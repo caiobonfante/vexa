@@ -12,7 +12,6 @@
 ```bash
 docker run -p 3000:3000 \
   -e VEXA_API_URL=http://your-vexa-instance:8056 \
-  -e VEXA_ADMIN_API_URL=http://your-vexa-instance:8057 \
   -e VEXA_ADMIN_API_KEY=your_admin_api_key \
   synapsr/vexa-dashboard
 ```
