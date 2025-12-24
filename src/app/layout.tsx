@@ -17,6 +17,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Vexa Dashboard",
   description: "Open source meeting transcription dashboard for Vexa",
+  icons: {
+    icon: [
+      {
+        url: "/icons/vexadark.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    apple: [
+      {
+        url: "/icons/vexadark.svg",
+        type: "image/svg+xml",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({

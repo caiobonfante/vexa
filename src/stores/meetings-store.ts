@@ -34,6 +34,8 @@ interface MeetingsState {
   clearCurrentMeeting: () => void;
 
   // Real-time updates
+  bootstrapTranscripts: (segments: TranscriptSegment[]) => void;
+  upsertTranscriptSegments: (segments: TranscriptSegment[]) => void;
   addTranscriptSegment: (segment: TranscriptSegment) => void;
   updateTranscriptSegment: (segment: TranscriptSegment) => void;
   updateMeetingStatus: (meetingId: string, status: MeetingStatus) => void;
@@ -180,27 +182,112 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     set({ currentMeeting: null, transcripts: [] });
   },
 
-  // Real-time: Add new transcript segment
-  addTranscriptSegment: (segment: TranscriptSegment) => {
-    const { transcripts } = get();
-
-    // Check if segment already exists (by absolute_start_time)
-    const existingIndex = transcripts.findIndex(
-      (t) => t.absolute_start_time === segment.absolute_start_time
+  // Bootstrap transcripts from REST API (Step 1 of algorithm)
+  // Seeds the in-memory map keyed by absolute_start_time
+  bootstrapTranscripts: (segments: TranscriptSegment[]) => {
+    // Filter out segments without absolute_start_time or empty text
+    const validSegments = segments.filter(
+      (seg) => seg.absolute_start_time && seg.text?.trim()
     );
 
-    if (existingIndex !== -1) {
-      // Update existing segment
-      const updated = [...transcripts];
-      updated[existingIndex] = segment;
-      set({ transcripts: updated });
-    } else {
-      // Add new segment and sort
-      const updated = [...transcripts, segment].sort(
-        (a, b) => a.start_time - b.start_time
-      );
-      set({ transcripts: updated });
+    // Create a map keyed by absolute_start_time (deduplication key)
+    const transcriptMap = new Map<string, TranscriptSegment>();
+    for (const segment of validSegments) {
+      transcriptMap.set(segment.absolute_start_time, segment);
     }
+
+    // Convert map to array and sort by absolute_start_time
+    const sortedTranscripts = Array.from(transcriptMap.values()).sort(
+      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
+    );
+
+    // Get the first segment's absolute_start_time to use as meeting start time
+    const firstSegmentTime = sortedTranscripts.length > 0 
+      ? sortedTranscripts[0].absolute_start_time 
+      : null;
+
+    // Update current meeting's start_time if not set and we have a first segment
+    const { currentMeeting } = get();
+    const updatedMeeting = firstSegmentTime && currentMeeting && !currentMeeting.start_time
+      ? {
+          ...currentMeeting,
+          start_time: firstSegmentTime,
+        }
+      : currentMeeting;
+
+    set({ 
+      transcripts: sortedTranscripts,
+      ...(updatedMeeting !== currentMeeting ? { currentMeeting: updatedMeeting } : {}),
+    });
+  },
+
+  // Upsert segments from WebSocket (Step 2 of algorithm)
+  // Implements deduplication by absolute_start_time with updated_at comparison
+  upsertTranscriptSegments: (segments: TranscriptSegment[]) => {
+    const { transcripts } = get();
+
+    if (!segments || segments.length === 0) return;
+
+    // Convert current transcripts to a map keyed by absolute_start_time
+    const transcriptMap = new Map<string, TranscriptSegment>();
+    for (const seg of transcripts) {
+      if (seg.absolute_start_time) {
+        transcriptMap.set(seg.absolute_start_time, seg);
+      }
+    }
+
+    // Upsert new segments with deduplication logic
+    let hasUpdates = false;
+    for (const segment of segments) {
+      const absStart = segment.absolute_start_time;
+      if (!absStart || !segment.text?.trim()) continue;
+
+      const existing = transcriptMap.get(absStart);
+
+      // Deduplication: keep segment with newer updated_at timestamp
+      if (existing && existing.updated_at && segment.updated_at) {
+        // If existing is newer, skip this segment
+        if (existing.updated_at >= segment.updated_at) {
+          continue;
+        }
+      }
+
+      // Update the map with new/updated segment
+      transcriptMap.set(absStart, segment);
+      hasUpdates = true;
+    }
+
+    // Always update store to ensure React detects changes (even if no new segments, content may have updated)
+    // Convert map to array and sort by absolute_start_time
+    const sortedTranscripts = Array.from(transcriptMap.values()).sort(
+      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
+    );
+    
+    // Get the first segment's absolute_start_time to use as meeting start time
+    const firstSegmentTime = sortedTranscripts.length > 0 
+      ? sortedTranscripts[0].absolute_start_time 
+      : null;
+
+    // Update current meeting's start_time if not set and we have a first segment
+    const { currentMeeting } = get();
+    const updatedMeeting = firstSegmentTime && currentMeeting && !currentMeeting.start_time
+      ? {
+          ...currentMeeting,
+          start_time: firstSegmentTime,
+        }
+      : currentMeeting;
+    
+    // Update store immediately - Zustand's set() is synchronous, ensuring immediate UI updates
+    // Always set to ensure React detects changes (new array reference)
+    set({ 
+      transcripts: sortedTranscripts,
+      ...(updatedMeeting !== currentMeeting ? { currentMeeting: updatedMeeting } : {}),
+    });
+  },
+
+  // Real-time: Add new transcript segment (legacy method, kept for compatibility)
+  addTranscriptSegment: (segment: TranscriptSegment) => {
+    get().upsertTranscriptSegments([segment]);
   },
 
   // Real-time: Update existing transcript segment

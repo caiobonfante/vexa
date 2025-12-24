@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { Search, Download, FileText, FileJson, FileVideo, X, Users, MessageSquare, Wifi, WifiOff, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -55,6 +54,13 @@ export function TranscriptViewer({
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Smart scroll state management
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollTopRef = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const hasScrolledOnceRef = useRef(false);
 
   // Keyboard shortcut for search (Cmd/Ctrl + F)
   useEffect(() => {
@@ -73,6 +79,148 @@ export function TranscriptViewer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Split text into sentence chunks for readability (max chars per chunk)
+  const splitTextIntoSentenceChunks = useCallback((text: string, maxLen: number): string[] => {
+    const normalized = (text || "").trim().replace(/\s+/g, " ");
+    if (normalized.length <= maxLen) return [normalized];
+
+    // Split into sentences on punctuation boundaries. Keep punctuation.
+    const sentences = normalized.split(/(?<=[.!?])\s+/);
+    if (sentences.length === 1) {
+      // Single long sentence: return as one chunk to avoid breaking the sentence
+      return [normalized];
+    }
+
+    const chunks: string[] = [];
+    let current = "";
+    for (const sentence of sentences) {
+      if (current.length === 0) {
+        if (sentence.length > maxLen) {
+          // Sentence itself exceeds limit: do not split it
+          chunks.push(sentence);
+        } else {
+          current = sentence;
+        }
+      } else if (current.length + 1 + sentence.length <= maxLen) {
+        current = current + " " + sentence;
+      } else {
+        chunks.push(current);
+        if (sentence.length > maxLen) {
+          // Sentence exceeds limit: push as is to avoid breaking
+          chunks.push(sentence);
+          current = "";
+        } else {
+          current = sentence;
+        }
+      }
+    }
+    if (current.length > 0) chunks.push(current);
+    return chunks;
+  }, []);
+
+  // Group consecutive segments by speaker and combine text
+  const groupSegmentsBySpeaker = useCallback((segments: TranscriptSegmentType[]) => {
+    if (!segments || segments.length === 0) return [];
+
+    // Sort by absolute_start_time
+    const sorted = [...segments].sort((a, b) =>
+      a.absolute_start_time.localeCompare(b.absolute_start_time)
+    );
+
+    interface GroupedSegment {
+      speaker: string;
+      startTime: string;
+      endTime: string;
+      startTimeSeconds: number;
+      endTimeSeconds: number;
+      combinedText: string;
+      segments: TranscriptSegmentType[];
+    }
+
+    const groups: GroupedSegment[] = [];
+    let current: GroupedSegment | null = null;
+
+    for (const seg of sorted) {
+      const speaker = seg.speaker || "Unknown";
+      const text = (seg.text || "").trim();
+      const startTime = seg.absolute_start_time;
+      const endTime = seg.absolute_end_time || seg.absolute_start_time;
+
+      if (!text) continue;
+
+      if (current && current.speaker === speaker) {
+        // Merge with current group
+        current.combinedText += " " + text;
+        current.endTime = endTime;
+        current.endTimeSeconds = seg.end_time;
+        current.segments.push(seg);
+      } else {
+        // Start new group
+        if (current) groups.push(current);
+        current = {
+          speaker,
+          startTime,
+          endTime,
+          startTimeSeconds: seg.start_time,
+          endTimeSeconds: seg.end_time,
+          combinedText: text,
+          segments: [seg],
+        };
+      }
+    }
+
+    if (current) groups.push(current);
+
+    // Split long speaker-runs into chunks for readability, but keep correct timestamps
+    // by chunking on underlying segments (so each chunk's time = first segment in that chunk).
+    const MAX_CHARS = 512;
+    const chunkedGroups: GroupedSegment[] = [];
+
+    for (const g of groups) {
+      if (!g.segments || g.segments.length === 0) continue;
+
+      let chunkSegments: TranscriptSegmentType[] = [];
+      let chunkText = "";
+
+      const flushChunk = () => {
+        if (chunkSegments.length === 0) return;
+        const first = chunkSegments[0];
+        const last = chunkSegments[chunkSegments.length - 1];
+        chunkedGroups.push({
+          speaker: g.speaker,
+          startTime: first.absolute_start_time,
+          endTime: last.absolute_end_time || last.absolute_start_time,
+          startTimeSeconds: first.start_time,
+          endTimeSeconds: last.end_time,
+          combinedText: chunkText.trim(),
+          segments: chunkSegments,
+        });
+        chunkSegments = [];
+        chunkText = "";
+      };
+
+      for (const seg of g.segments) {
+        const segText = (seg.text || "").trim();
+        if (!segText) continue;
+
+        const candidate = chunkText ? `${chunkText} ${segText}` : segText;
+
+        // If adding this segment would exceed MAX_CHARS, flush current chunk first.
+        // Then start a new chunk with this segment.
+        if (chunkSegments.length > 0 && candidate.length > MAX_CHARS) {
+          flushChunk();
+        }
+
+        chunkSegments.push(seg);
+        chunkText = chunkText ? `${chunkText} ${segText}` : segText;
+      }
+
+      flushChunk();
+    }
+
+    return chunkedGroups;
+  }, []);
+
   // Get unique speakers in order of appearance
   const speakerOrder = useMemo(() => {
     const speakers: string[] = [];
@@ -84,27 +232,33 @@ export function TranscriptViewer({
     return speakers;
   }, [segments]);
 
-  // Filter segments by search query and selected speakers
+  // Group segments by speaker first, then filter
+  // Use segments.length as part of the key to ensure re-computation when segments change
+  const groupedSegments = useMemo(() => {
+    return groupSegmentsBySpeaker(segments);
+  }, [segments, segments.length, groupSegmentsBySpeaker]);
+
+  // Filter grouped segments by search query and selected speakers
   const filteredSegments = useMemo(() => {
-    let result = segments;
+    let result = groupedSegments;
 
     // Filter by selected speakers
     if (selectedSpeakers.length > 0) {
-      result = result.filter((s) => selectedSpeakers.includes(s.speaker));
+      result = result.filter((g) => selectedSpeakers.includes(g.speaker));
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (s) =>
-          s.text.toLowerCase().includes(query) ||
-          s.speaker.toLowerCase().includes(query)
+        (g) =>
+          g.combinedText.toLowerCase().includes(query) ||
+          g.speaker.toLowerCase().includes(query)
       );
     }
 
     return result;
-  }, [segments, searchQuery, selectedSpeakers]);
+  }, [groupedSegments, searchQuery, selectedSpeakers]);
 
   // Toggle speaker selection
   const toggleSpeaker = useCallback((speaker: string) => {
@@ -123,15 +277,145 @@ export function TranscriptViewer({
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
 
-  // Auto-scroll to bottom when live and new segments arrive
+  // Get the scroll container - use direct ref (like example client)
+  const getScrollContainer = useCallback(() => {
+    return scrollRef.current;
+  }, []);
+
+  // Check if scroll is near bottom (within threshold)
+  const checkIfNearBottom = useCallback(() => {
+    const scrollContainer = getScrollContainer();
+    if (!scrollContainer) return false;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+    const threshold = 100; // pixels from bottom
+    return scrollHeight - scrollTop - clientHeight < threshold;
+  }, [getScrollContainer]);
+
+  // Handle scroll events to detect user scrolling
+  const handleScroll = useCallback(() => {
+    const scrollContainer = getScrollContainer();
+    if (!scrollContainer) return;
+
+    const currentScrollTop = scrollContainer.scrollTop;
+    const isScrollingUp = currentScrollTop < lastScrollTopRef.current;
+    const isNearBottom = checkIfNearBottom();
+
+    // Update refs
+    lastScrollTopRef.current = currentScrollTop;
+    isNearBottomRef.current = isNearBottom;
+
+    // Clear existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = null;
+    }
+
+    // Mark that user has scrolled manually
+    hasScrolledOnceRef.current = true;
+    
+    // If user is scrolling up or not near bottom, mark as user scrolling
+    if (isScrollingUp || !isNearBottom) {
+      setIsUserScrolling(true);
+
+      // Set timeout to reset user scrolling after 5 seconds of inactivity (only if near bottom)
+      scrollTimeoutRef.current = setTimeout(() => {
+        // Check again if near bottom before resetting
+        if (checkIfNearBottom()) {
+          setIsUserScrolling(false);
+        }
+        scrollTimeoutRef.current = null;
+      }, 5000);
+    } else {
+      // User scrolled back to bottom - reset immediately
+      setIsUserScrolling(false);
+    }
+  }, [getScrollContainer, checkIfNearBottom]);
+
+  // Scroll to bottom (only if not user scrolling)
+  const scrollToBottom = useCallback(() => {
+    if (isUserScrolling) return;
+    
+    const scrollContainer = getScrollContainer();
+    if (!scrollContainer) return;
+    
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    
+    // Update ref to reflect we're at bottom
+    lastScrollTopRef.current = scrollContainer.scrollTop;
+    isNearBottomRef.current = true;
+  }, [getScrollContainer, isUserScrolling]);
+
+
+  // Add scroll event listener (with retry to ensure viewport is available)
   useEffect(() => {
-    if (isLive && scrollRef.current) {
-      const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    let scrollContainer: HTMLElement | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+
+    const setupScrollListener = () => {
+      scrollContainer = getScrollContainer();
+      if (!scrollContainer) {
+        // Retry after a short delay if viewport not found (max 10 retries)
+        let retries = 0;
+        const maxRetries = 10;
+        retryTimeout = setTimeout(() => {
+          retries++;
+          if (retries < maxRetries) {
+            setupScrollListener();
+          }
+        }, 100);
+        return;
+      }
+
+      scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    };
+
+    setupScrollListener();
+
+    return () => {
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+    };
+  }, [getScrollContainer, handleScroll]);
+
+  // Auto-scroll to bottom when live and new segments/groups arrive (only if not user scrolling)
+  // Trigger immediately when segments change
+  useEffect(() => {
+    if (!isLive) return; // Only scroll when meeting is active
+    
+    // Scroll when segments change
+    if (groupedSegments.length > 0) {
+      const container = scrollRef.current;
+      if (!container) return;
+      
+      // Always scroll on first load or if user hasn't scrolled manually
+      // Only respect isUserScrolling after user has interacted
+      const shouldScroll = !hasScrolledOnceRef.current || !isUserScrolling;
+      
+      if (shouldScroll) {
+        // Use multiple requestAnimationFrame calls to ensure DOM is fully updated and painted
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Check if content is scrollable
+            const canScroll = container.scrollHeight > container.clientHeight;
+            if (!canScroll) return; // Nothing to scroll yet
+            
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+            lastScrollTopRef.current = container.scrollTop;
+            isNearBottomRef.current = true;
+          });
+        });
       }
     }
-  }, [segments.length, isLive]);
+  }, [segments.length, groupedSegments.length, isLive, isUserScrolling]); // Depend on segments.length to trigger on any change
 
   // Export handlers
   const handleExport = (format: "txt" | "json" | "srt" | "vtt") => {
@@ -186,27 +470,28 @@ export function TranscriptViewer({
 
   return (
     <Card className="flex flex-col h-full">
-      <CardHeader className="flex-shrink-0 space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CardTitle>Transcript</CardTitle>
+      <CardHeader className="flex-shrink-0 space-y-2 lg:space-y-4 py-3 lg:py-6">
+        {/* Compact header on mobile, full on desktop - hidden on mobile */}
+        <div className="hidden lg:flex items-center gap-2 lg:gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5 lg:gap-3">
+            <CardTitle className="text-sm lg:text-base">Transcript</CardTitle>
             {isLive && (
-              <Badge variant="destructive" className="animate-pulse">
-                <span className="relative flex h-2 w-2 mr-1.5">
+              <Badge variant="destructive" className="animate-pulse text-[10px] lg:text-xs h-4 lg:h-5 px-1.5 lg:px-2">
+                <span className="relative flex h-1.5 w-1.5 lg:h-2 lg:w-2 mr-1 lg:mr-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                  <span className="relative inline-flex rounded-full h-full w-full bg-white" />
                 </span>
                 Live
               </Badge>
             )}
           </div>
 
-          {/* Export */}
+          {/* Export - compact on mobile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Export
+              <Button variant="outline" size="sm" className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2">
+                <Download className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                <span className="hidden sm:inline">Export</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -230,18 +515,18 @@ export function TranscriptViewer({
           </DropdownMenu>
         </div>
 
-        {/* Search and Filter Bar */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Search and Filter Bar - compact on mobile */}
+        <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative flex-1 min-w-[150px] lg:min-w-[200px]">
+            <Search className="absolute left-2 lg:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 lg:h-4 lg:w-4 text-muted-foreground" />
             <Input
               ref={searchInputRef}
-              placeholder="Search transcript... (Cmd+F)"
+              placeholder="Search... (Cmd+F)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
-                "pl-9 pr-9 transition-all",
+                "h-7 lg:h-9 pl-7 lg:pl-9 pr-7 lg:pr-9 text-xs lg:text-sm transition-all",
                 searchQuery && "ring-2 ring-primary/20"
               )}
             />
@@ -249,10 +534,10 @@ export function TranscriptViewer({
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                className="absolute right-0.5 lg:right-1 top-1/2 -translate-y-1/2 h-6 w-6 lg:h-7 lg:w-7"
                 onClick={() => setSearchQuery("")}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3 lg:h-4 lg:w-4" />
               </Button>
             )}
           </div>
@@ -265,14 +550,14 @@ export function TranscriptViewer({
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "gap-2",
+                    "h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2",
                     selectedSpeakers.length > 0 && "border-primary text-primary"
                   )}
                 >
-                  <Users className="h-4 w-4" />
-                  Speakers
+                  <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                  <span className="hidden sm:inline">Speakers</span>
                   {selectedSpeakers.length > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                    <Badge variant="secondary" className="ml-0.5 lg:ml-1 h-4 lg:h-5 px-1 lg:px-1.5 text-[10px] lg:text-xs">
                       {selectedSpeakers.length}
                     </Badge>
                   )}
@@ -324,7 +609,8 @@ export function TranscriptViewer({
         {hasActiveFilters && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
             <span>
-              Showing {filteredSegments.length} of {segments.length} segments
+              Showing {filteredSegments.length} of {groupedSegments.length} groups
+              {segments.length !== groupedSegments.length && ` (${segments.length} segments)`}
             </span>
             {searchQuery && (
               <Badge variant="outline" className="font-normal">
@@ -346,8 +632,11 @@ export function TranscriptViewer({
         )}
       </CardHeader>
 
-      <CardContent className="flex-1 min-h-0">
-        <ScrollArea className="h-[500px] pr-4" ref={scrollRef}>
+      <CardContent className="flex-1 min-h-0 flex flex-col">
+        <div 
+          ref={scrollRef}
+          className="flex-1 min-h-0 pr-4 overflow-y-auto"
+        >
           {filteredSegments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
               {hasActiveFilters ? (
@@ -379,26 +668,43 @@ export function TranscriptViewer({
             </div>
           ) : (
             <div className="space-y-1">
-              {filteredSegments.map((segment, index) => (
-                <div
-                  key={segment.id || `${segment.absolute_start_time}-${index}`}
-                  className="animate-fade-in"
-                  style={{
-                    animationDelay: isLive ? "0ms" : `${Math.min(index * 20, 200)}ms`,
-                    animationFillMode: "backwards",
-                  }}
-                >
-                  <TranscriptSegment
-                    segment={segment}
-                    speakerColor={getSpeakerColor(segment.speaker, speakerOrder)}
-                    searchQuery={searchQuery}
-                    isHighlighted={searchQuery.length > 0}
-                  />
-                </div>
-              ))}
+              {filteredSegments.map((group, index) => {
+                // Create a synthetic segment for the grouped segment
+                const syntheticSegment: TranscriptSegmentType = {
+                  id: `${group.startTime}-${index}`,
+                  meeting_id: meeting.id,
+                  start_time: group.startTimeSeconds,
+                  end_time: group.endTimeSeconds,
+                  absolute_start_time: group.startTime,
+                  absolute_end_time: group.endTime,
+                  text: group.combinedText,
+                  speaker: group.speaker,
+                  language: group.segments[0]?.language || "en",
+                  session_uid: group.segments[0]?.session_uid || "",
+                  created_at: group.startTime,
+                };
+
+                return (
+                  <div
+                    key={`${group.startTime}-${index}`}
+                    className="animate-fade-in"
+                    style={{
+                      animationDelay: isLive ? "0ms" : `${Math.min(index * 20, 200)}ms`,
+                      animationFillMode: "backwards",
+                    }}
+                  >
+                    <TranscriptSegment
+                      segment={syntheticSegment}
+                      speakerColor={getSpeakerColor(group.speaker, speakerOrder)}
+                      searchQuery={searchQuery}
+                      isHighlighted={searchQuery.length > 0}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );

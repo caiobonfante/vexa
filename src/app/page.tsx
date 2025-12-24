@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { MeetingList } from "@/components/meetings/meeting-list";
 import { ErrorState } from "@/components/ui/error-state";
+import { MCPConfigButton } from "@/components/mcp/mcp-config-button";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 
@@ -42,10 +43,47 @@ export default function DashboardPage() {
             Overview of your meeting transcriptions
           </p>
         </div>
-        <Button onClick={openJoinModal}>
-          <Plus className="mr-2 h-4 w-4" />
-          Join Meeting
-        </Button>
+        <div className="flex items-center gap-2">
+          <MCPConfigButton />
+          <Button variant="outline" asChild>
+            <a
+              href="https://discord.gg/KXpwveJewr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2"
+            >
+              <img
+                src="/icons/icons8-discord-100.png"
+                alt="Discord"
+                width={20}
+                height={20}
+                className="object-contain flex-shrink-0 dark:invert"
+              />
+              Support
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href="https://github.com/Vexa-ai/vexa-dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2"
+            >
+              <img
+                src="/icons/icons8-github-120.png"
+                alt="GitHub"
+                width={20}
+                height={20}
+                className="object-contain flex-shrink-0 dark:invert"
+              />
+              Fork me!
+            </a>
+          </Button>
+          <Button onClick={openJoinModal}>
+            <Plus className="mr-2 h-4 w-4" />
+            Join Meeting
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}

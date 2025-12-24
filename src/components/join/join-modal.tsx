@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
 
 // Parse Google Meet or Teams URL/meeting ID
-function parseMeetingInput(input: string): { platform: Platform; meetingId: string } | null {
+function parseMeetingInput(input: string): { platform: Platform; meetingId: string; passcode?: string } | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
@@ -53,15 +53,21 @@ function parseMeetingInput(input: string): { platform: Platform; meetingId: stri
 
   // Microsoft Teams URL patterns
   // https://teams.microsoft.com/l/meetup-join/...
-  // https://teams.live.com/meet/...
+  // https://teams.live.com/meet/9387167464734?p=qxJanYOcdjN4d6UlGa
   const teamsUrlRegex = /(?:https?:\/\/)?(?:teams\.microsoft\.com|teams\.live\.com)\/(?:l\/meetup-join|meet)\/([^\s?#]+)/i;
   const teamsMatch = trimmed.match(teamsUrlRegex);
   if (teamsMatch) {
-    // Extract a simplified meeting ID from the URL
+    // Extract meeting ID and passcode from the URL
     const meetingPath = teamsMatch[1];
     // URL decode and extract the meeting thread id
     const decodedPath = decodeURIComponent(meetingPath);
-    return { platform: "teams", meetingId: decodedPath.split('/')[0] || decodedPath };
+    const meetingId = decodedPath.split('/')[0] || decodedPath;
+    
+    // Extract passcode from query parameter (p=...)
+    const passcodeMatch = trimmed.match(/[?&]p=([^&]+)/i);
+    const passcode = passcodeMatch ? decodeURIComponent(passcodeMatch[1]) : undefined;
+    
+    return { platform: "teams", meetingId, passcode };
   }
 
   // Teams meeting ID (numeric or alphanumeric with specific patterns)
@@ -74,7 +80,10 @@ function parseMeetingInput(input: string): { platform: Platform; meetingId: stri
     // Try to extract any usable ID
     const genericId = trimmed.replace(/^https?:\/\//, '').split('/').pop()?.split('?')[0];
     if (genericId) {
-      return { platform: "teams", meetingId: genericId };
+      // Also try to extract passcode from query string
+      const passcodeMatch = trimmed.match(/[?&]p=([^&]+)/i);
+      const passcode = passcodeMatch ? decodeURIComponent(passcodeMatch[1]) : undefined;
+      return { platform: "teams", meetingId: genericId, passcode };
     }
   }
 
@@ -127,10 +136,14 @@ export function JoinModal() {
     return parseMeetingInput(meetingInput);
   }, [meetingInput]);
 
-  // Update platform when detected from URL
+  // Update platform and passcode when detected from URL
   useEffect(() => {
     if (parsedInput) {
       setPlatform(parsedInput.platform);
+      // Auto-populate passcode if detected from URL
+      if (parsedInput.passcode) {
+        setPasscode(parsedInput.passcode);
+      }
     }
   }, [parsedInput]);
 
@@ -146,6 +159,19 @@ export function JoinModal() {
       return;
     }
 
+    // Validate Teams passcode requirement and prepare final passcode
+    let finalPasscode: string | undefined;
+    if (parsedInput.platform === "teams") {
+      // Use passcode from parsedInput (URL) if available, otherwise use manually entered passcode
+      finalPasscode = parsedInput.passcode || passcode.trim();
+      if (!finalPasscode) {
+        toast.error("Passcode required", {
+          description: "Microsoft Teams meetings require a passcode",
+        });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -154,8 +180,9 @@ export function JoinModal() {
         native_meeting_id: parsedInput.meetingId,
       };
 
-      if (parsedInput.platform === "teams" && passcode) {
-        request.passcode = passcode.trim();
+      // Add passcode for Teams meetings
+      if (parsedInput.platform === "teams" && finalPasscode) {
+        request.passcode = finalPasscode;
       }
 
       // Set bot name - use custom name or configured default

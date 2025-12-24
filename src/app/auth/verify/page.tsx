@@ -2,9 +2,10 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, CheckCircle, XCircle, Mic, RefreshCw, AlertTriangle, Clock, WifiOff, ShieldX } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, RefreshCw, AlertTriangle, Clock, WifiOff, ShieldX } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { useAuthStore } from "@/stores/auth-store";
 
 type VerifyState = "verifying" | "success" | "error";
@@ -251,14 +252,9 @@ export default function VerifyPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/25">
-            <Mic className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Vexa</h1>
-            <p className="text-sm text-muted-foreground">Meeting Transcription</p>
-          </div>
+        <div className="flex flex-col items-center justify-center gap-2 mb-8">
+          <Logo size="lg" showText={true} />
+          <p className="text-sm text-muted-foreground">Meeting Transcription</p>
         </div>
 
         <Suspense fallback={<VerifyLoading />}>

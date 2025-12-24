@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Mic, Plus, Settings, Menu, LogOut, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Settings, Menu, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useJoinModalStore } from "@/stores/join-modal-store";
 import { useAuthStore } from "@/stores/auth-store";
 
 interface HeaderProps {
@@ -20,9 +20,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
-  const pathname = usePathname();
   const router = useRouter();
-  const openJoinModal = useJoinModalStore((state) => state.openModal);
   const { user, logout } = useAuthStore();
 
   const handleLogout = () => {
@@ -46,9 +44,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-semibold group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary transition-transform group-hover:scale-105">
-            <Mic className="h-4 w-4 text-primary-foreground" />
-          </div>
+          <Logo size="md" showText={false} className="group-hover:scale-105 transition-transform" />
           <span className="hidden sm:inline-block">Vexa Dashboard</span>
         </Link>
 
@@ -57,15 +53,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Actions */}
         <div className="flex items-center gap-1">
-          <Button size="sm" className="hidden sm:flex" onClick={openJoinModal}>
-            <Plus className="mr-2 h-4 w-4" />
-            Join Meeting
-          </Button>
-
-          <Button size="icon" variant="ghost" className="sm:hidden" onClick={openJoinModal}>
-            <Plus className="h-5 w-5" />
-          </Button>
-
           <ThemeToggle />
 
           <DropdownMenu>

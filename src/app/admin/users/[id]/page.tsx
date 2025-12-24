@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, formatDistanceToNow } from "date-fns";
@@ -15,6 +15,7 @@ import {
   Trash2,
   Copy,
   Check,
+  X,
   AlertTriangle,
   Eye,
   EyeOff,
@@ -47,6 +48,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ErrorState } from "@/components/ui/error-state";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAdminStore } from "@/stores/admin-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -54,7 +56,17 @@ import { toast } from "sonner";
 export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const userId = params.id as string;
+  // Unwrap params if it's a Promise (Next.js 15+ compatibility)
+  // In Next.js 15+, params can be a Promise and must be unwrapped with React.use()
+  // Check if params is a Promise by checking if it has 'then' method and doesn't have 'id' property
+  const isPromise = params && typeof params === 'object' && 
+    'then' in params && 
+    typeof (params as any).then === 'function' && 
+    !('id' in params);
+  const resolvedParams = isPromise 
+    ? use(params as Promise<{ id: string }>)
+    : (params as { id: string });
+  const userId = resolvedParams.id as string;
 
   const {
     selectedUser,
@@ -73,6 +85,12 @@ export default function UserDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState("");
   const [editedMaxBots, setEditedMaxBots] = useState(3);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [isEditingMaxBots, setIsEditingMaxBots] = useState(false);
+  const [tempMaxBots, setTempMaxBots] = useState(3);
+  const [isSavingMaxBots, setIsSavingMaxBots] = useState(false);
   const [showNewTokenDialog, setShowNewTokenDialog] = useState(false);
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
 
@@ -88,7 +106,15 @@ export default function UserDetailPage() {
   useEffect(() => {
     if (selectedUser) {
       setEditedName(selectedUser.name || "");
+      setTempName(selectedUser.name || "");
       setEditedMaxBots(selectedUser.max_concurrent_bots);
+      setTempMaxBots(selectedUser.max_concurrent_bots);
+      // Debug: log image_url to verify it's being received
+      if (selectedUser.image_url) {
+        console.log("User image_url:", selectedUser.image_url);
+      } else {
+        console.log("User image_url is missing or null");
+      }
     }
   }, [selectedUser]);
 
@@ -105,6 +131,66 @@ export default function UserDetailPage() {
     });
     setIsEditing(false);
     toast.success("User updated successfully");
+  };
+
+  const handleStartEditName = () => {
+    setTempName(selectedUser.name || "");
+    setIsEditingName(true);
+  };
+
+  const handleSaveName = async () => {
+    setIsSavingName(true);
+    try {
+      await updateUser(userId, {
+        name: tempName.trim() || undefined,
+      });
+      // Refresh user data to ensure UI is updated
+      await fetchUser(userId);
+      setEditedName(tempName.trim());
+      setIsEditingName(false);
+      toast.success("Name updated successfully");
+    } catch (error) {
+      toast.error("Failed to update name");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setTempName(selectedUser.name || "");
+    setIsEditingName(false);
+  };
+
+  const handleStartEditMaxBots = () => {
+    setTempMaxBots(selectedUser.max_concurrent_bots);
+    setIsEditingMaxBots(true);
+  };
+
+  const handleSaveMaxBots = async () => {
+    if (tempMaxBots < 1 || tempMaxBots > 100) {
+      toast.error("Max bots must be between 1 and 100");
+      return;
+    }
+    setIsSavingMaxBots(true);
+    try {
+      await updateUser(userId, {
+        max_concurrent_bots: tempMaxBots,
+      });
+      // Refresh user data to ensure UI is updated
+      await fetchUser(userId);
+      setEditedMaxBots(tempMaxBots);
+      setIsEditingMaxBots(false);
+      toast.success("Max bots limit updated successfully");
+    } catch (error) {
+      toast.error("Failed to update max bots limit");
+    } finally {
+      setIsSavingMaxBots(false);
+    }
+  };
+
+  const handleCancelEditMaxBots = () => {
+    setTempMaxBots(selectedUser.max_concurrent_bots);
+    setIsEditingMaxBots(false);
   };
 
   const handleCreateToken = async () => {
@@ -153,36 +239,71 @@ export default function UserDetailPage() {
 
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-2 border-primary/20">
-          <span className="text-2xl font-semibold text-primary">
-            {selectedUser.name?.[0]?.toUpperCase() || selectedUser.email[0].toUpperCase()}
-          </span>
-        </div>
+        <Avatar className="h-16 w-16 border-2 border-primary/20">
+          <AvatarImage 
+            src={selectedUser.image_url || undefined} 
+            alt={selectedUser.name || selectedUser.email}
+          />
+          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10">
+            <span className="text-2xl font-semibold text-primary">
+              {selectedUser.name?.[0]?.toUpperCase() || selectedUser.email[0].toUpperCase()}
+            </span>
+          </AvatarFallback>
+        </Avatar>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
-            {isEditing ? (
+          {isEditingName ? (
+            <div className="flex items-center gap-2">
               <Input
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
                 className="text-2xl font-bold h-10 max-w-md"
                 placeholder="Name..."
+                autoFocus
+                disabled={isSavingName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !isSavingName) {
+                    handleSaveName();
+                  } else if (e.key === "Escape") {
+                    handleCancelEditName();
+                  }
+                }}
               />
-            ) : (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleSaveName}
+                disabled={isSavingName}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleCancelEditName}
+                disabled={isSavingName}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group/name">
               <h1 className="text-2xl font-bold">
                 {selectedUser.name || "Unnamed User"}
               </h1>
-            )}
-            {!isEditing && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setIsEditing(true)}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+              {!isEditing && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 opacity-0 group-hover/name:opacity-100 transition-opacity"
+                  onClick={handleStartEditName}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
           <p className="text-muted-foreground">{selectedUser.email}</p>
         </div>
         {isEditing && (
@@ -227,8 +348,58 @@ export default function UserDetailPage() {
               <div className="flex items-center gap-3">
                 <Bot className="h-4 w-4 text-muted-foreground" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Max Concurrent Bots</p>
-                  {isEditing ? (
+                  <div className="flex items-center gap-2 group/maxbots">
+                    <p className="text-sm font-medium">Max Concurrent Bots</p>
+                    {!isEditing && !isEditingMaxBots && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 opacity-0 group-hover/maxbots:opacity-100 transition-opacity"
+                        onClick={handleStartEditMaxBots}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  {isEditingMaxBots ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={tempMaxBots}
+                        onChange={(e) => setTempMaxBots(parseInt(e.target.value) || 1)}
+                        className="h-8 w-24"
+                        autoFocus
+                        disabled={isSavingMaxBots}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleSaveMaxBots();
+                          } else if (e.key === "Escape") {
+                            handleCancelEditMaxBots();
+                          }
+                        }}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={handleSaveMaxBots}
+                        disabled={isSavingMaxBots}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={handleCancelEditMaxBots}
+                        disabled={isSavingMaxBots}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : isEditing ? (
                     <Input
                       type="number"
                       min={1}

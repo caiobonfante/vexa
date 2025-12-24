@@ -12,7 +12,7 @@ import type { MeetingStatus, Platform } from "@/types/vexa";
 // Timeout in seconds before showing a warning
 const REQUESTED_TIMEOUT_SECONDS = 30;
 const JOINING_TIMEOUT_SECONDS = 60; // Give more time for joining state
-const BOT_CHECK_INTERVAL_MS = 5000;
+// Removed BOT_CHECK_INTERVAL_MS - no longer polling, using WebSocket for real-time updates
 
 interface BotStatusIndicatorProps {
   status: MeetingStatus;
@@ -105,27 +105,8 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
     return () => clearInterval(interval);
   }, [status, createdAt, updatedAt]);
 
-  // Check if bot is actually running when in early states for too long
-  const checkBotStatus = useCallback(async () => {
-    const isEarlyState = status === "requested" || status === "joining";
-    if (!isEarlyState) return;
-
-    try {
-      const running = await vexaAPI.isBotRunning(platform as Platform, meetingId);
-      setIsBotRunning(running);
-    } catch {
-      setIsBotRunning(false);
-    }
-  }, [status, platform, meetingId]);
-
-  useEffect(() => {
-    const isEarlyState = status === "requested" || status === "joining";
-    if (!isEarlyState || !isTimedOut) return;
-
-    checkBotStatus();
-    const interval = setInterval(checkBotStatus, BOT_CHECK_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [status, isTimedOut, checkBotStatus]);
+  // Removed polling - WebSocket now handles status updates in real-time
+  // No need to check bot status via REST API when WebSocket provides live updates
 
   const currentStep = STATUS_ORDER[status] ?? -1;
   const isEarlyState = currentStep >= 0 && currentStep < 3;
