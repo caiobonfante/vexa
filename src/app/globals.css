@@ -269,15 +269,19 @@
 }
 
 .dark mark.animate-highlight-fade {
+  background-color: rgb(191 219 254) !important; /* blue-200 - initial state before animation */
+  color: rgb(0 0 0) !important; /* black text for visibility on light background */
   animation: highlight-fade-dark 3s ease-out forwards;
 }
 
 @keyframes highlight-fade-dark {
   0% {
-    background-color: rgb(30 58 138 / 0.3); /* blue-900/30 */
+    background-color: rgb(191 219 254) !important; /* blue-200 - inverted for dark mode */
+    color: rgb(0 0 0) !important; /* black text for visibility on light background */
   }
   100% {
     background-color: transparent;
+    color: inherit; /* return to inherited text color */
   }
 }
 

@@ -88,7 +88,7 @@ function renderTextWithAppendedHighlight(
   return (
     <>
       {searchQuery ? highlightText(beforeText, searchQuery) : beforeText}
-      <mark className="bg-blue-200 dark:bg-blue-800/50 rounded px-0.5 animate-highlight-fade">
+      <mark className="bg-blue-200 dark:bg-blue-200 dark:text-black rounded px-0.5 animate-highlight-fade">
         {searchQuery ? highlightText(highlightedText, searchQuery) : highlightedText}
       </mark>
     </>
