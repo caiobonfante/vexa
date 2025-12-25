@@ -44,6 +44,17 @@ import { cn } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
 import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -439,45 +450,45 @@ export default function MeetingDetailPage() {
   };
 
   return (
-    <div className="space-y-2 lg:space-y-6">
+    <div className="space-y-2 lg:space-y-6 h-full flex flex-col">
       {/* Desktop Header */}
-      <div className="hidden lg:block space-y-4">
-        <Button variant="ghost" asChild>
-          <Link href="/meetings">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Meetings
-          </Link>
-        </Button>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            {isEditingTitle ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="text-2xl font-bold h-10 max-w-md"
-                  placeholder="Meeting title..."
-                  autoFocus
-                  disabled={isSavingTitle}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter" && editedTitle.trim()) {
-                      setIsSavingTitle(true);
-                      try {
-                        await updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
-                          name: editedTitle.trim(),
-                        });
-                        setIsEditingTitle(false);
-                        toast.success("Title updated");
-                      } catch (err) {
-                        toast.error("Failed to update title");
-                      } finally {
-                        setIsSavingTitle(false);
-                      }
-                    } else if (e.key === "Escape") {
+      <div className="hidden lg:flex items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <Button variant="ghost" size="sm" asChild className="-ml-2 h-8 px-2 text-muted-foreground hover:text-foreground">
+            <Link href="/meetings">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2 flex-1 max-w-md">
+              <Input
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                className="text-xl font-bold h-9"
+                placeholder="Meeting title..."
+                autoFocus
+                disabled={isSavingTitle}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" && editedTitle.trim()) {
+                    setIsSavingTitle(true);
+                    try {
+                      await updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
+                        name: editedTitle.trim(),
+                      });
                       setIsEditingTitle(false);
+                      toast.success("Title updated");
+                    } catch (err) {
+                      toast.error("Failed to update title");
+                    } finally {
+                      setIsSavingTitle(false);
                     }
-                  }}
-                />
+                  } else if (e.key === "Escape") {
+                    setIsEditingTitle(false);
+                  }
+                }}
+              />
+              <div className="flex items-center gap-1">
                 <Button
                   size="icon"
                   variant="ghost"
@@ -511,67 +522,156 @@ export default function MeetingDetailPage() {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 group">
-                <h1 className="text-2xl font-bold tracking-tight truncate">
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2 group min-w-0">
+                <h1 className="text-xl font-bold tracking-tight truncate">
                   {currentMeeting.data?.name || currentMeeting.data?.title || currentMeeting.platform_specific_id}
                 </h1>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                   onClick={() => {
                     setEditedTitle(currentMeeting.data?.name || currentMeeting.data?.title || "");
                     setIsEditingTitle(true);
                   }}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            )}
-            {currentMeeting.data?.participants && currentMeeting.data.participants.length > 0 && (
-              <p className="text-sm text-muted-foreground mt-1">
-                With {currentMeeting.data.participants.slice(0, 4).join(", ")}
-                {currentMeeting.data.participants.length > 4 && ` +${currentMeeting.data.participants.length - 4} more`}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <Badge className={cn(statusConfig.bgColor, statusConfig.color)}>
+              <Badge className={cn("shrink-0", statusConfig.bgColor, statusConfig.color)}>
                 {statusConfig.label}
               </Badge>
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {currentMeeting.status === "active" && (
-              <Button
-                variant="outline"
-                className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={handleStopBot}
-                disabled={isStoppingBot}
-              >
-                {isStoppingBot ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <StopCircle className="h-4 w-4" />
-                )}
-                Stop
-              </Button>
-            )}
-            {(currentMeeting.status === "active" || currentMeeting.status === "completed") && transcripts.length > 0 && (
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {(currentMeeting.status === "active" || currentMeeting.status === "completed") && transcripts.length > 0 && (
+            <div className="flex items-center gap-2">
               <AIChatPanel
                 meeting={currentMeeting}
                 transcripts={transcripts}
                 trigger={
-                  <Button className="gap-2">
+                  <Button className="gap-2 h-9">
                     <Sparkles className="h-4 w-4" />
                     Ask AI
                   </Button>
                 }
               />
-            )}
-          </div>
+              
+              <DropdownMenu>
+                <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-9">
+                  <Button
+                    variant="ghost"
+                    className="gap-2 rounded-r-none border-r-0 hover:bg-muted h-full"
+                    onClick={handleSendToChatGPT}
+                    title="Connect AI"
+                  >
+                    <Image
+                      src="/icons/icons8-chatgpt-100.png"
+                      alt="AI"
+                      width={18}
+                      height={18}
+                      className="object-contain invert dark:invert-0"
+                    />
+                    <span>Connect AI</span>
+                  </Button>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-9 rounded-l-none border-l hover:bg-muted h-full"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </div>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")}>
+                    <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
+                    Open in ChatGPT
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")}>
+                    <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
+                    Open in Perplexity
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (!isChatgptPromptExpanded) {
+                        setEditedChatgptPrompt(chatgptPrompt);
+                        setIsChatgptPromptExpanded(true);
+                      } else {
+                        setIsChatgptPromptExpanded(false);
+                      }
+                    }}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Configure Prompt
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport("txt")}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Download .txt
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("json")}>
+                    <FileJson className="h-4 w-4 mr-2" />
+                    Download .json
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+          {currentMeeting.status === "active" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9"
+                  disabled={isStoppingBot}
+                >
+                  {isStoppingBot ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <StopCircle className="h-4 w-4" />
+                  )}
+                  Stop
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Stop Transcription?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will disconnect the bot from the meeting and stop the live transcription. You can still access the transcript after stopping.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleStopBot}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Stop Transcription
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
+
+      {/* Participants List - Desktop Only */}
+      {currentMeeting.data?.participants && currentMeeting.data.participants.length > 0 && (
+        <div className="hidden lg:block mb-6">
+          <p className="text-sm text-muted-foreground">
+            With {currentMeeting.data.participants.slice(0, 4).join(", ")}
+            {currentMeeting.data.participants.length > 4 && ` +${currentMeeting.data.participants.length - 4} more`}
+          </p>
+        </div>
+      )}
 
       {/* Mobile: Single consolidated block with everything */}
       <div className="lg:hidden sticky top-[-16px] z-40 bg-background/80 backdrop-blur-sm -mx-4 px-4 py-2 mb-2">
@@ -669,23 +769,6 @@ export default function MeetingDetailPage() {
               </Badge>
 
               <div className="flex items-center border-l ml-0.5 pl-0.5 gap-0">
-                {currentMeeting.status === "active" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive"
-                    onClick={handleStopBot}
-                    disabled={isStoppingBot}
-                    title="Stop"
-                  >
-                    {isStoppingBot ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <StopCircle className="h-4 w-4" />
-                    )}
-                  </Button>
-                )}
-
                 <Button
                   variant="ghost"
                   size="icon"
@@ -714,7 +797,7 @@ export default function MeetingDetailPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")} disabled={transcripts.length === 0}>
-                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert" />
+                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
                       Open in ChatGPT
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")} disabled={transcripts.length === 0}>
@@ -746,6 +829,43 @@ export default function MeetingDetailPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                {currentMeeting.status === "active" && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive ml-0.5"
+                        disabled={isStoppingBot}
+                        title="Stop"
+                      >
+                        {isStoppingBot ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <StopCircle className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Stop Transcription?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will disconnect the bot and stop transcribing.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleStopBot}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Stop
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </div>
           </div>
@@ -793,12 +913,12 @@ export default function MeetingDetailPage() {
         </div>
       )}
 
-      {/* Collapsible ChatGPT Prompt Section - Mobile Only */}
+      {/* Collapsible AI Prompt Section - Mobile Only */}
       {isChatgptPromptExpanded && (
         <div className="lg:hidden sticky top-0 z-50 bg-card text-card-foreground rounded-lg border shadow-sm overflow-hidden animate-in slide-in-from-top-2 duration-200">
           <div className="p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">ChatGPT Prompt</span>
+              <span className="text-sm font-medium">AI Prompt</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -822,7 +942,7 @@ export default function MeetingDetailPage() {
                     setIsChatgptPromptExpanded(false);
                   }
                 }}
-                placeholder="ChatGPT prompt (use {url} for the transcript URL)"
+                placeholder="AI prompt (use {url} for the transcript URL)"
                 className="min-h-[120px] resize-none text-sm"
                 autoFocus
               />
@@ -835,9 +955,9 @@ export default function MeetingDetailPage() {
       )}
 
       {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         {/* Transcript or Status Indicator */}
-        <div className="lg:col-span-2 order-2 lg:order-1 flex flex-col min-h-0">
+        <div className="lg:col-span-2 order-2 lg:order-1 flex flex-col min-h-0 flex-1">
           {/* Show bot status for early states */}
           {(currentMeeting.status === "requested" ||
             currentMeeting.status === "joining" ||
@@ -1000,11 +1120,6 @@ export default function MeetingDetailPage() {
                     </p>
                   )}
                 </div>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Segments</span>
-                <span className="font-medium">{transcripts.length}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">

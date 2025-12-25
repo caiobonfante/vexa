@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
-import { Search, Download, FileText, FileJson, FileVideo, X, Users, MessageSquare, Wifi, WifiOff, Loader2, AlertCircle } from "lucide-react";
+import { Search, Download, FileText, FileJson, FileVideo, X, Users, MessageSquare, Wifi, WifiOff, Loader2, AlertCircle, Sparkles, Settings, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import Image from "next/image";
+import { AIChatPanel } from "@/components/ai";
+import { getCookie, setCookie } from "@/lib/cookies";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,8 +61,20 @@ export function TranscriptViewer({
   const bottomRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false); // Track if user has manually scrolled away from bottom
   const lastScrollTopRef = useRef(0);
+  const previousSegmentsLengthRef = useRef(0);
 
-  // Check if user is currently at bottom
+  // ChatGPT prompt state
+  const [chatgptPrompt, setChatgptPrompt] = useState(() => {
+    if (typeof window !== "undefined") {
+      return getCookie("vexa-chatgpt-prompt") || "Read from {url} so I can ask questions about it.";
+    }
+    return "Read from {url} so I can ask questions about it.";
+  });
+  const [isChatgptPromptExpanded, setIsChatgptPromptExpanded] = useState(false);
+  const [editedChatgptPrompt, setEditedChatgptPrompt] = useState(chatgptPrompt);
+  const chatgptPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Measure scroll container for auto-follow
   const isNearBottom = useCallback((el: HTMLElement) => {
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     return distanceFromBottom <= 50; // Allow some tolerance
@@ -387,11 +402,21 @@ export function TranscriptViewer({
     const el = scrollRef.current;
     if (!el) return;
 
-    // Only auto-scroll when we have segments
-    if (segments.length === 0) return;
+    // Only auto-scroll when new segments are actually added (not initial load)
+    const hasNewSegments = segments.length > previousSegmentsLengthRef.current;
+    previousSegmentsLengthRef.current = segments.length;
+
+    if (!hasNewSegments) return;
 
     // Don't auto-scroll if user has manually scrolled up
     if (userScrolledUpRef.current) return;
+
+    // Only scroll if we're actually near the bottom
+    // This prevents scrolling when user is reading older content
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const shouldScroll = distanceFromBottom <= 100; // Allow more tolerance
+
+    if (!shouldScroll) return;
 
     // Small delay to ensure DOM has updated
     requestAnimationFrame(() => {
@@ -476,11 +501,11 @@ export function TranscriptViewer({
     return output;
   }, [meeting, segments]);
 
-  // Handle sending transcript to ChatGPT
-  const handleSendToChatGPT = useCallback(async () => {
+  // Handle sending transcript to an AI provider (ChatGPT or Perplexity)
+  const handleOpenInProvider = useCallback(async (provider: "chatgpt" | "perplexity") => {
     if (segments.length === 0) return;
 
-    // Prefer link-based flow (server-generated short-lived URL)
+    // Prefer link-based flow
     try {
       const response = await fetch(
         `/api/vexa/transcripts/${meeting.platform}/${meeting.platform_specific_id}/share?meeting_id=${encodeURIComponent(meeting.id)}`,
@@ -495,9 +520,17 @@ export function TranscriptViewer({
               ? `${publicBase}/public/transcripts/${share.share_id}.txt`
               : share.url;
 
-          const q = `Read from ${shareUrl} so I can ask questions about it.`;
-          const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
-          window.open(chatgptUrl, "_blank", "noopener,noreferrer");
+          // Use custom prompt, replacing {url} placeholder
+          const prompt = chatgptPrompt.replace(/{url}/g, shareUrl);
+          
+          let providerUrl: string;
+          if (provider === "chatgpt") {
+            providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(prompt)}`;
+          } else {
+            providerUrl = `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
+          }
+          
+          window.open(providerUrl, "_blank", "noopener,noreferrer");
           return;
         }
       }
@@ -509,14 +542,27 @@ export function TranscriptViewer({
     try {
       const transcriptText = formatTranscriptForChatGPT();
       await navigator.clipboard.writeText(transcriptText);
-      const q =
-        "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
-      const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
-      setTimeout(() => window.open(chatgptUrl, "_blank", "noopener,noreferrer"), 100);
+      const q = "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
+      let providerUrl: string;
+      if (provider === "chatgpt") {
+        providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
+      } else {
+        providerUrl = `https://www.perplexity.ai/search?q=${encodeURIComponent(q)}`;
+      }
+      setTimeout(() => window.open(providerUrl, "_blank", "noopener,noreferrer"), 100);
     } catch (error) {
       console.error("Failed to copy transcript to clipboard:", error);
     }
-  }, [segments, formatTranscriptForChatGPT, meeting.id, meeting.platform, meeting.platform_specific_id]);
+  }, [segments, formatTranscriptForChatGPT, meeting.id, meeting.platform, meeting.platform_specific_id, chatgptPrompt]);
+
+  // Handle saving ChatGPT prompt to cookie
+  const handleChatgptPromptBlur = useCallback(() => {
+    const trimmed = editedChatgptPrompt.trim();
+    if (trimmed && trimmed !== chatgptPrompt) {
+      setChatgptPrompt(trimmed);
+      setCookie("vexa-chatgpt-prompt", trimmed);
+    }
+  }, [editedChatgptPrompt, chatgptPrompt]);
 
   if (isLoading) {
     return (
@@ -542,66 +588,8 @@ export function TranscriptViewer({
   }
 
   return (
-    <Card className="flex flex-col h-full max-h-[calc(100vh-200px)]">
+    <Card className="flex flex-col h-full flex-1 min-h-0">
       <CardHeader className="flex-shrink-0 space-y-2 lg:space-y-4 py-3 lg:py-6">
-        {/* Compact header on mobile, full on desktop - hidden on mobile */}
-        <div className="hidden lg:flex items-center gap-2 lg:gap-4 flex-wrap">
-          <div className="flex items-center gap-1.5 lg:gap-3">
-            <CardTitle className="text-sm lg:text-base">Transcript</CardTitle>
-            {isLive && (
-              <Badge variant="destructive" className="animate-pulse text-[10px] lg:text-xs h-4 lg:h-5 px-1.5 lg:px-2">
-                <span className="relative flex h-1.5 w-1.5 lg:h-2 lg:w-2 mr-1 lg:mr-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                  <span className="relative inline-flex rounded-full h-full w-full bg-white" />
-                </span>
-                Live
-              </Badge>
-            )}
-          </div>
-
-          {/* ChatGPT and Export buttons */}
-          <div className="flex items-center gap-2">
-            {segments.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2"
-                onClick={handleSendToChatGPT}
-                title="Send transcript to ChatGPT"
-              >
-                <MessageSquare className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                <span className="hidden sm:inline">ChatGPT</span>
-              </Button>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2">
-                  <Download className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                  <span className="hidden sm:inline">Export</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExport("txt")}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Text (.txt)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("json")}>
-                  <FileJson className="h-4 w-4 mr-2" />
-                  JSON (.json)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("srt")}>
-                  <FileVideo className="h-4 w-4 mr-2" />
-                  Subtitles (.srt)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport("vtt")}>
-                  <FileVideo className="h-4 w-4 mr-2" />
-                  WebVTT (.vtt)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
         {/* Search and Filter Bar - compact on mobile */}
         <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
           {/* Search */}
@@ -718,6 +706,48 @@ export function TranscriptViewer({
           </div>
         )}
       </CardHeader>
+
+      {/* Collapsible ChatGPT Prompt Section */}
+      {isChatgptPromptExpanded && (
+        <div className="px-6 pb-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="bg-muted/30 rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                AI Prompt
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => setIsChatgptPromptExpanded(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Input
+                ref={chatgptPromptTextareaRef as any}
+                value={editedChatgptPrompt}
+                onChange={(e) => setEditedChatgptPrompt(e.target.value)}
+                onBlur={handleChatgptPromptBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setEditedChatgptPrompt(chatgptPrompt);
+                    setIsChatgptPromptExpanded(false);
+                  }
+                }}
+                placeholder="AI prompt (use {url} for the transcript URL)"
+                className="text-sm"
+                autoFocus
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Use <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> as a placeholder for the transcript link.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <div
