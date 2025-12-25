@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, formatDistanceToNow } from "date-fns";
@@ -56,17 +56,8 @@ import { toast } from "sonner";
 export default function UserDetailPage() {
   const params = useParams();
   const router = useRouter();
-  // Unwrap params if it's a Promise (Next.js 15+ compatibility)
-  // In Next.js 15+, params can be a Promise and must be unwrapped with React.use()
-  // Check if params is a Promise by checking if it has 'then' method and doesn't have 'id' property
-  const isPromise = params && typeof params === 'object' && 
-    'then' in params && 
-    typeof (params as any).then === 'function' && 
-    !('id' in params);
-  const resolvedParams = isPromise 
-    ? use(params as Promise<{ id: string }>)
-    : (params as { id: string });
-  const userId = resolvedParams.id as string;
+  const idParam = (params as { id?: string | string[] } | null)?.id;
+  const userId = Array.isArray(idParam) ? idParam[0] : (idParam ?? "");
 
   const {
     selectedUser,
@@ -134,7 +125,7 @@ export default function UserDetailPage() {
   };
 
   const handleStartEditName = () => {
-    setTempName(selectedUser.name || "");
+    setTempName(selectedUser?.name ?? "");
     setIsEditingName(true);
   };
 
@@ -157,12 +148,12 @@ export default function UserDetailPage() {
   };
 
   const handleCancelEditName = () => {
-    setTempName(selectedUser.name || "");
+    setTempName(selectedUser?.name ?? "");
     setIsEditingName(false);
   };
 
   const handleStartEditMaxBots = () => {
-    setTempMaxBots(selectedUser.max_concurrent_bots);
+    setTempMaxBots(selectedUser?.max_concurrent_bots ?? 3);
     setIsEditingMaxBots(true);
   };
 
@@ -189,7 +180,7 @@ export default function UserDetailPage() {
   };
 
   const handleCancelEditMaxBots = () => {
-    setTempMaxBots(selectedUser.max_concurrent_bots);
+    setTempMaxBots(selectedUser?.max_concurrent_bots ?? 3);
     setIsEditingMaxBots(false);
   };
 

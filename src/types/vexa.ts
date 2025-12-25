@@ -117,7 +117,7 @@ export interface WebSocketSegment {
 }
 
 export interface WebSocketTranscriptMessage {
-  type: "transcript.mutable";
+  type: "transcript.mutable" | "transcript.finalized";
   meeting: { id: number };
   payload: {
     segments: WebSocketSegment[];

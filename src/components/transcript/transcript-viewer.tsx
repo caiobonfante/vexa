@@ -27,6 +27,7 @@ import {
   generateFilename,
 } from "@/lib/export";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 interface TranscriptViewerProps {
   meeting: Meeting;
@@ -55,12 +56,15 @@ export function TranscriptViewer({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  // Smart scroll state management
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastScrollTopRef = useRef(0);
-  const isNearBottomRef = useRef(true);
-  const hasScrolledOnceRef = useRef(false);
+  // Auto-follow state (stick to bottom unless user scrolls away)
+  const [autoFollow, setAutoFollow] = useState(true);
+  const autoFollowRef = useRef(true);
+  const resumeFollowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoScrollingRef = useRef(false);
+
+  useEffect(() => {
+    autoFollowRef.current = autoFollow;
+  }, [autoFollow]);
 
   // Keyboard shortcut for search (Cmd/Ctrl + F)
   useEffect(() => {
@@ -277,145 +281,92 @@ export function TranscriptViewer({
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
 
-  // Get the scroll container - use direct ref (like example client)
-  const getScrollContainer = useCallback(() => {
-    return scrollRef.current;
+  const isNearBottom = useCallback((el: HTMLElement, threshold = 120) => {
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    return distanceFromBottom <= threshold;
   }, []);
 
-  // Check if scroll is near bottom (within threshold)
-  const checkIfNearBottom = useCallback(() => {
-    const scrollContainer = getScrollContainer();
-    if (!scrollContainer) return false;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    const threshold = 100; // pixels from bottom
-    return scrollHeight - scrollTop - clientHeight < threshold;
-  }, [getScrollContainer]);
+  const clearResumeTimer = useCallback(() => {
+    if (resumeFollowTimeoutRef.current) {
+      clearTimeout(resumeFollowTimeoutRef.current);
+      resumeFollowTimeoutRef.current = null;
+    }
+  }, []);
 
-  // Handle scroll events to detect user scrolling
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = scrollRef.current;
+      if (!el) return;
+
+      // While smooth-scrolling back down, ignore scroll events so we don't immediately disable follow.
+      isAutoScrollingRef.current = behavior === "smooth";
+
+      const top = el.scrollHeight;
+      try {
+        el.scrollTo({ top, behavior });
+      } catch {
+        // Fallback for very old browsers
+        el.scrollTop = top;
+      }
+
+      if (behavior === "smooth") {
+        window.setTimeout(() => {
+          isAutoScrollingRef.current = false;
+        }, 900);
+      } else {
+        isAutoScrollingRef.current = false;
+      }
+    },
+    []
+  );
+
+  const scheduleResumeFollow = useCallback(() => {
+    clearResumeTimer();
+    resumeFollowTimeoutRef.current = setTimeout(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      // Only pull back down if user is still away from bottom.
+      if (!isNearBottom(el)) {
+        setAutoFollow(true);
+        scrollToBottom("smooth");
+      } else {
+        setAutoFollow(true);
+      }
+      resumeFollowTimeoutRef.current = null;
+    }, 5000);
+  }, [clearResumeTimer, isNearBottom, scrollToBottom]);
+
   const handleScroll = useCallback(() => {
-    const scrollContainer = getScrollContainer();
-    if (!scrollContainer) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (isAutoScrollingRef.current) return;
 
-    const currentScrollTop = scrollContainer.scrollTop;
-    const isScrollingUp = currentScrollTop < lastScrollTopRef.current;
-    const isNearBottom = checkIfNearBottom();
-
-    // Update refs
-    lastScrollTopRef.current = currentScrollTop;
-    isNearBottomRef.current = isNearBottom;
-
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = null;
-    }
-
-    // Mark that user has scrolled manually
-    hasScrolledOnceRef.current = true;
-    
-    // If user is scrolling up or not near bottom, mark as user scrolling
-    if (isScrollingUp || !isNearBottom) {
-      setIsUserScrolling(true);
-
-      // Set timeout to reset user scrolling after 5 seconds of inactivity (only if near bottom)
-      scrollTimeoutRef.current = setTimeout(() => {
-        // Check again if near bottom before resetting
-        if (checkIfNearBottom()) {
-          setIsUserScrolling(false);
-        }
-        scrollTimeoutRef.current = null;
-      }, 5000);
+    const atBottom = isNearBottom(el);
+    if (atBottom) {
+      if (!autoFollowRef.current) setAutoFollow(true);
+      clearResumeTimer();
     } else {
-      // User scrolled back to bottom - reset immediately
-      setIsUserScrolling(false);
+      if (autoFollowRef.current) setAutoFollow(false);
+      scheduleResumeFollow();
     }
-  }, [getScrollContainer, checkIfNearBottom]);
+  }, [clearResumeTimer, isNearBottom, scheduleResumeFollow]);
 
-  // Scroll to bottom (only if not user scrolling)
-  const scrollToBottom = useCallback(() => {
-    if (isUserScrolling) return;
-    
-    const scrollContainer = getScrollContainer();
-    if (!scrollContainer) return;
-    
-    scrollContainer.scrollTop = scrollContainer.scrollHeight;
-    
-    // Update ref to reflect we're at bottom
-    lastScrollTopRef.current = scrollContainer.scrollTop;
-    isNearBottomRef.current = true;
-  }, [getScrollContainer, isUserScrolling]);
-
-
-  // Add scroll event listener (with retry to ensure viewport is available)
+  // Cleanup timers
   useEffect(() => {
-    let scrollContainer: HTMLElement | null = null;
-    let retryTimeout: NodeJS.Timeout | null = null;
-
-    const setupScrollListener = () => {
-      scrollContainer = getScrollContainer();
-      if (!scrollContainer) {
-        // Retry after a short delay if viewport not found (max 10 retries)
-        let retries = 0;
-        const maxRetries = 10;
-        retryTimeout = setTimeout(() => {
-          retries++;
-          if (retries < maxRetries) {
-            setupScrollListener();
-          }
-        }, 100);
-        return;
-      }
-
-      scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
-    };
-
-    setupScrollListener();
-
     return () => {
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-      }
-      if (scrollContainer) {
-        scrollContainer.removeEventListener("scroll", handleScroll);
-      }
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = null;
-      }
+      clearResumeTimer();
     };
-  }, [getScrollContainer, handleScroll]);
+  }, [clearResumeTimer]);
 
-  // Auto-scroll to bottom when live and new segments/groups arrive (only if not user scrolling)
-  // Trigger immediately when segments change
-  useEffect(() => {
-    if (!isLive) return; // Only scroll when meeting is active
-    
-    // Scroll when segments change
-    if (groupedSegments.length > 0) {
-      const container = scrollRef.current;
-      if (!container) return;
-      
-      // Always scroll on first load or if user hasn't scrolled manually
-      // Only respect isUserScrolling after user has interacted
-      const shouldScroll = !hasScrolledOnceRef.current || !isUserScrolling;
-      
-      if (shouldScroll) {
-        // Use multiple requestAnimationFrame calls to ensure DOM is fully updated and painted
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            // Check if content is scrollable
-            const canScroll = container.scrollHeight > container.clientHeight;
-            if (!canScroll) return; // Nothing to scroll yet
-            
-            // Scroll to bottom
-            container.scrollTop = container.scrollHeight;
-            lastScrollTopRef.current = container.scrollTop;
-            isNearBottomRef.current = true;
-          });
-        });
-      }
-    }
-  }, [segments.length, groupedSegments.length, isLive, isUserScrolling]); // Depend on segments.length to trigger on any change
+  // Auto-follow: whenever segments update during a live meeting, keep us pinned to the bottom (unless user scrolled up).
+  useLayoutEffect(() => {
+    if (!isLive) return;
+    if (!autoFollowRef.current) return;
+    // Wait for DOM paint.
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+    });
+  }, [isLive, segments, scrollToBottom]);
 
   // Export handlers
   const handleExport = (format: "txt" | "json" | "srt" | "vtt") => {
@@ -444,6 +395,93 @@ export function TranscriptViewer({
     const filename = generateFilename(meeting, format);
     downloadFile(content, filename, mimeType);
   };
+
+  // Format transcript for ChatGPT
+  const formatTranscriptForChatGPT = useCallback(() => {
+    let output = "Meeting Transcript\n\n";
+    
+    if (meeting.data?.name || meeting.data?.title) {
+      output += `Title: ${meeting.data?.name || meeting.data?.title}\n`;
+    }
+    
+    if (meeting.start_time) {
+      output += `Date: ${format(new Date(meeting.start_time), "PPPp")}\n`;
+    }
+    
+    if (meeting.data?.participants?.length) {
+      output += `Participants: ${meeting.data.participants.join(", ")}\n`;
+    }
+    
+    output += "\n---\n\n";
+    
+    for (const segment of segments) {
+      // Use absolute timestamp if available
+      let timestamp = "";
+      if (segment.absolute_start_time) {
+        try {
+          const date = new Date(segment.absolute_start_time);
+          timestamp = date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "").replace("Z", "");
+        } catch {
+          timestamp = segment.absolute_start_time;
+        }
+      } else if (segment.start_time !== undefined) {
+        // Fallback to relative timestamp
+        const minutes = Math.floor(segment.start_time / 60);
+        const seconds = Math.floor(segment.start_time % 60);
+        timestamp = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+      
+      if (timestamp) {
+        output += `[${timestamp}] ${segment.speaker}: ${segment.text}\n\n`;
+      } else {
+        output += `${segment.speaker}: ${segment.text}\n\n`;
+      }
+    }
+    
+    return output;
+  }, [meeting, segments]);
+
+  // Handle sending transcript to ChatGPT
+  const handleSendToChatGPT = useCallback(async () => {
+    if (segments.length === 0) return;
+
+    // Prefer link-based flow (server-generated short-lived URL)
+    try {
+      const response = await fetch(
+        `/api/vexa/transcripts/${meeting.platform}/${meeting.platform_specific_id}/share?meeting_id=${encodeURIComponent(meeting.id)}`,
+        { method: "POST" }
+      );
+      if (response.ok) {
+        const share = (await response.json()) as { url: string; share_id?: string };
+        if (share?.url) {
+          const publicBase = process.env.NEXT_PUBLIC_TRANSCRIPT_SHARE_BASE_URL?.replace(/\/$/, "");
+          const shareUrl =
+            publicBase && share.share_id
+              ? `${publicBase}/public/transcripts/${share.share_id}.txt`
+              : share.url;
+
+          const q = `Read from ${shareUrl} so I can ask questions about it.`;
+          const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
+          window.open(chatgptUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to create transcript share link:", err);
+    }
+
+    // Fallback: clipboard flow
+    try {
+      const transcriptText = formatTranscriptForChatGPT();
+      await navigator.clipboard.writeText(transcriptText);
+      const q =
+        "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
+      const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
+      setTimeout(() => window.open(chatgptUrl, "_blank", "noopener,noreferrer"), 100);
+    } catch (error) {
+      console.error("Failed to copy transcript to clipboard:", error);
+    }
+  }, [segments, formatTranscriptForChatGPT, meeting.id, meeting.platform, meeting.platform_specific_id]);
 
   if (isLoading) {
     return (
@@ -486,33 +524,47 @@ export function TranscriptViewer({
             )}
           </div>
 
-          {/* Export - compact on mobile */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2">
-                <Download className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                <span className="hidden sm:inline">Export</span>
+          {/* ChatGPT and Export buttons */}
+          <div className="flex items-center gap-2">
+            {segments.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2"
+                onClick={handleSendToChatGPT}
+                title="Send transcript to ChatGPT"
+              >
+                <MessageSquare className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                <span className="hidden sm:inline">ChatGPT</span>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleExport("txt")}>
-                <FileText className="h-4 w-4 mr-2" />
-                Text (.txt)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport("json")}>
-                <FileJson className="h-4 w-4 mr-2" />
-                JSON (.json)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport("srt")}>
-                <FileVideo className="h-4 w-4 mr-2" />
-                Subtitles (.srt)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport("vtt")}>
-                <FileVideo className="h-4 w-4 mr-2" />
-                WebVTT (.vtt)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2">
+                  <Download className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport("txt")}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Text (.txt)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("json")}>
+                  <FileJson className="h-4 w-4 mr-2" />
+                  JSON (.json)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("srt")}>
+                  <FileVideo className="h-4 w-4 mr-2" />
+                  Subtitles (.srt)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("vtt")}>
+                  <FileVideo className="h-4 w-4 mr-2" />
+                  WebVTT (.vtt)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Search and Filter Bar - compact on mobile */}
@@ -635,6 +687,7 @@ export function TranscriptViewer({
       <CardContent className="flex-1 min-h-0 flex flex-col">
         <div 
           ref={scrollRef}
+          onScroll={handleScroll}
           className="flex-1 min-h-0 pr-4 overflow-y-auto"
         >
           {filteredSegments.length === 0 ? (

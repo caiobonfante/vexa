@@ -174,6 +174,24 @@ export const vexaAPI = {
     return { meeting, segments };
   },
 
+  // Create short-lived public transcript URL (for ChatGPT "Read from URL")
+  async createTranscriptShare(
+    platform: Platform,
+    nativeId: string,
+    meetingId?: string,
+    ttlSeconds?: number
+  ): Promise<{ share_id: string; url: string; expires_at: string; expires_in_seconds: number }> {
+    const params = new URLSearchParams();
+    if (meetingId) params.set("meeting_id", meetingId);
+    if (ttlSeconds) params.set("ttl_seconds", String(ttlSeconds));
+    const qs = params.toString();
+
+    const response = await fetch(`/api/vexa/transcripts/${platform}/${nativeId}/share${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+    });
+    return handleResponse<{ share_id: string; url: string; expires_at: string; expires_in_seconds: number }>(response);
+  },
+
   // Bots
   async createBot(request: CreateBotRequest): Promise<Meeting> {
     const response = await fetch("/api/vexa/bots", {

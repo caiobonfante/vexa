@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, use } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -19,9 +19,10 @@ import {
   Loader2,
   FileText,
   StopCircle,
-  Download,
   FileJson,
   FileVideo,
+  ChevronDown,
+  Settings,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   exportToTxt,
@@ -56,21 +58,13 @@ import {
   downloadFile,
   generateFilename,
 } from "@/lib/export";
+import { getCookie, setCookie } from "@/lib/cookies";
 
 export default function MeetingDetailPage() {
   const params = useParams();
   const router = useRouter();
-  // Unwrap params if it's a Promise (Next.js 15+ compatibility)
-  // In Next.js 15+, params can be a Promise and must be unwrapped with React.use()
-  // Check if params is a Promise by checking if it has 'then' method and doesn't have 'id' property
-  const isPromise = params && typeof params === 'object' && 
-    'then' in params && 
-    typeof (params as any).then === 'function' && 
-    !('id' in params);
-  const resolvedParams = isPromise 
-    ? use(params as Promise<{ id: string }>)
-    : (params as { id: string });
-  const meetingId = resolvedParams.id as string;
+  const idParam = (params as { id?: string | string[] } | null)?.id;
+  const meetingId = Array.isArray(idParam) ? idParam[0] : (idParam ?? "");
 
   const {
     currentMeeting,
@@ -98,6 +92,17 @@ export default function MeetingDetailPage() {
   const [isNotesExpanded, setIsNotesExpanded] = useState(false);
   const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
   const shouldSetCursorToEnd = useRef(false);
+
+  // ChatGPT prompt editing state
+  const [chatgptPrompt, setChatgptPrompt] = useState(() => {
+    if (typeof window !== "undefined") {
+      return getCookie("vexa-chatgpt-prompt") || "Read from {url} so I can ask questions about it.";
+    }
+    return "Read from {url} so I can ask questions about it.";
+  });
+  const [isChatgptPromptExpanded, setIsChatgptPromptExpanded] = useState(false);
+  const [editedChatgptPrompt, setEditedChatgptPrompt] = useState(chatgptPrompt);
+  const chatgptPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Bot control state
   const [isStoppingBot, setIsStoppingBot] = useState(false);
@@ -134,7 +139,16 @@ export default function MeetingDetailPage() {
 
   // Handle export
   const handleExport = useCallback((format: "txt" | "json" | "srt" | "vtt") => {
-    if (!currentMeeting) return;
+    if (!currentMeeting) {
+      toast.error("No meeting selected");
+      return;
+    }
+    if (transcripts.length === 0) {
+      toast.info("No transcript available yet", {
+        description: "The transcript will be available once the meeting starts and transcription begins.",
+      });
+      return;
+    }
     
     let content: string;
     let mimeType: string;
@@ -161,6 +175,133 @@ export default function MeetingDetailPage() {
     const filename = generateFilename(currentMeeting, format);
     downloadFile(content, filename, mimeType);
   }, [currentMeeting, transcripts]);
+
+  // Format transcript for ChatGPT
+  const formatTranscriptForChatGPT = useCallback((meeting: Meeting, segments: typeof transcripts): string => {
+    let output = "Meeting Transcript\n\n";
+    
+    if (meeting.data?.name || meeting.data?.title) {
+      output += `Title: ${meeting.data?.name || meeting.data?.title}\n`;
+    }
+    
+    if (meeting.start_time) {
+      output += `Date: ${format(new Date(meeting.start_time), "PPPp")}\n`;
+    }
+    
+    if (meeting.data?.participants?.length) {
+      output += `Participants: ${meeting.data.participants.join(", ")}\n`;
+    }
+    
+    output += "\n---\n\n";
+    
+    for (const segment of segments) {
+      // Use absolute timestamp if available
+      let timestamp = "";
+      if (segment.absolute_start_time) {
+        try {
+          const date = new Date(segment.absolute_start_time);
+          timestamp = date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "").replace("Z", "");
+        } catch {
+          timestamp = segment.absolute_start_time;
+        }
+      } else if (segment.start_time !== undefined) {
+        // Fallback to relative timestamp
+        const minutes = Math.floor(segment.start_time / 60);
+        const seconds = Math.floor(segment.start_time % 60);
+        timestamp = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+      
+      if (timestamp) {
+        output += `[${timestamp}] ${segment.speaker}: ${segment.text}\n\n`;
+      } else {
+        output += `${segment.speaker}: ${segment.text}\n\n`;
+      }
+    }
+    
+    return output;
+  }, []);
+
+  // Handle opening transcript in AI provider
+  const handleOpenInProvider = useCallback(async (provider: "chatgpt" | "perplexity") => {
+    if (!currentMeeting) {
+      toast.error("No meeting selected");
+      return;
+    }
+    if (transcripts.length === 0) {
+      toast.info("No transcript available yet", {
+        description: "The transcript will be available once the meeting starts and transcription begins.",
+      });
+      return;
+    }
+
+    // Prefer link-based flow (like "Read from https://..." in ChatGPT/Perplexity)
+    try {
+      const share = await vexaAPI.createTranscriptShare(
+        currentMeeting.platform,
+        currentMeeting.platform_specific_id,
+        meetingId
+      );
+
+      // If the gateway is accessed via localhost (dev), providers still need a PUBLIC URL.
+      // Allow overriding the public base via NEXT_PUBLIC_TRANSCRIPT_SHARE_BASE_URL.
+      const publicBase = process.env.NEXT_PUBLIC_TRANSCRIPT_SHARE_BASE_URL?.replace(/\/$/, "");
+      const shareUrl =
+        publicBase && share.share_id
+          ? `${publicBase}/public/transcripts/${share.share_id}.txt`
+          : share.url;
+
+      // Use custom prompt from cookie, replacing {url} placeholder
+      const prompt = chatgptPrompt.replace(/{url}/g, shareUrl);
+      
+      let providerUrl: string;
+      if (provider === "chatgpt") {
+        providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(prompt)}`;
+      } else {
+        // Perplexity format: https://www.perplexity.ai/search?q={query}
+        providerUrl = `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
+      }
+      
+      window.open(providerUrl, "_blank", "noopener,noreferrer");
+      return;
+    } catch (err) {
+      // Fall back to clipboard flow if share-link creation fails
+      console.error("Failed to create transcript share link:", err);
+    }
+
+    try {
+      const transcriptText = formatTranscriptForChatGPT(currentMeeting, transcripts);
+      await navigator.clipboard.writeText(transcriptText);
+      toast.success("Transcript copied to clipboard", {
+        description: `Opening ${provider === "chatgpt" ? "ChatGPT" : "Perplexity"}. Please paste the transcript when prompted.`,
+      });
+      const q = "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
+      let providerUrl: string;
+      if (provider === "chatgpt") {
+        providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
+      } else {
+        providerUrl = `https://www.perplexity.ai/search?q=${encodeURIComponent(q)}`;
+      }
+      setTimeout(() => window.open(providerUrl, "_blank", "noopener,noreferrer"), 100);
+    } catch (error) {
+      toast.error("Failed to copy transcript", {
+        description: "Please try again or copy the transcript manually.",
+      });
+    }
+  }, [currentMeeting, transcripts, formatTranscriptForChatGPT, meetingId, chatgptPrompt]);
+
+  // Handle sending transcript to ChatGPT (for main button)
+  const handleSendToChatGPT = useCallback(() => {
+    handleOpenInProvider("chatgpt");
+  }, [handleOpenInProvider]);
+
+  // Handle saving ChatGPT prompt to cookie
+  const handleChatgptPromptBlur = useCallback(() => {
+    const trimmed = editedChatgptPrompt.trim();
+    if (trimmed && trimmed !== chatgptPrompt) {
+      setChatgptPrompt(trimmed);
+      setCookie("vexa-chatgpt-prompt", trimmed);
+    }
+  }, [editedChatgptPrompt, chatgptPrompt]);
 
   // Live transcripts and status updates via WebSocket (for active and early states)
   const isEarlyState = currentMeeting?.status === "requested" || 
@@ -620,33 +761,108 @@ export default function MeetingDetailPage() {
                   Live
                 </Badge>
               )}
-              {transcripts.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-6 px-2 text-xs gap-1">
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExport("txt")}>
-                      <FileText className="h-4 w-4 mr-2" />
-                      Text (.txt)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport("json")}>
-                      <FileJson className="h-4 w-4 mr-2" />
-                      JSON (.json)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport("srt")}>
-                      <FileVideo className="h-4 w-4 mr-2" />
-                      Subtitles (.srt)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport("vtt")}>
-                      <FileVideo className="h-4 w-4 mr-2" />
-                      WebVTT (.vtt)
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              {/* Combined ChatGPT Button with Dropdown */}
+              <DropdownMenu>
+                    <div className="flex items-center border rounded-md overflow-hidden">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs gap-1 rounded-r-none border-r-0"
+                        onClick={handleSendToChatGPT}
+                        title="Connect AI"
+                      >
+                        <Image
+                          src="/icons/icons8-chatgpt-100.png"
+                          alt="ChatGPT"
+                          width={14}
+                          height={14}
+                          className="object-contain invert"
+                        />
+                        <span className="hidden sm:inline">Connect AI</span>
+                      </Button>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-1.5 rounded-l-none border-l"
+                          title="AI provider options"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </div>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => handleOpenInProvider("chatgpt")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <Image
+                          src="/icons/icons8-chatgpt-100.png"
+                          alt="ChatGPT"
+                          width={16}
+                          height={16}
+                          className="object-contain mr-2 invert"
+                        />
+                        Open in ChatGPT
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleOpenInProvider("perplexity")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <Image
+                          src="/icons/icons8-perplexity-ai-100.png"
+                          alt="Perplexity"
+                          width={16}
+                          height={16}
+                          className="object-contain mr-2"
+                        />
+                        Open in Perplexity
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (!isChatgptPromptExpanded) {
+                            setEditedChatgptPrompt(chatgptPrompt);
+                            setIsChatgptPromptExpanded(true);
+                          } else {
+                            setIsChatgptPromptExpanded(false);
+                          }
+                        }}
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure Prompt
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => handleExport("txt")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Download as Text (.txt)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleExport("json")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <FileJson className="h-4 w-4 mr-2" />
+                        Download as JSON (.json)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleExport("srt")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <FileVideo className="h-4 w-4 mr-2" />
+                        Download as Subtitles (.srt)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleExport("vtt")}
+                        disabled={transcripts.length === 0}
+                      >
+                        <FileVideo className="h-4 w-4 mr-2" />
+                        Download as WebVTT (.vtt)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
             </div>
           </div>
         </div>
@@ -689,6 +905,47 @@ export default function MeetingDetailPage() {
               disabled={isSavingNotes}
               autoFocus
             />
+          </div>
+        </div>
+      )}
+
+      {/* Collapsible ChatGPT Prompt Section - Mobile Only */}
+      {isChatgptPromptExpanded && (
+        <div className="lg:hidden sticky top-0 z-50 bg-card text-card-foreground rounded-lg border shadow-sm overflow-hidden animate-in slide-in-from-top-2 duration-200">
+          <div className="p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">ChatGPT Prompt</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => {
+                  setIsChatgptPromptExpanded(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Textarea
+                ref={chatgptPromptTextareaRef}
+                value={editedChatgptPrompt}
+                onChange={(e) => setEditedChatgptPrompt(e.target.value)}
+                onBlur={handleChatgptPromptBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setEditedChatgptPrompt(chatgptPrompt);
+                    setIsChatgptPromptExpanded(false);
+                  }
+                }}
+                placeholder="ChatGPT prompt (use {url} for the transcript URL)"
+                className="min-h-[120px] resize-none text-sm"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Use <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> as a placeholder for the transcript URL.
+              </p>
+            </div>
           </div>
         </div>
       )}
