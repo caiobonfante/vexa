@@ -9,6 +9,7 @@ interface TranscriptSegmentProps {
   speakerColor: SpeakerColor;
   isHighlighted?: boolean;
   searchQuery?: string;
+  appendedText?: string | null;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -64,11 +65,42 @@ function highlightText(text: string, query: string): React.ReactNode {
   );
 }
 
+function renderTextWithAppendedHighlight(
+  text: string,
+  appendedText: string | null,
+  searchQuery?: string
+): React.ReactNode {
+  if (!appendedText) {
+    return searchQuery ? highlightText(text, searchQuery) : text;
+  }
+
+  // Only highlight if the appended text is at the end of the text
+  // This ensures we don't highlight random occurrences in the middle
+  if (!text.endsWith(appendedText)) {
+    // If appended text is not at the end, don't highlight anything
+    return searchQuery ? highlightText(text, searchQuery) : text;
+  }
+
+  // The appended text is at the end, highlight only that portion
+  const beforeText = text.slice(0, text.length - appendedText.length);
+  const highlightedText = text.slice(text.length - appendedText.length);
+
+  return (
+    <>
+      {searchQuery ? highlightText(beforeText, searchQuery) : beforeText}
+      <mark className="bg-blue-200 dark:bg-blue-800/50 rounded px-0.5 animate-highlight-fade">
+        {searchQuery ? highlightText(highlightedText, searchQuery) : highlightedText}
+      </mark>
+    </>
+  );
+}
+
 export function TranscriptSegment({
   segment,
   speakerColor,
   isHighlighted,
   searchQuery,
+  appendedText,
 }: TranscriptSegmentProps) {
   // Always display absolute time from the feed when available (device-independent).
   // For grouped segments, callers should pass the FIRST segment's `absolute_start_time` as `segment.absolute_start_time`.
@@ -102,7 +134,7 @@ export function TranscriptSegment({
           </span>
         </div>
         <p className="text-sm leading-relaxed">
-          {searchQuery ? highlightText(segment.text, searchQuery) : segment.text}
+          {renderTextWithAppendedHighlight(segment.text, appendedText || null, searchQuery)}
         </p>
       </div>
     </div>

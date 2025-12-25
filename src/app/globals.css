@@ -255,6 +255,41 @@
   50% { transform: translateY(-5px); }
 }
 
+@keyframes highlight-fade {
+  0% {
+    background-color: rgb(219 234 254); /* blue-100 */
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.dark .animate-highlight-fade {
+  animation: highlight-fade-dark 3s ease-out forwards;
+}
+
+.dark mark.animate-highlight-fade {
+  animation: highlight-fade-dark 3s ease-out forwards;
+}
+
+@keyframes highlight-fade-dark {
+  0% {
+    background-color: rgb(30 58 138 / 0.3); /* blue-900/30 */
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight-fade {
+  animation: highlight-fade 3s ease-out forwards;
+}
+
+/* Highlight fade for inline mark elements */
+mark.animate-highlight-fade {
+  animation: highlight-fade 3s ease-out forwards;
+}
+
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
@@ -266,6 +301,15 @@
 
 .animate-bounce-slow {
   animation: bounce-slow 2s ease-in-out infinite;
+}
+
+.animate-highlight-fade {
+  animation: highlight-fade 3s ease-out forwards;
+}
+
+/* Highlight fade for inline mark elements */
+mark.animate-highlight-fade {
+  animation: highlight-fade 3s ease-out forwards;
 }
 
 /* Grid pattern background */

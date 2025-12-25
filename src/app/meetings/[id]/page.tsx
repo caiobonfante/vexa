@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -574,28 +574,61 @@ export default function MeetingDetailPage() {
       </div>
 
       {/* Mobile: Single consolidated block with everything */}
-      <div className="lg:hidden">
-        <div className="bg-card text-card-foreground rounded-lg border py-2.5 px-3 shadow-sm">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Back button */}
-            <Button variant="ghost" size="sm" className="h-7 px-2 -ml-1" asChild>
+      <div className="lg:hidden sticky top-[-16px] z-40 bg-background/80 backdrop-blur-sm -mx-4 px-4 py-2 mb-2">
+        <div
+          className={cn(
+            "bg-card text-card-foreground rounded-lg border shadow-sm px-2 py-1.5",
+            "backdrop-blur supports-[backdrop-filter]:bg-card/95"
+          )}
+        >
+          {/* Single Highly Compact Row for Mobile */}
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7 -ml-0.5 shrink-0" asChild>
               <Link href="/meetings">
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-3.5 w-3.5" />
               </Link>
             </Button>
-            
-            {/* Meeting ID/Title */}
-            {isEditingTitle ? (
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <Input
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="text-sm font-medium h-7 flex-1 min-w-0"
-                  placeholder="Title..."
-                  autoFocus
-                  disabled={isSavingTitle}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter" && editedTitle.trim()) {
+
+            {/* Title & Platform Icon */}
+            <div className="flex-1 min-w-0 flex items-center gap-1">
+              {isEditingTitle ? (
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  <Input
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    className="text-[11px] font-medium h-6 flex-1 min-w-0 py-0 px-1.5"
+                    placeholder="Title..."
+                    autoFocus
+                    disabled={isSavingTitle}
+                    onBlur={() => {
+                      if (!isSavingTitle) setIsEditingTitle(false);
+                    }}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && editedTitle.trim()) {
+                        setIsSavingTitle(true);
+                        try {
+                          await updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
+                            name: editedTitle.trim(),
+                          });
+                          setIsEditingTitle(false);
+                          toast.success("Title updated");
+                        } catch (err) {
+                          toast.error("Failed to update title");
+                        } finally {
+                          setIsSavingTitle(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        setIsEditingTitle(false);
+                      }
+                    }}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-green-600 shrink-0"
+                    disabled={isSavingTitle || !editedTitle.trim()}
+                    onClick={async () => {
+                      if (!editedTitle.trim()) return;
                       setIsSavingTitle(true);
                       try {
                         await updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
@@ -608,261 +641,112 @@ export default function MeetingDetailPage() {
                       } finally {
                         setIsSavingTitle(false);
                       }
-                    } else if (e.key === "Escape") {
-                      setIsEditingTitle(false);
-                    }
-                  }}
-                />
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6 text-green-600"
-                  disabled={isSavingTitle || !editedTitle.trim()}
-                  onClick={async () => {
-                    if (!editedTitle.trim()) return;
-                    setIsSavingTitle(true);
-                    try {
-                      await updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
-                        name: editedTitle.trim(),
-                      });
-                      setIsEditingTitle(false);
-                      toast.success("Title updated");
-                    } catch (err) {
-                      toast.error("Failed to update title");
-                    } finally {
-                      setIsSavingTitle(false);
-                    }
-                  }}
-                >
-                  {isSavingTitle ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6 text-muted-foreground"
-                  disabled={isSavingTitle}
-                  onClick={() => setIsEditingTitle(false)}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 group flex-1 min-w-0">
-                <span className="text-sm font-medium truncate">
-                  {currentMeeting.data?.name || currentMeeting.data?.title || currentMeeting.platform_specific_id}
-                </span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    }}
+                  >
+                    {isSavingTitle ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  </Button>
+                </div>
+              ) : (
+                <div 
+                  className="flex items-center gap-1 group cursor-pointer min-w-0"
                   onClick={() => {
                     setEditedTitle(currentMeeting.data?.name || currentMeeting.data?.title || "");
                     setIsEditingTitle(true);
                   }}
                 >
-                  <Pencil className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
-
-            {/* Status */}
-            <Badge className={cn("text-xs h-5 px-2", statusConfig.bgColor, statusConfig.color)}>
-              {statusConfig.label}
-            </Badge>
-
-            {/* Action buttons */}
-            {currentMeeting.status === "active" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={handleStopBot}
-                disabled={isStoppingBot}
-              >
-                {isStoppingBot ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <StopCircle className="h-3.5 w-3.5" />
-                )}
-                <span className="hidden xs:inline">Stop</span>
-              </Button>
-            )}
-            {(currentMeeting.status === "active" || currentMeeting.status === "completed") && transcripts.length > 0 && (
-              <AIChatPanel
-                meeting={currentMeeting}
-                transcripts={transcripts}
-                trigger={
-                  <Button size="sm" className="h-7 px-2 text-xs gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span className="hidden xs:inline">AI</span>
-                  </Button>
-                }
-              />
-            )}
-          </div>
-
-          {/* Second row: Platform, Date, Duration, Notes, Transcript */}
-          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t">
-            {/* Platform */}
-            <div className="flex items-center gap-1.5">
-              <Image
-                src={currentMeeting.platform === "google_meet" 
-                  ? "/icons/icons8-google-meet-96.png" 
-                  : "/icons/icons8-teams-96.png"}
-                alt={platformConfig.name}
-                width={16}
-                height={16}
-                className="object-contain"
-              />
-              <span className="text-xs font-medium">{platformConfig.name}</span>
+                  <span className="text-xs font-semibold truncate">
+                    {currentMeeting.data?.name || currentMeeting.data?.title || currentMeeting.platform_specific_id}
+                  </span>
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground" />
+                </div>
+              )}
             </div>
 
-            {/* Date */}
-            {currentMeeting.start_time && (
-              <span className="text-xs text-muted-foreground">
-                {format(new Date(currentMeeting.start_time), "MMM d, h:mm a")}
-              </span>
-            )}
+            {/* Status & Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Badge className={cn("text-[9px] h-4 px-1 shrink-0", statusConfig.bgColor, statusConfig.color)}>
+                {statusConfig.label}
+              </Badge>
 
-            {/* Duration */}
-            {duration && (
-              <span className="text-xs text-muted-foreground">{formatDuration(duration)}</span>
-            )}
+              <div className="flex items-center border-l ml-0.5 pl-0.5 gap-0">
+                {currentMeeting.status === "active" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive"
+                    onClick={handleStopBot}
+                    disabled={isStoppingBot}
+                    title="Stop"
+                  >
+                    {isStoppingBot ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
 
-            {/* Notes Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (!isNotesExpanded) {
-                  setEditedNotes(currentMeeting.data?.notes || "");
-                  setIsEditingNotes(true);
-                  setIsNotesExpanded(true);
-                } else {
-                  setIsNotesExpanded(false);
-                  setIsEditingNotes(false);
-                }
-              }}
-            >
-              <FileText className="h-3.5 w-3.5 mr-1" />
-              {currentMeeting.data?.notes ? "Notes" : "Add"}
-            </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground"
+                  onClick={() => {
+                    setEditedNotes(currentMeeting.data?.notes || "");
+                    setIsEditingNotes(true);
+                    setIsNotesExpanded(true);
+                  }}
+                  title="Notes"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                </Button>
 
-            {/* Transcript Header */}
-            <div className="flex items-center gap-1.5 ml-auto">
-              <span className="text-xs font-medium">Transcript</span>
-              {currentMeeting.status === "active" && (
-                <Badge variant="destructive" className="animate-pulse text-[10px] h-4 px-1.5">
-                  <span className="relative flex h-1.5 w-1.5 mr-1">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                    <span className="relative inline-flex rounded-full h-full w-full bg-white" />
-                  </span>
-                  Live
-                </Badge>
-              )}
-              {/* Combined ChatGPT Button with Dropdown */}
-              <DropdownMenu>
-                    <div className="flex items-center border rounded-md overflow-hidden">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-xs gap-1 rounded-r-none border-r-0"
-                        onClick={handleSendToChatGPT}
-                        title="Connect AI"
-                      >
-                        <Image
-                          src="/icons/icons8-chatgpt-100.png"
-                          alt="ChatGPT"
-                          width={14}
-                          height={14}
-                          className="object-contain invert"
-                        />
-                        <span className="hidden sm:inline">Connect AI</span>
-                      </Button>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-1.5 rounded-l-none border-l"
-                          title="AI provider options"
-                        >
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                    </div>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleOpenInProvider("chatgpt")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <Image
-                          src="/icons/icons8-chatgpt-100.png"
-                          alt="ChatGPT"
-                          width={16}
-                          height={16}
-                          className="object-contain mr-2 invert"
-                        />
-                        Open in ChatGPT
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleOpenInProvider("perplexity")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <Image
-                          src="/icons/icons8-perplexity-ai-100.png"
-                          alt="Perplexity"
-                          width={16}
-                          height={16}
-                          className="object-contain mr-2"
-                        />
-                        Open in Perplexity
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (!isChatgptPromptExpanded) {
-                            setEditedChatgptPrompt(chatgptPrompt);
-                            setIsChatgptPromptExpanded(true);
-                          } else {
-                            setIsChatgptPromptExpanded(false);
-                          }
-                        }}
-                      >
-                        <Settings className="h-4 w-4 mr-2" />
-                        Configure Prompt
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
-                        onClick={() => handleExport("txt")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        Download as Text (.txt)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleExport("json")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <FileJson className="h-4 w-4 mr-2" />
-                        Download as JSON (.json)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleExport("srt")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <FileVideo className="h-4 w-4 mr-2" />
-                        Download as Subtitles (.srt)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleExport("vtt")}
-                        disabled={transcripts.length === 0}
-                      >
-                        <FileVideo className="h-4 w-4 mr-2" />
-                        Download as WebVTT (.vtt)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-7 w-7 ml-0.5">
+                      <Image
+                        src="/icons/icons8-chatgpt-100.png"
+                        alt="AI"
+                        width={12}
+                        height={12}
+                        className="object-contain invert"
+                      />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")} disabled={transcripts.length === 0}>
+                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert" />
+                      Open in ChatGPT
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")} disabled={transcripts.length === 0}>
+                      <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
+                      Open in Perplexity
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!isChatgptPromptExpanded) {
+                          setEditedChatgptPrompt(chatgptPrompt);
+                          setIsChatgptPromptExpanded(true);
+                        } else {
+                          setIsChatgptPromptExpanded(false);
+                        }
+                      }}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configure Prompt
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleExport("txt")} disabled={transcripts.length === 0}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Download .txt
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("json")} disabled={transcripts.length === 0}>
+                      <FileJson className="h-4 w-4 mr-2" />
+                      Download .json
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
         </div>

@@ -55,21 +55,21 @@ export function TranscriptViewer({
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  
-  // Auto-follow state (stick to bottom unless user scrolls away)
-  const [autoFollow, setAutoFollow] = useState(true);
-  const autoFollowRef = useRef(true);
-  const resumeFollowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isAutoScrollingRef = useRef(false);
-  
-  // Track newly added segments for highlight animation
-  const [newSegmentIds, setNewSegmentIds] = useState<Set<string>>(new Set());
-  const previousSegmentIdsRef = useRef<Set<string>>(new Set());
-  const highlightTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false); // Track if user has manually scrolled away from bottom
+  const lastScrollTopRef = useRef(0);
 
-  useEffect(() => {
-    autoFollowRef.current = autoFollow;
-  }, [autoFollow]);
+  // Check if user is currently at bottom
+  const isNearBottom = useCallback((el: HTMLElement) => {
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    return distanceFromBottom <= 50; // Allow some tolerance
+  }, []);
+  
+  // Track only the most recently updated segment with appended text
+  const [mostRecentUpdatedSegment, setMostRecentUpdatedSegment] = useState<{ id: string; appendedText: string } | null>(null);
+  const previousSegmentIdsRef = useRef<Set<string>>(new Set());
+  const previousSegmentTextsRef = useRef<Map<string, string>>(new Map());
+  const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keyboard shortcut for search (Cmd/Ctrl + F)
   useEffect(() => {
@@ -286,92 +286,122 @@ export function TranscriptViewer({
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
 
-  const isNearBottom = useCallback((el: HTMLElement, threshold = 120) => {
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    return distanceFromBottom <= threshold;
-  }, []);
-
-  const clearResumeTimer = useCallback(() => {
-    if (resumeFollowTimeoutRef.current) {
-      clearTimeout(resumeFollowTimeoutRef.current);
-      resumeFollowTimeoutRef.current = null;
-    }
-  }, []);
-
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      const el = scrollRef.current;
-      if (!el) return;
-
-      // While smooth-scrolling back down, ignore scroll events so we don't immediately disable follow.
-      isAutoScrollingRef.current = behavior === "smooth";
-
-      const top = el.scrollHeight;
-      try {
-        el.scrollTo({ top, behavior });
-      } catch {
-        // Fallback for very old browsers
-        el.scrollTop = top;
-      }
-
-      if (behavior === "smooth") {
-        window.setTimeout(() => {
-          isAutoScrollingRef.current = false;
-        }, 900);
-      } else {
-        isAutoScrollingRef.current = false;
-      }
-    },
-    []
-  );
-
-  const scheduleResumeFollow = useCallback(() => {
-    clearResumeTimer();
-    resumeFollowTimeoutRef.current = setTimeout(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      // Only pull back down if user is still away from bottom.
-      if (!isNearBottom(el)) {
-        setAutoFollow(true);
-        scrollToBottom("smooth");
-      } else {
-        setAutoFollow(true);
-      }
-      resumeFollowTimeoutRef.current = null;
-    }, 5000);
-  }, [clearResumeTimer, isNearBottom, scrollToBottom]);
-
+  // Handle scroll events to detect when user scrolls up
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (isAutoScrollingRef.current) return;
 
-    const atBottom = isNearBottom(el);
-    if (atBottom) {
-      if (!autoFollowRef.current) setAutoFollow(true);
-      clearResumeTimer();
-    } else {
-      if (autoFollowRef.current) setAutoFollow(false);
-      scheduleResumeFollow();
+    const currentScrollTop = el.scrollTop;
+    const prevScrollTop = lastScrollTopRef.current;
+    lastScrollTopRef.current = currentScrollTop;
+
+    // If user scrolled up, mark them as having scrolled away from bottom
+    if (currentScrollTop < prevScrollTop) {
+      userScrolledUpRef.current = true;
     }
-  }, [clearResumeTimer, isNearBottom, scheduleResumeFollow]);
 
-  // Cleanup timers
+    // If user is back at bottom, resume auto-scrolling
+    if (isNearBottom(el)) {
+      userScrolledUpRef.current = false;
+    }
+  }, [isNearBottom]);
+
+  // Track only the most recently updated segment with appended text
+  useEffect(() => {
+    if (!isLive || segments.length === 0) {
+      previousSegmentIdsRef.current = new Set();
+      previousSegmentTextsRef.current.clear();
+      return;
+    }
+
+    // Create a set of current segment IDs and track text changes
+    const currentSegmentIds = new Set<string>();
+    const currentSegmentTexts = new Map<string, string>();
+    
+    segments.forEach((seg) => {
+      const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
+      currentSegmentIds.add(id);
+      currentSegmentTexts.set(id, seg.text || "");
+    });
+
+    // Find the most recently updated segment (check from end of array)
+    let mostRecentUpdate: { id: string; appendedText: string } | null = null;
+
+    // Check segments from the end (most recent first)
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i];
+      const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
+      const currentText = seg.text || "";
+      
+      // Check if this is a new segment
+      if (!previousSegmentIdsRef.current.has(id)) {
+        // For new segments, highlight the entire text initially
+        mostRecentUpdate = { id, appendedText: currentText };
+        break; // Found the most recent update, stop looking
+      } else {
+        // Check if text was appended to an existing segment
+        const previousText = previousSegmentTextsRef.current.get(id) || "";
+        if (currentText.length > previousText.length && currentText.startsWith(previousText)) {
+          const appendedText = currentText.slice(previousText.length);
+          mostRecentUpdate = { id, appendedText };
+          break; // Found the most recent update, stop looking
+        }
+      }
+    }
+
+    // Update state with only the most recent update
+    if (mostRecentUpdate) {
+      // Clear any existing timeout
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+
+      setMostRecentUpdatedSegment(mostRecentUpdate);
+
+      // Set up timeout to remove highlight after 3 seconds
+      highlightTimeoutRef.current = setTimeout(() => {
+        setMostRecentUpdatedSegment(null);
+        highlightTimeoutRef.current = null;
+      }, 3000); // 3 seconds
+    }
+
+    // Update previous segment IDs and texts
+    previousSegmentIdsRef.current = currentSegmentIds;
+    previousSegmentTextsRef.current = currentSegmentTexts;
+  }, [segments, isLive]);
+
+  // Cleanup highlight timeout on unmount
   useEffect(() => {
     return () => {
-      clearResumeTimer();
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
     };
-  }, [clearResumeTimer]);
+  }, []);
 
-  // Auto-follow: whenever segments update during a live meeting, keep us pinned to the bottom (unless user scrolled up).
+
+  // Auto-scroll to bottom when new segments arrive, unless user has scrolled up
   useLayoutEffect(() => {
     if (!isLive) return;
-    if (!autoFollowRef.current) return;
-    // Wait for DOM paint.
+
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Only auto-scroll when we have segments
+    if (segments.length === 0) return;
+
+    // Don't auto-scroll if user has manually scrolled up
+    if (userScrolledUpRef.current) return;
+
+    // Small delay to ensure DOM has updated
     requestAnimationFrame(() => {
-      scrollToBottom("auto");
+      // Double-check element still exists and we're still in live mode
+      if (!el || !isLive) return;
+
+      // Scroll to bottom by default (like a chat app)
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
     });
-  }, [isLive, segments, scrollToBottom]);
+  }, [isLive, segments.length]);
 
   // Export handlers
   const handleExport = (format: "txt" | "json" | "srt" | "vtt") => {
@@ -512,7 +542,7 @@ export function TranscriptViewer({
   }
 
   return (
-    <Card className="flex flex-col h-full">
+    <Card className="flex flex-col h-full max-h-[calc(100vh-200px)]">
       <CardHeader className="flex-shrink-0 space-y-2 lg:space-y-4 py-3 lg:py-6">
         {/* Compact header on mobile, full on desktop - hidden on mobile */}
         <div className="hidden lg:flex items-center gap-2 lg:gap-4 flex-wrap">
@@ -689,8 +719,8 @@ export function TranscriptViewer({
         )}
       </CardHeader>
 
-      <CardContent className="flex-1 min-h-0 flex flex-col">
-        <div 
+      <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div
           ref={scrollRef}
           onScroll={handleScroll}
           className="flex-1 min-h-0 pr-4 overflow-y-auto"
@@ -742,6 +772,50 @@ export function TranscriptViewer({
                   created_at: group.startTime,
                 };
 
+                // Check if this group contains the most recently updated segment
+                let textToHighlight: string | null = null;
+                
+                if (mostRecentUpdatedSegment) {
+                  // Find the segment in this group that matches the most recent update
+                  const matchingSegment = group.segments.find((seg) => {
+                    const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
+                    return mostRecentUpdatedSegment.id === id;
+                  });
+                  
+                  if (matchingSegment) {
+                    // For grouped segments, we need to find where this appended text appears in the combined text
+                    // Check if the appended text appears at the end (if it's from the last segment in the group)
+                    const isLastSegmentInGroup = 
+                      group.segments[group.segments.length - 1]?.id === matchingSegment.id ||
+                      (group.segments[group.segments.length - 1]?.absolute_start_time === matchingSegment.absolute_start_time &&
+                       group.segments[group.segments.length - 1]?.start_time === matchingSegment.start_time);
+                    
+                    if (isLastSegmentInGroup && group.combinedText.endsWith(mostRecentUpdatedSegment.appendedText)) {
+                      // The appended text is at the end of the combined text
+                      textToHighlight = mostRecentUpdatedSegment.appendedText;
+                    } else {
+                      // Try to find the appended text in the combined text more carefully
+                      // Only highlight if we can find it at the end of the matching segment's text within the combined text
+                      const segmentIndex = group.segments.indexOf(matchingSegment);
+                      if (segmentIndex >= 0) {
+                        // Calculate where this segment's text ends in the combined text
+                        let textBeforeThisSegment = "";
+                        for (let i = 0; i < segmentIndex; i++) {
+                          textBeforeThisSegment += (group.segments[i].text || "").trim() + " ";
+                        }
+                        const segmentStartInCombined = textBeforeThisSegment.length;
+                        const segmentEndInCombined = segmentStartInCombined + (matchingSegment.text || "").trim().length;
+                        
+                        // Check if the appended text is at the end of this segment's portion in the combined text
+                        const segmentTextInCombined = group.combinedText.slice(segmentStartInCombined, segmentEndInCombined);
+                        if (segmentTextInCombined.endsWith(mostRecentUpdatedSegment.appendedText)) {
+                          textToHighlight = mostRecentUpdatedSegment.appendedText;
+                        }
+                      }
+                    }
+                  }
+                }
+
                 return (
                   <div
                     key={`${group.startTime}-${index}`}
@@ -756,12 +830,15 @@ export function TranscriptViewer({
                       speakerColor={getSpeakerColor(group.speaker, speakerOrder)}
                       searchQuery={searchQuery}
                       isHighlighted={searchQuery.length > 0}
+                      appendedText={textToHighlight}
                     />
                   </div>
                 );
               })}
             </div>
           )}
+          {/* Bottom sentinel for reliable auto-follow scrolling */}
+          <div ref={bottomRef} />
         </div>
       </CardContent>
     </Card>
