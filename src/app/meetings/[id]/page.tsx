@@ -38,7 +38,7 @@ import { AIChatPanel } from "@/components/ai";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useLiveTranscripts } from "@/hooks/use-live-transcripts";
 import { PLATFORM_CONFIG, getDetailedStatus } from "@/types/vexa";
-import type { MeetingStatus } from "@/types/vexa";
+import type { MeetingStatus, Meeting } from "@/types/vexa";
 import { StatusHistory } from "@/components/meetings/status-history";
 import { cn } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
