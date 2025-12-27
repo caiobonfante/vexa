@@ -17,6 +17,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 import type { Platform, MeetingStatus } from "@/types/vexa";
+import { DocsLink } from "@/components/docs/docs-link";
 
 export default function MeetingsPage() {
   const { meetings, isLoadingMeetings, fetchMeetings, error } = useMeetingsStore();
@@ -70,7 +71,10 @@ export default function MeetingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Meetings</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight">Meetings</h1>
+            <DocsLink href="/docs/rest/meetings#list-meetings" />
+          </div>
           <p className="text-muted-foreground">
             Browse and search your meeting transcriptions
           </p>
@@ -79,10 +83,13 @@ export default function MeetingsPage() {
           <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoadingMeetings}>
             <RefreshCw className={`h-4 w-4 ${isLoadingMeetings ? "animate-spin" : ""}`} />
           </Button>
-          <Button onClick={openJoinModal}>
-            <Plus className="mr-2 h-4 w-4" />
-            Join Meeting
-          </Button>
+          <div className="flex items-center">
+            <Button onClick={openJoinModal}>
+              <Plus className="mr-2 h-4 w-4" />
+              Join Meeting
+            </Button>
+            <DocsLink href="/docs/rest/bots#create-bot" />
+          </div>
         </div>
       </div>
 

@@ -12,3 +12,8 @@ The component will automatically use the icon if it exists, otherwise it will fa
 
 Supported formats: SVG, PNG, JPG, WEBP
 
+
+
+
+
+

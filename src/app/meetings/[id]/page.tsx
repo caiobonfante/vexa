@@ -23,6 +23,7 @@ import {
   FileVideo,
   ChevronDown,
   Settings,
+  ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ import {
   generateFilename,
 } from "@/lib/export";
 import { getCookie, setCookie } from "@/lib/cookies";
+import { DocsLink } from "@/components/docs/docs-link";
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -507,13 +509,14 @@ export default function MeetingDetailPage() {
           
           {isEditingTitle ? (
             <div className="flex items-center gap-2 flex-1 max-w-md">
-              <Input
-                value={editedTitle}
-                onChange={(e) => setEditedTitle(e.target.value)}
-                className="text-xl font-bold h-9"
-                placeholder="Meeting title..."
-                autoFocus
-                disabled={isSavingTitle}
+              <div className="flex items-center gap-2 flex-1">
+                <Input
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  className="text-xl font-bold h-9"
+                  placeholder="Meeting title..."
+                  autoFocus
+                  disabled={isSavingTitle}
                 onKeyDown={async (e) => {
                   if (e.key === "Enter" && editedTitle.trim()) {
                     setIsSavingTitle(true);
@@ -566,6 +569,8 @@ export default function MeetingDetailPage() {
                 >
                   <X className="h-4 w-4" />
                 </Button>
+                <DocsLink href="/docs/cookbook/rename-meeting" />
+              </div>
               </div>
             </div>
           ) : (
@@ -607,33 +612,34 @@ export default function MeetingDetailPage() {
                 }
               />
               
-              <DropdownMenu>
-                <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-9">
-                  <Button
-                    variant="ghost"
-                    className="gap-2 rounded-r-none border-r-0 hover:bg-muted h-full"
-                    onClick={handleSendToChatGPT}
-                    title="Connect AI"
-                  >
-                    <Image
-                      src="/icons/icons8-chatgpt-100.png"
-                      alt="AI"
-                      width={18}
-                      height={18}
-                      className="object-contain invert dark:invert-0"
-                    />
-                    <span>Connect AI</span>
-                  </Button>
-                  <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-9">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="w-9 rounded-l-none border-l hover:bg-muted h-full"
+                      className="gap-2 rounded-r-none border-r-0 hover:bg-muted h-full"
+                      onClick={handleSendToChatGPT}
+                      title="Connect AI"
                     >
-                      <ChevronDown className="h-4 w-4" />
+                      <Image
+                        src="/icons/icons8-chatgpt-100.png"
+                        alt="AI"
+                        width={18}
+                        height={18}
+                        className="object-contain invert dark:invert-0"
+                      />
+                      <span>Connect AI</span>
                     </Button>
-                  </DropdownMenuTrigger>
-                </div>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-9 rounded-l-none border-l hover:bg-muted h-full"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </div>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")}>
                     <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
@@ -642,6 +648,13 @@ export default function MeetingDetailPage() {
                   <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")}>
                     <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
                     Open in Perplexity
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/docs/cookbook/share-transcript-url" target="_blank" rel="noopener noreferrer" className="flex items-center">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      API Docs: Share URL
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -668,24 +681,27 @@ export default function MeetingDetailPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <DocsLink href="/docs/cookbook/share-transcript-url" />
+              </div>
             </div>
           )}
           {currentMeeting.status === "active" && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9"
-                  disabled={isStoppingBot}
-                >
-                  {isStoppingBot ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <StopCircle className="h-4 w-4" />
-                  )}
-                  Stop
-                </Button>
-              </AlertDialogTrigger>
+            <div className="flex items-center">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-9"
+                    disabled={isStoppingBot}
+                  >
+                    {isStoppingBot ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-4 w-4" />
+                    )}
+                    Stop
+                  </Button>
+                </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Stop Transcription?</AlertDialogTitle>
@@ -704,6 +720,8 @@ export default function MeetingDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            <DocsLink href="/docs/rest/bots#stop-bot" />
+            </div>
           )}
         </div>
       </div>
@@ -790,6 +808,7 @@ export default function MeetingDetailPage() {
                   >
                     {isSavingTitle ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                   </Button>
+                  <DocsLink href="/docs/cookbook/rename-meeting" />
                 </div>
               ) : (
                 <div 
@@ -889,6 +908,13 @@ export default function MeetingDetailPage() {
                       Configure Prompt
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/docs/cookbook/share-transcript-url" target="_blank" rel="noopener noreferrer" className="flex items-center">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        API Docs: Share URL
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => handleExport("txt")} disabled={transcripts.length === 0}>
                       <FileText className="h-4 w-4 mr-2" />
                       Download .txt
@@ -897,8 +923,9 @@ export default function MeetingDetailPage() {
                       <FileJson className="h-4 w-4 mr-2" />
                       Download .json
                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DocsLink href="/docs/cookbook/share-transcript-url" />
 
                 {currentMeeting.status === "active" && (
                   <AlertDialog>
@@ -1067,6 +1094,7 @@ export default function MeetingDetailPage() {
               wsConnected={wsConnected}
               wsError={wsError}
               wsReconnectAttempts={reconnectAttempts}
+              headerActions={<DocsLink href="/docs/cookbook/get-transcripts" />}
             />
           )}
         </div>
@@ -1139,7 +1167,10 @@ export default function MeetingDetailPage() {
                     
                     {/* Language Selection */}
                     <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">Language</label>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground">Language</label>
+                        <DocsLink href="/docs/rest/bots#update-bot-configuration" />
+                      </div>
                       <Select
                         value={currentLanguage}
                         onValueChange={handleLanguageChange}
@@ -1263,10 +1294,13 @@ export default function MeetingDetailPage() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Notes
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Notes
+                  </CardTitle>
+                  <DocsLink href="/docs/rest/meetings#update-meeting-data" />
+                </div>
                 {isSavingNotes && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />

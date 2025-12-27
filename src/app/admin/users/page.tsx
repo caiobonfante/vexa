@@ -32,6 +32,7 @@ import { useAdminStore } from "@/stores/admin-store";
 import type { CreateUserRequest } from "@/types/vexa";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { DocsLink } from "@/components/docs/docs-link";
 
 export default function AdminUsersPage() {
   const {
@@ -104,12 +105,15 @@ export default function AdminUsersPage() {
           </Button>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New User
-              </Button>
-            </DialogTrigger>
+            <div className="flex items-center">
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  New User
+                </Button>
+              </DialogTrigger>
+              <DocsLink href="/docs/admin/users#create-user" />
+            </div>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New User</DialogTitle>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { getDocsUrl } from "@/lib/docs/webapp-url";
 import {
   LayoutDashboard,
   Video,
@@ -15,6 +16,7 @@ import {
   LogOut,
   Lock,
   Bot,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -194,13 +196,25 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </ScrollArea>
 
           {/* Footer */}
-          <div className="border-t p-4 shrink-0">
-            <p className="text-xs text-muted-foreground">
-              Vexa Dashboard v1.0
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Open Source Meeting Transcription
-            </p>
+          <div className="border-t p-4 shrink-0 space-y-2">
+            <a
+              href={getDocsUrl("/docs")}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClose}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              <BookOpen className="h-4 w-4" />
+              API Docs
+            </a>
+            <div>
+              <p className="text-xs text-muted-foreground">
+                Vexa Dashboard v1.0
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Open Source Meeting Transcription
+              </p>
+            </div>
           </div>
         </div>
       </aside>
