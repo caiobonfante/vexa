@@ -1,4 +1,4 @@
-import { Metadata } from "next";
+  import { Metadata } from "next";
 import { APIEndpointDoc } from "@/components/docs/api-endpoint-doc";
 
 export const metadata: Metadata = {

@@ -19,4 +19,3 @@ export function getDocsUrl(path: string): string {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${webappUrl}${cleanPath}`;
 }
-
