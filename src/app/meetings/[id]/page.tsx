@@ -407,10 +407,12 @@ export default function MeetingDetailPage() {
   const meetingNativeId = currentMeeting?.platform_specific_id;
 
   useEffect(() => {
-    if (meetingPlatform && meetingNativeId) {
+    // When WS is active, `useLiveTranscripts` already bootstraps from REST and then streams deltas.
+    // Fetching again here can race with WS upserts and cause occasional duplicate rendering.
+    if (!shouldUseWebSocket && meetingPlatform && meetingNativeId) {
       fetchTranscripts(meetingPlatform, meetingNativeId);
     }
-  }, [meetingPlatform, meetingNativeId, fetchTranscripts]);
+  }, [shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchTranscripts]);
 
   // Handle saving notes on blur
   const handleNotesBlur = useCallback(async () => {

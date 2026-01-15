@@ -141,9 +141,12 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     set({ isLoadingTranscripts: true, error: null });
     try {
       const transcripts = await vexaAPI.getTranscripts(platform, nativeId);
-      // Sort by start_time
-      transcripts.sort((a, b) => a.start_time - b.start_time);
-      set({ transcripts, isLoadingTranscripts: false });
+      // Reuse the same canonical pipeline as WS/bootstraps:
+      // - filter invalid
+      // - sort by absolute_start_time
+      // - collapse overlap (containment / expansion / tail-repeat)
+      get().bootstrapTranscripts(transcripts);
+      set({ isLoadingTranscripts: false });
     } catch (error) {
       set({
         error: (error as Error).message,

@@ -16,6 +16,29 @@ export function deduplicateOverlappingSegments(
 ): TranscriptSegment[] {
   if (segments.length === 0) return segments;
 
+  const normalizeText = (t: string): string =>
+    (t || "")
+      .trim()
+      .toLowerCase()
+      // strip trailing punctuation
+      .replace(/[.,!?;:]+$/g, "")
+      .replace(/\s+/g, " ");
+
+  const speakerIsKnown = (s?: string): boolean => {
+    const v = (s || "").trim();
+    return v.length > 0 && v.toLowerCase() !== "unknown";
+  };
+
+  const scoreSegment = (s: TranscriptSegment): number => {
+    // Higher score = more desirable to keep when de-duping duplicates.
+    const known = speakerIsKnown(s.speaker) ? 10 : 0;
+    const completed = s.completed ? 5 : 0;
+    const dur = Math.max(0, parseUTCTimestamp(s.absolute_end_time).getTime() - parseUTCTimestamp(s.absolute_start_time).getTime());
+    // duration bucket (0..3)
+    const durScore = dur >= 4000 ? 3 : dur >= 2000 ? 2 : dur >= 800 ? 1 : 0;
+    return known + completed + durScore;
+  };
+
   const deduped: TranscriptSegment[] = [];
 
   for (const seg of segments) {
@@ -41,6 +64,25 @@ export function deduplicateOverlappingSegments(
     const sameText = (seg.text || "").trim() === (last.text || "").trim();
     const overlaps =
       Math.max(segStartSec, lastStartSec) < Math.min(segEndSec, lastEndSec);
+
+    // Adjacent duplicate (no overlap): same text repeated across a tiny gap.
+    // This happens when speaker mapping updates cause the same sentence to be resent
+    // as a new segment with different speaker / completion.
+    const gapSec = (segStart - lastEnd) / 1000;
+    if (!overlaps && sameText && gapSec >= 0 && gapSec <= 1.0) {
+      const keepSeg = scoreSegment(seg) >= scoreSegment(last);
+      if (keepSeg) {
+        console.debug(
+          `[Dedup] Replacing adjacent duplicate '${last.text}' (${lastStartSec}-${lastEndSec}) with '${seg.text}' (${segStartSec}-${segEndSec}) (gap=${gapSec.toFixed(2)}s)`
+        );
+        deduped[deduped.length - 1] = seg;
+      } else {
+        console.debug(
+          `[Dedup] Dropping adjacent duplicate '${seg.text}' (${segStartSec}-${segEndSec}) (gap=${gapSec.toFixed(2)}s)`
+        );
+      }
+      continue;
+    }
 
     if (overlaps) {
       // Check if one segment is fully contained within another
@@ -88,12 +130,8 @@ export function deduplicateOverlappingSegments(
         // - "expansion": current is a longer revision that contains the previous text -> replace previous with current
         // - "tail-repeat": current is a tiny suffix/echo already present in previous -> drop current
         if (!segFullyInsideLast && !lastFullyInsideSeg) {
-          const segTextNorm = (seg.text || "").trim().toLowerCase();
-          const lastTextNorm = (last.text || "").trim().toLowerCase();
-
-          // Remove trailing punctuation for comparison
-          const segTextClean = segTextNorm.replace(/[.,!?;:]+$/, "").trim();
-          const lastTextClean = lastTextNorm.replace(/[.,!?;:]+$/, "").trim();
+          const segTextClean = normalizeText(seg.text || "");
+          const lastTextClean = normalizeText(last.text || "");
 
           const segDuration = segEndSec - segStartSec;
           const lastDuration = lastEndSec - lastStartSec;
