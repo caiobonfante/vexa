@@ -42,6 +42,7 @@ interface TranscriptViewerProps {
   wsConnected?: boolean;
   wsError?: string | null;
   wsReconnectAttempts?: number;
+  headerActions?: React.ReactNode;
 }
 
 export function TranscriptViewer({
@@ -53,6 +54,7 @@ export function TranscriptViewer({
   wsConnected,
   wsError,
   wsReconnectAttempts,
+  headerActions,
 }: TranscriptViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
@@ -677,6 +679,13 @@ export function TranscriptViewer({
               <X className="h-4 w-4 mr-1" />
               Clear filters
             </Button>
+          )}
+
+          {/* Header actions (e.g., DocsLink) */}
+          {headerActions && (
+            <div className="ml-auto">
+              {headerActions}
+            </div>
           )}
         </div>
 

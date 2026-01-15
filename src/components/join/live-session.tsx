@@ -14,6 +14,7 @@ import { vexaAPI } from "@/lib/api";
 import type { Platform } from "@/types/vexa";
 import { PLATFORM_CONFIG, MEETING_STATUS_CONFIG, getSpeakerColor } from "@/types/vexa";
 import { cn } from "@/lib/utils";
+import { DocsLink } from "@/components/docs/docs-link";
 
 interface LiveSessionProps {
   platform: Platform;
@@ -90,10 +91,13 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
             </div>
 
             {isActive && (
-              <Button variant="destructive" size="sm" onClick={handleStopBot}>
-                <StopCircle className="h-4 w-4 mr-2" />
-                Stop Bot
-              </Button>
+              <div className="flex items-center">
+                <Button variant="destructive" size="sm" onClick={handleStopBot}>
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  Stop Bot
+                </Button>
+                <DocsLink href="/docs/rest/bots#stop-bot" />
+              </div>
             )}
           </div>
         </CardHeader>

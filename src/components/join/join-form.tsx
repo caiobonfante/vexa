@@ -21,6 +21,7 @@ import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import type { Platform, CreateBotRequest } from "@/types/vexa";
 import { PLATFORM_CONFIG, SUPPORTED_LANGUAGES } from "@/types/vexa";
 import { cn } from "@/lib/utils";
+import { DocsLink } from "@/components/docs/docs-link";
 
 interface JoinFormProps {
   onSuccess?: (meetingId: string, platform: Platform, nativeId: string) => void;
@@ -310,27 +311,30 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
           </div>
 
           {/* Submit */}
-          <Button
-            type="submit"
-            className={cn(
-              "w-full relative overflow-hidden transition-all duration-300",
-              !isSubmitting && meetingIdValidation.valid && "bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
-            )}
-            size="lg"
-            disabled={isSubmitting || !meetingIdValidation.valid}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Connecting to meeting...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Start Transcription
-              </>
-            )}
-          </Button>
+          <div className="flex items-center">
+            <Button
+              type="submit"
+              className={cn(
+                "w-full relative overflow-hidden transition-all duration-300",
+                !isSubmitting && meetingIdValidation.valid && "bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25"
+              )}
+              size="lg"
+              disabled={isSubmitting || !meetingIdValidation.valid}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting to meeting...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Start Transcription
+                </>
+              )}
+            </Button>
+            <DocsLink href="/docs/rest/bots#create-bot" />
+          </div>
 
           {/* Helpful tip */}
           <p className="text-xs text-center text-muted-foreground">

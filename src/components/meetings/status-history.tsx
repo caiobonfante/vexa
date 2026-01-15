@@ -6,6 +6,7 @@ import { ChevronDown, Clock, User, Bot, Zap, CheckCircle2, XCircle, Radio, DoorO
 import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { StatusTransition, MeetingStatus } from "@/types/vexa";
+import { DocsLink } from "@/components/docs/docs-link";
 
 interface StatusHistoryProps {
   transitions?: StatusTransition[];
@@ -115,12 +116,15 @@ export function StatusHistory({ transitions, className }: StatusHistoryProps) {
               {transitions.length}
             </span>
           </div>
-          <ChevronDown
+          <div className="flex items-center gap-2">
+            <DocsLink href="/docs/cookbook/get-status-history" />
+            <ChevronDown
             className={cn(
               "h-4 w-4 text-muted-foreground transition-transform duration-200",
               isOpen && "rotate-180"
             )}
           />
+          </div>
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>

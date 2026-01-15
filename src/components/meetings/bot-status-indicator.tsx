@@ -8,6 +8,7 @@ import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
 import { toast } from "sonner";
 import type { MeetingStatus, Platform } from "@/types/vexa";
+import { DocsLink } from "@/components/docs/docs-link";
 
 // Timeout in seconds before showing a warning
 const REQUESTED_TIMEOUT_SECONDS = 30;
@@ -208,8 +209,11 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
   };
 
   return (
-    <Card className="border-0 shadow-lg bg-gradient-to-br from-background to-muted/30">
+    <Card className="border-0 shadow-lg bg-gradient-to-br from-background to-muted/30 relative">
       <CardContent className="pt-8 pb-8">
+        <div className="absolute top-4 right-4">
+          <DocsLink href="/docs/cookbook/track-meeting-status" />
+        </div>
         {/* Main status display */}
         <div className="flex flex-col items-center text-center mb-10">
           <div className="relative mb-6">

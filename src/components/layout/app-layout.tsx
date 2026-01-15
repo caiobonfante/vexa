@@ -9,7 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth/auth-provider";
 
 // Routes that don't need the full app layout
-const publicRoutes = ["/login", "/auth"];
+const publicRoutes = ["/login", "/auth", "/docs"];
 
 interface AppLayoutProps {
   children: React.ReactNode;

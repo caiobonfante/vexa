@@ -30,6 +30,7 @@ import type { Platform, CreateBotRequest } from "@/types/vexa";
 import { SUPPORTED_LANGUAGES } from "@/types/vexa";
 import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
+import { DocsLink } from "@/components/docs/docs-link";
 
 // Parse Google Meet or Teams URL/meeting ID
 function parseMeetingInput(input: string): { platform: Platform; meetingId: string; passcode?: string } | null {
@@ -387,26 +388,29 @@ export function JoinModal() {
           )}
 
           {/* Submit Button */}
-          <Button
-            type="submit"
-            className={cn(
-              "w-full h-12 text-base transition-all duration-300",
-              isValid && !isSubmitting && "shadow-lg shadow-primary/25"
-            )}
-            disabled={isSubmitting || !isValid}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-5 w-5" />
-                Start Transcription
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="submit"
+              className={cn(
+                "flex-1 h-12 text-base transition-all duration-300",
+                isValid && !isSubmitting && "shadow-lg shadow-primary/25"
+              )}
+              disabled={isSubmitting || !isValid}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Start Transcription
+                </>
+              )}
+            </Button>
+            <DocsLink href="/docs/rest/bots#create-bot" />
+          </div>
         </form>
       </DialogContent>
     </Dialog>

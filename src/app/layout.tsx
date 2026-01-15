@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppLayout } from "@/components/layout/app-layout";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -49,7 +50,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AppLayout>{children}</AppLayout>
+          <TooltipProvider delayDuration={0}>
+            <AppLayout>{children}</AppLayout>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
