@@ -158,10 +158,10 @@ export function APIEndpointDoc({
       </Card>
 
       {/* Path Parameters */}
-      {pathParamsSection as any}
+      {pathParamsSection}
 
       {/* Query Parameters */}
-      {queryParams && queryParams.length > 0 && (
+      {queryParams && queryParams.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Query Parameters</CardTitle>
@@ -192,10 +192,10 @@ export function APIEndpointDoc({
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Request Body */}
-      {requestBody && (
+      {requestBody ? (
         <Card>
           <CardHeader>
             <CardTitle>Request Body</CardTitle>
@@ -207,7 +207,7 @@ export function APIEndpointDoc({
             </pre>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Code Examples */}
       <Card>
@@ -249,7 +249,7 @@ export function APIEndpointDoc({
       </Card>
 
       {/* Response Example */}
-      {responseExample && (
+      {responseExample ? (
         <Card>
           <CardHeader>
             <CardTitle>Response</CardTitle>
@@ -260,10 +260,10 @@ export function APIEndpointDoc({
             </pre>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Error Examples */}
-      {errorExamples && errorExamples.length > 0 && (
+      {errorExamples && errorExamples.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Error Responses</CardTitle>
@@ -282,10 +282,10 @@ export function APIEndpointDoc({
             ))}
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Notes */}
-      {notes && notes.length > 0 && (
+      {notes && notes.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Notes</CardTitle>
@@ -301,7 +301,7 @@ export function APIEndpointDoc({
             </ul>
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }
