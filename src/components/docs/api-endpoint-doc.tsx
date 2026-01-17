@@ -10,13 +10,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { generateCodeExamples, type APIRequest } from "@/lib/docs/code-generator";
 import { cn } from "@/lib/utils";
 
+type PathParam = { name: string; type: string; description: string; required?: boolean };
+
 interface APIEndpointDocProps {
   title: string;
   description?: string;
   method: string;
   path: string;
   authType: "user" | "admin" | "none";
-  pathParams?: Array<{ name: string; type: string; description: string; required?: boolean }>;
+  pathParams?: PathParam[];
   queryParams?: Array<{ name: string; type: string; description: string; required?: boolean }>;
   requestBody?: {
     schema: unknown;
@@ -60,12 +62,46 @@ export function APIEndpointDoc({
   };
 
   const codeExamples = generateCodeExamples(apiRequest);
+  const pathParamsSection =
+    pathParams?.length ? (
+      <Card>
+        <CardHeader>
+          <CardTitle>Path Parameters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {pathParams.map((param) => (
+              <div key={param.name} className="flex items-start gap-3">
+                <code className="bg-muted px-2 py-1 rounded text-sm font-mono shrink-0">
+                  {param.name}
+                </code>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{param.name}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {param.type}
+                    </Badge>
+                    {param.required && (
+                      <Badge variant="destructive" className="text-xs">
+                        Required
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">{param.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    ) : null;
 
   const handleCopy = async (code: string, language: string) => {
     await navigator.clipboard.writeText(code);
     setCopiedLang(language);
     setTimeout(() => setCopiedLang(null), 2000);
   };
+
 
   const methodColors: Record<string, string> = {
     GET: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
@@ -122,38 +158,7 @@ export function APIEndpointDoc({
       </Card>
 
       {/* Path Parameters */}
-      {pathParams && pathParams.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Path Parameters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pathParams.map((param) => (
-                <div key={param.name} className="flex items-start gap-3">
-                  <code className="bg-muted px-2 py-1 rounded text-sm font-mono shrink-0">
-                    {param.name}
-                  </code>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{param.name}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {param.type}
-                      </Badge>
-                      {param.required && (
-                        <Badge variant="destructive" className="text-xs">
-                          Required
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">{param.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {pathParamsSection as any}
 
       {/* Query Parameters */}
       {queryParams && queryParams.length > 0 && (
