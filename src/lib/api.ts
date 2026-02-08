@@ -227,11 +227,17 @@ export const vexaAPI = {
       body: JSON.stringify(config),
     });
     if (!response.ok) {
-      throw new VexaAPIError(
-        "Failed to update bot config",
-        response.status,
-        await response.text()
-      );
+      const errorText = await response.text();
+      let message = "Failed to update bot config";
+      try {
+        const parsed = JSON.parse(errorText) as Record<string, unknown>;
+        if (typeof parsed.detail === "string") message = parsed.detail;
+        else if (typeof parsed.error === "string") message = parsed.error;
+        else if (typeof parsed.message === "string") message = parsed.message;
+      } catch {
+        if (errorText) message = errorText;
+      }
+      throw new VexaAPIError(message, response.status, errorText);
     }
   },
 

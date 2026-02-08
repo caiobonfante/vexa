@@ -13,13 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { vexaAPI } from "@/lib/api";
 import { useLiveStore } from "@/stores/live-store";
@@ -27,7 +20,8 @@ import { useJoinModalStore } from "@/stores/join-modal-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import type { Platform, CreateBotRequest } from "@/types/vexa";
-import { SUPPORTED_LANGUAGES } from "@/types/vexa";
+import { LanguagePicker } from "@/components/language-picker";
+import { WHISPER_LANGUAGE_NAMES } from "@/lib/languages";
 import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { DocsLink } from "@/components/docs/docs-link";
@@ -96,8 +90,7 @@ function getBrowserLanguage(): string {
   if (typeof window === "undefined") return "auto";
 
   const browserLang = navigator.language.split("-")[0].toLowerCase();
-  const supported = SUPPORTED_LANGUAGES.find((l) => l.code === browserLang);
-  return supported ? browserLang : "auto";
+  return WHISPER_LANGUAGE_NAMES[browserLang] ? browserLang : "auto";
 }
 
 export function JoinModal() {
@@ -115,10 +108,8 @@ export function JoinModal() {
   const [botName, setBotName] = useState("");
   const [passcode, setPasscode] = useState("");
 
-  // Set default language on mount
-  useEffect(() => {
-    setLanguage(getBrowserLanguage());
-  }, []);
+  // Default is "auto" so we don't send a language and the transcription service can auto-detect.
+  // (Previously we set getBrowserLanguage() here, which sent e.g. "en" and skipped detection.)
 
   // Reset form when modal closes
   useEffect(() => {
@@ -319,24 +310,22 @@ export function JoinModal() {
             )}
           </div>
 
-          {/* Language Selection */}
+          {/* Language Selection - backend detects language if not set; user can change from meeting page */}
           <div className="space-y-2">
             <Label htmlFor="language" className="text-sm flex items-center gap-2">
               <Globe className="h-3.5 w-3.5" />
               Transcription Language
             </Label>
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger id="language" className="h-10">
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <SelectItem key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LanguagePicker
+              value={language}
+              onValueChange={setLanguage}
+              triggerClassName="h-10 w-full justify-between"
+            />
+            {language === "auto" && (
+              <p className="text-xs text-muted-foreground">
+                Auto-detect: the service will detect the language when the meeting starts. You can change it anytime from the meeting page.
+              </p>
+            )}
           </div>
 
           {/* Advanced Options Toggle */}

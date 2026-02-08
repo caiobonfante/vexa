@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, type CSSProperties } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -44,14 +44,8 @@ import { StatusHistory } from "@/components/meetings/status-history";
 import { cn } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SUPPORTED_LANGUAGES } from "@/types/vexa";
+import { LanguagePicker } from "@/components/language-picker";
+import { WHISPER_LANGUAGE_CODES, getLanguageDisplayName } from "@/lib/languages";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -139,8 +133,8 @@ export default function MeetingDetailPage() {
 
   // Handle meeting status change from WebSocket
   const handleStatusChange = useCallback((status: MeetingStatus) => {
-    // If meeting ended, refresh to get final data
-    if (status === "completed" || status === "failed") {
+    // Refetch when status changes so we get latest data (e.g. detected language when bot becomes active)
+    if (status === "active" || status === "completed" || status === "failed") {
       fetchMeeting(meetingId);
     }
   }, [fetchMeeting, meetingId]);
@@ -390,13 +384,24 @@ export default function MeetingDetailPage() {
     }
   }, [currentMeeting]);
 
-  // Update config state when meeting data changes
+  // Show detected language from backend first (meeting.data.languages or from segments), then user can change via toggle
+  const validLangCodes = useMemo(
+    () => new Set(WHISPER_LANGUAGE_CODES),
+    []
+  );
   useEffect(() => {
-    if (currentMeeting) {
-      const lang = currentMeeting.data?.languages?.[0] || "auto";
-      setCurrentLanguage(lang);
+    if (!currentMeeting) return;
+    const fromData = currentMeeting.data?.languages?.[0];
+    if (fromData && fromData !== "auto") {
+      setCurrentLanguage(fromData);
+      return;
     }
-  }, [currentMeeting]);
+    // When not set by backend, use first detected language from segments (backend returns it per segment)
+    const fromSegment = transcripts.find(
+      (t) => t.language && t.language !== "unknown" && validLangCodes.has(t.language)
+    )?.language;
+    setCurrentLanguage(fromSegment || "auto");
+  }, [currentMeeting, transcripts, validLangCodes]);
 
   // No longer need polling - WebSocket handles status updates for early states
   // Removed auto-refresh polling since WebSocket provides real-time updates
@@ -836,27 +841,17 @@ export default function MeetingDetailPage() {
 
               {/* Language Selector - Mobile (only when active) */}
               {currentMeeting.status === "active" && (
-                <Select
-                  value={currentLanguage}
-                  onValueChange={handleLanguageChange}
-                  disabled={isUpdatingConfig}
-                >
-                  <SelectTrigger className="h-7 px-1.5 text-[9px] border-0 bg-transparent hover:bg-muted/50 w-auto shrink-0 ml-0.5 [&>svg:last-child]:hidden">
-                    <span className="text-[9px] font-medium">
-                      {SUPPORTED_LANGUAGES.find(l => l.code === currentLanguage)?.code.toUpperCase() || "AUTO"}
-                    </span>
-                    {isUpdatingConfig && (
-                      <Loader2 className="h-2.5 w-2.5 ml-1 animate-spin" />
-                    )}
-                  </SelectTrigger>
-                  <SelectContent align="end" sideOffset={4}>
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code}>
-                        {lang.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-0.5 shrink-0 ml-0.5">
+                  <LanguagePicker
+                    value={currentLanguage ?? "auto"}
+                    onValueChange={handleLanguageChange}
+                    disabled={isUpdatingConfig}
+                    compact
+                  />
+                  {isUpdatingConfig && (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  )}
+                </div>
               )}
 
               <div className="flex items-center border-l ml-0.5 pl-0.5 gap-0">
@@ -1167,28 +1162,26 @@ export default function MeetingDetailPage() {
                   <div className="space-y-3">
                     <p className="text-sm font-medium">Bot Settings</p>
                     
-                    {/* Language Selection */}
+                    {/* Language Selection - shows detected language from backend first, user can change */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <label className="text-xs text-muted-foreground">Language</label>
                         <DocsLink href="/docs/rest/bots#update-bot-configuration" />
                       </div>
-                      <Select
-                        value={currentLanguage}
-                        onValueChange={handleLanguageChange}
-                        disabled={isUpdatingConfig}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SUPPORTED_LANGUAGES.map((lang) => (
-                            <SelectItem key={lang.code} value={lang.code}>
-                              {lang.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        When not set, the service detects the language automatically. You can change it below if needed.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <LanguagePicker
+                          value={currentLanguage ?? "auto"}
+                          onValueChange={handleLanguageChange}
+                          disabled={isUpdatingConfig}
+                          triggerClassName="h-9 w-full justify-between"
+                        />
+                        {isUpdatingConfig && (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
                     </div>
 
                     {isUpdatingConfig && (
@@ -1210,7 +1203,7 @@ export default function MeetingDetailPage() {
                     <div>
                       <p className="text-sm font-medium">Languages</p>
                       <p className="text-sm text-muted-foreground">
-                        {currentMeeting.data.languages.join(", ").toUpperCase()}
+                        {currentMeeting.data.languages.map(getLanguageDisplayName).join(", ")}
                       </p>
                     </div>
                   </div>

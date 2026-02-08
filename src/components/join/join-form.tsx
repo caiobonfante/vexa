@@ -7,19 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { vexaAPI } from "@/lib/api";
 import { useLiveStore } from "@/stores/live-store";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import type { Platform, CreateBotRequest } from "@/types/vexa";
-import { PLATFORM_CONFIG, SUPPORTED_LANGUAGES } from "@/types/vexa";
+import { PLATFORM_CONFIG } from "@/types/vexa";
+import { LanguagePicker } from "@/components/language-picker";
 import { cn } from "@/lib/utils";
 import { DocsLink } from "@/components/docs/docs-link";
 
@@ -293,21 +287,19 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             </p>
           </div>
 
-          {/* Language */}
+          {/* Language - backend detects if not set; user can change from meeting page */}
           <div className="space-y-2">
             <Label htmlFor="language">Transcription Language</Label>
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <SelectItem key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LanguagePicker
+              value={language}
+              onValueChange={setLanguage}
+              triggerClassName="w-full justify-between"
+            />
+            {language === "auto" && (
+              <p className="text-xs text-muted-foreground">
+                Auto-detect: the service will detect the language when the meeting starts. You can change it anytime from the meeting page.
+              </p>
+            )}
           </div>
 
           {/* Submit */}
