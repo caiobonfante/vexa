@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { DocsLink } from "@/components/docs/docs-link";
 
-// Parse Google Meet or Teams URL/meeting ID
+// Parse Google Meet, Zoom, or Teams URL/meeting ID
 function parseMeetingInput(input: string): { platform: Platform; meetingId: string; passcode?: string } | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -230,7 +230,7 @@ export function JoinModal() {
             Join a Meeting
           </DialogTitle>
           <DialogDescription>
-            Paste a Google Meet or Teams URL to start transcribing automatically
+            Paste a Google Meet, Zoom, or Teams URL to start transcribing automatically
           </DialogDescription>
         </DialogHeader>
 
