@@ -162,22 +162,19 @@ export function JoinModal() {
 
     if (!parsedInput) {
       toast.error("Invalid meeting", {
-        description: "Please enter a valid Google Meet URL or meeting code",
+        description: "Please enter a valid Google Meet, Zoom, or Teams URL or meeting code",
       });
       return;
     }
 
     // Validate Teams passcode requirement and prepare final passcode
-    let finalPasscode: string | undefined;
-    if (parsedInput.platform === "teams") {
-      // Use passcode from parsedInput (URL) if available, otherwise use manually entered passcode
-      finalPasscode = parsedInput.passcode || passcode.trim();
-      if (!finalPasscode) {
-        toast.error("Passcode required", {
-          description: "Microsoft Teams meetings require a passcode",
-        });
-        return;
-      }
+    // Use passcode from parsed URL first, then fall back to manually entered passcode
+    const finalPasscode = parsedInput.passcode || passcode.trim() || undefined;
+    if (parsedInput.platform === "teams" && !finalPasscode) {
+      toast.error("Passcode required", {
+        description: "Microsoft Teams meetings require a passcode",
+      });
+      return;
     }
 
     setIsSubmitting(true);
@@ -188,8 +185,8 @@ export function JoinModal() {
         native_meeting_id: parsedInput.meetingId,
       };
 
-      // Add passcode for Teams meetings
-      if (parsedInput.platform === "teams" && finalPasscode) {
+      // Add passcode for Teams and Zoom meetings
+      if ((parsedInput.platform === "teams" || parsedInput.platform === "zoom") && finalPasscode) {
         request.passcode = finalPasscode;
       }
 
