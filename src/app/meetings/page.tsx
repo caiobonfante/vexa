@@ -123,6 +123,7 @@ export default function MeetingsPage() {
                 <SelectItem value="all">All Platforms</SelectItem>
                 <SelectItem value="google_meet">Google Meet</SelectItem>
                 <SelectItem value="teams">Microsoft Teams</SelectItem>
+                <SelectItem value="zoom">Zoom</SelectItem>
               </SelectContent>
             </Select>
 

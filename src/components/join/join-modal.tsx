@@ -65,8 +65,24 @@ function parseMeetingInput(input: string): { platform: Platform; meetingId: stri
     return { platform: "teams", meetingId, passcode };
   }
 
-  // Teams meeting ID (numeric or alphanumeric with specific patterns)
-  if (/^\d{9,}$/.test(trimmed)) {
+  // Zoom URL patterns
+  // https://zoom.us/j/85173157171?pwd=xxx
+  // https://us05web.zoom.us/j/85173157171?pwd=xxx
+  const zoomUrlRegex = /(?:https?:\/\/)?(?:[\w-]+\.)?zoom\.us\/j\/(\d+)/i;
+  const zoomMatch = trimmed.match(zoomUrlRegex);
+  if (zoomMatch) {
+    const passcodeMatch = trimmed.match(/[?&]pwd=([^&]+)/i);
+    const passcode = passcodeMatch ? decodeURIComponent(passcodeMatch[1]) : undefined;
+    return { platform: "zoom", meetingId: zoomMatch[1], passcode };
+  }
+
+  // Zoom meeting ID (9-11 digits)
+  if (/^\d{9,11}$/.test(trimmed)) {
+    return { platform: "zoom", meetingId: trimmed };
+  }
+
+  // Teams meeting ID (longer numeric strings)
+  if (/^\d{12,}$/.test(trimmed)) {
     return { platform: "teams", meetingId: trimmed };
   }
 

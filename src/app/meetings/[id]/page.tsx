@@ -1112,9 +1112,11 @@ export default function MeetingDetailPage() {
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden bg-background">
                   <Image
-                    src={currentMeeting.platform === "google_meet" 
-                      ? "/icons/icons8-google-meet-96.png" 
-                      : "/icons/icons8-teams-96.png"}
+                    src={currentMeeting.platform === "google_meet"
+                      ? "/icons/icons8-google-meet-96.png"
+                      : currentMeeting.platform === "teams"
+                      ? "/icons/icons8-teams-96.png"
+                      : "/icons/icons8-zoom-96.png"}
                     alt={platformConfig.name}
                     width={32}
                     height={32}

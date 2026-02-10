@@ -1,6 +1,6 @@
 // Vexa API Types
 
-export type Platform = "google_meet" | "teams";
+export type Platform = "google_meet" | "teams" | "zoom";
 
 export type MeetingStatus =
   | "requested"
@@ -212,6 +212,15 @@ export const PLATFORM_CONFIG = {
     icon: "users",
     pattern: /^\d+$/,
     placeholder: "123456789",
+  },
+  zoom: {
+    name: "Zoom",
+    color: "bg-blue-500",
+    textColor: "text-blue-600",
+    bgColor: "bg-blue-50",
+    icon: "video",
+    pattern: /^\d{9,11}$/,
+    placeholder: "85173157171",
   },
 } as const;
 
