@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { Video, Loader2, Check, AlertCircle, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,15 +15,17 @@ import { PLATFORM_CONFIG } from "@/types/vexa";
 import { LanguagePicker } from "@/components/language-picker";
 import { cn } from "@/lib/utils";
 import { DocsLink } from "@/components/docs/docs-link";
+import { useAuthStore } from "@/stores/auth-store";
+import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
 
 interface JoinFormProps {
   onSuccess?: (meetingId: string, platform: Platform, nativeId: string) => void;
 }
 
 export function JoinForm({ onSuccess }: JoinFormProps) {
-  const router = useRouter();
   const { setActiveMeeting } = useLiveStore();
   const { config } = useRuntimeConfig();
+  const user = useAuthStore((state) => state.user);
 
   const [platform, setPlatform] = useState<Platform>("google_meet");
   const [meetingId, setMeetingId] = useState("");
@@ -81,23 +82,23 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
     setIsSubmitting(true);
 
+    const request: CreateBotRequest = {
+      platform,
+      native_meeting_id: cleanMeetingId,
+    };
+
+    if ((platform === "teams" || platform === "zoom") && passcode) {
+      request.passcode = passcode.trim();
+    }
+
+    // Set bot name - use custom name or configured default
+    request.bot_name = botName.trim() || config?.defaultBotName || "Vexa - Open Source Bot";
+
+    if (language && language !== "auto") {
+      request.language = language;
+    }
+
     try {
-      const request: CreateBotRequest = {
-        platform,
-        native_meeting_id: cleanMeetingId,
-      };
-
-      if ((platform === "teams" || platform === "zoom") && passcode) {
-        request.passcode = passcode.trim();
-      }
-
-      // Set bot name - use custom name or configured default
-      request.bot_name = botName.trim() || config?.defaultBotName || "Vexa - Open Source Bot";
-
-      if (language && language !== "auto") {
-        request.language = language;
-      }
-
       const meeting = await vexaAPI.createBot(request);
 
       toast.success("Bot joining meeting", {
@@ -109,6 +110,30 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
     } catch (error) {
       console.error("Failed to create bot:", error);
+
+      if (
+        shouldTriggerZoomOAuth(error, request.platform) &&
+        request.platform === "zoom" &&
+        user?.email
+      ) {
+        try {
+          toast.info("Zoom authentication required", {
+            description:
+              "Redirecting to Zoom. Sign in with the Zoom account that owns or is allowed to use the Vexa app to avoid \"Application not found\".",
+          });
+          await startZoomOAuth({
+            userEmail: user.email,
+            pendingRequest: request,
+            returnTo: "/join",
+          });
+          return;
+        } catch (oauthError) {
+          toast.error("Failed to start Zoom authentication", {
+            description: (oauthError as Error).message,
+          });
+        }
+      }
+
       toast.error("Failed to join meeting", {
         description: (error as Error).message,
       });

@@ -234,6 +234,7 @@ export interface VexaUserData {
   name: string;
   max_concurrent_bots: number;
   created_at: string;
+  data?: Record<string, unknown>;
 }
 
 /**
@@ -267,6 +268,31 @@ export async function createUser(data: {
 export async function createUserToken(userId: string): Promise<ApiResult<{ token: string }>> {
   return adminRequest<{ token: string }>(`/admin/users/${userId}/tokens`, {
     method: "POST",
+  });
+}
+
+/**
+ * Get user by ID (includes data and possibly API tokens depending on backend config)
+ */
+export async function getUserById(userId: string): Promise<ApiResult<VexaUserData>> {
+  return adminRequest<VexaUserData>(`/admin/users/${encodeURIComponent(userId)}`);
+}
+
+/**
+ * Update user fields (used for writing zoom oauth data into user.data)
+ */
+export async function updateUser(
+  userId: string,
+  payload: {
+    name?: string;
+    image_url?: string;
+    max_concurrent_bots?: number;
+    data?: Record<string, unknown>;
+  }
+): Promise<ApiResult<VexaUserData>> {
+  return adminRequest<VexaUserData>(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 

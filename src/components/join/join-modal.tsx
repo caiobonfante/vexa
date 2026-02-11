@@ -24,6 +24,8 @@ import { LanguagePicker } from "@/components/language-picker";
 import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { DocsLink } from "@/components/docs/docs-link";
+import { useAuthStore } from "@/stores/auth-store";
+import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
 
 // Parse Google Meet, Zoom, or Teams URL/meeting ID
 function parseMeetingInput(input: string): { platform: Platform; meetingId: string; passcode?: string } | null {
@@ -106,6 +108,7 @@ export function JoinModal() {
   const { setActiveMeeting } = useLiveStore();
   const { setCurrentMeeting } = useMeetingsStore();
   const { config } = useRuntimeConfig();
+  const user = useAuthStore((state) => state.user);
 
   const [meetingInput, setMeetingInput] = useState("");
   const [platform, setPlatform] = useState<Platform>("google_meet");
@@ -170,24 +173,24 @@ export function JoinModal() {
 
     setIsSubmitting(true);
 
-    try {
-      const request: CreateBotRequest = {
+    const request: CreateBotRequest = {
         platform: parsedInput.platform,
         native_meeting_id: parsedInput.meetingId,
       };
 
-      // Add passcode for Teams and Zoom meetings
-      if ((parsedInput.platform === "teams" || parsedInput.platform === "zoom") && finalPasscode) {
-        request.passcode = finalPasscode;
-      }
+    // Add passcode for Teams and Zoom meetings
+    if ((parsedInput.platform === "teams" || parsedInput.platform === "zoom") && finalPasscode) {
+      request.passcode = finalPasscode;
+    }
 
-      // Set bot name - use custom name or configured default
-      request.bot_name = botName.trim() || config?.defaultBotName || "Vexa - Open Source Bot";
+    // Set bot name - use custom name or configured default
+    request.bot_name = botName.trim() || config?.defaultBotName || "Vexa - Open Source Bot";
 
-      if (language && language !== "auto") {
-        request.language = language;
-      }
+    if (language && language !== "auto") {
+      request.language = language;
+    }
 
+    try {
       const meeting = await vexaAPI.createBot(request);
 
       toast.success("Bot joining meeting", {
@@ -203,12 +206,36 @@ export function JoinModal() {
       router.push(`/meetings/${meeting.id}`);
     } catch (error) {
       console.error("Failed to create bot:", error);
+
+      if (
+        shouldTriggerZoomOAuth(error, request.platform) &&
+        request.platform === "zoom" &&
+        user?.email
+      ) {
+        try {
+          toast.info("Zoom authentication required", {
+            description:
+              "Redirecting to Zoom. Sign in with the Zoom account that owns or is allowed to use the Vexa app to avoid \"Application not found\".",
+          });
+          await startZoomOAuth({
+            userEmail: user.email,
+            pendingRequest: request,
+            returnTo: "/meetings",
+          });
+          return;
+        } catch (oauthError) {
+          toast.error("Failed to start Zoom authentication", {
+            description: (oauthError as Error).message,
+          });
+        }
+      }
+
       const { title, description } = getUserFriendlyError(error as Error);
       toast.error(title, { description });
     } finally {
       setIsSubmitting(false);
     }
-  }, [parsedInput, passcode, botName, language, config, setActiveMeeting, setCurrentMeeting, closeModal, router]);
+  }, [parsedInput, passcode, botName, language, config, setActiveMeeting, setCurrentMeeting, closeModal, router, user]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeModal()}>
