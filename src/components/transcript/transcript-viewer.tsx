@@ -43,6 +43,7 @@ interface TranscriptViewerProps {
   wsError?: string | null;
   wsReconnectAttempts?: number;
   headerActions?: React.ReactNode;
+  topBarContent?: React.ReactNode;
   // Playback sync props
   playbackTime?: number | null;
   isPlaybackActive?: boolean;
@@ -59,6 +60,7 @@ export function TranscriptViewer({
   wsError,
   wsReconnectAttempts,
   headerActions,
+  topBarContent,
   playbackTime,
   isPlaybackActive,
   onSegmentClick,
@@ -645,8 +647,15 @@ export function TranscriptViewer({
 
   return (
     <Card className="flex flex-col h-full flex-1 min-h-0">
-      <CardHeader className="flex-shrink-0 space-y-2 py-2 lg:py-3">
-        {/* Search and Filter Bar - compact on mobile */}
+      <CardHeader className="flex-shrink-0 space-y-1.5 py-2">
+        {/* Thin playback strip (separate row) */}
+        {topBarContent && (
+          <div className="mb-1">
+            {topBarContent}
+          </div>
+        )}
+
+        {/* Search and Filter Bar */}
         <div className="flex flex-wrap items-center gap-1.5 lg:gap-2">
           {/* Search */}
           <div className="relative flex-1 min-w-[150px] lg:min-w-[200px]">
@@ -657,7 +666,7 @@ export function TranscriptViewer({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
-                "h-7 lg:h-9 pl-7 lg:pl-9 pr-7 lg:pr-9 text-xs lg:text-sm transition-all",
+                "h-7 lg:h-8 pl-7 lg:pl-9 pr-7 lg:pr-9 text-xs lg:text-sm transition-all",
                 searchQuery && "ring-2 ring-primary/20"
               )}
             />
@@ -681,7 +690,7 @@ export function TranscriptViewer({
                   variant="outline"
                   size="sm"
                   className={cn(
-                    "h-7 lg:h-9 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2",
+                    "h-7 lg:h-8 px-2 lg:px-3 text-xs lg:text-sm gap-1 lg:gap-2",
                     selectedSpeakers.length > 0 && "border-primary text-primary"
                   )}
                 >

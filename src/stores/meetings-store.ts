@@ -332,15 +332,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Update meeting status from WebSocket
   updateMeetingStatus: (meetingId: string, status: MeetingStatus) => {
     const { meetings, currentMeeting } = get();
+    const targetId = String(meetingId);
 
     // Update in meetings list
     const updatedMeetings = meetings.map((m) =>
-      m.id === meetingId ? { ...m, status } : m
+      String(m.id) === targetId ? { ...m, status } : m
     );
     set({ meetings: updatedMeetings });
 
     // Update current meeting if it matches
-    if (currentMeeting?.id === meetingId) {
+    if (currentMeeting && String(currentMeeting.id) === targetId) {
       set({ currentMeeting: { ...currentMeeting, status } });
     }
   },

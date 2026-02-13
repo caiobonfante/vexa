@@ -7,6 +7,7 @@ export type MeetingStatus =
   | "joining"
   | "awaiting_admission"
   | "active"
+  | "stopping"
   | "completed"
   | "failed";
 
@@ -229,6 +230,7 @@ export const MEETING_STATUS_CONFIG: Record<MeetingStatus, { label: string; color
   joining: { label: "Joining", color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-950/50" },
   awaiting_admission: { label: "Waiting", color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-100 dark:bg-amber-950/50" },
   active: { label: "Active", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
+  stopping: { label: "Stopping", color: "text-slate-600 dark:text-slate-400", bgColor: "bg-slate-100 dark:bg-slate-900/50" },
   completed: { label: "Completed", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
   failed: { label: "Failed", color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-950/50" },
 };

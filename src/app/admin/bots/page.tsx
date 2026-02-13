@@ -48,6 +48,7 @@ const STATUS_CONFIG: Record<MeetingStatus, { label: string; color: string; icon:
   joining: { label: "Joining", color: "bg-yellow-100 text-yellow-700", icon: Play },
   awaiting_admission: { label: "Waiting", color: "bg-orange-100 text-orange-700", icon: Clock },
   active: { label: "Active", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  stopping: { label: "Stopping", color: "bg-slate-100 text-slate-700", icon: Loader2 },
   completed: { label: "Completed", color: "bg-blue-100 text-blue-700", icon: CheckCircle },
   failed: { label: "Failed", color: "bg-red-100 text-red-700", icon: XCircle },
 };

@@ -93,6 +93,7 @@ export default function MeetingDetailPage() {
     fetchMeeting,
     refreshMeeting,
     fetchTranscripts,
+    updateMeetingStatus,
     updateMeetingData,
     clearCurrentMeeting,
   } = useMeetingsStore();
@@ -123,6 +124,7 @@ export default function MeetingDetailPage() {
 
   // Bot control state
   const [isStoppingBot, setIsStoppingBot] = useState(false);
+  const [forcePostMeetingMode, setForcePostMeetingMode] = useState(false);
   
   // Bot config state
   const [currentLanguage, setCurrentLanguage] = useState<string | undefined>(
@@ -134,6 +136,7 @@ export default function MeetingDetailPage() {
   const audioPlayerRef = useRef<AudioPlayerHandle>(null);
   const [playbackTime, setPlaybackTime] = useState<number | null>(null);
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
+  const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
 
   // Find the completed recording with audio media
   const recordingAudioUrl = useMemo(() => {
@@ -150,21 +153,43 @@ export default function MeetingDetailPage() {
   }, []);
 
   const handleSegmentClick = useCallback((startTimeSeconds: number) => {
+    if (!recordingAudioUrl) {
+      setPendingSeekTime(startTimeSeconds);
+      return;
+    }
     audioPlayerRef.current?.seekTo(startTimeSeconds);
     setPlaybackTime(startTimeSeconds);
     setIsPlaybackActive(true);
-  }, []);
+  }, [recordingAudioUrl]);
+
+  useEffect(() => {
+    if (!recordingAudioUrl || pendingSeekTime == null) return;
+    const timer = setTimeout(() => {
+      audioPlayerRef.current?.seekTo(pendingSeekTime);
+      setPlaybackTime(pendingSeekTime);
+      setIsPlaybackActive(true);
+      setPendingSeekTime(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [recordingAudioUrl, pendingSeekTime]);
 
   // Track if initial load is complete to prevent animation replays
   const hasLoadedRef = useRef(false);
 
   // Handle meeting status change from WebSocket
   const handleStatusChange = useCallback((status: MeetingStatus) => {
-    // Refetch when status changes so we get latest data (e.g. detected language when bot becomes active)
-    if (status === "active" || status === "completed" || status === "failed") {
+    // Refetch when status changes so we get latest data and post-meeting artifacts.
+    if (status === "active" || status === "stopping" || status === "completed" || status === "failed") {
       fetchMeeting(meetingId);
     }
-  }, [fetchMeeting, meetingId]);
+    if (
+      (status === "stopping" || status === "completed") &&
+      currentMeeting?.platform &&
+      currentMeeting?.platform_specific_id
+    ) {
+      fetchTranscripts(currentMeeting.platform, currentMeeting.platform_specific_id);
+    }
+  }, [fetchMeeting, fetchTranscripts, meetingId, currentMeeting?.platform, currentMeeting?.platform_specific_id]);
 
   // Handle stopping the bot
   const handleStopBot = useCallback(async () => {
@@ -172,6 +197,10 @@ export default function MeetingDetailPage() {
     setIsStoppingBot(true);
     try {
       await vexaAPI.stopBot(currentMeeting.platform, currentMeeting.platform_specific_id);
+      // Optimistic transition to post-meeting UI immediately after stop is accepted.
+      setForcePostMeetingMode(true);
+      updateMeetingStatus(String(currentMeeting.id), "stopping");
+      fetchTranscripts(currentMeeting.platform, currentMeeting.platform_specific_id);
       toast.success("Bot stopped", {
         description: "The transcription has been stopped.",
       });
@@ -183,7 +212,7 @@ export default function MeetingDetailPage() {
     } finally {
       setIsStoppingBot(false);
     }
-  }, [currentMeeting, fetchMeeting, meetingId]);
+  }, [currentMeeting, fetchMeeting, fetchTranscripts, meetingId, updateMeetingStatus]);
 
   // Handle language change
   const handleLanguageChange = useCallback(async (newLanguage: string) => {
@@ -375,10 +404,13 @@ export default function MeetingDetailPage() {
   }, [editedChatgptPrompt, chatgptPrompt]);
 
   // Live transcripts and status updates via WebSocket (for active and early states)
-  const isEarlyState = currentMeeting?.status === "requested" || 
-                       currentMeeting?.status === "joining" || 
-                       currentMeeting?.status === "awaiting_admission";
-  const shouldUseWebSocket = currentMeeting?.status === "active" || isEarlyState;
+  const isEarlyState =
+    currentMeeting?.status === "requested" ||
+    currentMeeting?.status === "joining" ||
+    currentMeeting?.status === "awaiting_admission";
+  const isStoppingState = currentMeeting?.status === "stopping";
+  const shouldUseWebSocket =
+    currentMeeting?.status === "active" || isEarlyState || isStoppingState;
   
   const {
     isConnecting: wsConnecting,
@@ -395,6 +427,7 @@ export default function MeetingDetailPage() {
 
   useEffect(() => {
     if (meetingId) {
+      setForcePostMeetingMode(false);
       fetchMeeting(meetingId);
     }
 
@@ -437,14 +470,20 @@ export default function MeetingDetailPage() {
   // Use specific properties as dependencies to avoid unnecessary refetches
   const meetingPlatform = currentMeeting?.platform;
   const meetingNativeId = currentMeeting?.platform_specific_id;
+  const meetingStatus = currentMeeting?.status;
 
   useEffect(() => {
-    // When WS is active, `useLiveTranscripts` already bootstraps from REST and then streams deltas.
-    // Fetching again here can race with WS upserts and cause occasional duplicate rendering.
+    // Always refresh transcript/recording artifacts when entering post-meeting flow.
+    if ((meetingStatus === "stopping" || meetingStatus === "completed") && meetingPlatform && meetingNativeId) {
+      fetchTranscripts(meetingPlatform, meetingNativeId);
+      return;
+    }
+
+    // During non-WS states, use REST fetch as source of truth.
     if (!shouldUseWebSocket && meetingPlatform && meetingNativeId) {
       fetchTranscripts(meetingPlatform, meetingNativeId);
     }
-  }, [shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchTranscripts]);
+  }, [meetingStatus, shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchTranscripts]);
 
   // Handle saving notes on blur
   const handleNotesBlur = useCallback(async () => {
@@ -522,6 +561,24 @@ export default function MeetingDetailPage() {
             60000
         )
       : null;
+  const isPostMeetingFlow =
+    forcePostMeetingMode ||
+    currentMeeting.status === "stopping" || currentMeeting.status === "completed";
+  const recordingTopBar = isPostMeetingFlow ? (
+    recordingAudioUrl ? (
+      <AudioPlayer
+        ref={audioPlayerRef}
+        src={recordingAudioUrl}
+        onTimeUpdate={handlePlaybackTimeUpdate}
+        compact
+      />
+    ) : (
+      <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Recording is processing...
+      </div>
+    )
+  ) : null;
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) return `${minutes} min`;
@@ -1106,18 +1163,9 @@ export default function MeetingDetailPage() {
             />
           )}
 
-          {/* Audio Player for completed meetings with recordings */}
-          {currentMeeting.status === "completed" && recordingAudioUrl && (
-            <AudioPlayer
-              ref={audioPlayerRef}
-              src={recordingAudioUrl}
-              onTimeUpdate={handlePlaybackTimeUpdate}
-              className="mb-2"
-            />
-          )}
-
-          {/* Show transcript viewer for active/completed */}
+          {/* Keep transcript visible through stopping -> completed transition */}
           {(currentMeeting.status === "active" ||
+            currentMeeting.status === "stopping" ||
             currentMeeting.status === "completed") && (
             <TranscriptViewer
               meeting={currentMeeting}
@@ -1129,9 +1177,10 @@ export default function MeetingDetailPage() {
               wsError={wsError}
               wsReconnectAttempts={reconnectAttempts}
               headerActions={<DocsLink href="/docs/cookbook/get-transcripts" />}
+              topBarContent={recordingTopBar}
               playbackTime={playbackTime}
               isPlaybackActive={isPlaybackActive}
-              onSegmentClick={recordingAudioUrl ? handleSegmentClick : undefined}
+              onSegmentClick={isPostMeetingFlow ? handleSegmentClick : undefined}
             />
           )}
         </div>

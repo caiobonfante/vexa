@@ -13,6 +13,7 @@ interface AudioPlayerProps {
   src: string;
   onTimeUpdate?: (currentTime: number) => void;
   className?: string;
+  compact?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -23,14 +24,15 @@ function formatTime(seconds: number): string {
 }
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
-  function AudioPlayer({ src, onTimeUpdate, className }, ref) {
+  function AudioPlayer({ src, onTimeUpdate, className, compact = false }, ref) {
     const audioRef = useRef<HTMLAudioElement>(null);
+    const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [errorCount, setErrorCount] = useState(0);
 
     // Expose seekTo to parent via ref
     useImperativeHandle(ref, () => ({
@@ -61,12 +63,26 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         setIsLoading(false);
       };
 
-      const handleCanPlay = () => setIsLoading(false);
+      const handleCanPlay = () => {
+        setIsLoading(false);
+        setErrorCount(0);
+      };
       const handleWaiting = () => setIsLoading(true);
       const handlePlaying = () => { setIsLoading(false); setIsPlaying(true); };
       const handlePause = () => setIsPlaying(false);
       const handleEnded = () => setIsPlaying(false);
-      const handleError = () => { setError("Failed to load audio"); setIsLoading(false); };
+      const handleError = () => {
+        setIsPlaying(false);
+        setIsLoading(true);
+        setErrorCount((count) => count + 1);
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current);
+        }
+        // Recording can take a moment to become streamable after stop. Retry automatically.
+        retryTimerRef.current = setTimeout(() => {
+          audio.load();
+        }, 1500);
+      };
 
       audio.addEventListener("timeupdate", handleTimeUpdate);
       audio.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -78,6 +94,10 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       audio.addEventListener("error", handleError);
 
       return () => {
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = null;
+        }
         audio.removeEventListener("timeupdate", handleTimeUpdate);
         audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
         audio.removeEventListener("canplay", handleCanPlay);
@@ -95,7 +115,9 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       if (isPlaying) {
         audio.pause();
       } else {
-        audio.play().catch(() => setError("Playback failed"));
+        audio.play().catch(() => {
+          setErrorCount((count) => count + 1);
+        });
       }
     }, [isPlaying]);
 
@@ -117,23 +139,21 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-    if (error) {
-      return (
-        <div className={cn("flex items-center gap-2 px-4 py-2 bg-destructive/10 rounded-lg text-sm text-destructive", className)}>
-          {error}
-        </div>
-      );
-    }
-
     return (
-      <div className={cn("flex items-center gap-3 px-4 py-2 bg-muted/50 rounded-lg border", className)}>
+      <div
+        className={cn(
+          "flex items-center bg-muted/50 rounded-lg border",
+          compact ? "gap-1.5 px-2 py-1" : "gap-3 px-4 py-2",
+          className
+        )}
+      >
         <audio ref={audioRef} src={src} preload="metadata" />
 
         {/* Play/Pause */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className={cn("shrink-0", compact ? "h-6 w-6" : "h-8 w-8")}
           onClick={togglePlay}
           disabled={isLoading && !isPlaying}
         >
@@ -147,12 +167,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         </Button>
 
         {/* Current time */}
-        <span className="text-xs text-muted-foreground tabular-nums w-10 text-right shrink-0">
+        <span className={cn("text-xs text-muted-foreground tabular-nums text-right shrink-0", compact ? "w-8" : "w-10")}>
           {formatTime(currentTime)}
         </span>
 
         {/* Seek bar */}
-        <div className="relative flex-1 h-8 flex items-center">
+        <div className={cn("relative flex-1 flex items-center", compact ? "h-6" : "h-8")}>
           <div className="absolute inset-x-0 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-[width] duration-75"
@@ -166,12 +186,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
             step={0.1}
             value={currentTime}
             onChange={handleSeekBarChange}
-            className="absolute inset-x-0 w-full h-8 opacity-0 cursor-pointer"
+            className={cn("absolute inset-x-0 w-full opacity-0 cursor-pointer", compact ? "h-6" : "h-8")}
           />
         </div>
 
         {/* Duration */}
-        <span className="text-xs text-muted-foreground tabular-nums w-10 shrink-0">
+        <span className={cn("text-xs text-muted-foreground tabular-nums shrink-0", compact ? "w-8" : "w-10")}>
           {formatTime(duration)}
         </span>
 
@@ -179,7 +199,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className={cn("shrink-0", compact ? "h-6 w-6" : "h-8 w-8")}
           onClick={toggleMute}
         >
           {isMuted ? (
@@ -188,6 +208,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
             <Volume2 className="h-4 w-4" />
           )}
         </Button>
+
+        {isLoading && errorCount > 0 && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            Preparing audio...
+          </span>
+        )}
       </div>
     );
   }
