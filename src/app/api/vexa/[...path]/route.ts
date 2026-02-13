@@ -27,6 +27,12 @@ async function proxyRequest(
     headers["X-API-Key"] = VEXA_API_KEY;
   }
 
+  // Forward Range header for audio/video seeking support
+  const rangeHeader = request.headers.get("range");
+  if (rangeHeader) {
+    headers["Range"] = rangeHeader;
+  }
+
   try {
     const fetchOptions: RequestInit = {
       method,
@@ -44,8 +50,23 @@ async function proxyRequest(
 
     // Handle empty responses
     const contentType = response.headers.get("content-type");
-    if (response.status === 204 || !contentType?.includes("application/json")) {
+    if (response.status === 204) {
       return new NextResponse(null, { status: response.status });
+    }
+
+    // Stream binary responses (audio, video, octet-stream) directly
+    if (contentType && !contentType.includes("application/json")) {
+      const responseHeaders = new Headers();
+      // Forward relevant headers for media streaming
+      for (const key of ["content-type", "content-length", "content-disposition",
+        "accept-ranges", "content-range"]) {
+        const value = response.headers.get(key);
+        if (value) responseHeaders.set(key, value);
+      }
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers: responseHeaders,
+      });
     }
 
     const data = await response.json();

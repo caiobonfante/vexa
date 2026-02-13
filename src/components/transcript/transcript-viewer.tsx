@@ -43,6 +43,10 @@ interface TranscriptViewerProps {
   wsError?: string | null;
   wsReconnectAttempts?: number;
   headerActions?: React.ReactNode;
+  // Playback sync props
+  playbackTime?: number | null;
+  isPlaybackActive?: boolean;
+  onSegmentClick?: (startTimeSeconds: number) => void;
 }
 
 export function TranscriptViewer({
@@ -55,6 +59,9 @@ export function TranscriptViewer({
   wsError,
   wsReconnectAttempts,
   headerActions,
+  playbackTime,
+  isPlaybackActive,
+  onSegmentClick,
 }: TranscriptViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
@@ -429,6 +436,53 @@ export function TranscriptViewer({
       bottomRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
     });
   }, [isLive, segments.length]);
+
+  // Find the active segment index during playback
+  const activePlaybackIndex = useMemo(() => {
+    if (playbackTime == null || !isPlaybackActive) return -1;
+    // Find the grouped segment that contains the current playback time
+    for (let i = filteredSegments.length - 1; i >= 0; i--) {
+      const group = filteredSegments[i];
+      if (group.startTimeSeconds <= playbackTime) {
+        // Check if playback is within this segment's range (with some tolerance for gaps)
+        if (playbackTime <= group.endTimeSeconds + 1) {
+          return i;
+        }
+        // If we're past this segment but before the next one, still highlight it
+        if (i < filteredSegments.length - 1) {
+          const nextGroup = filteredSegments[i + 1];
+          if (playbackTime < nextGroup.startTimeSeconds) {
+            return i;
+          }
+        }
+        // If it's the last segment and we're past it, highlight it
+        if (i === filteredSegments.length - 1) {
+          return i;
+        }
+        return -1;
+      }
+    }
+    return -1;
+  }, [playbackTime, isPlaybackActive, filteredSegments]);
+
+  // Auto-scroll to active playback segment
+  const activeSegmentRef = useRef<HTMLDivElement>(null);
+  const lastScrolledIndexRef = useRef(-1);
+
+  useEffect(() => {
+    if (activePlaybackIndex < 0 || !isPlaybackActive) return;
+    // Only scroll when the active segment changes (not on every time update)
+    if (activePlaybackIndex === lastScrolledIndexRef.current) return;
+    lastScrolledIndexRef.current = activePlaybackIndex;
+
+    // Use a small delay to let the DOM update
+    requestAnimationFrame(() => {
+      activeSegmentRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }, [activePlaybackIndex, isPlaybackActive]);
 
   // Export handlers
   const handleExport = (format: "txt" | "json" | "srt" | "vtt") => {
@@ -855,9 +909,12 @@ export function TranscriptViewer({
                   }
                 }
 
+                const isActivePlayback = activePlaybackIndex === index;
+
                 return (
                   <div
                     key={`${group.startTime}-${index}`}
+                    ref={isActivePlayback ? activeSegmentRef : undefined}
                     className="animate-fade-in"
                     style={{
                       animationDelay: isLive ? "0ms" : `${Math.min(index * 20, 200)}ms`,
@@ -870,6 +927,8 @@ export function TranscriptViewer({
                       searchQuery={searchQuery}
                       isHighlighted={searchQuery.length > 0}
                       appendedText={textToHighlight}
+                      isActivePlayback={isActivePlayback}
+                      onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds) : undefined}
                     />
                   </div>
                 );

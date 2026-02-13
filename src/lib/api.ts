@@ -4,6 +4,7 @@ import type {
   CreateBotRequest,
   BotConfigUpdate,
   Platform,
+  RecordingData,
 } from "@/types/vexa";
 
 class VexaAPIError extends Error {
@@ -110,7 +111,7 @@ export const vexaAPI = {
   async getMeetingWithTranscripts(
     platform: Platform,
     nativeId: string
-  ): Promise<{ meeting: Meeting; segments: TranscriptSegment[] }> {
+  ): Promise<{ meeting: Meeting; segments: TranscriptSegment[]; recordings: RecordingData[] }> {
     const response = await fetch(`/api/vexa/transcripts/${platform}/${nativeId}`);
     interface RawSegment {
       start: number;
@@ -135,6 +136,7 @@ export const vexaAPI = {
       error_code?: string;
       failure_reason?: string;
       segments: RawSegment[];
+      recordings?: RecordingData[];
     }
     const data = await handleResponse<RawTranscriptResponse>(response);
 
@@ -171,7 +173,10 @@ export const vexaAPI = {
       created_at: seg.created_at,
     }));
 
-    return { meeting, segments };
+    // Extract recordings from response (populated from meeting.data.recordings by backend)
+    const recordings: RecordingData[] = data.recordings || [];
+
+    return { meeting, segments, recordings };
   },
 
   // Create short-lived public transcript URL (for ChatGPT "Read from URL")
@@ -277,6 +282,11 @@ export const vexaAPI = {
     });
     const raw = await handleResponse<RawMeeting>(response);
     return mapMeeting(raw);
+  },
+
+  // Recordings - get the proxied URL for streaming audio via /raw endpoint
+  getRecordingAudioUrl(recordingId: number, mediaFileId: number): string {
+    return `/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`;
   },
 
   // Connection test

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Meeting, TranscriptSegment, Platform, MeetingStatus } from "@/types/vexa";
+import type { Meeting, TranscriptSegment, Platform, MeetingStatus, RecordingData } from "@/types/vexa";
 import { vexaAPI } from "@/lib/api";
 import { deduplicateOverlappingSegments } from "@/lib/transcript-dedup";
 
@@ -15,6 +15,7 @@ interface MeetingsState {
   meetings: Meeting[];
   currentMeeting: Meeting | null;
   transcripts: TranscriptSegment[];
+  recordings: RecordingData[];
 
   // Loading states
   isLoadingMeetings: boolean;
@@ -50,6 +51,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   meetings: [],
   currentMeeting: null,
   transcripts: [],
+  recordings: [],
   isLoadingMeetings: false,
   isLoadingMeeting: false,
   isLoadingTranscripts: false,
@@ -140,12 +142,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   fetchTranscripts: async (platform: Platform, nativeId: string) => {
     set({ isLoadingTranscripts: true, error: null });
     try {
-      const transcripts = await vexaAPI.getTranscripts(platform, nativeId);
+      const result = await vexaAPI.getMeetingWithTranscripts(platform, nativeId);
       // Reuse the same canonical pipeline as WS/bootstraps:
       // - filter invalid
       // - sort by absolute_start_time
       // - collapse overlap (containment / expansion / tail-repeat)
-      get().bootstrapTranscripts(transcripts);
+      get().bootstrapTranscripts(result.segments);
+      // Store recordings from the transcript response
+      if (result.recordings.length > 0) {
+        set({ recordings: result.recordings });
+      }
       set({ isLoadingTranscripts: false });
     } catch (error) {
       set({
@@ -183,7 +189,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   clearCurrentMeeting: () => {
-    set({ currentMeeting: null, transcripts: [] });
+    set({ currentMeeting: null, transcripts: [], recordings: [] });
   },
 
   // Bootstrap transcripts from REST API (Step 1 of algorithm)

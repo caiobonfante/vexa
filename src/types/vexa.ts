@@ -388,6 +388,38 @@ export const SUPPORTED_LANGUAGES = [
 ] as const;
 
 // ==========================================
+// Recording Types (from meeting.data.recordings)
+// ==========================================
+
+export type RecordingStatus = "in_progress" | "uploading" | "completed" | "failed";
+export type RecordingSource = "bot" | "upload" | "url";
+export type MediaFileType = "audio" | "video" | "screenshot";
+
+export interface RecordingMediaFile {
+  id: number;
+  type: MediaFileType;
+  format: string; // wav, webm, opus, mp3, etc.
+  storage_path: string;
+  storage_backend: "minio" | "s3" | "local";
+  file_size_bytes: number | null;
+  duration_seconds: number | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface RecordingData {
+  id: number;
+  meeting_id: number;
+  user_id: number;
+  session_uid: string;
+  source: RecordingSource;
+  status: RecordingStatus;
+  created_at: string;
+  completed_at: string | null;
+  media_files: RecordingMediaFile[];
+}
+
+// ==========================================
 // Admin API Types
 // ==========================================
 

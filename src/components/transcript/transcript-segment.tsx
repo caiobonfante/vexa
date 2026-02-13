@@ -10,6 +10,8 @@ interface TranscriptSegmentProps {
   isHighlighted?: boolean;
   searchQuery?: string;
   appendedText?: string | null;
+  isActivePlayback?: boolean;
+  onClickSegment?: () => void;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -101,6 +103,8 @@ export function TranscriptSegment({
   isHighlighted,
   searchQuery,
   appendedText,
+  isActivePlayback,
+  onClickSegment,
 }: TranscriptSegmentProps) {
   // Always display absolute time from the feed when available (device-independent).
   // For grouped segments, callers should pass the FIRST segment's `absolute_start_time` as `segment.absolute_start_time`.
@@ -110,10 +114,13 @@ export function TranscriptSegment({
 
   return (
     <div
+      onClick={onClickSegment}
       className={cn(
         "group flex gap-3 p-3 rounded-lg transition-colors",
         isHighlighted && "bg-yellow-50 dark:bg-yellow-900/20",
-        !isHighlighted && "hover:bg-muted/50"
+        isActivePlayback && "bg-primary/10 border-l-2 border-primary",
+        !isHighlighted && !isActivePlayback && "hover:bg-muted/50",
+        onClickSegment && "cursor-pointer"
       )}
     >
       {/* Avatar */}

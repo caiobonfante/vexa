@@ -25,6 +25,7 @@ import {
   Settings,
   ExternalLink,
 } from "lucide-react";
+import { AudioPlayer, type AudioPlayerHandle } from "@/components/recording/audio-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,7 @@ export default function MeetingDetailPage() {
   const {
     currentMeeting,
     transcripts,
+    recordings,
     isLoadingMeeting,
     isLoadingTranscripts,
     isUpdatingMeeting,
@@ -127,6 +129,31 @@ export default function MeetingDetailPage() {
     currentMeeting?.data?.languages?.[0] || "auto"
   );
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+
+  // Audio playback state
+  const audioPlayerRef = useRef<AudioPlayerHandle>(null);
+  const [playbackTime, setPlaybackTime] = useState<number | null>(null);
+  const [isPlaybackActive, setIsPlaybackActive] = useState(false);
+
+  // Find the completed recording with audio media
+  const recordingAudioUrl = useMemo(() => {
+    const completedRecording = recordings.find(r => r.status === "completed");
+    if (!completedRecording) return null;
+    const audioMedia = completedRecording.media_files?.find(mf => mf.type === "audio");
+    if (!audioMedia) return null;
+    return vexaAPI.getRecordingAudioUrl(completedRecording.id, audioMedia.id);
+  }, [recordings]);
+
+  const handlePlaybackTimeUpdate = useCallback((time: number) => {
+    setPlaybackTime(time);
+    setIsPlaybackActive(true);
+  }, []);
+
+  const handleSegmentClick = useCallback((startTimeSeconds: number) => {
+    audioPlayerRef.current?.seekTo(startTimeSeconds);
+    setPlaybackTime(startTimeSeconds);
+    setIsPlaybackActive(true);
+  }, []);
 
   // Track if initial load is complete to prevent animation replays
   const hasLoadedRef = useRef(false);
@@ -1079,6 +1106,16 @@ export default function MeetingDetailPage() {
             />
           )}
 
+          {/* Audio Player for completed meetings with recordings */}
+          {currentMeeting.status === "completed" && recordingAudioUrl && (
+            <AudioPlayer
+              ref={audioPlayerRef}
+              src={recordingAudioUrl}
+              onTimeUpdate={handlePlaybackTimeUpdate}
+              className="mb-2"
+            />
+          )}
+
           {/* Show transcript viewer for active/completed */}
           {(currentMeeting.status === "active" ||
             currentMeeting.status === "completed") && (
@@ -1092,6 +1129,9 @@ export default function MeetingDetailPage() {
               wsError={wsError}
               wsReconnectAttempts={reconnectAttempts}
               headerActions={<DocsLink href="/docs/cookbook/get-transcripts" />}
+              playbackTime={playbackTime}
+              isPlaybackActive={isPlaybackActive}
+              onSegmentClick={recordingAudioUrl ? handleSegmentClick : undefined}
             />
           )}
         </div>
