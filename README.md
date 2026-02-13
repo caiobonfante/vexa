@@ -27,6 +27,17 @@ npm run dev
 
 Local dev server runs on `http://localhost:3001`.
 
+## Recording Playback (Post-Meeting)
+
+On completed meetings, the meeting detail page can show an audio playback strip (if a recording exists) and highlight transcript segments during playback. Clicking a segment seeks the audio.
+
+Backend requirements:
+- Vexa must expose recordings in the transcript response (so the dashboard can discover recordings without extra calls).
+- `GET /recordings/{recording_id}/media/{media_file_id}/raw` should stream audio with `Range` support (`206`) and `Content-Disposition: inline` so browser seeking works.
+
+Notes:
+- The dashboard fetches audio through its own `/api/vexa/...` proxy to avoid MinIO/S3 CORS issues.
+
 ## Required Configuration
 
 | Variable | Required | Notes |
