@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Settings,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
 import { AudioPlayer, type AudioPlayerHandle } from "@/components/recording/audio-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,6 +96,7 @@ export default function MeetingDetailPage() {
     fetchTranscripts,
     updateMeetingStatus,
     updateMeetingData,
+    deleteMeeting,
     clearCurrentMeeting,
   } = useMeetingsStore();
 
@@ -124,6 +126,8 @@ export default function MeetingDetailPage() {
 
   // Bot control state
   const [isStoppingBot, setIsStoppingBot] = useState(false);
+  const [isDeletingMeeting, setIsDeletingMeeting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [forcePostMeetingMode, setForcePostMeetingMode] = useState(false);
   
   // Bot config state
@@ -236,6 +240,26 @@ export default function MeetingDetailPage() {
       setIsUpdatingConfig(false);
     }
   }, [currentMeeting, updateMeetingData]);
+
+  const handleDeleteMeeting = useCallback(async () => {
+    if (!currentMeeting) return;
+    setIsDeletingMeeting(true);
+    try {
+      await deleteMeeting(
+        currentMeeting.platform,
+        currentMeeting.platform_specific_id,
+        currentMeeting.id
+      );
+      toast.success("Meeting deleted");
+      router.push("/meetings");
+    } catch (error) {
+      toast.error("Failed to delete meeting", {
+        description: (error as Error).message,
+      });
+    } finally {
+      setIsDeletingMeeting(false);
+    }
+  }, [currentMeeting, deleteMeeting, router]);
 
   // Handle export
   const handleExport = useCallback((format: "txt" | "json" | "srt" | "vtt") => {
@@ -564,6 +588,12 @@ export default function MeetingDetailPage() {
   const isPostMeetingFlow =
     forcePostMeetingMode ||
     currentMeeting.status === "stopping" || currentMeeting.status === "completed";
+  const recordingExplicitlyDisabled = currentMeeting.data?.recording_enabled === false;
+  const hasRecordingEntries = recordings.length > 0;
+  const noAudioRecordingForMeeting =
+    recordingExplicitlyDisabled ||
+    (currentMeeting.status === "completed" && !hasRecordingEntries);
+  const canUseSegmentPlayback = isPostMeetingFlow && !noAudioRecordingForMeeting;
   const recordingTopBar = isPostMeetingFlow ? (
     recordingAudioUrl ? (
       <AudioPlayer
@@ -572,6 +602,10 @@ export default function MeetingDetailPage() {
         onTimeUpdate={handlePlaybackTimeUpdate}
         compact
       />
+    ) : noAudioRecordingForMeeting ? (
+      <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
+        No audio recording for this meeting.
+      </div>
     ) : (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1180,7 +1214,7 @@ export default function MeetingDetailPage() {
               topBarContent={recordingTopBar}
               playbackTime={playbackTime}
               isPlaybackActive={isPlaybackActive}
-              onSegmentClick={isPostMeetingFlow ? handleSegmentClick : undefined}
+              onSegmentClick={canUseSegmentPlayback ? handleSegmentClick : undefined}
             />
           )}
         </div>
@@ -1433,6 +1467,56 @@ export default function MeetingDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {(currentMeeting.status === "completed" || currentMeeting.status === "failed") && (
+            <Card className="border-destructive/30">
+              <CardContent className="pt-6">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      className="w-full gap-2"
+                      disabled={isDeletingMeeting}
+                      onClick={() => setDeleteConfirmText("")}
+                    >
+                      {isDeletingMeeting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      Delete meeting
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete meeting?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This removes transcript data and anonymizes meeting data. Type <strong>delete</strong> to confirm.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="py-2">
+                      <Input
+                        placeholder='Type "delete" to confirm'
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteMeeting}
+                        disabled={deleteConfirmText.trim().toLowerCase() !== "delete" || isDeletingMeeting}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete meeting
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </CardContent>
+            </Card>
+          )}
           </div>
         </div>
       </div>

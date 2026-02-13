@@ -10,6 +10,13 @@ interface MeetingDataUpdate {
   languages?: string[];
 }
 
+function isHiddenDeletedMeeting(meeting: Meeting): boolean {
+  const redacted = meeting.data?.redacted === true;
+  // Backend delete/anonymize flow clears native meeting id.
+  const missingNativeId = !meeting.platform_specific_id;
+  return redacted || missingNativeId;
+}
+
 interface MeetingsState {
   // Data
   meetings: Meeting[];
@@ -32,6 +39,7 @@ interface MeetingsState {
   refreshMeeting: (id: string) => Promise<void>;
   fetchTranscripts: (platform: Platform, nativeId: string) => Promise<void>;
   updateMeetingData: (platform: Platform, nativeId: string, data: MeetingDataUpdate) => Promise<void>;
+  deleteMeeting: (platform: Platform, nativeId: string, meetingId?: string) => Promise<void>;
   setCurrentMeeting: (meeting: Meeting | null) => void;
   clearCurrentMeeting: () => void;
 
@@ -62,7 +70,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   fetchMeetings: async () => {
     set({ isLoadingMeetings: true, error: null });
     try {
-      const meetings = await vexaAPI.getMeetings();
+      const meetings = (await vexaAPI.getMeetings()).filter((m) => !isHiddenDeletedMeeting(m));
       // Sort by created_at descending (most recent first)
       meetings.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -88,7 +96,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
     try {
       // Always fetch fresh data from the API to ensure we have the latest meeting state
-      const meetings = await vexaAPI.getMeetings();
+      const meetings = (await vexaAPI.getMeetings()).filter((m) => !isHiddenDeletedMeeting(m));
       meetings.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -115,7 +123,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Silently refresh meeting data (for polling without UI flicker)
   refreshMeeting: async (id: string) => {
     try {
-      const meetings = await vexaAPI.getMeetings();
+      const meetings = (await vexaAPI.getMeetings()).filter((m) => !isHiddenDeletedMeeting(m));
       meetings.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -182,6 +190,29 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       set({ isUpdatingMeeting: false });
       throw error; // Re-throw so UI can handle it
     }
+  },
+
+  deleteMeeting: async (platform: Platform, nativeId: string, meetingId?: string) => {
+    await vexaAPI.deleteMeeting(platform, nativeId);
+
+    const targetId = meetingId ? String(meetingId) : null;
+    const { meetings, currentMeeting } = get();
+
+    const updatedMeetings = meetings.filter((m) => {
+      if (targetId) return String(m.id) !== targetId;
+      return !(m.platform === platform && m.platform_specific_id === nativeId);
+    });
+
+    const shouldClearCurrent =
+      currentMeeting &&
+      (targetId
+        ? String(currentMeeting.id) === targetId
+        : currentMeeting.platform === platform && currentMeeting.platform_specific_id === nativeId);
+
+    set({
+      meetings: updatedMeetings,
+      ...(shouldClearCurrent ? { currentMeeting: null, transcripts: [], recordings: [] } : {}),
+    });
   },
 
   setCurrentMeeting: (meeting: Meeting | null) => {

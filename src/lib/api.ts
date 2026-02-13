@@ -284,6 +284,25 @@ export const vexaAPI = {
     return mapMeeting(raw);
   },
 
+  async deleteMeeting(platform: Platform, nativeId: string): Promise<void> {
+    const response = await fetch(`/api/vexa/meetings/${platform}/${nativeId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      let message = "Failed to delete meeting";
+      try {
+        const parsed = JSON.parse(errorText) as Record<string, unknown>;
+        if (typeof parsed.detail === "string") message = parsed.detail;
+        else if (typeof parsed.error === "string") message = parsed.error;
+        else if (typeof parsed.message === "string") message = parsed.message;
+      } catch {
+        if (errorText) message = errorText;
+      }
+      throw new VexaAPIError(message, response.status, errorText);
+    }
+  },
+
   // Recordings - get the proxied URL for streaming audio via /raw endpoint
   getRecordingAudioUrl(recordingId: number, mediaFileId: number): string {
     return `/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`;
