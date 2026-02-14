@@ -46,8 +46,10 @@ interface TranscriptViewerProps {
   topBarContent?: React.ReactNode;
   // Playback sync props
   playbackTime?: number | null;
+  /** ISO absolute timestamp of current playback position (for multi-fragment matching) */
+  playbackAbsoluteTime?: string | null;
   isPlaybackActive?: boolean;
-  onSegmentClick?: (startTimeSeconds: number) => void;
+  onSegmentClick?: (startTimeSeconds: number, absoluteStartTime?: string) => void;
 }
 
 export function TranscriptViewer({
@@ -62,6 +64,7 @@ export function TranscriptViewer({
   headerActions,
   topBarContent,
   playbackTime,
+  playbackAbsoluteTime,
   isPlaybackActive,
   onSegmentClick,
 }: TranscriptViewerProps) {
@@ -439,33 +442,51 @@ export function TranscriptViewer({
     });
   }, [isLive, segments.length]);
 
-  // Find the active segment index during playback
+  // Find the active segment index during playback.
+  // When playbackAbsoluteTime is available (multi-fragment mode), use absolute
+  // timestamp comparison. Otherwise fall back to relative time comparison.
   const activePlaybackIndex = useMemo(() => {
-    if (playbackTime == null || !isPlaybackActive) return -1;
-    // Find the grouped segment that contains the current playback time
+    if (!isPlaybackActive) return -1;
+
+    // Absolute time matching (multi-fragment safe)
+    if (playbackAbsoluteTime) {
+      const pbTime = new Date(playbackAbsoluteTime).getTime();
+      for (let i = filteredSegments.length - 1; i >= 0; i--) {
+        const group = filteredSegments[i];
+        const groupStart = new Date(group.startTime).getTime();
+        const groupEnd = new Date(group.endTime).getTime();
+        if (groupStart <= pbTime) {
+          // Within this group's range (with 1s tolerance)
+          if (pbTime <= groupEnd + 1000) return i;
+          // Between this group and the next
+          if (i < filteredSegments.length - 1) {
+            const nextStart = new Date(filteredSegments[i + 1].startTime).getTime();
+            if (pbTime < nextStart) return i;
+          }
+          // Past the last group
+          if (i === filteredSegments.length - 1) return i;
+          return -1;
+        }
+      }
+      return -1;
+    }
+
+    // Fallback: relative time matching (single-fragment)
+    if (playbackTime == null) return -1;
     for (let i = filteredSegments.length - 1; i >= 0; i--) {
       const group = filteredSegments[i];
       if (group.startTimeSeconds <= playbackTime) {
-        // Check if playback is within this segment's range (with some tolerance for gaps)
-        if (playbackTime <= group.endTimeSeconds + 1) {
-          return i;
-        }
-        // If we're past this segment but before the next one, still highlight it
+        if (playbackTime <= group.endTimeSeconds + 1) return i;
         if (i < filteredSegments.length - 1) {
           const nextGroup = filteredSegments[i + 1];
-          if (playbackTime < nextGroup.startTimeSeconds) {
-            return i;
-          }
+          if (playbackTime < nextGroup.startTimeSeconds) return i;
         }
-        // If it's the last segment and we're past it, highlight it
-        if (i === filteredSegments.length - 1) {
-          return i;
-        }
+        if (i === filteredSegments.length - 1) return i;
         return -1;
       }
     }
     return -1;
-  }, [playbackTime, isPlaybackActive, filteredSegments]);
+  }, [playbackTime, playbackAbsoluteTime, isPlaybackActive, filteredSegments]);
 
   // Auto-scroll to active playback segment
   const activeSegmentRef = useRef<HTMLDivElement>(null);
@@ -937,7 +958,7 @@ export function TranscriptViewer({
                       isHighlighted={searchQuery.length > 0}
                       appendedText={textToHighlight}
                       isActivePlayback={isActivePlayback}
-                      onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds) : undefined}
+                      onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds, group.startTime) : undefined}
                     />
                   </div>
                 );
