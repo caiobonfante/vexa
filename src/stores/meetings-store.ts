@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Meeting, TranscriptSegment, Platform, MeetingStatus, RecordingData } from "@/types/vexa";
+import type { Meeting, TranscriptSegment, Platform, MeetingStatus, RecordingData, ChatMessage } from "@/types/vexa";
 import { vexaAPI } from "@/lib/api";
 import { deduplicateOverlappingSegments } from "@/lib/transcript-dedup";
 
@@ -23,6 +23,7 @@ interface MeetingsState {
   currentMeeting: Meeting | null;
   transcripts: TranscriptSegment[];
   recordings: RecordingData[];
+  chatMessages: ChatMessage[];
 
   // Loading states
   isLoadingMeetings: boolean;
@@ -50,6 +51,10 @@ interface MeetingsState {
   updateTranscriptSegment: (segment: TranscriptSegment) => void;
   updateMeetingStatus: (meetingId: string, status: MeetingStatus) => void;
 
+  // Chat
+  fetchChatMessages: (platform: Platform, nativeId: string) => Promise<void>;
+  addChatMessage: (message: ChatMessage) => void;
+
   // Utilities
   clearError: () => void;
 }
@@ -60,6 +65,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   currentMeeting: null,
   transcripts: [],
   recordings: [],
+  chatMessages: [],
   isLoadingMeetings: false,
   isLoadingMeeting: false,
   isLoadingTranscripts: false,
@@ -211,7 +217,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
     set({
       meetings: updatedMeetings,
-      ...(shouldClearCurrent ? { currentMeeting: null, transcripts: [], recordings: [] } : {}),
+      ...(shouldClearCurrent ? { currentMeeting: null, transcripts: [], recordings: [], chatMessages: [] } : {}),
     });
   },
 
@@ -220,7 +226,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   clearCurrentMeeting: () => {
-    set({ currentMeeting: null, transcripts: [], recordings: [] });
+    set({ currentMeeting: null, transcripts: [], recordings: [], chatMessages: [] });
   },
 
   // Bootstrap transcripts from REST API (Step 1 of algorithm)
@@ -374,6 +380,29 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     // Update current meeting if it matches
     if (currentMeeting && String(currentMeeting.id) === targetId) {
       set({ currentMeeting: { ...currentMeeting, status } });
+    }
+  },
+
+  // Fetch chat messages via REST API (bootstrap)
+  fetchChatMessages: async (platform: Platform, nativeId: string) => {
+    try {
+      const result = await vexaAPI.getChatMessages(platform, nativeId);
+      set({ chatMessages: result.messages });
+    } catch (error) {
+      // Non-fatal — chat may not be available (bot not in meeting, etc.)
+      console.error("[Chat] Failed to fetch chat messages:", error);
+    }
+  },
+
+  // Add a single chat message from WebSocket (real-time)
+  addChatMessage: (message: ChatMessage) => {
+    const { chatMessages } = get();
+    // Deduplicate by timestamp + sender + text
+    const exists = chatMessages.some(
+      (m) => m.timestamp === message.timestamp && m.sender === message.sender && m.text === message.text
+    );
+    if (!exists) {
+      set({ chatMessages: [...chatMessages, message] });
     }
   },
 

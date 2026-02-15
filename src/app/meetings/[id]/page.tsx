@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ErrorState } from "@/components/ui/error-state";
 import { TranscriptViewer } from "@/components/transcript/transcript-viewer";
 import { BotStatusIndicator, BotFailedIndicator } from "@/components/meetings/bot-status-indicator";
+// ChatPanel removed — chat messages now render inline in TranscriptViewer
 import { AIChatPanel } from "@/components/ai";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useLiveTranscripts } from "@/hooks/use-live-transcripts";
@@ -87,6 +88,7 @@ export default function MeetingDetailPage() {
     currentMeeting,
     transcripts,
     recordings,
+    chatMessages,
     isLoadingMeeting,
     isLoadingTranscripts,
     isUpdatingMeeting,
@@ -94,6 +96,7 @@ export default function MeetingDetailPage() {
     fetchMeeting,
     refreshMeeting,
     fetchTranscripts,
+    fetchChatMessages,
     updateMeetingStatus,
     updateMeetingData,
     deleteMeeting,
@@ -555,14 +558,23 @@ export default function MeetingDetailPage() {
     // Always refresh transcript/recording artifacts when entering post-meeting flow.
     if ((meetingStatus === "stopping" || meetingStatus === "completed") && meetingPlatform && meetingNativeId) {
       fetchTranscripts(meetingPlatform, meetingNativeId);
+      fetchChatMessages(meetingPlatform, meetingNativeId);
       return;
     }
 
     // During non-WS states, use REST fetch as source of truth.
     if (!shouldUseWebSocket && meetingPlatform && meetingNativeId) {
       fetchTranscripts(meetingPlatform, meetingNativeId);
+      fetchChatMessages(meetingPlatform, meetingNativeId);
     }
-  }, [meetingStatus, shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchTranscripts]);
+  }, [meetingStatus, shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchTranscripts, fetchChatMessages]);
+
+  // Also fetch chat messages for active meetings (WS handles real-time, REST bootstraps)
+  useEffect(() => {
+    if (shouldUseWebSocket && meetingPlatform && meetingNativeId) {
+      fetchChatMessages(meetingPlatform, meetingNativeId);
+    }
+  }, [shouldUseWebSocket, meetingPlatform, meetingNativeId, fetchChatMessages]);
 
   // Handle saving notes on blur
   const handleNotesBlur = useCallback(async () => {
@@ -1283,6 +1295,7 @@ export default function MeetingDetailPage() {
             <TranscriptViewer
               meeting={currentMeeting}
               segments={transcripts}
+              chatMessages={chatMessages}
               isLoading={isLoadingTranscripts}
               isLive={currentMeeting.status === "active"}
               wsConnecting={wsConnecting}

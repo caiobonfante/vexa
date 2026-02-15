@@ -303,6 +303,15 @@ export const vexaAPI = {
     }
   },
 
+  // Chat messages captured by the bot from the meeting chat
+  async getChatMessages(
+    platform: Platform,
+    nativeId: string
+  ): Promise<{ messages: Array<{ sender: string; text: string; timestamp: number; is_from_bot: boolean }>; meeting_id: number }> {
+    const response = await fetch(`/api/vexa/bots/${platform}/${nativeId}/chat`);
+    return handleResponse(response);
+  },
+
   // Recordings - get the proxied URL for streaming audio via /raw endpoint
   getRecordingAudioUrl(recordingId: number, mediaFileId: number): string {
     return `/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`;

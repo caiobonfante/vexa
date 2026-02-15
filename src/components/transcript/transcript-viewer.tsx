@@ -19,7 +19,7 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { TranscriptSegment } from "./transcript-segment";
-import type { Meeting, TranscriptSegment as TranscriptSegmentType } from "@/types/vexa";
+import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage } from "@/types/vexa";
 import { getSpeakerColor } from "@/types/vexa";
 import {
   exportToTxt,
@@ -32,9 +32,50 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
+// Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
+const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
+
+function linkifyText(text: string, searchQuery?: string): React.ReactNode[] {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (URL_REGEX.test(part)) {
+      // Reset lastIndex since we're using 'g' flag
+      URL_REGEX.lastIndex = 0;
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sky-600 dark:text-sky-400 underline underline-offset-2 hover:text-sky-800 dark:hover:text-sky-300 break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {searchQuery ? highlightChatText(part, searchQuery) : part}
+        </a>
+      );
+    }
+    return searchQuery ? highlightChatText(part, searchQuery) : part;
+  });
+}
+
+function highlightChatText(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const segments = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi"));
+  return segments.map((seg, i) =>
+    seg.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">
+        {seg}
+      </mark>
+    ) : (
+      seg
+    )
+  );
+}
+
 interface TranscriptViewerProps {
   meeting: Meeting;
   segments: TranscriptSegmentType[];
+  chatMessages?: ChatMessage[];
   isLoading?: boolean;
   isLive?: boolean;
   // WebSocket connection state (only relevant when isLive=true)
@@ -55,6 +96,7 @@ interface TranscriptViewerProps {
 export function TranscriptViewer({
   meeting,
   segments,
+  chatMessages = [],
   isLoading,
   isLive,
   wsConnecting,
@@ -156,6 +198,21 @@ export function TranscriptViewer({
     return chunks;
   }, []);
 
+  // ---- Timeline item types for unified transcript + chat rendering ----
+  interface GroupedSegment {
+    speaker: string;
+    startTime: string;       // ISO absolute timestamp
+    endTime: string;
+    startTimeSeconds: number;
+    endTimeSeconds: number;
+    combinedText: string;
+    segments: TranscriptSegmentType[];
+  }
+
+  type TimelineItem =
+    | { type: "transcript"; group: GroupedSegment; index: number }
+    | { type: "chat"; message: ChatMessage };
+
   // Group consecutive segments by speaker and combine text
   const groupSegmentsBySpeaker = useCallback((segments: TranscriptSegmentType[]) => {
     if (!segments || segments.length === 0) return [];
@@ -164,16 +221,6 @@ export function TranscriptViewer({
     const sorted = [...segments].sort((a, b) =>
       a.absolute_start_time.localeCompare(b.absolute_start_time)
     );
-
-    interface GroupedSegment {
-      speaker: string;
-      startTime: string;
-      endTime: string;
-      startTimeSeconds: number;
-      endTimeSeconds: number;
-      combinedText: string;
-      segments: TranscriptSegmentType[];
-    }
 
     const groups: GroupedSegment[] = [];
     let current: GroupedSegment | null = null;
@@ -259,10 +306,11 @@ export function TranscriptViewer({
     return chunkedGroups;
   }, []);
 
-  // Get unique speakers in order of appearance
+  // Get unique speakers in order of appearance (excluding legacy [Chat] injected segments)
   const speakerOrder = useMemo(() => {
     const speakers: string[] = [];
     for (const segment of segments) {
+      if (segment.text?.trimStart().startsWith("[Chat]")) continue;
       if (!speakers.includes(segment.speaker)) {
         speakers.push(segment.speaker);
       }
@@ -272,8 +320,10 @@ export function TranscriptViewer({
 
   // Group segments by speaker first, then filter
   // Use segments.length as part of the key to ensure re-computation when segments change
+  // Filter out legacy "[Chat]" transcript-stream-injected segments (now rendered inline via chatMessages)
   const groupedSegments = useMemo(() => {
-    return groupSegmentsBySpeaker(segments);
+    const cleaned = segments.filter((seg) => !seg.text?.trimStart().startsWith("[Chat]"));
+    return groupSegmentsBySpeaker(cleaned);
   }, [segments, segments.length, groupSegmentsBySpeaker]);
 
   // Filter grouped segments by search query and selected speakers
@@ -297,6 +347,40 @@ export function TranscriptViewer({
 
     return result;
   }, [groupedSegments, searchQuery, selectedSpeakers]);
+
+  // Build unified timeline: merge transcript groups + chat messages, sorted by time
+  const timelineItems: TimelineItem[] = useMemo(() => {
+    // Start with transcript groups
+    const items: TimelineItem[] = filteredSegments.map((group, index) => ({
+      type: "transcript" as const,
+      group,
+      index,
+    }));
+
+    // Add chat messages (optionally filtered by search query)
+    if (chatMessages.length > 0) {
+      const query = searchQuery.trim().toLowerCase();
+      for (const msg of chatMessages) {
+        if (query && !msg.text.toLowerCase().includes(query) && !msg.sender.toLowerCase().includes(query)) {
+          continue;
+        }
+        items.push({ type: "chat" as const, message: msg });
+      }
+    }
+
+    // Sort by timestamp: transcript groups use ISO startTime, chat messages use Unix ms
+    items.sort((a, b) => {
+      const timeA = a.type === "transcript"
+        ? new Date(a.group.startTime).getTime()
+        : a.message.timestamp;
+      const timeB = b.type === "transcript"
+        ? new Date(b.group.startTime).getTime()
+        : b.message.timestamp;
+      return timeA - timeB;
+    });
+
+    return items;
+  }, [filteredSegments, chatMessages, searchQuery]);
 
   // Toggle speaker selection
   const toggleSpeaker = useCallback((speaker: string) => {
@@ -777,8 +861,8 @@ export function TranscriptViewer({
         {hasActiveFilters && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
             <span>
-              Showing {filteredSegments.length} of {groupedSegments.length} groups
-              {segments.length !== groupedSegments.length && ` (${segments.length} segments)`}
+              Showing {timelineItems.length} of {groupedSegments.length + chatMessages.length} items
+              {chatMessages.length > 0 && ` (${chatMessages.length} chat)`}
             </span>
             {searchQuery && (
               <Badge variant="outline" className="font-normal">
@@ -848,7 +932,7 @@ export function TranscriptViewer({
           onScroll={handleScroll}
           className="flex-1 min-h-0 pr-4 overflow-y-auto"
         >
-          {filteredSegments.length === 0 ? (
+          {timelineItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
               {hasActiveFilters ? (
                 <>
@@ -879,7 +963,50 @@ export function TranscriptViewer({
             </div>
           ) : (
             <div className="space-y-1">
-              {filteredSegments.map((group, index) => {
+              {timelineItems.map((item, idx) => {
+                // ---- Chat message item ----
+                if (item.type === "chat") {
+                  const msg = item.message;
+                  const chatTime = new Date(msg.timestamp);
+                  const hh = chatTime.getUTCHours().toString().padStart(2, "0");
+                  const mm = chatTime.getUTCMinutes().toString().padStart(2, "0");
+                  const ss = chatTime.getUTCSeconds().toString().padStart(2, "0");
+                  const displayTime = `${hh}:${mm}:${ss}`;
+
+                  return (
+                    <div
+                      key={`chat-${msg.timestamp}-${idx}`}
+                      className="animate-fade-in flex gap-3 p-3 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/50 dark:border-sky-800/30"
+                    >
+                      {/* Chat icon instead of avatar */}
+                      <div className="h-8 w-8 flex-shrink-0 rounded-full bg-sky-500 flex items-center justify-center">
+                        <MessageSquare className="h-4 w-4 text-white" />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm text-sky-700 dark:text-sky-400">
+                            {msg.sender}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400">
+                            chat
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {displayTime}
+                          </span>
+                        </div>
+                        <p className="text-sm leading-relaxed">
+                          {linkifyText(msg.text, searchQuery || undefined)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ---- Transcript group item ----
+                const { group, index } = item;
+
                 // Create a synthetic segment for the grouped segment
                 const syntheticSegment: TranscriptSegmentType = {
                   id: `${group.startTime}-${index}`,
@@ -897,39 +1024,30 @@ export function TranscriptViewer({
 
                 // Check if this group contains the most recently updated segment
                 let textToHighlight: string | null = null;
-                
+
                 if (mostRecentUpdatedSegment) {
-                  // Find the segment in this group that matches the most recent update
                   const matchingSegment = group.segments.find((seg) => {
                     const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
                     return mostRecentUpdatedSegment.id === id;
                   });
-                  
+
                   if (matchingSegment) {
-                    // For grouped segments, we need to find where this appended text appears in the combined text
-                    // Check if the appended text appears at the end (if it's from the last segment in the group)
-                    const isLastSegmentInGroup = 
+                    const isLastSegmentInGroup =
                       group.segments[group.segments.length - 1]?.id === matchingSegment.id ||
                       (group.segments[group.segments.length - 1]?.absolute_start_time === matchingSegment.absolute_start_time &&
                        group.segments[group.segments.length - 1]?.start_time === matchingSegment.start_time);
-                    
+
                     if (isLastSegmentInGroup && group.combinedText.endsWith(mostRecentUpdatedSegment.appendedText)) {
-                      // The appended text is at the end of the combined text
                       textToHighlight = mostRecentUpdatedSegment.appendedText;
                     } else {
-                      // Try to find the appended text in the combined text more carefully
-                      // Only highlight if we can find it at the end of the matching segment's text within the combined text
                       const segmentIndex = group.segments.indexOf(matchingSegment);
                       if (segmentIndex >= 0) {
-                        // Calculate where this segment's text ends in the combined text
                         let textBeforeThisSegment = "";
                         for (let i = 0; i < segmentIndex; i++) {
                           textBeforeThisSegment += (group.segments[i].text || "").trim() + " ";
                         }
                         const segmentStartInCombined = textBeforeThisSegment.length;
                         const segmentEndInCombined = segmentStartInCombined + (matchingSegment.text || "").trim().length;
-                        
-                        // Check if the appended text is at the end of this segment's portion in the combined text
                         const segmentTextInCombined = group.combinedText.slice(segmentStartInCombined, segmentEndInCombined);
                         if (segmentTextInCombined.endsWith(mostRecentUpdatedSegment.appendedText)) {
                           textToHighlight = mostRecentUpdatedSegment.appendedText;

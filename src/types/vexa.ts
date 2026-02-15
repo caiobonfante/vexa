@@ -151,9 +151,25 @@ export interface WebSocketErrorMessage {
   message: string;
 }
 
+// Chat message from the meeting chat (read by the bot)
+export interface ChatMessage {
+  sender: string;
+  text: string;
+  timestamp: number;    // Unix ms
+  is_from_bot: boolean;
+}
+
+export interface WebSocketChatMessage {
+  type: "chat.new_message";
+  meeting: { id: number };
+  payload: ChatMessage;
+  ts: string;
+}
+
 export type WebSocketIncomingMessage =
   | WebSocketTranscriptMessage
   | WebSocketStatusMessage
+  | WebSocketChatMessage
   | WebSocketSubscribedMessage
   | WebSocketPongMessage
   | WebSocketErrorMessage;

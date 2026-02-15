@@ -7,6 +7,7 @@ import type {
   MeetingStatus,
   TranscriptSegment,
   WebSocketSegment,
+  ChatMessage,
 } from "@/types/vexa";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { vexaAPI } from "@/lib/api";
@@ -68,6 +69,7 @@ export function useLiveTranscripts(
   const bootstrapTranscripts = useMeetingsStore((state) => state.bootstrapTranscripts);
   const upsertTranscriptSegments = useMeetingsStore((state) => state.upsertTranscriptSegments);
   const updateMeetingStatus = useMeetingsStore((state) => state.updateMeetingStatus);
+  const addChatMessage = useMeetingsStore((state) => state.addChatMessage);
 
   // Convert WebSocket segment to TranscriptSegment format
   const convertWebSocketSegment = useCallback(
@@ -234,6 +236,16 @@ export function useLiveTranscripts(
               }
               break;
 
+            case "chat.new_message":
+              // Real-time chat message from the bot
+              if (message.payload) {
+                addChatMessage(message.payload as ChatMessage);
+                console.log(
+                  `[LiveTranscripts] chat.new_message: ${(message.payload as ChatMessage).sender}`
+                );
+              }
+              break;
+
             case "meeting.status":
               // Update meeting status in the store (status is in payload)
               const status = message.payload?.status;
@@ -363,6 +375,7 @@ export function useLiveTranscripts(
     convertWebSocketSegment,
     upsertTranscriptSegments,
     updateMeetingStatus,
+    addChatMessage,
     getReconnectDelay,
     cleanup,
   ]);
