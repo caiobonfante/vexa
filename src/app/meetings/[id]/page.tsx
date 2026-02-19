@@ -25,6 +25,7 @@ import {
   Settings,
   ExternalLink,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { AudioPlayer, type AudioPlayerHandle, type AudioFragment } from "@/components/recording/audio-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,7 @@ import {
 } from "@/lib/export";
 import { getCookie, setCookie } from "@/lib/cookies";
 import { DocsLink } from "@/components/docs/docs-link";
+import { DecisionsPanel } from "@/components/decisions/decisions-panel";
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -102,6 +104,9 @@ export default function MeetingDetailPage() {
     deleteMeeting,
     clearCurrentMeeting,
   } = useMeetingsStore();
+
+  // Decisions panel state
+  const [decisionsOpen, setDecisionsOpen] = useState(false);
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -939,6 +944,17 @@ export default function MeetingDetailPage() {
             <DocsLink href="/docs/rest/bots#stop-bot" />
             </div>
           )}
+
+          {/* Decisions panel toggle */}
+          <Button
+            variant={decisionsOpen ? "secondary" : "outline"}
+            size="sm"
+            className="gap-1.5 h-9"
+            onClick={() => setDecisionsOpen((v) => !v)}
+          >
+            <Zap className="h-4 w-4 text-amber-500" />
+            <span className="hidden sm:inline">Decisions</span>
+          </Button>
         </div>
       </div>
 
@@ -1611,6 +1627,48 @@ export default function MeetingDetailPage() {
             </Card>
           )}
           </div>
+        </div>
+      </div>
+
+      {/* Decisions slide-over panel */}
+      {/* Backdrop */}
+      {decisionsOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+          onClick={() => setDecisionsOpen(false)}
+        />
+      )}
+      {/* Panel */}
+      <div
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex flex-col w-full sm:w-[420px]",
+          "bg-background border-l shadow-2xl",
+          "transform transition-transform duration-300 ease-in-out",
+          decisionsOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        {/* Panel header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-500" />
+            <span className="font-semibold text-sm">Decisions</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setDecisionsOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        {/* Panel content — scrollable */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <DecisionsPanel
+            meetingId={meetingId}
+            isActive={currentMeeting.status === "active"}
+            embedded
+          />
         </div>
       </div>
     </div>

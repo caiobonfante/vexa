@@ -17,6 +17,7 @@ import {
   Lock,
   Bot,
   BookOpen,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,6 +33,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Meetings", href: "/meetings", icon: Video },
+  { name: "Tracker", href: "/tracker", icon: Zap },
 ];
 
 const adminNavigation = [

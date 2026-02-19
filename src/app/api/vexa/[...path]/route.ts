@@ -34,9 +34,13 @@ async function proxyRequest(
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     const fetchOptions: RequestInit = {
       method,
       headers,
+      signal: controller.signal,
     };
 
     if (method !== "GET" && method !== "HEAD") {
@@ -47,6 +51,7 @@ async function proxyRequest(
     }
 
     const response = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
 
     // Handle empty responses
     const contentType = response.headers.get("content-type");
@@ -72,10 +77,12 @@ async function proxyRequest(
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error(`Proxy error for ${method} ${url}:`, error);
+    const isTimeout = error instanceof DOMException && error.name === "AbortError";
+    console.error(`Proxy ${isTimeout ? "timeout" : "error"} for ${method} ${url}:`, error);
     return NextResponse.json(
-      { error: "Failed to connect to Vexa API", details: (error as Error).message },
-      { status: 502 }
+      { error: isTimeout ? "Backend request timed out" : "Failed to connect to Vexa API",
+        details: (error as Error).message },
+      { status: isTimeout ? 504 : 502 }
     );
   }
 }
