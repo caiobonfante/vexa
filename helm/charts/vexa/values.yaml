@@ -127,11 +127,11 @@ botManager:
     dockerNetwork: ""
     resources:
       requests:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "250m"        # measured steady state: 250m (baseline 2026-03-12)
+        memory: "600Mi"    # measured steady state: 597Mi
       limits:
-        cpu: "2000m"
-        memory: "4Gi"
+        cpu: "1000m"       # 4x headroom for browser spikes
+        memory: "1Gi"      # ~1.7x headroom
 
   resources:
     requests:
