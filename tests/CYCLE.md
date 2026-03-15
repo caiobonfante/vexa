@@ -406,20 +406,83 @@ open dashboard -> log in -> see meetings -> click meeting -> see live transcript
 ```bash
 cd services/transcription-service && bash tests/test_stress.sh
 ```
-**Baselines:** Single: ~0.17s GPU. 40 concurrent (2 workers): 100% success.
+**Baselines:** Single: ~0.17s GPU. 40 concurrent (2 workers): 100% success. Queue limit: ~20/worker.
 
-### 5.2 WhisperLive concurrent streams (if used)
-```bash
-cd services/WhisperLive && bash tests/test_stress.sh
-```
-**Baselines:** 100 concurrent: 100% delivery. 200: 96.5%. 500: 58.4% (LIFO by design).
+### 5.2 Bot scaling (K8s)
 
-### 5.3 Bot scaling
-Multiple concurrent bots against mock meetings. Resource usage per bot.
-**Baselines:** ~250m CPU, ~597Mi RAM per bot.
+**Unit of scale:** 1 bot pod = 250m CPU request, 600Mi RAM request (measured 2026-03-12).
+
+**Node: g6-standard-6 (Linode/Akamai LKE)**
+- Allocatable: 4 CPU, ~8GB RAM
+- Services overhead: ~1.6 CPU, ~3.5GB (gateway, admin-api, bot-manager, collector, mcp, dashboard, redis, caddy, tx-gateway, webapp)
+- Node 1 (with services): **7 bots** (RAM-limited)
+- Additional nodes (bots only): **13 bots each** (RAM-limited)
+
+**Scaling table:**
+
+| Nodes | Bot capacity | Cumulative provision time |
+|-------|-------------|--------------------------|
+| 1     | 7           | 0 (existing)             |
+| 2     | 20          | ~90s                     |
+| 3     | 33          | ~90s                     |
+| 5     | 59          | ~90s each                |
+| 8     | 98          | ~90s each                |
+| 9     | 111         | 100+ target              |
+
+**Cold start for new node:** ~2-3 min (90s provision + 60s image pull for 2GB bot image).
+
+**Burst scenario — 100 bots at once:**
+1. First 7 on existing node → instant
+2. Bots 8-100 go Pending → autoscaler requests ~7 nodes in parallel
+3. All nodes ready in ~90s, images pulled in ~60s
+4. All 100 bots running in **~2.5 minutes**
+
+**Bottleneck analysis at 100 concurrent bots:**
+
+| Component | Load | Limit | Breaks at |
+|-----------|------|-------|-----------|
+| **Transcription service (GPU)** | 100 concurrent POST | 2 workers × 20 queue = 40 | **~40 bots** |
+| Collector (stream consumer) | ~300 segments/s | Single-threaded | ~200 bots |
+| Redis XADD | ~300/s | 100K+/s | Never |
+| Postgres writes | ~3000/10s batch | Managed DB handles | ~500+ bots |
+| Network (audio to BBB) | 100 × 50KB/s = 5MB/s | 1Gbps | Never |
+| Caddy ingress (WS) | Dashboard connections | Thousands | Never |
+
+**Primary bottleneck: transcription-service at ~40 bots.** Fix: scale GPU workers (5 workers = 100 concurrent) or use Fireworks AI as overflow via TX gateway.
+
+**Mitigation for production scale:**
+1. **LKE autoscaler**: min=1, max=10 nodes
+2. **Image pre-pull**: DaemonSet to pre-pull vexa-bot image on every node
+3. **Buffer node**: overprovisioner pod (low-priority) keeps 1 empty node warm
+4. **Ramp limit**: bot-manager queues launches, max N concurrent provisions
+5. **GPU scaling**: 5 transcription workers for 100 bots, or Fireworks overflow
+
+### 5.3 Load test plan
+
+**Setup:**
+1. Create N test users with API keys via admin-api
+2. Create test Google Meet rooms (or mock meetings)
+3. Ramp: 5 → 10 → 25 → 50 → 100 bots
+
+**Measure at each step:**
+- Per-bot CPU/RAM (kubectl top)
+- Node count and autoscaler events
+- Transcription latency (bot log timestamps: audio → draft → confirmed)
+- Redis stream lag (XLEN, consumer group pending)
+- Collector processing rate (segments/s in logs)
+- DB write rate and latency
+- Dashboard WebSocket delivery latency
+- Transcription service queue depth and error rate
+
+**Pass criteria:**
+- No bot OOM kills
+- No transcription service 5xx > 1%
+- Draft latency < 5s at all levels
+- Autoscaler provisions nodes before Pending > 60s
+- No data loss (all segments reach Postgres)
 
 ### Phase 5 Gate
-**No regression >20% from baselines.**
+**No regression >20% from baselines. Bottlenecks identified and documented. Scaling plan for 100+ bots validated.**
 
 ---
 
