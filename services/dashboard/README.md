@@ -106,6 +106,16 @@ services:
       VEXA_ADMIN_API_KEY: ${VEXA_ADMIN_API_KEY}
 ```
 
+## Test
+
+```bash
+cd services/dashboard
+npm install
+npm test
+```
+
+Runs vitest against `tests/` — covers `parseMeetingInput`, `parseUTCTimestamp`, `cn`, and language utilities.
+
 ## Troubleshooting
 
 - Login or admin routes fail: verify `VEXA_ADMIN_API_KEY` is valid.
