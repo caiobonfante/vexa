@@ -1,32 +1,26 @@
-# Environment Variable Examples
+# Environment Variables
 
 ## Why
-Each deployment profile needs different env vars (GPU settings, transcription URLs, model sizes). Example files provide working defaults for each profile.
+Vexa needs a `.env` file at the repo root to configure services, ports, and credentials.
 
 ## What
 
-| File | Profile | GPU required? | Notes |
-|------|---------|---------------|-------|
-| [env-example.remote](env-example.remote) | Remote transcription | No | Recommended for first setup |
-| [env-example.cpu](env-example.cpu) | Local CPU Whisper | No | Slower, development only |
-| [env-example.gpu](env-example.gpu) | Local GPU Whisper | Yes | Best quality, needs NVIDIA GPU |
+One example file covers both deployment modes:
+
+| File | Description |
+|------|-------------|
+| [env-example](env-example) | All variables with sensible defaults and comments |
+
+Two modes:
+- **Default** — external transcription. Set `TRANSCRIPTION_SERVICE_URL`.
+- **Local GPU** — set `LOCAL_TRANSCRIPTION=true` to also start transcription-service.
 
 ## How
 
-Copy the appropriate file to `.env` at the repo root:
-
 ```bash
-cp deploy/env/env-example.remote .env
-# Edit .env with your values
+cp deploy/env/env-example .env
+# Edit .env — set TRANSCRIPTION_SERVICE_URL and TRANSCRIPTION_SERVICE_TOKEN
 make all
-```
-
-Or use the Makefile helper:
-
-```bash
-make env TRANSCRIPTION=remote   # copies env-example.remote -> .env
-make env TRANSCRIPTION=cpu      # copies env-example.cpu -> .env
-make env TRANSCRIPTION=gpu      # copies env-example.gpu -> .env
 ```
 
 For the full variable reference, see [Deployment Guide](https://docs.vexa.ai/deployment).

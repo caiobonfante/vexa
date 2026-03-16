@@ -5,45 +5,51 @@ Real-time Google Meet, Microsoft Teams, and Zoom transcription API. Get up and r
 
 Note: Zoom joins require additional configuration (Zoom Meeting SDK + OAuth/OBF). See [Zoom Integration Setup Guide](zoom-app-setup).
 
-> 💡 **For end users**: If you want quick deployment on your platform of choice with user interfaces, see [Vexa Lite Deployment Guide](vexa-lite-deployment) and [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy).  
-> 💻 **For developers**: This guide covers the full Docker Compose setup for development.
+> **For end users**: If you want quick deployment on your platform of choice with user interfaces, see [Vexa Lite Deployment Guide](vexa-lite-deployment) and [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy).
+> **For developers**: This guide covers the full Docker Compose setup for development.
 
 ## Quick Start
-
-**TL;DR - Try these in order:**
 
 ### 1. If you have an established development machine
 **Docker Compose setup for development** - All services wrapped in `deploy/compose/docker-compose.yml` with Makefile convenience commands.
 
-Try running directly - this might work instantly:
 ```bash
 git clone https://github.com/Vexa-ai/vexa.git && cd vexa
-make all  # Default profile: remote transcription (GPU-free)
-```
-
-**What `make all` does:**
-- Builds all Docker images (takes some time at the first run)
-- Spins up all containers (API, bots, transcription services, database)
-- Runs database migrations (if necessary)
-- Starts a simple test to verify everything works
-
-If you change code later, just run `make all` again - it rebuilds what's needed and skips the rest.
-
-> 💡 **Note**: This is the **development setup**. For production deployments, see [Vexa Lite Deployment Guide](vexa-lite-deployment).
-
-### 2. If you're on a fresh GPU VM in the cloud
-**Automated setup** - Tested on Vultr `vcg-a16-6c-64g-16vram`
-
-Sets up everything for you on a fresh VM:
-```bash
-git clone https://github.com/Vexa-ai/vexa.git && cd vexa
-sudo ./deploy/scripts/fresh_setup.sh --gpu    # or --cpu for CPU-only hosts
+cp deploy/env/env-example .env
+# Edit .env — set TRANSCRIPTION_SERVICE_URL and TRANSCRIPTION_SERVICE_TOKEN
 make all
 ```
 
+**What `make all` does:**
+- Copies env-example to .env if missing
+- Builds all Docker images (takes some time on first run)
+- Spins up all containers (API, bots, transcription, database)
+- Runs database migrations
+- Starts a simple test to verify everything works
 
-### 3. Manual setup (if the above don't work)
-**For fresh GPU virtual machines or custom setups:**
+If you change code later, just run `make all` again — it rebuilds what's needed.
+
+> **Note**: This is the **development setup**. For production deployments, see [Vexa Lite Deployment Guide](vexa-lite-deployment).
+
+### 2. Two transcription modes
+
+| Mode | What you need | How |
+|------|--------------|-----|
+| **Default** | External transcription service (no GPU) | Set `TRANSCRIPTION_SERVICE_URL` in `.env` |
+| **Local GPU** | NVIDIA GPU + drivers | Set `LOCAL_TRANSCRIPTION=true` in `.env` |
+
+### 3. If you're on a fresh GPU VM in the cloud
+**Automated setup** - Tested on Vultr `vcg-a16-6c-64g-16vram`
+
+```bash
+git clone https://github.com/Vexa-ai/vexa.git && cd vexa
+sudo ./deploy/scripts/fresh_setup.sh --gpu    # or --cpu for CPU-only hosts
+cp deploy/env/env-example .env
+# Edit .env
+make all
+```
+
+### 4. Manual setup (if the above don't work)
 
 **Ubuntu/Debian:**
 ```bash
@@ -76,7 +82,8 @@ sudo systemctl restart docker
 
 # Deploy
 git clone https://github.com/Vexa-ai/vexa.git && cd vexa
-# make all              # CPU (tiny model)
+cp deploy/env/env-example .env
+# Edit .env
 make all
 ```
 
@@ -84,10 +91,12 @@ make all
 Install Docker Desktop, then:
 ```bash
 git clone https://github.com/Vexa-ai/vexa.git && cd vexa
+cp deploy/env/env-example .env
+# Edit .env — set TRANSCRIPTION_SERVICE_URL
 make all
 ```
 
-### 4. Vexa Lite - For Users (Production Deployment)
+### 5. Vexa Lite - For Users (Production Deployment)
 
 **For end users who want quick deployment on their platform of choice.**
 

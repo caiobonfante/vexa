@@ -1,7 +1,7 @@
 # Deployment
 
 ## Why
-Vexa supports 3 deployment modes for different needs -- development, PaaS, and production Kubernetes.
+Vexa supports multiple deployment modes — from single-command local dev to production Kubernetes.
 
 ## What
 
@@ -12,13 +12,13 @@ Vexa supports 3 deployment modes for different needs -- development, PaaS, and p
 | **Helm** | [helm/](helm/) | Production Kubernetes | K8s cluster |
 
 ### Docker Compose (development)
-Full stack: all services, Postgres, Redis, transcription. Three profiles:
-- `remote` -- external transcription (no GPU needed)
-- `cpu` -- local Whisper on CPU
-- `gpu` -- local Whisper on GPU
+Full stack: all services, Postgres, Redis, MinIO. Two modes:
+- **Default** — external transcription (no GPU needed). Set `TRANSCRIPTION_SERVICE_URL`.
+- **Local GPU** — run transcription-service from the repo. Set `LOCAL_TRANSCRIPTION=true`.
 
 ```bash
-cp deploy/env/env-example.remote .env
+cp deploy/env/env-example .env
+# Edit .env — set TRANSCRIPTION_SERVICE_URL and TRANSCRIPTION_SERVICE_TOKEN
 make all
 ```
 
@@ -33,10 +33,15 @@ See [helm/README.md](helm/README.md).
 ## How
 
 ### Environment variables
-All env vars documented in [env/](env/). Example files:
-- [env-example.remote](env/env-example.remote) -- recommended for first setup
-- [env-example.cpu](env/env-example.cpu) -- local CPU transcription
-- [env-example.gpu](env/env-example.gpu) -- local GPU transcription
+One env-example covers both modes: [env/env-example](env/env-example)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TRANSCRIPTION_SERVICE_URL` | Yes | Transcription API endpoint |
+| `TRANSCRIPTION_SERVICE_TOKEN` | Yes | Auth token for transcription |
+| `LOCAL_TRANSCRIPTION` | No | Set `true` to run GPU transcription locally |
+| `REMOTE_DB` | No | Set `true` to use external Postgres |
+| `ADMIN_API_TOKEN` | Yes | Admin API auth token |
 
 ### Which mode?
 | You want... | Use |

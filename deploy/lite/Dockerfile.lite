@@ -7,7 +7,6 @@
 # - Admin API (port 8057)
 # - Bot Manager (with process orchestrator)
 # - Transcription Collector
-# - WhisperLive (CPU-based transcription)
 # - Vexa Bot (Node.js/Playwright)
 # - MCP Service (port 18888)
 #
@@ -76,7 +75,6 @@ RUN mkdir -p \
     /app/admin-api \
     /app/bot-manager \
     /app/transcription-collector \
-    /app/whisperlive \
     /app/vexa-bot \
     /app/mcp \
     /app/tts-service \
@@ -93,7 +91,6 @@ RUN mkdir -p \
 
 # Copy requirements files first
 COPY deploy/lite/requirements.txt /tmp/requirements.txt
-COPY services/WhisperLive/requirements/server.txt /tmp/requirements-whisperlive.txt
 COPY services/mcp/requirements.txt /tmp/requirements-mcp.txt
 
 # Install consolidated Python dependencies for all services
@@ -103,15 +100,6 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 # Note: fastapi-mcp requires pydantic>=2.0.0, so we upgrade pydantic here
 RUN pip3 install --no-cache-dir --upgrade pydantic>=2.0.0 && \
     pip3 install --no-cache-dir -r /tmp/requirements-mcp.txt
-
-# WhisperLive dependencies (CPU version)
-# Note: openai-whisper and onnxruntime GPU versions are excluded
-RUN sed -i '/openai-whisper/d' /tmp/requirements-whisperlive.txt || true \
-    && sed -i '/onnxruntime==/d' /tmp/requirements-whisperlive.txt || true \
-    && pip3 install --no-cache-dir -r /tmp/requirements-whisperlive.txt \
-    && pip3 install --no-cache-dir onnxruntime \
-    && pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
-    && pip3 install --no-cache-dir 'faster-whisper[cpu]'
 
 # Clean up requirements files
 RUN rm -f /tmp/requirements-*.txt
@@ -141,9 +129,6 @@ COPY services/bot-manager/app/ /app/bot-manager/app/
 
 # Transcription Collector
 COPY services/transcription-collector/ /app/transcription-collector/
-
-# WhisperLive
-COPY services/WhisperLive/ /app/whisperlive/
 
 # MCP Service
 COPY services/mcp/ /app/mcp/
@@ -201,12 +186,6 @@ ENV ORCHESTRATOR=process \
 # TTS Service (requires OPENAI_API_KEY at runtime)
 ENV TTS_SERVICE_URL=http://localhost:8059 \
     OPENAI_API_KEY=
-
-# WhisperLive configuration
-ENV WHISPER_LIVE_URL=ws://localhost:9090 \
-    DEVICE_TYPE=cpu \
-    WHISPER_MODEL_SIZE=tiny \
-    CONSUL_ENABLE=false
 
 # Display for headless browsers
 ENV DISPLAY=:99
