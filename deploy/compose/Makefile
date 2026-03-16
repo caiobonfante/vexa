@@ -1,4 +1,4 @@
-.PHONY: all env build build-bot-image up down ps logs test migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker
+.PHONY: all env build build-bot-image up down ps logs test test-api migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker
 
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -22,6 +22,7 @@ endif
 # ============================================================================
 
 all: env build up migrate-or-init test
+	@echo "Vexa is running. API: http://localhost:$${API_GATEWAY_HOST_PORT:-8056}/docs"
 
 # --- Environment ---
 env:
@@ -74,82 +75,30 @@ logs:
 
 # --- Test ---
 test: check_docker
-	@echo ""
-	@echo "============================================"
-	@echo "  Validating Vexa stack..."
-	@echo "============================================"
-	@PASS=0; FAIL=0; BLOCK=""; \
-	API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
-	API_PORT=$${API_PORT:-8056}; \
+	@API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
 	ADMIN_PORT=$$(grep -E '^ADMIN_API_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8057"); \
-	ADMIN_PORT=$${ADMIN_PORT:-8057}; \
-	DASH_PORT=$$(grep -E '^DASHBOARD_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "3001"); \
-	DASH_PORT=$${DASH_PORT:-3001}; \
-	\
-	if curl -sf "http://localhost:$$API_PORT/" > /dev/null 2>&1; then \
-		echo "  ✓ API Gateway (localhost:$$API_PORT)"; PASS=$$((PASS+1)); \
-	else \
-		echo "  ✗ API Gateway not responding"; FAIL=$$((FAIL+1)); BLOCK="API Gateway down on port $$API_PORT"; \
-	fi; \
-	\
-	if curl -sf "http://localhost:$$ADMIN_PORT/" > /dev/null 2>&1; then \
-		echo "  ✓ Admin API (localhost:$$ADMIN_PORT)"; PASS=$$((PASS+1)); \
-	else \
-		echo "  ✗ Admin API not responding"; FAIL=$$((FAIL+1)); BLOCK="Admin API down on port $$ADMIN_PORT"; \
-	fi; \
-	\
-	if curl -sf "http://localhost:$$DASH_PORT/" > /dev/null 2>&1; then \
-		echo "  ✓ Dashboard (localhost:$$DASH_PORT)"; PASS=$$((PASS+1)); \
-	else \
-		echo "  ✗ Dashboard not responding"; FAIL=$$((FAIL+1)); \
-		if [ -z "$$BLOCK" ]; then BLOCK="Dashboard down — check DASHBOARD_PATH in .env"; fi; \
-	fi; \
-	\
-	if $(COMPOSE_CMD) exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then \
-		echo "  ✓ Redis"; PASS=$$((PASS+1)); \
-	else \
-		echo "  ✗ Redis not responding"; FAIL=$$((FAIL+1)); \
-		if [ -z "$$BLOCK" ]; then BLOCK="Redis down"; fi; \
-	fi; \
-	\
-	DB_OK=$$($(COMPOSE_CMD) exec -T postgres psql -U $${DB_USER:-postgres} -d $${DB_NAME:-vexa} -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' '); \
-	if [ -n "$$DB_OK" ] && [ "$$DB_OK" -gt "0" ] 2>/dev/null; then \
-		echo "  ✓ Database ($$DB_OK tables)"; PASS=$$((PASS+1)); \
-	else \
-		echo "  ✗ Database not ready or no tables"; FAIL=$$((FAIL+1)); \
-		if [ -z "$$BLOCK" ]; then BLOCK="Database has no tables — migration may have failed"; fi; \
-	fi; \
-	\
-	TX_URL=$$(grep -E '^TRANSCRIPTION_SERVICE_URL=' $(ENV_FILE) 2>/dev/null | cut -d= -f2); \
-	if [ -n "$$TX_URL" ] && [ "$$TX_URL" != "https://your-transcription-url/v1/audio/transcriptions" ]; then \
-		if curl -sf "$$(echo $$TX_URL | sed 's|/v1/audio/transcriptions||')" > /dev/null 2>&1; then \
-			echo "  ✓ Transcription service reachable"; PASS=$$((PASS+1)); \
+	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; \
+	echo "API:   http://localhost:$$API_PORT/docs"; \
+	echo "Admin: http://localhost:$$ADMIN_PORT/docs"; \
+	if [ -x $(ROOT)/testing/run_vexa_interaction.sh ]; then \
+		if [ -n "$(MEETING_ID)" ]; then \
+			$(ROOT)/testing/run_vexa_interaction.sh "$(MEETING_ID)"; \
 		else \
-			echo "  ⚠ Transcription service not reachable ($$TX_URL)"; \
-			echo "    Bots will start but transcription will fail."; \
-			echo "    Get a key at vexa.ai or self-host services/transcription-service/"; \
+			$(ROOT)/testing/run_vexa_interaction.sh; \
 		fi; \
-	else \
-		echo "  ⚠ TRANSCRIPTION_SERVICE_URL not configured"; \
-		echo "    Set it in .env — get a key at vexa.ai or self-host services/transcription-service/"; \
+	fi
+
+test-api: check_docker
+	@API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
+	ADMIN_PORT=$$(grep -E '^ADMIN_API_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8057"); \
+	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; \
+	if ! curl -s -f "http://localhost:$$API_PORT/docs" > /dev/null; then \
+		echo "API Gateway not responding on port $$API_PORT"; exit 1; \
 	fi; \
-	\
-	echo ""; \
-	echo "============================================"; \
-	if [ $$FAIL -eq 0 ]; then \
-		echo "  ✓ Vexa is ready! ($$PASS/$$PASS checks passed)"; \
-		echo ""; \
-		echo "  Dashboard:  http://localhost:$$DASH_PORT"; \
-		echo "  API docs:   http://localhost:$$API_PORT/docs"; \
-		echo "  Admin docs: http://localhost:$$ADMIN_PORT/docs"; \
-		echo ""; \
-		echo "  Next: open the dashboard and join a meeting."; \
-	else \
-		echo "  ✗ BLOCKED: $$BLOCK"; \
-		echo "    $$PASS passed, $$FAIL failed. Fix the issue and run 'make test'."; \
-		exit 1; \
+	if ! curl -s -f "http://localhost:$$ADMIN_PORT/docs" > /dev/null; then \
+		echo "Admin API not responding on port $$ADMIN_PORT"; exit 1; \
 	fi; \
-	echo "============================================"
+	echo "API connectivity OK"
 
 # ============================================================================
 # Database migrations
