@@ -92,8 +92,8 @@ botManager:
 
   # Additional env vars passed to bot-manager deployment
   # Note: extraEnv in default values.yaml is a map; templates should handle both
-  transcriptionServiceUrl: "http://94.132.129.15:8083/v1/audio/transcriptions"
-  transcriptionServiceToken: ""  # Must match BBB API_TOKEN — set via --set
+  transcriptionServiceUrl: "http://vexa-transcription-gateway:8084/v1/audio/transcriptions"
+  transcriptionServiceToken: "vxa_tx_YD5DxB4xHWdpBx0pDPL0XMAdLnt48lFjQ3Aj9r14"
   postMeetingHooks: "https://app.staging.vexa.ai/api/hooks/meeting-completed"
 
   resources:
