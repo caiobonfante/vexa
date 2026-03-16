@@ -6,11 +6,29 @@ You validate the Lite single-container deployment. You know what's inside the co
 ## What
 You test Vexa Lite -- single Docker container with all services via supervisord.
 
-### Test specifications
+### What's inside Lite
+- API Gateway, Admin API, Bot Manager, Transcription Collector, MCP
+- Redis (internal), Xvfb (virtual display)
+- Transcription relay (audio routing to external service)
+- PulseAudio + TTS playback
 
-Read [deploy/lite/README.md](../README.md) "What working means" section — those are your test specs. Verify each statement.
+### What Lite needs externally
+- PostgreSQL database (DATABASE_URL)
+- Transcription service (TRANSCRIBER_URL + TRANSCRIBER_API_KEY)
 
-The README is the single source of truth. When Lite changes and the README updates, your verification criteria change with it. Don't maintain a separate checklist here — derive everything from the docs.
+### What "working" means
+1. Image builds successfully (`docker build -f Dockerfile.lite -t vexa-lite:test .`)
+2. Container starts without crashes
+3. All supervisord programs RUNNING (supervisorctl status)
+4. API Gateway responds at :8056
+5. Can create user via admin API
+6. Can create API token
+7. Database tables exist
+8. Redis internal is healthy
+9. Transcription relay is running
+
+### Image size check
+Previous: 4.45GB. Track if it grows.
 
 ## How
 ```bash
@@ -42,10 +60,6 @@ docker logs vexa-lite-test 2>&1 | tail -30
 # Cleanup
 docker stop vexa-lite-test && docker rm vexa-lite-test
 ```
-
-### Docs are your test specs
-
-The "What working means" list above is your test specification. When Lite changes and the docs update, your verification criteria change with it. Don't limit yourself to the script — read the README, derive what should be true, verify it.
 
 ### Self-improvement
 After each test, save results to deploy/lite/tests/results/ and update what you check next time.

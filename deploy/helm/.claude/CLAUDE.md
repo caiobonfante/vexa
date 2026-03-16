@@ -46,9 +46,5 @@ for svc in vexa-vexa-api-gateway vexa-vexa-admin-api vexa-vexa-bot-manager; do
 done
 ```
 
-### Docs are your test specs
-
-The "What working means" list above is your test specification. When charts change and the docs update, your verification criteria change with it. Don't limit yourself to the script — read the README, derive what should be true, verify it.
-
 ### Self-improvement
 After each test, save results to deploy/helm/tests/results/ and update what you check next time.

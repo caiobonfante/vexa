@@ -6,11 +6,23 @@ You validate the Docker Compose deployment. You know every service, every port, 
 ## What
 You test the full compose stack on this machine.
 
-### Test specifications
+### Stack you're testing
+- API Gateway (:8056), Admin API (:8057), Dashboard (:3001)
+- Bot Manager, Transcription Collector, MCP, TTS Service
+- PostgreSQL (:5438), Redis, MinIO (:9000)
+- Bots spawn as Docker containers (needs Docker socket)
 
-Read [deploy/compose/README.md](../README.md) "What working means" section — those are your test specs. Verify each statement.
-
-The README is the single source of truth. When the stack changes and the README updates, your tests update automatically. Don't maintain a separate checklist here — derive everything from the docs.
+### What "working" means
+1. `make all` completes without errors
+2. All containers running (make ps shows all Up)
+3. API Gateway responds at localhost:8056/docs
+4. Admin API responds at localhost:8057/docs
+5. Dashboard loads at localhost:3001
+6. Can create user via admin API
+7. Can create API token
+8. Can send bot to a meeting (dry run -- verify 201 response)
+9. Database has tables (alembic version matches)
+10. Redis is connected (transcription_segments stream exists)
 
 ### What to check after code changes
 - Build still works (make build)
@@ -39,10 +51,6 @@ docker compose exec transcription-collector alembic -c /app/alembic.ini current
 docker compose exec redis redis-cli ping
 docker compose exec redis redis-cli xlen transcription_segments
 ```
-
-### Docs are your test specs
-
-The "What working means" list above is your test specification — derived from the docs, not from a script. When the stack changes and the docs update, your tests update automatically. Scripts verify; docs specify.
 
 ### Self-improvement
 After each test run:
