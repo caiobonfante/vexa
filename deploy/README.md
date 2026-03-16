@@ -16,7 +16,7 @@ See [lite/README.md](lite/README.md).
 
 ### Option 2: Docker Compose (development)
 Full stack locally. All services, Postgres, Redis.
-See [compose/](compose/) and the root Makefile: `make all`.
+See [compose/README.md](compose/README.md) and the root Makefile: `make all`.
 
 ### Option 3: Helm (production K8s)
 Two charts: `vexa` (full) and `vexa-lite` (single-pod).
