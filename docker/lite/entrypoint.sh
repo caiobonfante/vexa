@@ -120,17 +120,13 @@ fi
 export DB_SSL_MODE="${DB_SSL_MODE:-disable}"
 
 export LOG_LEVEL="${LOG_LEVEL:-info}"
-export DEVICE_TYPE="${DEVICE_TYPE:-remote}"
-export WHISPER_BACKEND="${WHISPER_BACKEND:-remote}"
-export WHISPER_MODEL_SIZE="${WHISPER_MODEL_SIZE:-tiny}"
 export DISPLAY="${DISPLAY:-:99}"
 
 echo "Configuration:"
 echo "  - Redis URL: ${REDIS_URL}"
 echo "  - Database URL: ${DATABASE_URL}"
 echo "  - Database SSL Mode: ${DB_SSL_MODE}"
-echo "  - Whisper Model: ${WHISPER_MODEL_SIZE}"
-echo "  - Device Type: ${DEVICE_TYPE}"
+echo "  - Transcriber URL: ${TRANSCRIBER_URL:-${REMOTE_TRANSCRIBER_URL:-NOT SET}}"
 echo "  - Log Level: ${LOG_LEVEL}"
 echo "  - Storage Backend: ${STORAGE_BACKEND:-local}"
 echo "  - Local Storage Dir: ${LOCAL_STORAGE_DIR:-/var/lib/vexa/recordings}"
