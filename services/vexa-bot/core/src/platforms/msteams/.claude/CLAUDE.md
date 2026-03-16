@@ -19,3 +19,9 @@ Teams bot integration. Playwright-based join, media warm-up, mixed audio routing
 
 ## After every run
 Update findings. Track selector drift and enterprise link behavior.
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

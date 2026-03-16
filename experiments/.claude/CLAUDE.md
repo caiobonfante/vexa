@@ -69,3 +69,9 @@ To run the full bot manually:
 cd /app/vexa-bot/core
 BOT_CONFIG='{"platform":"google_meet","meetingUrl":"https://meet.google.com/xxx","botName":"TestBot","connectionId":"test","nativeMeetingId":"xxx","meeting_id":1,"token":"test","redisUrl":"redis://redis:6379/0","container_name":"test","automaticLeave":{"waitingRoomTimeout":300000,"noOneJoinedTimeout":600000,"everyoneLeftTimeout":120000}}' node dist/docker.js
 ```
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

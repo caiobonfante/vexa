@@ -19,3 +19,9 @@ Zoom SDK integration via shared meetingFlow pattern. Strategies: join, admission
 
 ## After every run
 Update SDK binary status and strategy execution results.
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

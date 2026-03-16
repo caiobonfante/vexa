@@ -20,3 +20,9 @@ Public documentation at docs.vexa.ai. Mintlify .mdx files, docs.json navigation,
 
 ## After every run
 List broken links, missing pages, and content gaps found.
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

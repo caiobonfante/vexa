@@ -21,3 +21,9 @@ ORM models, Pydantic schemas, database sessions, storage abstraction, webhook de
 
 ## After every run
 Run existing tests: `pytest test_token_scope.py test_webhook_delivery_history.py test_webhook_retry.py`. Update with results.
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

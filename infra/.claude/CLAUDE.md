@@ -21,3 +21,9 @@ Redis streams/pub-sub/queues, PostgreSQL schema, storage backends. Cross-cutting
 
 ## After every run
 Record consumer lag numbers, alembic version delta, storage accessibility results.
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check

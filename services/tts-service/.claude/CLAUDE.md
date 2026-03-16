@@ -21,3 +21,9 @@ Save findings to `tests/findings.md` — accumulates across runs.
 2. Add unexpected findings to `tests/findings.md`
 3. Note what you couldn't test and why
 4. The goal: each run makes the docs better, which makes the next run better
+
+## Logging
+Append meaningful findings to `/home/dima/dev/vexa/test.log`:
+- Format: `[timestamp] [agent-name] LEVEL: message`
+- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
+- Don't spam — one line per finding, not per check
