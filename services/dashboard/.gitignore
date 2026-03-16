@@ -23,7 +23,7 @@
 # misc
 .DS_Store
 *.pem
-.claude
+# .claude — not ignored, testing agents live here
 
 # debug
 npm-debug.log*
