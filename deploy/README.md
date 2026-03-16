@@ -34,11 +34,12 @@ One env-example covers both modes: [env/env-example](env/env-example)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
+| `DASHBOARD_PATH` | Compose only | Absolute path to vexa-dashboard checkout |
 | `TRANSCRIPTION_SERVICE_URL` | Yes | Transcription API endpoint |
-| `TRANSCRIPTION_SERVICE_TOKEN` | Yes | Auth token for transcription |
+| `TRANSCRIPTION_SERVICE_TOKEN` | If needed | Auth token for transcription |
 | `LOCAL_TRANSCRIPTION` | No | Set `true` to run GPU transcription locally |
 | `REMOTE_DB` | No | Set `true` to use external Postgres |
-| `ADMIN_API_TOKEN` | Yes | Admin API auth token |
+| `ADMIN_API_TOKEN` | No | Admin API auth token (default: `changeme`) |
 
 ### Which mode?
 | You want... | Use |

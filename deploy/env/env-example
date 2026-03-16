@@ -1,16 +1,20 @@
 # --- Vexa Environment ---
+# Everything works as-is EXCEPT transcription — set TRANSCRIPTION_SERVICE_URL below.
 
-# Admin
+# Admin (default works for local dev)
 ADMIN_API_TOKEN=changeme
 
-# Transcription service (REQUIRED for self-hosted)
-# Ready to go: sign up at vexa.ai for a transcription API key
-# Self-host: run services/transcription-service/ with GPU
+# Transcription service (REQUIRED — the only thing you MUST change)
+# Get a transcription API key at vexa.ai OR self-host services/transcription-service/
 TRANSCRIPTION_SERVICE_URL=https://your-transcription-url/v1/audio/transcriptions
 TRANSCRIPTION_SERVICE_TOKEN=your-token
 
 # To run transcription locally with GPU, uncomment:
 # LOCAL_TRANSCRIPTION=true
+
+# Dashboard (absolute path to vexa-dashboard checkout)
+# git clone https://github.com/Vexa-ai/vexa-dashboard
+DASHBOARD_PATH=/path/to/vexa-dashboard
 
 # Bot
 BOT_IMAGE_NAME=vexa-bot:dev

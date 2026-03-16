@@ -1,4 +1,4 @@
-.PHONY: all env build build-bot-image up down ps logs test test-api migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker
+.PHONY: all env build build-bot-image up down ps logs test migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker
 
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -75,30 +75,32 @@ logs:
 
 # --- Test ---
 test: check_docker
+	@echo "Checking services..."
 	@API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
 	ADMIN_PORT=$$(grep -E '^ADMIN_API_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8057"); \
-	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; \
-	echo "API:   http://localhost:$$API_PORT/docs"; \
-	echo "Admin: http://localhost:$$ADMIN_PORT/docs"; \
-	if [ -x $(ROOT)/testing/run_vexa_interaction.sh ]; then \
-		if [ -n "$(MEETING_ID)" ]; then \
-			$(ROOT)/testing/run_vexa_interaction.sh "$(MEETING_ID)"; \
-		else \
-			$(ROOT)/testing/run_vexa_interaction.sh; \
-		fi; \
-	fi
-
-test-api: check_docker
-	@API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
-	ADMIN_PORT=$$(grep -E '^ADMIN_API_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8057"); \
-	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; \
-	if ! curl -s -f "http://localhost:$$API_PORT/docs" > /dev/null; then \
-		echo "API Gateway not responding on port $$API_PORT"; exit 1; \
+	DASH_PORT=$$(grep -E '^DASHBOARD_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "3001"); \
+	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; DASH_PORT=$${DASH_PORT:-3001}; \
+	if curl -sf "http://localhost:$$API_PORT/" > /dev/null 2>&1; then \
+		echo "  ✓ API Gateway (port $$API_PORT)"; \
+	else \
+		echo "  ✗ API Gateway not responding (port $$API_PORT)"; \
 	fi; \
-	if ! curl -s -f "http://localhost:$$ADMIN_PORT/docs" > /dev/null; then \
-		echo "Admin API not responding on port $$ADMIN_PORT"; exit 1; \
+	if curl -sf "http://localhost:$$ADMIN_PORT/" > /dev/null 2>&1; then \
+		echo "  ✓ Admin API (port $$ADMIN_PORT)"; \
+	else \
+		echo "  ✗ Admin API not responding (port $$ADMIN_PORT)"; \
 	fi; \
-	echo "API connectivity OK"
+	if curl -sf "http://localhost:$$DASH_PORT/" > /dev/null 2>&1; then \
+		echo "  ✓ Dashboard (port $$DASH_PORT)"; \
+	else \
+		echo "  ✗ Dashboard not responding (port $$DASH_PORT)"; \
+	fi; \
+	echo ""; \
+	echo "Dashboard: http://localhost:$$DASH_PORT"; \
+	echo "API docs:  http://localhost:$$API_PORT/docs"; \
+	echo "Admin:     http://localhost:$$ADMIN_PORT/docs"; \
+	echo ""; \
+	echo "To test: open the dashboard and join a Google Meet."
 
 # ============================================================================
 # Database migrations
