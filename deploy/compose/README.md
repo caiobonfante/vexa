@@ -28,7 +28,9 @@ make all
 
 That's it. Copies env-example → .env, builds images, starts services, runs migrations, tests connectivity.
 
-**Then edit `.env`** — set your `TRANSCRIPTION_SERVICE_URL` and `TRANSCRIPTION_SERVICE_TOKEN`.
+**Before running**, edit `.env`:
+1. Set `DASHBOARD_PATH` to your [vexa-dashboard](https://github.com/Vexa-ai/vexa-dashboard) checkout (absolute path)
+2. Set `TRANSCRIPTION_SERVICE_URL` — get a key at [vexa.ai](https://vexa.ai) or [self-host](../../services/transcription-service/)
 
 ### Make targets
 
@@ -41,8 +43,7 @@ That's it. Copies env-example → .env, builds images, starts services, runs mig
 | `make down` | Stop all services |
 | `make ps` | Show running containers |
 | `make logs` | Tail all service logs |
-| `make test` | Quick connectivity test |
-| `make test-api` | Verify API + Admin endpoints respond |
+| `make test` | Health check all services + show URLs |
 | `make migrate` | Run database migrations |
 | `make migrate-or-init` | Smart: init fresh DB or migrate existing |
 | `make makemigrations M="msg"` | Create new migration |
@@ -55,13 +56,15 @@ Edit `.env` at repo root. Created from [deploy/env/env-example](../env/env-examp
 **Required:**
 | Variable | Description |
 |----------|-------------|
-| TRANSCRIPTION_SERVICE_URL | Your transcription endpoint |
-| TRANSCRIPTION_SERVICE_TOKEN | API key for transcription |
-| ADMIN_API_TOKEN | Secret for admin operations |
+| DASHBOARD_PATH | Absolute path to [vexa-dashboard](https://github.com/Vexa-ai/vexa-dashboard) checkout |
+| TRANSCRIPTION_SERVICE_URL | Your transcription endpoint. Get at [vexa.ai](https://vexa.ai) or [self-host](../../services/transcription-service/). |
+
+Everything else has working defaults for local dev.
 
 **Optional:**
 | Variable | Default | Description |
 |----------|---------|-------------|
+| DASHBOARD_HOST_PORT | 3001 | Dashboard port |
 | REMOTE_DB | false | Use external Postgres instead of local |
 | LOCAL_TRANSCRIPTION | false | Run transcription-service locally (needs GPU) |
 | BOT_IMAGE_NAME | vexa-bot:dev | Bot Docker image name |
