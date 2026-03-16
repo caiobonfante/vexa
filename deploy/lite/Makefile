@@ -11,7 +11,7 @@ PLATFORMS ?= linux/amd64,linux/arm64
 # Buildx builder name
 BUILDER_NAME ?= vexa-multiarch
 
-# Paths (Makefile is in docker/lite/, Dockerfile is in same dir, context is repo root)
+# Paths (Makefile is in deploy/lite/, Dockerfile is in same dir, context is repo root)
 DOCKERFILE := $(shell pwd)/Dockerfile.lite
 CONTEXT := $(shell pwd)/../..
 LOCAL_TAG := $(IMAGE_NAME):$(TAG)

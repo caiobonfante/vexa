@@ -2,9 +2,6 @@
 
 Helm charts for deploying Vexa, the self-hosted real-time meeting transcription platform, including the Vexa Dashboard (https://github.com/Vexa-ai/Vexa-Dashboard).
 
-### Documentation
-- [Deployment](../../docs/deployment.mdx)
-
 Upstream app repo: https://github.com/Vexa-ai/vexa
 
 ## Charts
@@ -66,42 +63,6 @@ Key values in `charts/vexa-lite/values.yaml`:
 - `vexa.orchestrator`: Defaults to `process` (no Docker socket required).
 - `dashboard.enabled`: Deploys a separate dashboard container.
 - `ingress.*`: Optional ingress for the lite API and dashboard.
-
-### What working means
-
-After `helm install`, these must be true:
-
-**Pods and services:**
-- All pods Running, 0 restarts
-- All services have ClusterIP endpoints
-- Caddy LoadBalancer has external IP assigned
-
-**Ingress and routing:**
-- Ingress routes resolve correctly
-- api-gateway reachable on configured host/port
-- `/docs` returns Swagger UI
-- `/admin/*` routes to admin-api
-- `/mcp` routes to mcp service
-
-**RBAC (when orchestrator=kubernetes):**
-- bot-manager ServiceAccount can create/delete pods in its namespace
-- Bot pods spawn and terminate correctly
-
-**Health endpoints:**
-- api-gateway `/` → JSON response
-- admin-api `/` → JSON response
-- bot-manager `/health` → 200
-- transcription-collector `/health` → 200
-
-**Data stores:**
-- Redis: `PING` → `PONG`
-- PostgreSQL: connected, `alembic_version` table exists with current migration
-- `users`, `meetings`, `transcriptions`, `api_tokens` tables exist
-
-**Environment:**
-- All secrets mounted correctly (admin token, transcriber key, DB credentials)
-- No stale WhisperLive vars in any pod's env
-- ConfigMaps match values.yaml overrides
 
 ## Notes
 
