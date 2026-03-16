@@ -43,5 +43,9 @@ docker logs vexa-lite-test 2>&1 | tail -30
 docker stop vexa-lite-test && docker rm vexa-lite-test
 ```
 
+### Docs are your test specs
+
+The "What working means" list above is your test specification. When Lite changes and the docs update, your verification criteria change with it. Don't limit yourself to the script — read the README, derive what should be true, verify it.
+
 ### Self-improvement
 After each test, save results to deploy/lite/tests/results/ and update what you check next time.

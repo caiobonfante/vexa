@@ -40,6 +40,10 @@ docker compose exec redis redis-cli ping
 docker compose exec redis redis-cli xlen transcription_segments
 ```
 
+### Docs are your test specs
+
+The "What working means" list above is your test specification — derived from the docs, not from a script. When the stack changes and the docs update, your tests update automatically. Scripts verify; docs specify.
+
 ### Self-improvement
 After each test run:
 1. If a check failed because the test was wrong, fix it
