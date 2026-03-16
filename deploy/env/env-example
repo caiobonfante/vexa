@@ -3,9 +3,10 @@
 # Admin
 ADMIN_API_TOKEN=changeme
 
-# Transcription (REQUIRED)
-# Point to your transcription service — self-hosted GPU or external provider
-TRANSCRIPTION_SERVICE_URL=https://your-transcription-service/v1/audio/transcriptions
+# Transcription service (REQUIRED for self-hosted)
+# Ready to go: sign up at vexa.ai for a transcription API key
+# Self-host: run services/transcription-service/ with GPU
+TRANSCRIPTION_SERVICE_URL=https://your-transcription-url/v1/audio/transcriptions
 TRANSCRIPTION_SERVICE_TOKEN=your-token
 
 # To run transcription locally with GPU, uncomment:

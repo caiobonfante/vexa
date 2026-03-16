@@ -1,5 +1,9 @@
 # Vexa Lite Deployment
 
+Lite is the easiest way to self-host Vexa. Single Docker container, needs external Postgres and a transcription service.
+
+**Transcription service:** Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host [transcription-service](../../services/transcription-service/) on your own GPU for full data sovereignty.
+
 All-in-one Docker deployment for platforms without Docker socket access (EasyPanel, Dokploy, Railway, Render, etc.).
 
 **Note:** This deployment includes Redis server inside the container. Only PostgreSQL needs to be provided externally.

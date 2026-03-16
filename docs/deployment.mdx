@@ -5,10 +5,25 @@ Real-time Google Meet, Microsoft Teams, and Zoom transcription API. Get up and r
 
 Note: Zoom joins require additional configuration (Zoom Meeting SDK + OAuth/OBF). See [Zoom Integration Setup Guide](zoom-app-setup).
 
-> **For end users**: If you want quick deployment on your platform of choice with user interfaces, see [Vexa Lite Deployment Guide](vexa-lite-deployment) and [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy).
-> **For developers**: This guide covers the full Docker Compose setup for development.
+## Before You Deploy
 
-## Quick Start
+Before self-hosting, consider the hosted service at [vexa.ai](https://vexa.ai) — get an API key at [vexa.ai/dashboard/api-keys](https://vexa.ai/dashboard/api-keys) and start sending bots immediately. No infrastructure needed.
+
+## Self-Hosting Options
+
+| Option | Best for | Guide |
+|--------|----------|-------|
+| **Lite** (recommended) | Easiest self-host — single container | [Vexa Lite Deployment Guide](vexa-lite-deployment) |
+| **Docker Compose** | Development and testing | This page (below) |
+| **Helm** | Production Kubernetes | [Helm charts](https://github.com/Vexa-ai/vexa/tree/main/deploy/helm) |
+
+### Transcription service
+
+All self-hosted deployments need a transcription service:
+- **Ready to go:** Use Vexa transcription — sign up at [vexa.ai](https://vexa.ai), get a transcription API key. No GPU needed.
+- **Self-host:** Run `services/transcription-service/` on your own GPU for full data sovereignty.
+
+## Docker Compose Setup (Development)
 
 ### 1. If you have an established development machine
 **Docker Compose setup for development** - All services wrapped in `deploy/compose/docker-compose.yml` with Makefile convenience commands.
@@ -31,12 +46,12 @@ If you change code later, just run `make all` again — it rebuilds what's neede
 
 > **Note**: This is the **development setup**. For production deployments, see [Vexa Lite Deployment Guide](vexa-lite-deployment).
 
-### 2. Two transcription modes
+### 2. Transcription modes
 
 | Mode | What you need | How |
 |------|--------------|-----|
-| **Default** | External transcription service (no GPU) | Set `TRANSCRIPTION_SERVICE_URL` in `.env` |
-| **Local GPU** | NVIDIA GPU + drivers | Set `LOCAL_TRANSCRIPTION=true` in `.env` |
+| **Vexa transcription** (ready to go) | Sign up at [vexa.ai](https://vexa.ai) for API key | Set `TRANSCRIPTION_SERVICE_URL` in `.env` |
+| **Self-host GPU** | NVIDIA GPU + drivers | Set `LOCAL_TRANSCRIPTION=true` in `.env` |
 
 ### 3. If you're on a fresh GPU VM in the cloud
 **Automated setup** - Tested on Vultr `vcg-a16-6c-64g-16vram`
@@ -96,17 +111,13 @@ cp deploy/env/env-example .env
 make all
 ```
 
-### 5. Vexa Lite - For Users (Production Deployment)
+### 5. Vexa Lite (recommended for self-hosting)
 
-**For end users who want quick deployment on their platform of choice.**
+**Easiest way to self-host Vexa.** Single Docker container, needs external Postgres + transcription service.
 
-Vexa Lite is a single-container deployment that:
-- Runs as a single Docker container (no multi-service orchestration)
-- Requires no GPU (transcription runs externally)
-- Perfect for serverless providers and production deployments
-- Works with a variety of open-source user interfaces
+See [Vexa Lite Deployment Guide](vexa-lite-deployment) for the full guide.
 
-**Quick start with hosted transcription:**
+**Quick start:**
 
 ```bash
 # 1. Set up database (PostgreSQL)

@@ -83,21 +83,21 @@ Modular architecture scales from edge devices to millions of users. You choose w
 
 **You control everything:**
 
-**1. Full self-hosting**  
-Run Vexa, database, and transcription service entirely on your infrastructure  
-*<small style="color: #999;">For regulated industries like fintech, medical, etc.</small>*
-
-<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
-
-**2. GPU-free self-hosting**  
-Self-host Vexa, but plug into external transcription service  
-*<small style="color: #999;">Perfect privacy with minimal DevOps</small>*
-
-<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
-
-**3. Fully hosted service**  
-At [vexa.ai](https://vexa.ai) — just grab API key  
+**1. Hosted service**
+At [vexa.ai](https://vexa.ai) — get an API key and start sending bots. No infrastructure needed.
 *<small style="color: #999;">Ready to integrate</small>*
+
+<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
+
+**2. Self-host with Vexa transcription**
+Run Vexa yourself, use vexa.ai for transcription — ready to go, no GPU needed.
+*<small style="color: #999;">Control with minimal DevOps</small>*
+
+<hr style="margin: 1.25em 0; border: none; border-top: 1px solid #333;">
+
+**3. Fully self-host**
+Run everything including your own GPU transcription service.
+*<small style="color: #999;">Full data sovereignty for regulated industries</small>*
 
 
 <a id="whats-new"></a>
@@ -119,20 +119,21 @@ At [vexa.ai](https://vexa.ai) — just grab API key
 
 ## Quickstart
 
-### Option 1: Hosted (Fastest)
+### Option 1: Hosted (no deployment needed)
 
-Just grab your API key at [https://vexa.ai/dashboard/api-keys](https://vexa.ai/dashboard/api-keys) and start using the service immediately.
+Get your API key at [vexa.ai/dashboard/api-keys](https://vexa.ai/dashboard/api-keys) and start sending bots immediately. No infrastructure needed.
 
-### Option 2: Vexa Lite - For Users (Recommended for Production)
+### Option 2: Vexa Lite (recommended for self-hosting)
 
-**Self-hosted, multiuser service for teams. Run as a single Docker container for easy deployment.**
+**Single Docker container. Easiest way to self-host Vexa.**
 
-Vexa Lite is a single-container deployment perfect for teams who want:
 - **Self-hosted multiuser service** - Multiple users, API tokens, and team management
-- **Quick deployment** on any platform - Single container, easy to deploy
+- **Single container** - Easy to deploy on any platform
 - **No GPU required** - Transcription runs externally
 - **Choose your frontend** - Pick from open-source user interfaces like [Vexa Dashboard](./services/dashboard)
 - **Production-ready** - Stateless, scalable, serverless-friendly
+
+Needs external Postgres + transcription service. Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host your own GPU transcription for full data sovereignty.
 
 **Quick start:**
 ```bash
@@ -147,22 +148,18 @@ docker run -d \
 ```
 
 **Deployment options:**
-- 🚀 **One-click platform deployments**: [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy)
-  - ✅ **Fly.io** - Implemented
-  - 🚧 **Railway, Render, etc.** - To be added (contribute by adding your platform of choice!)
-- 📖 **Complete setup guide**: [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment) - Environment variables, storage, TTS, and all configuration options
-- 🎨 **Frontend options**: Choose from open-source user interfaces like [Vexa Dashboard](./services/dashboard)
+- **One-click platform deployments**: [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy) (Fly.io ready, more platforms coming)
+- **Complete setup guide**: [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment)
+- **Frontend options**: [Vexa Dashboard](./services/dashboard)
 
-### Option 3: Docker Compose - For Development
+### Option 3: Docker Compose (development)
 
 **Full stack deployment with all services. Perfect for development and testing.**
-
-All services are saved in `docker-compose.yml` and wrapped in a Makefile for convenience:
 
 ```bash
 git clone https://github.com/Vexa-ai/vexa.git
 cd vexa
-make all                         # Default: remote transcription (GPU-free)
+make all
 ```
 
 **What `make all` does:**
@@ -171,21 +168,16 @@ make all                         # Default: remote transcription (GPU-free)
 - Runs database migrations
 - Starts a simple test to verify everything works
 
-* Full guide: [Deployment Guide](https://docs.vexa.ai/deployment)
+Full guide: [Deployment Guide](https://docs.vexa.ai/deployment)
+
+### Option 4: Helm (production K8s)
+
+For Kubernetes production deployments. See [deploy/helm/README.md](deploy/helm/README.md).
 
 ### Recording storage (local and cloud)
 
-Recording is implemented and supports local filesystem, MinIO, and cloud S3-compatible backends.
-
-See [Recording Storage](https://docs.vexa.ai/recording-storage) for:
-
-- Storage backends and environment variables (`STORAGE_BACKEND`)
-- Docker Compose / Lite / Kubernetes deployment notes
-- Browser playback details (`/recordings/{recording_id}/media/{media_file_id}/raw`, `Range`/`206`, `Content-Disposition: inline`)
-
-### Option 4: Hashicorp Nomad, Kubernetes, OpenShift
-
-For enterprise orchestration platforms, contact [vexa.ai](https://vexa.ai)
+Recording supports local filesystem, MinIO, and cloud S3-compatible backends.
+See [Recording Storage](https://docs.vexa.ai/recording-storage) for configuration details.
 
 ## 1. Send bot to meeting:
 
