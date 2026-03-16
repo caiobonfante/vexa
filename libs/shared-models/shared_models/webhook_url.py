@@ -43,9 +43,6 @@ _BLOCKED_HOSTNAMES = frozenset([
     "redis",
     "postgres",
     "mcp",
-    "whisperlive",
-    "whisperlive-cpu",
-    "whisperlive-remote",
 ])
 
 

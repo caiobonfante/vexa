@@ -1,4 +1,4 @@
-# Vexa Lite Deployment
+# [Vexa](../../README.md) Lite Deployment
 
 All-in-one Docker deployment for platforms without Docker socket access (EasyPanel, Dokploy, Railway, Render, etc.).
 
@@ -26,7 +26,7 @@ docker run -d \
 
 **Notes:**
 - Redis runs internally on `localhost:6379` by default. To use an external Redis, set `REDIS_HOST` to your Redis server address.
-- Default transcription mode is `remote` - WhisperLive calls an external transcription service via `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`.
+- Default transcription mode is `remote` - bots call an external transcription service via `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`.
 - If transcription service uses Docker service names (e.g., `transcription-lb`), add `--network transcription-network` to the docker run command.
 - If transcription service is accessible via host port (e.g., `localhost:8083`), no network flag needed.
 
@@ -37,7 +37,7 @@ docker run -d \
 │                    Lite Container                         │
 │                                                                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────┐ │
-│  │ API Gateway │  │  Admin API  │  │ Bot Manager  │  │ MCP  │ │
+│  │ [API Gateway] │  │ [Admin API] │  │ [Bot Manager]│  │[MCP] │ │
 │  │   :8056     │  │    :8057    │  │    :8080     │  │:18888│ │
 │  │  (external) │  │  (internal) │  │  (internal)  │  │(int.)│ │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └──┬───┘ │
@@ -54,13 +54,13 @@ docker run -d \
 │                          │                                      │
 │                     audio stream                                │
 │                          ↓                                      │
-│  ┌─────────────────┐           ┌─────────────────────────┐     │
-│  │   WhisperLive   │──Redis───▶│ Transcription Collector │     │
-│  │     :9090       │  Stream   │         :8123           │     │
-│  └────────┬────────┘           └─────────────────────────┘     │
-│           │                                                      │
-│           │ (calls remote transcription service)                 │
-│           │                                                      │
+│                     │                                      │
+│              Redis Stream                                  │
+│                     ↓                                      │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Transcription Collector :8123               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                    Xvfb (:99)                            │   │
 │  │              Virtual Display for Browsers                │   │
@@ -79,6 +79,8 @@ docker run -d \
              │   (remote)     │  │          │
              └──────────────┘  └──────────┘
 ```
+
+The Lite container bundles [api-gateway](../../services/api-gateway/README.md), [admin-api](../../services/admin-api/README.md), [bot-manager](../../services/bot-manager/README.md), [transcription-collector](../../services/transcription-collector/README.md), [MCP](../../services/mcp/README.md), and [dashboard](../../services/dashboard/README.md) into a single image.
 
 **Key difference from standard deployment:** Instead of spawning Docker containers for bots, the Lite version uses a **process orchestrator** that spawns bots as Node.js child processes within the same container.
 
@@ -99,7 +101,7 @@ docker run -d \
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_URL` | Auto-generated | Full Redis URL (auto-generated from host/port if not provided) |
 | `DEVICE_TYPE` | `remote` | Device type: `remote` (default), `cpu` (for local faster-whisper) |
-| `WHISPER_BACKEND` | `remote` | WhisperLive backend: `remote` (default), `faster_whisper` (for local CPU) |
+| `WHISPER_BACKEND` | `remote` | Transcription backend: `remote` (default), `faster_whisper` (for local CPU) |
 | `WHISPER_MODEL_SIZE` | `tiny` | Whisper model size (only used for `faster_whisper` backend) |
 | `LOG_LEVEL` | `info` | Logging level (debug, info, warning, error) |
 | `REMOTE_TRANSCRIBER_URL` | (required) | Remote transcription API URL |
@@ -296,7 +298,6 @@ docker logs -f vexa
 # Specific service logs (inside container)
 docker exec vexa cat /var/log/supervisor/api-gateway.log
 docker exec vexa cat /var/log/supervisor/bot-manager.log
-docker exec vexa cat /var/log/supervisor/whisperlive.log
 ```
 
 ### Service Status
@@ -311,7 +312,6 @@ vexa-core:admin-api              RUNNING   pid 123, uptime 0:05:00
 vexa-core:api-gateway            RUNNING   pid 124, uptime 0:05:00
 vexa-core:bot-manager            RUNNING   pid 125, uptime 0:05:00
 vexa-core:transcription-collector RUNNING   pid 126, uptime 0:05:00
-vexa-core:whisperlive            RUNNING   pid 127, uptime 0:05:00
 vexa-core:xvfb                   RUNNING   pid 128, uptime 0:05:00
 vexa-core:mcp                    RUNNING   pid 129, uptime 0:05:00
 ```
@@ -319,7 +319,6 @@ vexa-core:mcp                    RUNNING   pid 129, uptime 0:05:00
 ### Restart a Service
 
 ```bash
-docker exec vexa supervisorctl restart vexa-core:whisperlive
 docker exec vexa supervisorctl restart vexa-core:bot-manager
 ```
 
@@ -404,7 +403,7 @@ The MCP service provides a Model Context Protocol interface for Claude Desktop, 
 - MCP Protocol: `http://localhost:8056/mcp` (via API Gateway)
 - All MCP requests are routed through the API Gateway on port 8056
 
-See `services/mcp/README.md` for detailed MCP setup instructions.
+See [MCP service documentation](../../services/mcp/README.md) for detailed MCP setup instructions.
 
 ## Comparison with Standard Deployment
 
@@ -451,10 +450,10 @@ docker exec vexa supervisorctl status vexa-core:xvfb
 ### Transcriptions Not Appearing
 
 ```bash
-# Check WhisperLive Redis connection
+# Check Redis connection
 docker logs vexa 2>&1 | grep -i "redis"
 
-# Verify Redis stream URL is set correctly
+# Verify Redis is set correctly
 docker exec vexa env | grep REDIS
 ```
 
@@ -485,7 +484,7 @@ The Lite deployment adds the following without modifying core service code:
 - `services/bot-manager/app/orchestrators/process.py` - Process-based bot spawner
 
 **Included Services:**
-- MCP Service (`services/mcp/`) - Model Context Protocol service for Claude/Cursor integration
+- [MCP](../../services/mcp/README.md) Service - Model Context Protocol service for Claude/Cursor integration
 
 **Minimal Modifications:**
 - `services/bot-manager/app/orchestrators/__init__.py` - Loads process orchestrator when `ORCHESTRATOR=process`

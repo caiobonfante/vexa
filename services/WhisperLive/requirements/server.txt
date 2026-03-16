@@ -1,4 +1,0 @@
-websockets
-numpy<2
-redis>=4.6.0
-httpx>=0.24.0

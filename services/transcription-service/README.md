@@ -4,7 +4,7 @@
 
 GPU inference is expensive, stateful, and hardware-specific. You don't want every service that needs transcription to manage its own model, CUDA runtime, and GPU memory. The transcription service isolates all of that behind a standard OpenAI-compatible API — separation of concerns.
 
-Any client that speaks the OpenAI Whisper API can use it. WhisperLive uses it as the backbone for real-time meeting transcription. But it's a standalone, general-purpose service — not tied to Vexa. Send audio, get text back.
+Any client that speaks the OpenAI Whisper API can use it. The bot pipeline uses it for real-time meeting transcription. But it's a standalone, general-purpose service — not tied to Vexa. Send audio, get text back.
 
 Under the hood: faster-whisper behind an Nginx load balancer. Add workers to scale. GPU or CPU. One API endpoint, one docker-compose command.
 
@@ -131,6 +131,13 @@ docker compose exec transcription-api nginx -t
 - **Out of memory** -- switch to a smaller model (see [docs/models.md](docs/models.md)).
 - **Port conflict** -- change the host port in `docker-compose.yml`.
 
+### Known limitations
+
+| Area | Status | Detail |
+|------|--------|--------|
+| **Certainty** | HIGH | API and config well documented |
+| **Single GPU capacity** | Known | Single GPU on BBB handles ~2 concurrent meetings. Beyond that, queuing increases and LIFO skipping kicks in. |
+
 ## Integration with Vexa
 
 Set these in the Vexa gateway environment:
@@ -139,6 +146,11 @@ Set these in the Vexa gateway environment:
 REMOTE_TRANSCRIBER_URL=http://localhost:8083/v1/audio/transcriptions
 TRANSCRIPTION_SERVICE_API_TOKEN=<same value as API_TOKEN above>
 ```
+
+## Public Docs
+
+- [Concepts](https://docs.vexa.ai/concepts)
+- [Recording & Storage](https://docs.vexa.ai/recording-storage)
 
 ## License
 

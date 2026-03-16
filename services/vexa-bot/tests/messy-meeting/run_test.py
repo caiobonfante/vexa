@@ -33,8 +33,8 @@ TRANSCRIPTION_URL = os.environ.get(
 )
 TRANSCRIPTION_TOKEN = os.environ.get("TRANSCRIPTION_SERVICE_TOKEN", "your_secure_token_here")
 
-# Known hallucination phrases — loaded from WhisperLive files if available
-HALLUCINATION_DIR = Path(__file__).parent / "../../../WhisperLive/hallucinations"
+# Known hallucination phrases — loaded from bot hallucination files
+HALLUCINATION_DIR = Path(__file__).parent / "../../core/src/services/hallucinations"
 
 
 def load_hallucination_phrases() -> set[str]:

@@ -75,7 +75,7 @@ def _env_float(name: str, default: float) -> float:
         logger.warning(f"Invalid float env {name}={raw!r}, using default {default}")
         return default
 
-# WhisperLive-inspired defaults (can be overridden via env)
+# Transcription defaults (can be overridden via env)
 BEAM_SIZE = _env_int("BEAM_SIZE", 5)
 BEST_OF = _env_int("BEST_OF", 5)
 COMPRESSION_RATIO_THRESHOLD = _env_float("COMPRESSION_RATIO_THRESHOLD", 1.8)
@@ -167,7 +167,7 @@ MAX_QUEUE_SIZE = _env_int("MAX_QUEUE_SIZE", 10)  # Max requests waiting in queue
 
 # Backpressure strategy:
 # - If FAIL_FAST_WHEN_BUSY=true, we do NOT wait in a queue; we immediately return 503 so callers
-#   (e.g. WhisperLive) can keep buffering and submit a newer/larger window later.
+#   callers can keep buffering and submit a newer/larger window later.
 FAIL_FAST_WHEN_BUSY = _env_bool("FAIL_FAST_WHEN_BUSY", True)
 BUSY_RETRY_AFTER_S = _env_int("BUSY_RETRY_AFTER_S", 1)
 REALTIME_RESERVED_SLOTS = _env_int("REALTIME_RESERVED_SLOTS", 1)

@@ -1,4 +1,4 @@
-# Vexa Helm Charts
+# [Vexa](../README.md) Helm Charts
 
 Helm charts for deploying Vexa, the self-hosted real-time meeting transcription platform, including the Vexa Dashboard (https://github.com/Vexa-ai/Vexa-Dashboard).
 
@@ -6,7 +6,7 @@ Upstream app repo: https://github.com/Vexa-ai/vexa
 
 ## Charts
 
-- `vexa`: Full, multi-service deployment matching the upstream Docker Compose topology, with optional Vexa Dashboard deployment.
+- [`vexa`](./charts/vexa/README.md): Full, multi-service deployment matching the upstream Docker Compose topology, with optional Vexa Dashboard deployment.
 - `vexa-lite`: Single-container deployment intended for simpler setups, with optional Vexa Dashboard deployment.
 
 ## Prerequisites
@@ -45,11 +45,10 @@ helm install vexa-lite ./charts/vexa-lite \
 Key values in `charts/vexa/values.yaml`:
 
 - `secrets.adminApiToken`, `secrets.transcriberApiKey`: Required for auth and service communication.
-- `database.host`, `database.user`, `database.name`: Used by admin-api, bot-manager, transcription-collector.
+- `database.host`, `database.user`, `database.name`: Used by [admin-api](../services/admin-api/README.md), [bot-manager](../services/bot-manager/README.md), [transcription-collector](../services/transcription-collector/README.md).
 - `redisConfig.url` (or `redisConfig.host`/`port`): Required if `redis.enabled=false`.
 - `botManager.orchestrator`: `process` (default), `kubernetes` (PoC), or `docker`.
-- `whisperLive.profile`: `cpu` or `gpu` (use with GPU resources and node selectors).
-- `ingress.*`: Optional ingress for `api-gateway`.
+- `ingress.*`: Optional ingress for [api-gateway](../services/api-gateway/README.md).
 
 Bundled dev dependencies:
 

@@ -1,5 +1,7 @@
 # Whisper Hallucination Pipeline
 
+Part of [vexa-bot](../README.md). See also: [recording-pipeline](./recording-pipeline.md).
+
 ## WHY -- what hallucination looks like and why it happens
 
 Whisper hallucinates when it receives silence or low-energy audio. Instead of outputting nothing, it generates confident-sounding text -- often repetitive loops ("so much so much so" x37, "i will draft the api" x34) or known stock phrases ("Thank you for watching", "Subscribe to my channel").
@@ -13,7 +15,7 @@ Root causes:
 
 ## WHAT -- current 3-layer protection and where it fails
 
-### Layer 1: transcription-service (faster-whisper parameters)
+### Layer 1: [transcription-service](../../transcription-service/README.md) (faster-whisper parameters)
 
 | Parameter | Current Value | Status |
 |---|---|---|
@@ -28,13 +30,9 @@ Root causes:
 | `VAD_FILTER` | True | Good but bypassed in deferred path |
 | `VAD_FILTER_THRESHOLD` | 0.5 | OK |
 
-### Layer 2: WhisperLive (phrase lists)
+### Layer 2: bot (hallucination-filter.ts)
 
-Known hallucination phrases are matched and suppressed. Catches stock phrases like "Thank you for watching" but cannot catch novel repetitive content since the phrases differ each run.
-
-### Layer 3: bot (hallucination-filter.ts)
-
-- Phrase matching (same limitation as Layer 2)
+- Phrase matching (known hallucination phrases from `hallucinations/*.txt`)
 - Too-short segment check
 - Repetition detection: 3-6 word n-gram repeated 3+ times
 - Compression ratio > 2.0
@@ -42,7 +40,7 @@ Known hallucination phrases are matched and suppressed. Catches stock phrases li
 
 ### Where it fails
 
-1. **Deferred/batch transcription bypasses Layer 3 entirely.** The bot filter only runs in the live path. Post-meeting re-transcription sends full recordings without the bot's hallucination-filter.ts.
+1. **Deferred/batch transcription bypasses Layer 2 entirely.** The bot filter only runs in the live path. Post-meeting re-transcription sends full recordings without the bot's hallucination-filter.ts.
 2. **Deferred transcription may bypass VAD.** Full recordings sent without VAD pre-segmentation means long silence gaps go straight to Whisper.
 3. **`no_repeat_ngram_size` does not work across segments.** A 37x repetition that spans multiple segments is invisible to the decode-time n-gram check.
 4. **Low-level noise (-15 to -20dB) causes VAD false negatives.** Background pink noise makes Silero VAD think silence is speech, letting silence+noise through to Whisper.

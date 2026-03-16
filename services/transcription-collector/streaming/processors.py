@@ -11,11 +11,10 @@ import redis # For redis.exceptions
 import redis.asyncio as aioredis # For type hinting redis_client
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-# from pydantic import ValidationError # Not explicitly used in the snippets for these functions, but could be for WhisperLiveData
 
 from shared_models.database import async_session_local # For DB sessions
 from shared_models.models import User, Meeting, MeetingSession, APIToken
-from shared_models.schemas import Platform # WhisperLiveData not directly used by these functions from snippet
+from shared_models.schemas import Platform
 from config import REDIS_SEGMENT_TTL, REDIS_SPEAKER_EVENT_KEY_PREFIX, REDIS_SPEAKER_EVENT_TTL # Added new configs (NEW)
 # MODIFIED: Import the new utility function and only necessary statuses/base mapper if still needed elsewhere
 from mapping.speaker_mapper import get_speaker_mapping_for_segment, STATUS_UNKNOWN, STATUS_ERROR # Removed direct map_speaker_to_segment and other statuses if not directly used by this file
@@ -230,7 +229,7 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                      end_time_float = float(segment['end'])
                      text_content = segment.get('text') or ""
                      language_content = segment.get('language')
-                     # WhisperLive provides this; we must propagate it so the UI can observe
+                     # Propagate completed flag so the UI can observe
                      # partial -> completed transitions (e.g., SAME_OUTPUT_THRESHOLD confirmation).
                      completed_content = bool(segment.get('completed', False))
                  except (ValueError, TypeError) as time_err:

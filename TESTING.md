@@ -96,7 +96,7 @@ For thorough pre-release validation, use the bottom-up cycle in [tests/CYCLE.md]
 2. **Service isolation** -- start each service in Docker, verify it works
 3. **Functionality chains** -- transcription chain, webhook delivery, API chain, real-time delivery, speaker identification
 4. **User experience flows** -- self-hoster deploy, API user flow, dashboard flow
-5. **Stress and load** -- transcription-service capacity, WhisperLive streams (if used), bot scaling
+5. **Stress and load** -- transcription-service capacity, bot scaling
 6. **Builds and packages** -- Docker images, Vexa-lite, Helm charts, version consistency
 7. **Audit** -- security, config, architecture, staleness
 8. **Report to human** -- per-phase summary, human decides next steps
