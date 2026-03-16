@@ -3127,7 +3127,7 @@ async def transcribe_meeting_recording(
         logger.info(f"Created vxa_tx_ token for user {current_user.id} for deferred transcription")
 
     # 6. Call Transcription Gateway
-    tg_url = os.getenv("TRANSCRIPTION_GATEWAY_URL", "http://transcription-gateway:8084")
+    tg_url = os.getenv("TRANSCRIPTION_GATEWAY_URL", "http://vexa-transcription-gateway:8084")
 
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
