@@ -19,7 +19,7 @@ what, the bot keeps each speaker's WebRTC audio track separate. This gives:
 - Per-speaker audio capture: each participant = separate audio stream.
 - Screen share tracks (unmapped to a participant tile) labeled "Presentation".
 - Silero VAD filters silence before transcription (saves compute).
-- Direct HTTP POST to transcription-service (no WhisperLive dependency).
+- Direct HTTP POST to [transcription-service](../transcription-service/README.md).
 - Per-speaker language detection: auto-detect on first chunk, lock language
   after high-confidence detection so subsequent chunks skip detection overhead.
 - Confirmation-based buffer: resubmits full buffer every 2s, publishes
@@ -27,13 +27,23 @@ what, the bot keeps each speaker's WebRTC audio track separate. This gives:
   Confirmed segments (`completed: true`) replace drafts after 2 consecutive
   matching transcriptions. Wall-clock hard cap at 10s forces flush.
 - Hallucination filter: known junk phrases + repetition detection.
-  Shared phrase lists at `services/WhisperLive/hallucinations/`.
+  Phrase lists at `core/src/services/hallucinations/`.
 - Redis output: XADD to streams (persistence) + PUBLISH to channels
   (real-time dashboard).
 - Speaker identity: one-time DOM name resolution per participant, cached.
   Google Meet uses participant tile DOM selectors. Teams uses
   RTCPeerConnection track metadata.
-- Recording: audio file capture + upload to storage via bot-manager.
+- Recording: audio file capture + upload to storage via [bot-manager](../bot-manager/README.md).
+
+### Known limitations
+
+| Area | Status | Detail |
+|------|--------|--------|
+| **Certainty** | HIGH | Per-speaker pipeline well documented |
+| **Google Meet failures** | Known | 7.8% failure rate — join-stage "No active media elements" error. |
+| **Teams regressions** | Active | Current prod works (0% fail), but new code has open issues (#171, #189, #190, #191). |
+| **Zoom production** | Self-hosted only | Requires your own Zoom Marketplace app + SDK. Not available on hosted service. Web app mode (Playwright, no SDK) in development. |
+| **Unauthenticated guest only** | By design | Bots join as unauthenticated guests. Meetings requiring org authentication (domain-only Google Meet, enterprise Teams, authenticated Zoom) will reject the bot. Authenticated bot support is on the roadmap. |
 
 ## How
 
@@ -90,7 +100,7 @@ make rebuild                 # after editing TS (~10s, no image rebuild)
 |-----------------------------|-------------------------------------------------|
 | `BOT_CONFIG`                | JSON with full bot config (platform, meetingUrl, botName, meeting_id, redisUrl, automaticLeave) |
 | `TRANSCRIPTION_SERVICE_URL` | HTTP URL of transcription-service endpoint       |
-| `REDIS_URL`                 | Redis connection URL                             |
+| `REDIS_URL`                 | [Redis](../redis.md) connection URL              |
 | `ZOOM_CLIENT_ID`            | Zoom SDK client ID (Zoom only)                   |
 | `ZOOM_CLIENT_SECRET`        | Zoom SDK client secret (Zoom only)               |
 
@@ -139,7 +149,7 @@ core/src/platforms/hot-debug.sh
 |------------------|--------------------|------------------------------------------------|-----------------------------------------------------|
 | Google Meet      | Chrome + Stealth   | Per-element `<audio>`/`<video>` streams (one per participant) | Speaking-indicator correlation + voting/locking: correlates DOM speaking indicators with audio tracks, votes on matches, locks permanently after threshold |
 | Microsoft Teams  | MS Edge (required) | Single mixed RTCPeerConnection stream, DOM-routed by speaker events | DOM traversal + voting/locking: identifies active speaker from DOM, routes mixed audio segments to the correct speaker via the same vote/lock system |
-| Zoom             | None (native SDK)  | SDK raw audio callback or PulseAudio fallback   | SDK participant metadata                            |
+| Zoom (self-hosted only) | None (native SDK)  | SDK raw audio callback or PulseAudio fallback   | SDK participant metadata. Requires own Marketplace app. Web app mode in dev. |
 
 All platforms feed into the same per-speaker pipeline: tracks discovered,
 tagged with participant identity (via voting/locking in `speaker-identity.ts`),
@@ -175,7 +185,7 @@ redis-cli PUBLISH bot_commands:meeting:123 '{"action":"leave"}'
 redis-cli PUBLISH bot_commands:meeting:123 '{"action":"reconfigure","language":"es"}'
 ```
 
-Status callbacks via HTTP POST to bot-manager: `joining`, `awaiting_admission`,
+Status callbacks via HTTP POST to [bot-manager](../bot-manager/README.md): `joining`, `awaiting_admission`,
 `active`, `completed`, `failed`.
 
 ## Project Structure
@@ -217,3 +227,9 @@ and place under `core/src/platforms/zoom/native/zoom_meeting_sdk/`.
 ```bash
 ls core/src/platforms/zoom/native/zoom_meeting_sdk/libmeetingsdk.so
 ```
+
+## Public Docs
+
+- [Google Meet](https://docs.vexa.ai/platforms/google-meet)
+- [Microsoft Teams](https://docs.vexa.ai/platforms/microsoft-teams)
+- [Zoom](https://docs.vexa.ai/platforms/zoom)

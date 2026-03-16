@@ -8,10 +8,10 @@
 
 ## Tests
 
-### Test 1: Transcription Chain (WhisperLive -> Transcription Service)
-**Goal:** Verify audio flows from WebSocket input through WhisperLive to the transcription service and produces a stored transcript.
-**Setup:** Run `python tests/integration/test_transcription_chain.py` to execute the deterministic test first.
-**Verify:** Audio sent via WebSocket appears as a completed transcription in the database. The transcript text is coherent and matches the input audio.
+### Test 1: Transcription Chain (Bot -> Transcription Service)
+**Goal:** Verify audio flows from the bot through the transcription service and produces a stored transcript.
+**Setup:** Use the mock meeting test or send audio directly to the transcription service endpoint.
+**Verify:** Audio appears as a completed transcription in the database. The transcript text is coherent and matches the input audio.
 **Evidence:** Capture the transcript from the database. Compare with expected reference text if available.
 **Pass criteria:** End-to-end latency under 30 seconds for a 10-second clip. Transcript is recognizable. No data lost between services.
 

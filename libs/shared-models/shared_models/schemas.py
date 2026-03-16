@@ -22,7 +22,6 @@ ACCEPTED_LANGUAGE_CODES = {
 }
 
 # --- Allowed Tasks ---
-# These are the tasks supported by WhisperLive
 ALLOWED_TASKS = {"transcribe", "translate"}
 
 # --- Allowed Transcription Tiers ---
@@ -617,7 +616,7 @@ class TranscriptionSegment(BaseModel):
     language: Optional[str]
     created_at: Optional[datetime] = Field(default=None)
     speaker: Optional[str] = None
-    # WhisperLive marks segments as completed/partial. This is important for real-time UI updates
+    # Segments are marked completed/partial. This is important for real-time UI updates
     # (e.g., to show when a partial segment becomes "confirmed" via SAME_OUTPUT_THRESHOLD).
     completed: Optional[bool] = None
     absolute_start_time: Optional[datetime] = Field(None, description="Absolute start timestamp of the segment (UTC)")
@@ -634,28 +633,6 @@ class TranscriptionSegment(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True # Allow using both alias and field name
-
-# --- WebSocket Schema (NEW - Represents data from WhisperLive) ---
-
-class WhisperLiveData(BaseModel):
-    """Schema for the data message sent by WhisperLive to the collector."""
-    uid: str # Unique identifier from the original client connection
-    platform: Platform
-    meeting_url: Optional[str] = None
-    token: str # User API token
-    meeting_id: str # Native Meeting ID (string, e.g., 'abc-xyz-pqr')
-    segments: List[TranscriptionSegment]
-
-    @field_validator('platform', mode='before')
-    @classmethod
-    def validate_whisperlive_platform_str(cls, v):
-        """Validate that the platform string is one of the supported platforms"""
-        try:
-            Platform(v)
-            return v
-        except ValueError:
-            supported = ', '.join([p.value for p in Platform])
-            raise ValueError(f"Invalid platform '{v}'. Must be one of: {supported}")
 
 # --- Other Schemas ---
 class TranscriptionResponse(BaseModel): # Doesn't inherit MeetingResponse to avoid redundancy if joining data

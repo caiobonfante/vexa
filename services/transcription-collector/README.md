@@ -2,7 +2,7 @@
 
 ## Why
 
-Transcription segments arrive in Redis from multiple sources -- the bot's per-speaker pipeline and (optionally) WhisperLive for external WebSocket clients. These segments are ephemeral in Redis. Something needs to consume them, deduplicate, filter noise, and persist meaningful content to Postgres so transcripts survive restarts and are queryable via the API. The collector is that persistence layer.
+Transcription segments arrive in Redis from the bot's per-speaker pipeline. These segments are ephemeral in Redis. Something needs to consume them, deduplicate, filter noise, and persist meaningful content to Postgres so transcripts survive restarts and are queryable via the API. The collector is that persistence layer.
 
 ## What
 
@@ -21,10 +21,9 @@ A background service that reads from Redis streams, filters non-informative segm
 
 Segments are pre-labeled with speaker identity by the producer:
 
-- **Bot (primary):** Per-speaker pipeline publishes segments to Redis via XADD with speaker label, meeting ID, and platform already set. No diarization needed -- the bot has per-speaker audio tracks.
-- **WhisperLive (optional):** External WebSocket clients sending mixed audio. WhisperLive publishes segments to the same Redis stream.
+- **Bot:** Per-speaker pipeline publishes segments to Redis via XADD with speaker label, meeting ID, and platform already set. No diarization needed -- the bot has per-speaker audio tracks.
 
-When the bot publishes segments with a `speaker` field already set, the collector uses it directly (logged as `PRODUCER_LABELED`) instead of running the overlap-based speaker mapper. This is the primary path -- diarization-free speaker attribution from per-speaker audio tracks.
+The bot publishes segments with a `speaker` field already set. The collector uses it directly (logged as `PRODUCER_LABELED`) instead of running the overlap-based speaker mapper. This is the primary path -- diarization-free speaker attribution from per-speaker audio tracks.
 
 Each segment has a `segment_id` (assigned by the bot) which the collector uses as the Redis hash key. This provides stable identity for draft/confirmed updates: a confirmed segment (`completed: true`) replaces the draft (`completed: false`) at the same hash key.
 
@@ -48,9 +47,16 @@ Each segment passes through multiple filters before persistence:
 | PATCH | `/meetings/{platform}/{native_meeting_id}` | Update meeting metadata |
 | DELETE | `/meetings/{platform}/{native_meeting_id}` | Delete/anonymize a meeting |
 
+### Known limitations
+
+| Area | Status | Detail |
+|------|--------|--------|
+| **Certainty** | HIGH | Pipeline and filtering well documented |
+| **Silent transcript failures** | Known | 22% of completed meetings have zero transcriptions. The collector does not detect or alert on this — segments simply never arrive from the bot. See [bot metrics research](/home/dima/dev/1/analytics/database/bot-metrics-research.md). |
+
 ### Dependencies
 
-- **Redis** -- source streams (`transcription_segments`, `speaker_events`), segment dedup hashes
+- **[Redis](../redis.md)** -- source streams (`transcription_segments`, `speaker_events`), segment dedup hashes
 - **PostgreSQL** -- permanent transcript storage via shared-models ORM
 - **shared-models** -- ORM models, schemas, database session factory
 
@@ -112,3 +118,7 @@ def filter_out_repeated_characters(text):
 
 CUSTOM_FILTERS = [filter_out_repeated_characters]
 ```
+
+## Public Docs
+
+- [WebSocket API](https://docs.vexa.ai/websocket)

@@ -41,9 +41,7 @@ shared-models              <- library, no deps
      |
 transcription-service      <- standalone, GPU inference behind API
      |
-WhisperLive                <- WebSocket server, depends on transcription-service + Redis (optional for bots)
-     |
-Bot (per-speaker pipeline) <- depends on transcription-service + Redis (NOT WhisperLive)
+Bot (per-speaker pipeline) <- depends on transcription-service + Redis
      |
 admin-api                  <- depends on Postgres + shared-models
 transcription-collector    <- depends on Redis + Postgres
@@ -99,45 +97,16 @@ bash tests/test_stress.sh
 ```
 **Look at:** Auth enforcement, OpenAI API compatibility, worker crash recovery, log quality.
 
-### 1.3 WhisperLive (optional -- not required for bot pipeline)
+### 1.3 Bot (per-speaker pipeline)
 
 **1.3a Unit tests**
-**WHY:** Dataclass contracts -- if Segment serializes wrong, downstream breaks silently.
-**Gates:** 10 unit tests + README with WHY/WHAT/HOW.
-```bash
-cd services/WhisperLive && pytest tests/ -v
-```
-
-**1.3b Hot chain test**
-**WHY:** WhisperLive can't be tested alone -- needs transcription-service. Test the chain.
-**Prerequisite:** transcription-service running (already tested in 1.2).
-```bash
-# Start transcription-service first
-cd services/transcription-service && docker compose up -d
-
-# Start WhisperLive test compose (separate ports, separate network)
-cd services/WhisperLive && bash tests/test_hot.sh --full
-```
-**Look at:** Transcript quality through the chain. Audio format (Float32Array, not Int16). LIFO behavior with short audio.
-
-**1.3c Stress test**
-**WHY:** Find concurrent stream limits. Understand LIFO behavior under load.
-```bash
-bash tests/test_stress.sh
-```
-**Baselines:** 100 concurrent: 100% segment delivery. 200: 96.5%. 500: 58.4% (LIFO skipping by design). ~4MiB memory per connection.
-**Look at:** This is NOT silent failure -- it's LIFO prioritizing freshness. Streams that "miss" segments would get them eventually, just slower.
-
-### 1.4 Bot (per-speaker pipeline)
-
-**1.4a Unit tests**
 **WHY:** Per-speaker buffer management — confirmation logic, fuzzy matching, hard cap flush.
 **Gates:** Unit tests + README with WHY/WHAT/HOW.
 ```bash
 cd services/vexa-bot/core && npx tsx src/services/__tests__/speaker-streams.test.ts
 ```
 
-**1.4b Mock meeting test**
+**1.3b Mock meeting test**
 **WHY:** Test the full per-speaker pipeline without a real meeting.
 **Prerequisite:** transcription-service + Redis running.
 ```bash
@@ -169,7 +138,7 @@ redis-cli HGETALL meeting:<meeting_id>:segments
 - Speaker events have correct event_type (SPEAKER_START/SPEAKER_END) and relative timestamps
 - Bot's own name is NOT in the speaker list (filtered by speaker-identity.ts)
 
-**1.4c Dashboard end-to-end test**
+**1.3c Dashboard end-to-end test**
 **WHY:** Verify the full pipeline from dashboard bot launch to live transcript display.
 **Prerequisite:** All services running (`docker compose up -d`), dashboard on :3001.
 ```bash
@@ -215,11 +184,10 @@ cd services/api-gateway && pytest tests/ -v
 ### 1.9 README validation
 **WHY:** Docs must be accurate post-architecture change.
 **Check each service README for:**
-- Bot README reflects per-speaker pipeline, no WhisperLive dependency
-- WhisperLive README says optional for bots
+- Bot README reflects per-speaker pipeline
 - Transcription-service README mentions repetition_penalty
-- Collector README reflects bot-published segments (not just WhisperLive)
-- redis.md reflects bot as stream producer alongside WhisperLive
+- Collector README reflects bot-published segments
+- redis.md reflects bot as stream producer
 
 ### Phase 1 Gate
 **All unit tests pass. All READMEs have WHY/WHAT/HOW. Standalone services hot-tested.**
@@ -254,26 +222,19 @@ docker compose up -d transcription-collector
 ```
 **Verify:** consuming Redis stream, persisting to Postgres.
 
-### 2.5 WhisperLive (optional)
-```bash
-docker compose up -d whisperlive
-```
-**Verify:** health check, WebSocket connect, segments arrive.
-**Note:** Only needed if serving external WebSocket clients. Bot does not require WhisperLive.
-
-### 2.6 bot-manager
+### 2.5 bot-manager
 ```bash
 docker compose up -d bot-manager
 ```
 **Verify:** health check, bot launch capability.
 
-### 2.7 api-gateway
+### 2.6 api-gateway
 ```bash
 docker compose up -d api-gateway
 ```
 **Verify:** routing, auth enforcement, WebSocket proxy.
 
-### 2.8 dashboard
+### 2.7 dashboard
 ```bash
 docker compose up -d dashboard
 ```
@@ -512,13 +473,13 @@ Phase 7: N new findings, M resolved
 
 1. **Audio format matters.** Bot sends Float32Array, not Int16 PCM. Sending wrong format = hallucinated garbage, not an error. Silent corruption.
 2. **Test compose needs exact config.** DNS (`extra_hosts`), API keys matching between services, correct env vars. Budget 3-4 iterations for new test compose files.
-3. **WhisperLive's LIFO is not a bug.** Under load, it intentionally skips old audio to stay current. "Missing segments" at high concurrency = LIFO working as designed, not silent failure.
+3. **Transcription service LIFO is not a bug.** Under load, it intentionally skips old audio to stay current. "Missing segments" at high concurrency = LIFO working as designed, not silent failure.
 4. **Per-worker queue limit (~20) is the transcription-service bottleneck.** Not GPU, not memory. Software limit.
 5. **GPU memory reported by nvidia-smi is machine-wide.** Filter to per-process: `nvidia-smi --query-compute-apps=pid,used_memory --format=csv`.
 6. **Missing README = failed gate.** Not optional. 4 services were missing READMEs and should have blocked Phase 1.
 7. **DOM is still needed for speaker names.** Audio tracks give you separation, DOM gives you labels. One-time lookup per participant, not continuous polling.
 8. **Edge TTS generates good test audio.** Three distinct neural voices (Jenny, Guy, Sonia), different content, transcribes perfectly. Use for mock meeting dev environment.
-9. **Bot does not need WhisperLive.** The per-speaker pipeline posts directly to transcription-service via HTTP. WhisperLive is only needed for external WebSocket clients sending mixed audio.
+9. **Bot posts directly to transcription-service via HTTP.** The per-speaker pipeline does not need any intermediary.
 10. **Zod schema strips unknown fields.** `docker.ts` uses `BotConfigSchema.parse()` — any field not in the schema is silently dropped from BOT_CONFIG. New config fields MUST be added to the Zod schema or they won't reach the bot code.
 11. **Bot name filtering is required.** `__vexaGetAllParticipantNames()` returns all DOM tiles including the bot itself and UI text ("Let participants send messages"). speaker-identity.ts must filter these before positional mapping to audio elements.
 12. **Draft/confirmed is the latency solution.** Publish drafts (`completed=false`) on every transcription result (~3s latency). Confirmed segments (`completed=true`) replace drafts after stabilization. Both flow through XADD → collector → pub/sub → dashboard. Same Redis hash key (start_time) so drafts update in place.
