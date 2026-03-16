@@ -219,7 +219,7 @@ cd services/api-gateway && pytest tests/ -v
 - WhisperLive README says optional for bots
 - Transcription-service README mentions repetition_penalty
 - Collector README reflects bot-published segments (not just WhisperLive)
-- redis.md reflects bot as stream producer alongside WhisperLive
+- [infra/redis.md](../infra/redis.md) reflects bot as stream producer alongside WhisperLive
 
 ### Phase 1 Gate
 **All unit tests pass. All READMEs have WHY/WHAT/HOW. Standalone services hot-tested.**

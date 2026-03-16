@@ -70,13 +70,20 @@ Key responsibilities:
 | * | `/mcp` | MCP protocol forwarding |
 | WS | `/ws` | Real-time meeting status via WebSocket |
 
+### Known limitations
+
+| Area | Status | Detail |
+|------|--------|--------|
+| **Certainty** | HIGH | All routes listed, CORS config documented |
+| **CORS defaults** | Risk | `CORS_ORIGINS` defaults to `localhost` if not set. Must configure for production domains or requests will be silently blocked. |
+
 ### Dependencies
 
-- **admin-api** -- user/token management
-- **bot-manager** -- bot lifecycle, recordings, voice agent
-- **transcription-collector** -- meetings and transcripts
-- **MCP service** -- Model Context Protocol
-- **Redis** -- WebSocket Pub/Sub, transcript share link storage
+- **[admin-api](../admin-api/README.md)** -- user/token management
+- **[bot-manager](../bot-manager/README.md)** -- bot lifecycle, recordings, voice agent
+- **[transcription-collector](../transcription-collector/README.md)** -- meetings and transcripts
+- **[MCP service](../mcp/README.md)** -- Model Context Protocol
+- **[Redis](../../infra/redis.md)** -- WebSocket Pub/Sub, transcript share link storage
 
 ## How
 
@@ -130,3 +137,10 @@ open http://localhost:8000/docs
 - Set `LOG_LEVEL=DEBUG` for header-level forwarding traces
 - 503 errors mean a downstream service is unreachable
 - WebSocket connections subscribe to Redis channels `bm:meeting:{id}:status`
+
+## Public Docs
+
+- [Quickstart](https://docs.vexa.ai/quickstart)
+- [User API Guide](https://docs.vexa.ai/user_api_guide)
+- [WebSocket API](https://docs.vexa.ai/websocket)
+- [Webhooks](https://docs.vexa.ai/webhooks)

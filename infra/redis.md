@@ -34,14 +34,14 @@ webhook_delivery ──LPUSH──► Redis List (webhook_retry_queue) ──BRP
 
 | Pattern | Type | Producer | Consumer | Purpose |
 |---------|------|----------|----------|---------|
-| `transcription_segments` | Stream | Bot (XADD {payload: JSON with JWT}) | transcription-collector | Transcript segments with speaker, text, timestamps. Payload includes `completed` flag (false=draft, true=confirmed) |
-| `speaker_events_relative` | Stream | Bot | transcription-collector | Speaker activity events with relative timestamps (ms from session start) |
-| `meeting:{meeting_id}:segments` | Hash | transcription-collector | collector API, background flush | Mutable segment store keyed by start_time. TTL 1h |
-| `tc:meeting:{meeting_id}:mutable` | Pub/Sub | transcription-collector | api-gateway → WebSocket → dashboard | Change-only segment updates for real-time display |
-| `speaker_events:{session_uid}` | Sorted Set | transcription-collector | collector (speaker mapping fallback) | Speaker events scored by relative timestamp. TTL 24h |
-| `meeting:{meeting_id}:status` | Pub/Sub | bot-manager | api-gateway → WebSocket | Meeting status changes (joining, active, completed, failed) |
-| `bot_commands:meeting:{meeting_id}` | Pub/Sub | bot-manager | vexa-bot | Bot control commands (leave, reconfigure) |
-| `webhook_retry_queue` | List | webhook_delivery (shared-models) | retry_worker (bot-manager) | Failed webhook deliveries with backoff metadata |
+| `transcription_segments` | Stream | [Bot](../services/vexa-bot/README.md) (XADD {payload: JSON with JWT}) | [transcription-collector](../services/transcription-collector/README.md) | Transcript segments with speaker, text, timestamps. Payload includes `completed` flag (false=draft, true=confirmed) |
+| `speaker_events_relative` | Stream | [Bot](../services/vexa-bot/README.md) | [transcription-collector](../services/transcription-collector/README.md) | Speaker activity events with relative timestamps (ms from session start) |
+| `meeting:{meeting_id}:segments` | Hash | [transcription-collector](../services/transcription-collector/README.md) | collector API, background flush | Mutable segment store keyed by start_time. TTL 1h |
+| `tc:meeting:{meeting_id}:mutable` | Pub/Sub | [transcription-collector](../services/transcription-collector/README.md) | [api-gateway](../services/api-gateway/README.md) → WebSocket → dashboard | Change-only segment updates for real-time display |
+| `speaker_events:{session_uid}` | Sorted Set | [transcription-collector](../services/transcription-collector/README.md) | collector (speaker mapping fallback) | Speaker events scored by relative timestamp. TTL 24h |
+| `meeting:{meeting_id}:status` | Pub/Sub | [bot-manager](../services/bot-manager/README.md) | [api-gateway](../services/api-gateway/README.md) → WebSocket | Meeting status changes (joining, active, completed, failed) |
+| `bot_commands:meeting:{meeting_id}` | Pub/Sub | [bot-manager](../services/bot-manager/README.md) | [vexa-bot](../services/vexa-bot/README.md) | Bot control commands (leave, reconfigure) |
+| `webhook_retry_queue` | List | webhook_delivery (shared-models) | retry_worker ([bot-manager](../services/bot-manager/README.md)) | Failed webhook deliveries with backoff metadata |
 
 ### Stream details
 
@@ -95,12 +95,20 @@ Collector stores these in sorted set `speaker_events:{session_uid}` (score = tim
 
 ### References
 
-- Stream producer (bot): [`services/vexa-bot/core/src/services/segment-publisher.ts`](vexa-bot/core/src/services/segment-publisher.ts) -- XADD + PUBLISH per segment
-- Stream consumer: [`services/transcription-collector/streaming/consumer.py`](transcription-collector/streaming/consumer.py) -- `XREADGROUP` loop
-- Pub/Sub producer: [`services/bot-manager/app/main.py`](bot-manager/app/main.py) -- `publish_meeting_status_change()`
-- Pub/Sub consumer: [`services/api-gateway/main.py`](api-gateway/main.py) -- `websocket_multiplex()` subscribes for real-time updates
+- Stream producer (bot): [`services/vexa-bot/core/src/services/segment-publisher.ts`](../services/vexa-bot/core/src/services/segment-publisher.ts) -- XADD + PUBLISH per segment
+- Stream consumer: [`services/transcription-collector/streaming/consumer.py`](../services/transcription-collector/streaming/consumer.py) -- `XREADGROUP` loop
+- Pub/Sub producer: [`services/bot-manager/app/main.py`](../services/bot-manager/app/main.py) -- `publish_meeting_status_change()`
+- Pub/Sub consumer: [`services/api-gateway/main.py`](../services/api-gateway/main.py) -- `websocket_multiplex()` subscribes for real-time updates
 - Webhook retry: [`libs/shared-models/shared_models/webhook_retry_worker.py`](../libs/shared-models/shared_models/webhook_retry_worker.py) -- `BRPOP` loop with backoff
 - Webhook enqueue: [`libs/shared-models/shared_models/webhook_delivery.py`](../libs/shared-models/shared_models/webhook_delivery.py) -- `LPUSH` on failure
+
+### Known limitations
+
+| Area | Status | Detail |
+|------|--------|--------|
+| **Certainty** | HIGH | Excellent architectural reference with all keys/channels documented |
+| **No persistence** | Risk | No `appendonly` configured. If Redis restarts, in-flight stream messages are lost. Production should enable AOF. |
+| **No test/debug section** | Gap | No commands for inspecting live state (stream lengths, pending messages, pub/sub subscribers). |
 
 ## How
 
