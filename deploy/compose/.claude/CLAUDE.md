@@ -63,18 +63,3 @@ Each service saves tests/findings.md. You aggregate into tests/results/report-{t
 
 ### Self-improvement
 If a service agent's findings contradict the README spec, update the README. Findings bubble up; specs flow down.
-
-## Diagnostic protocol
-1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
-2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
-3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "502 error" — report "502 because bot-manager is down because Redis connection refused."
-4. **Parallelize** — run independent checks concurrently. Don't wait for Postgres to finish before checking Redis.
-5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
-
-Dependencies to check first: Redis, Postgres, then transcription-collector, then api-gateway/bot-manager/dashboard. If compose up fails, check .env and Docker daemon before blaming services.
-
-## Logging
-Append meaningful findings to `/home/dima/dev/vexa/test.log`:
-- Format: `[timestamp] [agent-name] LEVEL: message`
-- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
-- Don't spam — one line per finding, not per check
