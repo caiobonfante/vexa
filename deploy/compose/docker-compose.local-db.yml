@@ -1,7 +1,7 @@
 # Local database override file
 # This file extends docker-compose.yml to add the postgres service
 # and postgres dependencies for services that need it.
-# Use with: docker compose -f docker-compose.yml -f docker-compose.local-db.yml
+# Use with: docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml
 
 services:
   # Postgres service for local database

@@ -92,7 +92,7 @@ RUN mkdir -p \
 # -----------------------------------------------------------------------------
 
 # Copy requirements files first
-COPY docker/lite/requirements.txt /tmp/requirements.txt
+COPY deploy/lite/requirements.txt /tmp/requirements.txt
 COPY services/WhisperLive/requirements/server.txt /tmp/requirements-whisperlive.txt
 COPY services/mcp/requirements.txt /tmp/requirements-mcp.txt
 
@@ -181,10 +181,10 @@ WORKDIR /app
 # -----------------------------------------------------------------------------
 
 # Supervisor configuration
-COPY docker/lite/supervisord.conf /etc/supervisor/conf.d/vexa.conf
+COPY deploy/lite/supervisord.conf /etc/supervisor/conf.d/vexa.conf
 
 # Entrypoint script
-COPY docker/lite/entrypoint.sh /entrypoint.sh
+COPY deploy/lite/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 RUN mkdir -p /var/lib/vexa/recordings /var/log/vexa-bots
 

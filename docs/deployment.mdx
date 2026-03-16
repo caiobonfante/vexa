@@ -13,7 +13,7 @@ Note: Zoom joins require additional configuration (Zoom Meeting SDK + OAuth/OBF)
 **TL;DR - Try these in order:**
 
 ### 1. If you have an established development machine
-**Docker Compose setup for development** - All services wrapped in `docker-compose.yml` with Makefile convenience commands.
+**Docker Compose setup for development** - All services wrapped in `deploy/compose/docker-compose.yml` with Makefile convenience commands.
 
 Try running directly - this might work instantly:
 ```bash
@@ -37,7 +37,7 @@ If you change code later, just run `make all` again - it rebuilds what's needed 
 Sets up everything for you on a fresh VM:
 ```bash
 git clone https://github.com/Vexa-ai/vexa.git && cd vexa
-sudo ./fresh_setup.sh --gpu    # or --cpu for CPU-only hosts
+sudo ./deploy/scripts/fresh_setup.sh --gpu    # or --cpu for CPU-only hosts
 make all
 ```
 
@@ -174,7 +174,7 @@ This guide covers:
 
 **GPU Issues:**
 - **"unknown device" error:** Ensure NVIDIA drivers work (`nvidia-smi`) and Container Toolkit is configured
-- **Bot creation fails:** Check `docker-compose.yml` has correct `device_ids` (usually `"0"`)
+- **Bot creation fails:** Check `deploy/compose/docker-compose.yml` has correct `device_ids` (usually `"0"`)
 
 **Test Issues:**
 - **JSON parsing errors:** Use valid Google Meet ID format (`xxx-xxxx-xxx`) and admit bot to meeting

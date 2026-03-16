@@ -468,10 +468,10 @@ docker exec vexa env | grep REDIS
 
 | File | Description |
 |------|-------------|
-| `Dockerfile.lite` | Main Dockerfile (in repo root) |
-| `docker/lite/supervisord.conf` | Supervisor configuration |
-| `docker/lite/entrypoint.sh` | Container initialization |
-| `docker/lite/requirements.txt` | Python dependencies |
+| `Dockerfile.lite` | Main Dockerfile |
+| `supervisord.conf` | Supervisor configuration |
+| `entrypoint.sh` | Container initialization |
+| `requirements.txt` | Python dependencies |
 | `services/bot-manager/app/orchestrators/process.py` | Process orchestrator |
 | `services/mcp/` | MCP service (Model Context Protocol) |
 
@@ -480,8 +480,8 @@ docker exec vexa env | grep REDIS
 The Lite deployment adds the following without modifying core service code:
 
 **New Files:**
-- `Dockerfile.lite` - All-in-one container build
-- `docker/lite/*` - Configuration files
+- `deploy/lite/Dockerfile.lite` - All-in-one container build
+- `deploy/lite/*` - Configuration files
 - `services/bot-manager/app/orchestrators/process.py` - Process-based bot spawner
 
 **Included Services:**

@@ -28,9 +28,9 @@ check_docker:
 # Usage: $(call get_compose_files)
 get_compose_files = $(shell REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		echo "-f docker-compose.yml -f docker-compose.local-db.yml"; \
+		echo "-f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml"; \
 	else \
-		echo "-f docker-compose.yml"; \
+		echo "-f deploy/compose/docker-compose.yml"; \
 	fi)
 
 # Ensure transcription-service/.env exists with API_TOKEN
@@ -72,13 +72,13 @@ define create_env_file
 		exit 0; \
 	fi; \
 	if [ "$$TRANSCRIPTION_TYPE" = "cpu" ]; then \
-		ENV_FILE=env-example.cpu; \
+		ENV_FILE=deploy/env/env-example.cpu; \
 		URL=http://transcription-lb-cpu:80/v1/audio/transcriptions; \
 	elif [ "$$TRANSCRIPTION_TYPE" = "gpu" ]; then \
-		ENV_FILE=env-example.gpu; \
+		ENV_FILE=deploy/env/env-example.gpu; \
 		URL=http://transcription-lb:80/v1/audio/transcriptions; \
 	elif [ "$$TRANSCRIPTION_TYPE" = "remote" ]; then \
-		ENV_FILE=env-example.remote; \
+		ENV_FILE=deploy/env/env-example.remote; \
 		URL=https://transcription-service.dev.vexa.ai/v1/audio/transcriptions; \
 	else \
 		echo "Error: Invalid TRANSCRIPTION_TYPE=$$TRANSCRIPTION_TYPE. Must be 'cpu', 'gpu', or 'remote'"; \
@@ -211,9 +211,9 @@ build-transcription-service: check_docker
 # Build Docker Compose service images
 build: check_docker build-bot-image build-transcription-service
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	docker compose $$COMPOSE_FILES --profile remote build
 
@@ -238,9 +238,9 @@ up: check_docker
 		$(MAKE) up-transcription-service; \
 	fi
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	if ! docker network ls | grep -q "vexa-network"; then \
 		echo "Creating vexa-network..."; \
@@ -264,27 +264,27 @@ up: check_docker
 # Stop services
 down: check_docker down-transcription-service
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	docker compose $$COMPOSE_FILES down
 
 # Show container status
 ps: check_docker
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	docker compose $$COMPOSE_FILES ps
 
 # Tail logs for all services
 logs:
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	docker compose $$COMPOSE_FILES logs -f
 
@@ -344,9 +344,9 @@ test-setup: check_docker
 migrate-or-init: check_docker
 	@set -e; \
 	REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	DB_HOST=$$(grep -E '^[[:space:]]*DB_HOST=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' || echo "postgres"); \
 	DB_PORT=$$(grep -E '^[[:space:]]*DB_PORT=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' || echo "5432"); \
@@ -391,7 +391,7 @@ migrate-or-init: check_docker
 migrate: check_docker
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		if ! docker compose -f docker-compose.yml -f docker-compose.local-db.yml ps postgres | grep -q "Up"; then \
+		if ! docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml ps postgres | grep -q "Up"; then \
 			echo "ERROR: PostgreSQL container is not running. Run 'make up' first."; \
 			exit 1; \
 		fi; \
@@ -399,16 +399,16 @@ migrate: check_docker
 		DB_NAME=$$(grep -E '^[[:space:]]*DB_NAME=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' || echo "vexa"); \
 		[ -n "$$DB_USER" ] || DB_USER="postgres"; \
 		[ -n "$$DB_NAME" ] || DB_NAME="vexa"; \
-		docker compose -f docker-compose.yml -f docker-compose.local-db.yml exec -T transcription-collector python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
-		current_version=$$(docker compose -f docker-compose.yml -f docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini current 2>/dev/null | grep -E '^[a-f0-9]{12}' | head -1 || echo ""); \
+		docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml exec -T transcription-collector python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
+		current_version=$$(docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini current 2>/dev/null | grep -E '^[a-f0-9]{12}' | head -1 || echo ""); \
 		if [ "$$current_version" = "dc59a1c03d1f" ]; then \
-			if docker compose -f docker-compose.yml -f docker-compose.local-db.yml exec -T postgres psql -U $$DB_USER -d $$DB_NAME -t -c "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'data';" | grep -q 1; then \
-				docker compose -f docker-compose.yml -f docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini stamp 5befe308fa8b; \
+			if docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml exec -T postgres psql -U $$DB_USER -d $$DB_NAME -t -c "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'data';" | grep -q 1; then \
+				docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini stamp 5befe308fa8b; \
 			fi; \
 		fi; \
-		docker compose -f docker-compose.yml -f docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini upgrade head; \
+		docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.local-db.yml exec -T transcription-collector alembic -c /app/alembic.ini upgrade head; \
 	else \
-		docker compose -f docker-compose.yml exec -T transcription-collector alembic -c /app/alembic.ini upgrade head; \
+		docker compose -f deploy/compose/docker-compose.yml exec -T transcription-collector alembic -c /app/alembic.ini upgrade head; \
 	fi
 
 # Create a new migration file
@@ -418,9 +418,9 @@ makemigrations: check_docker
 		exit 1; \
 	fi
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 		if ! docker compose $$COMPOSE_FILES ps postgres | grep -q "Up"; then \
 			echo "ERROR: PostgreSQL container is not running. Run 'make up' first."; \
 			exit 1; \
@@ -431,9 +431,9 @@ makemigrations: check_docker
 # Initialize the database
 init-db: check_docker
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 	fi; \
 	docker compose $$COMPOSE_FILES run --rm transcription-collector python -c "import asyncio; from shared_models.database import init_db; asyncio.run(init_db())"; \
 	docker compose $$COMPOSE_FILES run --rm transcription-collector alembic -c /app/alembic.ini stamp head
@@ -441,9 +441,9 @@ init-db: check_docker
 # Stamp existing database with current version
 stamp-db: check_docker
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 		if ! docker compose $$COMPOSE_FILES ps postgres | grep -q "Up"; then \
 			echo "ERROR: PostgreSQL container is not running. Run 'make up' first."; \
 			exit 1; \
@@ -454,9 +454,9 @@ stamp-db: check_docker
 # Show current migration status
 migration-status: check_docker
 	@REMOTE_DB=$$(grep -E '^[[:space:]]*REMOTE_DB=' .env 2>/dev/null | cut -d= -f2- | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' | tr '[:upper:]' '[:lower:]' || echo "false"); \
-	COMPOSE_FILES="-f docker-compose.yml"; \
+	COMPOSE_FILES="-f deploy/compose/docker-compose.yml"; \
 	if [ "$$REMOTE_DB" != "true" ]; then \
-		COMPOSE_FILES="$$COMPOSE_FILES -f docker-compose.local-db.yml"; \
+		COMPOSE_FILES="$$COMPOSE_FILES -f deploy/compose/docker-compose.local-db.yml"; \
 		if ! docker compose $$COMPOSE_FILES ps postgres | grep -q "Up"; then \
 			echo "ERROR: PostgreSQL container is not running. Run 'make up' first."; \
 			exit 1; \
