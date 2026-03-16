@@ -1412,6 +1412,26 @@ async def bot_exit_callback(
                 meeting.data["last_error"] = error_data
                 logger.info(f"Bot exit callback: Stored error details in meeting {meeting_id} data: {error_data}")
         
+        # Persist chat messages from Redis to meeting.data before final commit
+        try:
+            chat_raw = await redis_client.lrange(f"meeting:{meeting_id}:chat_messages", 0, -1)
+            if chat_raw:
+                chat_messages = []
+                for raw in chat_raw:
+                    try:
+                        chat_messages.append(json.loads(raw))
+                    except json.JSONDecodeError:
+                        pass
+                if chat_messages:
+                    if not meeting.data:
+                        meeting.data = {}
+                    updated_data = dict(meeting.data)
+                    updated_data["chat_messages"] = chat_messages
+                    meeting.data = updated_data
+                    logger.info(f"Bot exit callback: Persisted {len(chat_messages)} chat messages to meeting.data for meeting {meeting_id}")
+        except Exception as chat_err:
+            logger.warning(f"Bot exit callback: Failed to persist chat messages for meeting {meeting_id}: {chat_err}")
+
         meeting.end_time = datetime.utcnow()
         await db.commit()
         await db.refresh(meeting)
@@ -2812,7 +2832,7 @@ async def bot_chat_read(
 
     meeting = await _find_active_meeting(db, current_user.id, platform_value, native_meeting_id)
 
-    # Read chat messages from Redis
+    # Read chat messages from Redis first, fall back to meeting.data for completed meetings
     messages_raw = await redis_client.lrange(f"meeting:{meeting.id}:chat_messages", 0, -1)
     messages = []
     for raw in messages_raw:
@@ -2820,6 +2840,10 @@ async def bot_chat_read(
             messages.append(json.loads(raw))
         except json.JSONDecodeError:
             pass
+
+    # Fallback: if Redis has no messages, check persisted data
+    if not messages and meeting.data and isinstance(meeting.data, dict):
+        messages = meeting.data.get("chat_messages", [])
 
     return {"messages": messages, "meeting_id": meeting.id}
 
