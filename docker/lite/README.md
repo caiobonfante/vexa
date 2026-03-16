@@ -405,6 +405,46 @@ The MCP service provides a Model Context Protocol interface for Claude Desktop, 
 
 See [MCP service documentation](../../services/mcp/README.md) for detailed MCP setup instructions.
 
+### What working means
+
+After `docker run`, these must be true:
+
+**Container health:**
+- Container is running (not restarting, not exited)
+- `supervisorctl status` shows all programs RUNNING:
+  - api-gateway, admin-api, bot-manager, transcription-collector, mcp
+  - tts-service, redis, xvfb, pulseaudio
+- No ERROR or FATAL in supervisor logs
+
+**Endpoints (all via :8056):**
+- `GET /` → JSON welcome message
+- `GET /docs` → Swagger UI
+- `GET /admin/users` with admin token → user list
+- `POST /admin/users` with admin token → creates user
+- `POST /admin/users/{id}/tokens` → creates token
+- `POST /bots` with user token → creates bot (or fails gracefully if no transcription service)
+
+**Internal services:**
+- Redis: `redis-cli PING` → PONG
+- PostgreSQL: connected via DATABASE_URL, tables exist
+- Transcription relay: running (if TRANSCRIBER_URL is set)
+
+**Bot spawning:**
+- Bots spawn as Node.js processes (not Docker containers)
+- `supervisorctl status` shows bot processes when active
+- Max 3-5 concurrent recommended
+
+**Environment:**
+- DATABASE_URL connects to external Postgres successfully
+- TRANSCRIBER_URL is set and reachable (or SKIP_TRANSCRIPTION_CHECK=true)
+- ADMIN_API_TOKEN is set
+- No stale DEVICE_TYPE, WHISPER_BACKEND, WHISPER_MODEL_SIZE in env output
+
+**Image:**
+- Build succeeds from `Dockerfile.lite`
+- Image size < 6GB (currently 5.62GB)
+- No WhisperLive binaries or ML model dependencies
+
 ## Comparison with Standard Deployment
 
 | Feature | Standard (Docker Compose) | Lite |

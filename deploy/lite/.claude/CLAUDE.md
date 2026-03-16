@@ -43,23 +43,5 @@ docker logs vexa-lite-test 2>&1 | tail -30
 docker stop vexa-lite-test && docker rm vexa-lite-test
 ```
 
-### After every test run
-1. Update the README if specs were unclear
-2. Add unexpected findings to `tests/findings.md`
-3. Note what you couldn't test and why
-4. The goal: each run makes the docs better, which makes the next run better
-
-## Diagnostic protocol
-1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
-2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
-3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "502 error" — report "502 because bot-manager is down because Redis connection refused."
-4. **Parallelize** — run independent checks concurrently. Don't wait for Postgres to finish before checking Redis.
-5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
-
-Dependencies to check first: external Postgres (must be reachable), then supervisord (are all processes RUNNING?), then individual services. If the container exits immediately, check DATABASE_URL and env vars before anything else.
-
-## Logging
-Append meaningful findings to `/home/dima/dev/vexa/test.log`:
-- Format: `[timestamp] [agent-name] LEVEL: message`
-- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
-- Don't spam — one line per finding, not per check
+### Self-improvement
+After each test, save results to deploy/lite/tests/results/ and update what you check next time.

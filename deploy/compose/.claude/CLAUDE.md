@@ -40,26 +40,8 @@ docker compose exec redis redis-cli ping
 docker compose exec redis redis-cli xlen transcription_segments
 ```
 
-### After every test run
-1. Update the README if specs were unclear
-2. Add unexpected findings to `tests/findings.md`
-3. Note what you couldn't test and why
-4. The goal: each run makes the docs better, which makes the next run better
-
-## Orchestration
-
-You are the root of the test tree. You test infrastructure and API directly. For deep service testing, dispatch background agents to each service folder.
-
-The full test playbook is in [commands/test.md](commands/test.md) — 7 phases, 3 modes (quick/standard/full).
-
-### Constraints
-- Background agents can only curl exposed ports + read files (no docker compose exec)
-- You handle container-level checks (compose exec, logs, restart counts)
-- Max 3 concurrent background agents
-- Waves ordered by dependency: infra → foundation → dependent → frontend
-
-### Findings format
-Each service saves tests/findings.md. You aggregate into tests/results/report-{timestamp}.md.
-
 ### Self-improvement
-If a service agent's findings contradict the README spec, update the README. Findings bubble up; specs flow down.
+After each test run:
+1. If a check failed because the test was wrong, fix it
+2. If you found something the test doesn't cover, add it
+3. Save findings to deploy/compose/tests/results/
