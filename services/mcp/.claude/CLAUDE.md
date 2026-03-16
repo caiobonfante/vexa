@@ -22,6 +22,15 @@ Save findings to `tests/findings.md` — accumulates across runs.
 3. Note what you couldn't test and why
 4. The goal: each run makes the docs better, which makes the next run better
 
+## Diagnostic protocol
+1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
+2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
+3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "MCP tool failed" — report "MCP tool failed because api-gateway returned 502 because admin-api is down."
+4. **Parallelize** — run independent checks concurrently. Don't wait for one tool to finish before testing another.
+5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
+
+Dependencies to check first: api-gateway (all API calls route through it). If MCP tools return errors, check api-gateway health and auth token validity before looking at MCP code.
+
 ## Logging
 Append meaningful findings to `/home/dima/dev/vexa/test.log`:
 - Format: `[timestamp] [agent-name] LEVEL: message`

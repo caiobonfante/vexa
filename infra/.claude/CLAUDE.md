@@ -22,6 +22,15 @@ Redis streams/pub-sub/queues, PostgreSQL schema, storage backends. Cross-cutting
 ## After every run
 Record consumer lag numbers, alembic version delta, storage accessibility results.
 
+## Diagnostic protocol
+1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
+2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
+3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "Redis down" — report "Redis down because OOM-killed because no maxmemory set and stream grew unbounded."
+4. **Parallelize** — run independent checks concurrently. Check Redis, Postgres, and storage in parallel — they're independent.
+5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
+
+You ARE the dependency layer. If Redis or Postgres is down, every service above fails. Check: Redis (PING, INFO memory, XINFO on streams), Postgres (connection, alembic current, table sizes), storage (bucket accessible, credentials valid).
+
 ## Logging
 Append meaningful findings to `/home/dima/dev/vexa/test.log`:
 - Format: `[timestamp] [agent-name] LEVEL: message`

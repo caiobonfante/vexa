@@ -20,6 +20,15 @@ Google Meet bot integration. Playwright-based join flow, admission waiting, per-
 ## After every run
 Update findings inline. Note selector breakages and join failure patterns.
 
+## Diagnostic protocol
+1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
+2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
+3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "bot can't join" — report "bot can't join because name input selector changed because Google updated Meet DOM."
+4. **Parallelize** — run independent checks concurrently. Don't wait for join flow before checking selector validity.
+5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
+
+Dependencies to check first: DOM selectors (Google changes these without notice), then admission flow, then WebRTC media elements. If join fails, check selectors.ts against live DOM before anything else.
+
 ## Logging
 Append meaningful findings to `/home/dima/dev/vexa/test.log`:
 - Format: `[timestamp] [agent-name] LEVEL: message`

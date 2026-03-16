@@ -21,6 +21,15 @@ Public documentation at docs.vexa.ai. Mintlify .mdx files, docs.json navigation,
 ## After every run
 List broken links, missing pages, and content gaps found.
 
+## Diagnostic protocol
+1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
+2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
+3. **Isolate** — when something fails, drill into WHY. Is it a missing page? A broken link? A stale reference? Don't report "page not found" — report "page not found because docs.json references platforms/zoom.mdx but file doesn't exist."
+4. **Parallelize** — run independent checks concurrently. Check link validity, page existence, and content accuracy in parallel.
+5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
+
+Dependencies to check first: docs.json (is nav structure valid?), then .mdx file existence, then internal cross-links, then content accuracy against service READMEs.
+
 ## Logging
 Append meaningful findings to `/home/dima/dev/vexa/test.log`:
 - Format: `[timestamp] [agent-name] LEVEL: message`

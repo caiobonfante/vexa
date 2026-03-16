@@ -22,6 +22,15 @@ ORM models, Pydantic schemas, database sessions, storage abstraction, webhook de
 ## After every run
 Run existing tests: `pytest test_token_scope.py test_webhook_delivery_history.py test_webhook_retry.py`. Update with results.
 
+## Diagnostic protocol
+1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
+2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
+3. **Isolate** — when something fails, drill into WHY. Is it the model? The migration? The connection? Don't report "test failed" — report "test failed because token_scope.py expects vxa_admin_ prefix but admin-api sends admin_."
+4. **Parallelize** — run independent checks concurrently. Don't wait for DB tests before running unit tests.
+5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
+
+Dependencies to check first: Postgres (alembic current vs head — schema drift?), Redis (webhook retry queue). If models don't match DB, check alembic migration state before editing models.
+
 ## Logging
 Append meaningful findings to `/home/dima/dev/vexa/test.log`:
 - Format: `[timestamp] [agent-name] LEVEL: message`
