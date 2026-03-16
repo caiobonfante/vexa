@@ -1,34 +1,31 @@
 # Deployment
 
 ## Why
-Vexa supports multiple deployment modes — from single-command local dev to production Kubernetes.
+Vexa can be used without any deployment — the hosted service at [vexa.ai](https://vexa.ai) gives you an API key and you start sending bots immediately.
+
+Self-hosting gives you control over your data and infrastructure. Three options, from simplest to most flexible.
 
 ## What
 
-| Mode | Directory | Use case | What you need |
-|------|-----------|----------|--------------|
-| **Docker Compose** | [compose/](compose/) | Development, self-hosted | Docker + Compose |
-| **Lite** | [lite/](lite/) | PaaS, single container | Docker + external Postgres |
-| **Helm** | [helm/](helm/) | Production Kubernetes | K8s cluster |
+### Option 0: Hosted (no deployment)
+Get an API key at [vexa.ai/dashboard/api-keys](https://vexa.ai/dashboard/api-keys). Start sending bots. No infrastructure needed.
 
-### Docker Compose (development)
-Full stack: all services, Postgres, Redis, MinIO. Two modes:
-- **Default** — external transcription (no GPU needed). Set `TRANSCRIPTION_SERVICE_URL`.
-- **Local GPU** — run transcription-service from the repo. Set `LOCAL_TRANSCRIPTION=true`.
-
-```bash
-cp deploy/env/env-example .env
-# Edit .env — set TRANSCRIPTION_SERVICE_URL and TRANSCRIPTION_SERVICE_TOKEN
-make all
-```
-
-### Lite (single container)
-All services in one container via supervisord. Only needs external Postgres.
+### Option 1: Lite (easiest self-host)
+Single Docker container. Needs external Postgres + transcription service.
 See [lite/README.md](lite/README.md).
 
-### Helm (Kubernetes)
-Two charts: `vexa` (full production) and `vexa-lite` (single-pod).
+### Option 2: Docker Compose (development)
+Full stack locally. All services, Postgres, Redis.
+See [compose/](compose/) and the root Makefile: `make all`.
+
+### Option 3: Helm (production K8s)
+Two charts: `vexa` (full) and `vexa-lite` (single-pod).
 See [helm/README.md](helm/README.md).
+
+### Transcription service
+All self-hosted deployments need a transcription service:
+- **Ready to go:** Use Vexa transcription — sign up at [vexa.ai](https://vexa.ai), get a transcription API key. No GPU needed.
+- **Self-host:** Run [services/transcription-service](../services/transcription-service/) on your own GPU for full data sovereignty.
 
 ## How
 
@@ -46,6 +43,7 @@ One env-example covers both modes: [env/env-example](env/env-example)
 ### Which mode?
 | You want... | Use |
 |-------------|-----|
-| Try it out / develop | `make all` (Docker Compose) |
-| Deploy on Railway/Render | Lite |
+| Use Vexa without deploying anything | Hosted at [vexa.ai](https://vexa.ai) |
+| Easiest self-host | Lite |
+| Develop / contribute | `make all` (Docker Compose) |
 | Production with scaling | Helm |
