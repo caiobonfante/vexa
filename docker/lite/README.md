@@ -1,16 +1,87 @@
 # [Vexa](../../README.md) Lite Deployment
 
-All-in-one Docker deployment for platforms without Docker socket access (EasyPanel, Dokploy, Railway, Render, etc.).
+## Why
 
-**Note:** This deployment includes Redis server inside the container. Only PostgreSQL needs to be provided externally.
+Lite is the **production Docker image** for self-hosting Vexa. One container, one port, no Docker socket needed. Pull from Docker Hub and run.
 
-## Quick Start
+### Documentation
+- [Vexa Lite Deployment](../../docs/vexa-lite-deployment.mdx)
 
 ```bash
-# Build the image
-docker build -f Dockerfile.lite -t vexa-lite .
+docker pull vexa/vexa-lite:latest
+docker run -d -p 8056:8056 \
+  -e DATABASE_URL="..." -e ADMIN_API_TOKEN="..." \
+  -e REMOTE_TRANSCRIBER_URL="..." -e REMOTE_TRANSCRIBER_API_KEY="..." \
+  vexa/vexa-lite:latest
+```
 
-# Run with internal Redis & external PostgreSQL (default: remote transcription)
+The `latest` tag means the image passed all integration edges (build, bot join, transcription, live streaming, chat, recordings, speaker mapping). Version tags (e.g. `1.2.3`) are pinned releases.
+
+You provide: PostgreSQL + a transcription service.
+Lite provides: everything else in a single image.
+
+Runs on any platform: EasyPanel, Dokploy, Railway, Render, bare metal.
+
+**Transcription service:** Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host [transcription-service](../../services/transcription-service/) on your own GPU for full data sovereignty.
+
+## What
+
+Single Docker container running all Vexa services via supervisord:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Lite Container                               │
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────┐ │
+│  │ API Gateway  │  │  Admin API  │  │ Bot Manager  │  │ MCP  │ │
+│  │   :8056      │  │    :8057    │  │    :8080     │  │:18888│ │
+│  │  (external)  │  │  (internal) │  │  (internal)  │  │(int.)│ │
+│  └──────┬───────┘  └──────┬──────┘  └──────┬───────┘  └──┬───┘ │
+│         │                 │                │              │     │
+│         └─────────────────┴────────────────┴──────────────┘     │
+│                    (routes: /admin/*, /mcp, /bots, /transcripts) │
+│                                           │                     │
+│                                    spawns processes              │
+│                                           ↓                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              Bot Processes (Node.js/Playwright)          │    │
+│  │         bot-1 (pid)    bot-2 (pid)    bot-3 (pid)       │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                          │                                      │
+│                     audio stream                                │
+│                          ↓                                      │
+│                    Redis Stream                                  │
+│                          ↓                                      │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              Transcription Collector :8123               │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────┐  ┌──────────┐  │
+│  │ Xvfb :99 │  │ PulseAudio   │  │ TTS Service│  │Redis :6379│ │
+│  └──────────┘  └──────────────┘  └────────────┘  └──────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                    │              │
+                    ▼              ▼
+             ┌──────────────┐  ┌──────────┐
+             │ Transcription │  │ Postgres │
+             │   Service     │  │(external)│
+             │   (remote)    │  │          │
+             └──────────────┘  └──────────┘
+```
+
+**Bundled services:** [api-gateway](../../services/api-gateway/README.md), [admin-api](../../services/admin-api/README.md), [bot-manager](../../services/bot-manager/README.md), [transcription-collector](../../services/transcription-collector/README.md), [MCP](../../services/mcp/README.md), [TTS](../../services/tts-service/README.md), Redis, Xvfb, PulseAudio.
+
+**Key difference from standard deployment:** Bots spawn as Node.js child processes (process orchestrator), not Docker containers. No Docker socket required.
+
+## How
+
+### Quick start
+
+```bash
+# Build
+docker build -f deploy/lite/Dockerfile.lite -t vexa-lite .
+
+# Run
 docker run -d \
   --name vexa \
   -p 8056:8056 \
@@ -21,332 +92,113 @@ docker run -d \
   vexa-lite
 ```
 
-**API Access:** 
-- API Gateway: `http://localhost:8056/docs` (includes Admin API routes at `/admin/*` and MCP at `/mcp`)
+**API access:** `http://localhost:8056/docs` (Swagger UI — includes Admin API at `/admin/*`, MCP at `/mcp`)
 
-**Notes:**
-- Redis runs internally on `localhost:6379` by default. To use an external Redis, set `REDIS_HOST` to your Redis server address.
-- Default transcription mode is `remote` - bots call an external transcription service via `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`.
-- If transcription service uses Docker service names (e.g., `transcription-lb`), add `--network transcription-network` to the docker run command.
-- If transcription service is accessible via host port (e.g., `localhost:8083`), no network flag needed.
+### Environment variables
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Lite Container                         │
-│                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────┐ │
-│  │ [API Gateway] │  │ [Admin API] │  │ [Bot Manager]│  │[MCP] │ │
-│  │   :8056     │  │    :8057    │  │    :8080     │  │:18888│ │
-│  │  (external) │  │  (internal) │  │  (internal)  │  │(int.)│ │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └──┬───┘ │
-│         │                │                 │             │     │
-│         └────────────────┴─────────────────┴─────────────┘     │
-│                    (routes: /admin/*, /mcp, /bots, /transcripts)│
-│                                           │                     │
-│                                    spawns processes             │
-│                                           ↓                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              Bot Processes (Node.js/Playwright)          │   │
-│  │         bot-1 (pid)    bot-2 (pid)    bot-3 (pid)       │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                          │                                      │
-│                     audio stream                                │
-│                          ↓                                      │
-│                     │                                      │
-│              Redis Stream                                  │
-│                     ↓                                      │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              Transcription Collector :8123               │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Xvfb (:99)                            │   │
-│  │              Virtual Display for Browsers                │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Redis Server                          │   │
-│  │                    :6379 (internal)                    │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                    │              │
-                    ▼              ▼
-             ┌──────────────┐  ┌──────────┐
-             │ Transcription │  │ Postgres │
-             │   Service     │  │(external)│
-             │   (remote)     │  │          │
-             └──────────────┘  └──────────┘
-```
-
-The Lite container bundles [api-gateway](../../services/api-gateway/README.md), [admin-api](../../services/admin-api/README.md), [bot-manager](../../services/bot-manager/README.md), [transcription-collector](../../services/transcription-collector/README.md), [MCP](../../services/mcp/README.md), and [dashboard](../../services/dashboard/README.md) into a single image.
-
-**Key difference from standard deployment:** Instead of spawning Docker containers for bots, the Lite version uses a **process orchestrator** that spawns bots as Node.js child processes within the same container.
-
-## Environment Variables
-
-### Required
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection URL | `postgresql://user:pass@host:5432/vexa` |
-| `ADMIN_API_TOKEN` | Secret token for admin operations | `your-secret-token-here` |
-
-### Optional
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_HOST` | `localhost` | Redis host (use `localhost` for internal Redis, or external hostname) |
-| `REDIS_PORT` | `6379` | Redis port |
-| `REDIS_URL` | Auto-generated | Full Redis URL (auto-generated from host/port if not provided) |
-| `DEVICE_TYPE` | `remote` | Device type: `remote` (default), `cpu` (for local faster-whisper) |
-| `WHISPER_BACKEND` | `remote` | Transcription backend: `remote` (default), `faster_whisper` (for local CPU) |
-| `WHISPER_MODEL_SIZE` | `tiny` | Whisper model size (only used for `faster_whisper` backend) |
-| `LOG_LEVEL` | `info` | Logging level (debug, info, warning, error) |
-| `REMOTE_TRANSCRIBER_URL` | (required) | Remote transcription API URL |
-| `REMOTE_TRANSCRIBER_API_KEY` | (required) | API key for remote transcription service |
-| `REMOTE_TRANSCRIBER_TEMPERATURE` | `0` | Temperature parameter for remote transcription |
-| `SKIP_TRANSCRIPTION_CHECK` | `false` | If `true`, skips the startup connectivity check to the transcription service. **Only relevant when using an external (non‑Vexa) Whisper‑compatible transcription service** that does not expose a `/health` or root URL returning 2xx (e.g. some third‑party/OVH gateways). The Vexa transcription service (developed in this stack) exposes `/health` and does not need this. The container still requires `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY` to be set. |
-| `API_GATEWAY_URL` | `http://localhost:8056` | API Gateway URL (used by MCP service) |
-| `STORAGE_BACKEND` | `local` | Recording storage backend: `local`, `minio`, or `s3` |
-| `LOCAL_STORAGE_DIR` | `/var/lib/vexa/recordings` | Local recording directory when `STORAGE_BACKEND=local` |
-| `LOCAL_STORAGE_FSYNC` | `true` | If `true`, fsync recording writes for durability |
-| `MINIO_ENDPOINT` | (empty) | MinIO/S3-compatible endpoint when `STORAGE_BACKEND=minio` |
-| `MINIO_ACCESS_KEY` | (empty) | Access key for MinIO backend |
-| `MINIO_SECRET_KEY` | (empty) | Secret key for MinIO backend |
-| `MINIO_BUCKET` | `vexa-recordings` | Bucket for MinIO backend |
-| `MINIO_SECURE` | `false` | Use TLS for MinIO endpoint |
-| `AWS_REGION` | `us-east-1` | Region for `s3` backend |
-| `AWS_ACCESS_KEY_ID` | (empty) | AWS access key for `s3` backend |
-| `AWS_SECRET_ACCESS_KEY` | (empty) | AWS secret key for `s3` backend |
-| `S3_BUCKET` | (empty) | Bucket for `s3` backend |
-| `S3_ENDPOINT` | (empty) | Optional custom endpoint for S3-compatible providers |
-| `S3_SECURE` | `true` | Use TLS for `S3_ENDPOINT` |
-
-### External transcription services without health endpoint
-
-At startup, the Lite entrypoint verifies that the transcription service is reachable by requesting `BASE_URL/health` (or the root URL if that fails). It uses `curl -f`, so any HTTP 4xx or 5xx (e.g. **404**) causes the check to fail and the container to exit with "Cannot reach transcription service".
-
-This applies **only when you use an external (outside) Whisper‑compatible transcription service**—not the Vexa transcription service developed in this stack, which exposes `/health` and works with the default check. If your **external** service does not expose a `/health` or root endpoint that returns 2xx (e.g. some third‑party or proxy gateways that only serve the transcription path), set:
+#### Required
 
 ```bash
--e SKIP_TRANSCRIPTION_CHECK=true
-```
-
-With this set, the entrypoint only checks that `REMOTE_TRANSCRIBER_URL` (or `TRANSCRIBER_URL`) and `REMOTE_TRANSCRIBER_API_KEY` (or `TRANSCRIBER_API_KEY`) are non-empty; it does not perform the connectivity or API-key request.
-
-### Redis Configuration
-
-**Internal Redis (Default):**
-- Redis server runs inside the container on `localhost:6379`
-- No configuration needed - works out of the box
-- Data persists in `/var/lib/redis` (use volumes for persistence)
-
-**External Redis:**
-```bash
-# Use external Redis by setting REDIS_HOST
--e REDIS_HOST=redis.example.com
--e REDIS_PORT=6379
--e REDIS_PASSWORD=your-password  # Optional
-```
-
-### Alternative Configuration (Individual Variables)
-
-Instead of URLs, you can use individual variables:
-
-```bash
-# Database
-DB_HOST=postgres.example.com
-DB_PORT=5432
-DB_NAME=vexa
-DB_USER=postgres
-DB_PASSWORD=your-password
-DB_SSL_MODE=disable  # Use "disable" for local PostgreSQL
-
-# Redis (only needed for external Redis)
-REDIS_HOST=redis.example.com
-REDIS_PORT=6379
-REDIS_PASSWORD=your-redis-password
-```
-
-## Whisper Model Selection
-
-| Model | Size | Quality | Speed | Recommended For |
-|-------|------|---------|-------|-----------------|
-| `tiny` | ~75MB | Basic | Fast | Development, testing |
-| `small` | ~500MB | Good | Medium | Light production |
-| `medium` | ~1.5GB | Better | Slower | Production |
-| `large` | ~3GB | Best | Slowest | High-quality requirements |
-
-```bash
-# Example: Use CPU mode with local faster-whisper (instead of remote)
-docker run -d \
-  --name vexa \
-  -p 8056:8056 \
-  -e DEVICE_TYPE=cpu \
-  -e WHISPER_BACKEND=faster_whisper \
-  -e WHISPER_MODEL_SIZE=medium \
-  -e DATABASE_URL="..." \
-  -e ADMIN_API_TOKEN="..." \
-  vexa-lite
-```
-
-**Note:** 
-- Default mode is `remote` transcription (requires `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`)
-- For local CPU transcription, set `DEVICE_TYPE=cpu` and `WHISPER_BACKEND=faster_whisper`
-- Models are downloaded on first use for local CPU mode. Larger models require more RAM and CPU.
-
-## Persistent Storage (Volumes)
-
-For production deployments, mount volumes to persist data:
-
-```bash
-docker run -d \
-  --name vexa \
-  -p 8056:8056 \
-  -v vexa-logs:/var/log/vexa-bots \
-  -v vexa-recordings:/var/lib/vexa/recordings \
-  -e DATABASE_URL="..." \
-  -e ADMIN_API_TOKEN="..." \
-  -e REMOTE_TRANSCRIBER_URL="http://localhost:8083/v1/audio/transcriptions" \
+docker run -d -p 8056:8056 \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/vexa" \
+  -e ADMIN_API_TOKEN="your-secret-token" \
+  -e REMOTE_TRANSCRIBER_URL="http://host:8083/v1/audio/transcriptions" \
   -e REMOTE_TRANSCRIBER_API_KEY="your-api-key" \
   vexa-lite
 ```
 
-| Volume | Path | Description |
-|--------|------|-------------|
-| `vexa-logs` | `/var/log/vexa-bots` | Bot process logs |
-| `vexa-recordings` | `/var/lib/vexa/recordings` | Persisted recording files for `STORAGE_BACKEND=local` |
+| Variable | What it does |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection. Also accepts individual vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSL_MODE` |
+| `ADMIN_API_TOKEN` | Auth token for `/admin/*` endpoints (user creation, token generation) |
+| `REMOTE_TRANSCRIBER_URL` | Whisper-compatible transcription endpoint. Alias: `TRANSCRIBER_URL` |
+| `REMOTE_TRANSCRIBER_API_KEY` | Bearer token for transcription service. Alias: `TRANSCRIBER_API_KEY` |
 
-**Note:** Model volumes are only needed for local CPU mode (`WHISPER_BACKEND=faster_whisper`). Remote transcription mode doesn't require model storage.
+#### Redis (optional — internal by default)
 
-### Recording backend quick switch
+Redis runs inside the container. Only set these to use an external Redis:
 
-Local filesystem (default in Lite):
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `REDIS_HOST` | `localhost` | `localhost` = internal Redis server. Set to external host to disable internal. |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_PASSWORD` | (empty) | Redis auth password |
+| `REDIS_URL` | Auto-generated | Full URL. Auto-built from host/port/password if not set. |
+
+#### Recording storage (optional — local filesystem by default)
+
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `STORAGE_BACKEND` | `local` | `local`, `minio`, or `s3` |
+| `LOCAL_STORAGE_DIR` | `/var/lib/vexa/recordings` | Path inside container. Mount a volume for persistence. |
+| `LOCAL_STORAGE_FSYNC` | `true` | fsync writes for durability |
+
+<details>
+<summary>MinIO / S3 configuration</summary>
+
+For `STORAGE_BACKEND=minio`:
 
 ```bash
--e STORAGE_BACKEND=local \
--e LOCAL_STORAGE_DIR=/var/lib/vexa/recordings \
--e LOCAL_STORAGE_FSYNC=true
+-e STORAGE_BACKEND=minio
+-e MINIO_ENDPOINT=minio.example.com:9000
+-e MINIO_ACCESS_KEY=...
+-e MINIO_SECRET_KEY=...
+-e MINIO_BUCKET=vexa-recordings
+-e MINIO_SECURE=false
 ```
 
-Cloud object storage (AWS S3):
+For `STORAGE_BACKEND=s3` (or S3-compatible):
 
 ```bash
--e STORAGE_BACKEND=s3 \
--e AWS_REGION=us-east-1 \
--e AWS_ACCESS_KEY_ID=... \
--e AWS_SECRET_ACCESS_KEY=... \
+-e STORAGE_BACKEND=s3
+-e AWS_REGION=us-east-1
+-e AWS_ACCESS_KEY_ID=...
+-e AWS_SECRET_ACCESS_KEY=...
 -e S3_BUCKET=vexa-recordings
-```
-
-S3-compatible providers can also set:
-
-```bash
--e S3_ENDPOINT=https://<provider-endpoint> \
+-e S3_ENDPOINT=https://provider-endpoint  # optional, for non-AWS S3
 -e S3_SECURE=true
 ```
 
-## Platform-Specific Deployment
+</details>
 
-### EasyPanel
+#### TTS / Voice agent (optional)
 
-1. Create a new **App** from Git repository or Docker image
-2. Expose port: `8056` (API Gateway - routes all services including Admin API and MCP)
-3. Configure environment variables:
-   - `DATABASE_URL` → Use EasyPanel PostgreSQL service URL
-   - `ADMIN_API_TOKEN` → Generate a secure token
-   - `REMOTE_TRANSCRIBER_URL` → Your transcription service URL (e.g., `http://transcription-service.example.com/v1/audio/transcriptions`)
-   - `REMOTE_TRANSCRIBER_API_KEY` → Your transcription service API key
-4. Optional: Add persistent volumes for logs
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | (empty) | Required for `/speak` endpoint (text-to-speech via OpenAI). Bot voice agent won't work without it. |
 
-### Dokploy
+#### Local transcription (optional — remote is default)
 
-1. Create a new **Application** → Docker deployment
-2. Use `Dockerfile.lite` or pre-built image
-3. Expose port: `8056` (API Gateway - routes all services including Admin API and MCP)
-4. Set environment variables in Dokploy's env section:
-   - `DATABASE_URL` → PostgreSQL service URL
-   - `ADMIN_API_TOKEN` → Generate a secure token
-   - `REMOTE_TRANSCRIBER_URL` → Your transcription service URL (public URL or Docker service name)
-   - `REMOTE_TRANSCRIBER_API_KEY` → Your transcription service API key
-5. Configure PostgreSQL service in Dokploy
+Only needed if you want to run Whisper inside the container instead of calling a remote service:
 
-### Railway / Render
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `DEVICE_TYPE` | `remote` | `cpu` for local faster-whisper |
+| `WHISPER_BACKEND` | `remote` | `faster_whisper` for local CPU |
+| `WHISPER_MODEL_SIZE` | `tiny` | `tiny`, `small`, `medium`, `large` — bigger = slower + more RAM |
 
-1. Deploy from GitHub with `Dockerfile.lite`
-2. Set exposed port: `8056` (API Gateway - routes all services including Admin API and MCP)
-3. Add PostgreSQL as managed service
-4. Configure environment variables:
-   - `DATABASE_URL` → PostgreSQL service URL
-   - `ADMIN_API_TOKEN` → Generate a secure token
-   - `REMOTE_TRANSCRIBER_URL` → Your transcription service URL (public URL)
-   - `REMOTE_TRANSCRIBER_API_KEY` → Your transcription service API key
+#### Other
 
-## Management
+| Variable | Default | What it does |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warning`, `error` |
+| `SKIP_TRANSCRIPTION_CHECK` | `false` | Skip startup reachability check for transcription service. Only needed for non-Vexa external services without a `/health` endpoint. |
 
-### View Logs
+### Create a user and start a bot
 
 ```bash
-# All services (stdout)
-docker logs vexa
-
-# Follow logs
-docker logs -f vexa
-
-# Specific service logs (inside container)
-docker exec vexa cat /var/log/supervisor/api-gateway.log
-docker exec vexa cat /var/log/supervisor/bot-manager.log
-```
-
-### Service Status
-
-```bash
-docker exec vexa supervisorctl status
-```
-
-Output:
-```
-vexa-core:admin-api              RUNNING   pid 123, uptime 0:05:00
-vexa-core:api-gateway            RUNNING   pid 124, uptime 0:05:00
-vexa-core:bot-manager            RUNNING   pid 125, uptime 0:05:00
-vexa-core:transcription-collector RUNNING   pid 126, uptime 0:05:00
-vexa-core:xvfb                   RUNNING   pid 128, uptime 0:05:00
-vexa-core:mcp                    RUNNING   pid 129, uptime 0:05:00
-```
-
-### Restart a Service
-
-```bash
-docker exec vexa supervisorctl restart vexa-core:bot-manager
-```
-
-## Testing
-
-### Create a User and Get API Key
-
-```bash
-# Create user (via Admin API through API Gateway)
+# Create user
 curl -X POST "http://localhost:8056/admin/users" \
   -H "X-Admin-API-Key: your-admin-token" \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com", "name": "Test User"}'
 
-# Response includes user info:
-# {"id": 1, "email": "test@example.com", "name": "Test User", ...}
-
-# Generate API token for the user
+# Generate API token
 curl -X POST "http://localhost:8056/admin/users/1/tokens" \
   -H "X-Admin-API-Key: your-admin-token"
+# → {"token": "vx_abc123..."}
 
-# Response includes API key:
-# {"user_id": 1, "id": 1, "token": "vx_abc123...", ...}
-```
-
-### Start a Bot
-
-```bash
+# Start a bot
 curl -X POST "http://localhost:8056/bots" \
   -H "X-API-Key: vx_abc123..." \
   -H "Content-Type: application/json" \
@@ -356,96 +208,136 @@ curl -X POST "http://localhost:8056/bots" \
     "bot_name": "Vexa Bot",
     "language": "en"
   }'
-```
 
-### Get Transcription
-
-```bash
+# Get transcript
 curl "http://localhost:8056/transcripts/google_meet/abc-defg-hij" \
   -H "X-API-Key: vx_abc123..."
 ```
 
-### Using MCP Service (Model Context Protocol)
+### MCP (Model Context Protocol)
 
-The MCP service provides a Model Context Protocol interface for Claude Desktop, Cursor, and other MCP-compatible clients. The MCP service is accessible through the API Gateway.
-
-**Configure Claude Desktop:**
-
-1. Open Claude Desktop Settings → Developer → Edit Config
-2. Add the following configuration:
+The MCP service lets Claude Desktop, Cursor, and other MCP clients interact with Vexa.
 
 ```json
 {
   "mcpServers": {
     "Vexa": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://localhost:8056/mcp",
-        "--header",
-        "Authorization:${VEXA_API_KEY}"
-      ],
-      "env": {
-        "VEXA_API_KEY": "your-api-key-here"
-      }
+      "args": ["-y", "mcp-remote", "http://localhost:8056/mcp", "--header", "Authorization:${VEXA_API_KEY}"],
+      "env": { "VEXA_API_KEY": "your-api-key-here" }
     }
   }
 }
 ```
 
-3. Replace `your-api-key-here` with your Vexa API key
-4. Restart Claude Desktop
+For remote deployments, replace `http://localhost:8056/mcp` with your public URL. See [MCP docs](../../services/mcp/README.md).
 
-**For remote deployments**, replace `http://localhost:8056/mcp` with your public gateway URL (e.g., `https://vexa-lite.fly.dev/mcp`).
+### Persistent storage
 
-**MCP Endpoints:**
-- MCP Protocol: `http://localhost:8056/mcp` (via API Gateway)
-- All MCP requests are routed through the API Gateway on port 8056
+```bash
+docker run -d \
+  --name vexa \
+  -p 8056:8056 \
+  -v vexa-logs:/var/log/vexa-bots \
+  -v vexa-recordings:/var/lib/vexa/recordings \
+  -e DATABASE_URL="..." \
+  -e ADMIN_API_TOKEN="..." \
+  -e REMOTE_TRANSCRIBER_URL="..." \
+  -e REMOTE_TRANSCRIBER_API_KEY="..." \
+  vexa-lite
+```
 
-See [MCP service documentation](../../services/mcp/README.md) for detailed MCP setup instructions.
+| Volume | Path | Description |
+|--------|------|-------------|
+| `vexa-logs` | `/var/log/vexa-bots` | Bot process logs |
+| `vexa-recordings` | `/var/lib/vexa/recordings` | Recording files (`STORAGE_BACKEND=local`) |
 
-### What working means
+### Management
 
-After `docker run`, these must be true:
+```bash
+docker exec vexa supervisorctl status    # All service statuses
+docker logs vexa                          # All stdout
+docker logs -f vexa                       # Follow logs
+docker exec vexa supervisorctl restart vexa-core:bot-manager  # Restart one service
+```
 
-**Container health:**
-- Container is running (not restarting, not exited)
-- `supervisorctl status` shows all programs RUNNING:
-  - api-gateway, admin-api, bot-manager, transcription-collector, mcp
-  - tts-service, redis, xvfb, pulseaudio
-- No ERROR or FATAL in supervisor logs
+### Platform-specific deployment
 
-**Endpoints (all via :8056):**
-- `GET /` → JSON welcome message
-- `GET /docs` → Swagger UI
-- `GET /admin/users` with admin token → user list
-- `POST /admin/users` with admin token → creates user
-- `POST /admin/users/{id}/tokens` → creates token
-- `POST /bots` with user token → creates bot (or fails gracefully if no transcription service)
+<details>
+<summary>EasyPanel / Dokploy / Railway / Render</summary>
 
-**Internal services:**
+**EasyPanel:** Create app from Git/Docker image → expose port 8056 → set env vars (`DATABASE_URL`, `ADMIN_API_TOKEN`, `REMOTE_TRANSCRIBER_URL`, `REMOTE_TRANSCRIBER_API_KEY`).
+
+**Dokploy:** Create Application → Docker → use `Dockerfile.lite` → expose 8056 → set env vars → configure PostgreSQL service.
+
+**Railway / Render:** Deploy from GitHub with `Dockerfile.lite` → expose 8056 → add PostgreSQL as managed service → set env vars.
+
+</details>
+
+## What working means
+
+This is the **integration gate**. Individual services have their own tests. This gate verifies the edges between components — data flows end-to-end through the full pipeline against the Google Meet mock (`features/realtime-transcription/mocks/google-meet.html`, scenario: `full-messy`).
+
+### Moving parts and integration edges
+
+```
+Client (curl/WS)
+  │
+  ├─ POST /bots ──→ API Gateway ──→ Bot Manager ──→ spawns Bot process
+  │                                                      │
+  │                                          Bot ──→ Mock Google Meet
+  │                                           │         (meeting.html)
+  │                                           │
+  │                           ┌───────────────┼───────────────────┐
+  │                           │               │                   │
+  │                    speaker events    audio streams      recording
+  │                           │               │               file
+  │                           ▼               ▼                │
+  │                        Redis ◄────────────┘                │
+  │                           │                                ▼
+  │                           ▼                          Storage
+  │                  Transcription Collector               (local/S3)
+  │                    │             │
+  │                    │             ▼
+  │                    │     Transcription Service (external)
+  │                    │             │
+  │                    │    segments + speaker mapping
+  │                    │             │
+  │                    ▼             ▼
+  │                  PostgreSQL (segments, meetings, speakers)
+  │                           │
+  ├─ WS /ws ──→ API GW ──→ Redis pub/sub ──→ live segments to client
+  ├─ GET /transcripts ──→ API GW ──→ TC ──→ PostgreSQL ──→ segments
+  ├─ POST/GET /chat ──→ API GW ──→ Bot Manager ──→ Bot ──→ meeting
+  └─ GET /recordings ──→ API GW ──→ TC ──→ Storage ──→ audio file
+```
+
+### Edges
+
+| # | Edge | What must happen |
+|---|------|-----------------|
+| 0 | **Build** | `docker build` succeeds, image < 6GB, container starts, supervisord all RUNNING |
+| 1 | **Client → API GW → Bot Manager → Bot → Mock** | Bot spawns, navigates to mock, passes admission, detects 3 participants |
+| 2 | **Bot → Redis → TC → Transcription Service** | Audio captured from mock WAVs, streamed via Redis, transcribed by external service |
+| 3 | **TC → Redis pub/sub → API GW → WS → Client** | Live segments stream to WS client with speaker names, text matches scenario |
+| 4 | **TC → PostgreSQL → API GW → Client** | Segments persisted, speaker-attributed, keyword_attribution passes, no cross-contamination, multilingual (Russian) |
+| 5 | **Bot → Storage → API GW → Client** | Recording saved, `GET /recordings` lists it, download returns playable audio |
+| 6 | **Client → API GW → Bot → Mock (chat)** | `POST /chat` sends message, `GET /chat` returns it |
+| 7 | **SPLM** | Post-meeting speaker mapping ≥70% correct vs source, deferred_keyword_attribution passes |
+
+**PASS:** Build + all 7 edges. Data flows from mock meeting through every component and arrives correct at the client.
+
+**FAIL:** Any edge broken. The failing edge number identifies which integration point is broken.
+
+### Prerequisites
+
+- Container healthy: supervisord shows all processes RUNNING, no FATAL
+- `DATABASE_URL` connects to external Postgres, tables exist
+- `REMOTE_TRANSCRIBER_URL` reachable (or `SKIP_TRANSCRIPTION_CHECK=true`)
+- `ADMIN_API_TOKEN` set
 - Redis: `redis-cli PING` → PONG
-- PostgreSQL: connected via DATABASE_URL, tables exist
-- Transcription relay: running (if TRANSCRIBER_URL is set)
 
-**Bot spawning:**
-- Bots spawn as Node.js processes (not Docker containers)
-- `supervisorctl status` shows bot processes when active
-- Max 3-5 concurrent recommended
-
-**Environment:**
-- DATABASE_URL connects to external Postgres successfully
-- TRANSCRIBER_URL is set and reachable (or SKIP_TRANSCRIPTION_CHECK=true)
-- ADMIN_API_TOKEN is set
-- No stale DEVICE_TYPE, WHISPER_BACKEND, WHISPER_MODEL_SIZE in env output
-
-**Image:**
-- Build succeeds from `Dockerfile.lite`
-- Image size < 6GB (currently 5.62GB)
-- No WhisperLive binaries or ML model dependencies
-
-## Comparison with Standard Deployment
+## Comparison with standard deployment
 
 | Feature | Standard (Docker Compose) | Lite |
 |---------|---------------------------|------------|
@@ -456,79 +348,52 @@ After `docker run`, these must be true:
 | **Redis** | External container | Internal (included) |
 | **PostgreSQL** | External container | External (required) |
 | **Transcription** | GPU/CPU/Remote | Remote (default) or CPU |
-| **GPU Support** | Yes | No (uses remote transcription service) |
+| **GPU Support** | Yes | No (uses remote transcription) |
 | **Scaling** | Horizontal | Vertical |
-| **Max Concurrent Bots** | Unlimited* | 3-5 recommended |
-| **Complexity** | Higher | Lower |
+| **Max Concurrent Bots** | Unlimited* | depends on VM size |
 | **Use Case** | Production, self-hosted | PaaS, simple deployments |
 
 ## Limitations
 
-- **Remote Transcription Default:** Uses remote transcription service (requires `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`)
-- **Local CPU Mode:** Available but slower - set `DEVICE_TYPE=cpu` and `WHISPER_BACKEND=faster_whisper`
-- **Concurrent Bots:** Recommended max 3-5 (shared CPU/RAM)
+- **Remote Transcription Default:** Requires `REMOTE_TRANSCRIBER_URL` and `REMOTE_TRANSCRIBER_API_KEY`
+- **Concurrent Bots:** Depends on VM size — each bot is a Playwright browser process (~300-500MB RAM)
 - **Process Isolation:** Less isolated than container-per-bot
-- **Model Size:** Only relevant for local CPU mode - larger models require more RAM and CPU
-- **Redis Persistence:** Internal Redis data is ephemeral unless volumes are mounted
+- **Redis Persistence:** Internal Redis is ephemeral unless volumes are mounted
 
 ## Troubleshooting
 
-### "Cannot reach transcription service" at startup
+### External transcription services without health endpoint
 
-The entrypoint checks reachability by requesting the transcription service's `/health` (or root) URL. If that returns 404 or another non-2xx, the container exits with this error. This only affects **external** Whisper-compatible services that don't expose such an endpoint; the Vexa transcription service in this stack has `/health` and does not need a workaround. **Fix for external services:** set `SKIP_TRANSCRIPTION_CHECK=true`. See [External transcription services without health endpoint](#external-transcription-services-without-health-endpoint) above.
+The entrypoint checks `BASE_URL/health` at startup. If your external (non-Vexa) transcription service doesn't expose this, set `SKIP_TRANSCRIPTION_CHECK=true`. The Vexa transcription service has `/health` and works without this.
 
-### Bot Fails to Start
+### Bot fails to start
 
 ```bash
-# Check bot manager logs
 docker logs vexa 2>&1 | grep -i "bot-manager"
-
-# Verify Xvfb is running (required for browsers)
 docker exec vexa supervisorctl status vexa-core:xvfb
 ```
 
-### Transcriptions Not Appearing
+### Transcriptions not appearing
 
 ```bash
-# Check Redis connection
 docker logs vexa 2>&1 | grep -i "redis"
-
-# Verify Redis is set correctly
 docker exec vexa env | grep REDIS
 ```
-
-### High Memory Usage
-
-- Use a smaller Whisper model (`tiny` or `small`)
-- Limit concurrent bots
-- Increase container memory limits
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `Dockerfile.lite` | Main Dockerfile (in repo root) |
-| `docker/lite/supervisord.conf` | Supervisor configuration |
-| `docker/lite/entrypoint.sh` | Container initialization |
-| `docker/lite/requirements.txt` | Python dependencies |
-| `services/bot-manager/app/orchestrators/process.py` | Process orchestrator |
-| `services/mcp/` | MCP service (Model Context Protocol) |
+| `Dockerfile.lite` | Main Dockerfile |
+| `supervisord.conf` | Supervisor configuration |
+| `entrypoint.sh` | Container initialization |
+| `requirements.txt` | Python dependencies |
 
-## Changes from Open Source Project
+## Changes from open source project
 
-The Lite deployment adds the following without modifying core service code:
+**New files:** `deploy/lite/*`, `services/bot-manager/app/orchestrators/process.py`
 
-**New Files:**
-- `Dockerfile.lite` - All-in-one container build
-- `docker/lite/*` - Configuration files
-- `services/bot-manager/app/orchestrators/process.py` - Process-based bot spawner
-
-**Included Services:**
-- [MCP](../../services/mcp/README.md) Service - Model Context Protocol service for Claude/Cursor integration
-
-**Minimal Modifications:**
-- `services/bot-manager/app/orchestrators/__init__.py` - Loads process orchestrator when `ORCHESTRATOR=process`
-- `services/transcription-collector/config.py` - Added `REDIS_PASSWORD` support
-- `services/transcription-collector/main.py` - Password parameter in Redis connection
-
-All changes are **backwards compatible** and don't affect standard Docker Compose deployment.
+**Minimal modifications (backwards compatible):**
+- `services/bot-manager/app/orchestrators/__init__.py` — loads process orchestrator when `ORCHESTRATOR=process`
+- `services/transcription-collector/config.py` — `REDIS_PASSWORD` support
+- `services/transcription-collector/main.py` — password parameter in Redis connection

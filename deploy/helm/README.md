@@ -2,6 +2,9 @@
 
 Helm charts for deploying Vexa, the self-hosted real-time meeting transcription platform, including the Vexa Dashboard (https://github.com/Vexa-ai/Vexa-Dashboard).
 
+### Documentation
+- [Deployment](../../docs/deployment.mdx)
+
 Upstream app repo: https://github.com/Vexa-ai/vexa
 
 ## Charts

@@ -8,6 +8,9 @@ AI assistants (Claude, Cursor, etc.) need a structured way to interact with Vexa
 
 A FastAPI service that exposes Vexa's bot management, transcript retrieval, and recording operations as MCP tools. It proxies to the api-gateway, translating MCP tool calls into Vexa API requests.
 
+### Documentation
+- [Vexa MCP](../../docs/vexa-mcp.mdx)
+
 Key tools: `start_bot`, `stop_bot`, `get_bot_status`, `get_meeting_transcript`, `parse_meeting_link`, `update_meeting_data`, `create_transcript_share_link`, `get_meeting_bundle`, recording CRUD.
 
 ### Dependencies

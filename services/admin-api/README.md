@@ -8,6 +8,10 @@ Users and API tokens must be managed independently of the bot lifecycle. Without
 
 A FastAPI service that manages users, API tokens, and platform analytics. It is the only service that writes to the `users` and `api_tokens` tables.
 
+### Documentation
+- [Self-Hosted Management](../../docs/self-hosted-management.mdx)
+- [Settings API](../../docs/api/settings.mdx)
+
 Three routers provide different access levels:
 - **Admin router** (`/admin/*`) -- full CRUD, requires `X-Admin-API-Key` header matching `ADMIN_API_TOKEN`
 - **Analytics router** (`/admin/*` read-only subset) -- accepts either admin or analytics token
@@ -22,7 +26,7 @@ Three routers provide different access levels:
 | GET | `/admin/users/{user_id}` | Get user by ID (includes API tokens) |
 | GET | `/admin/users/email/{email}` | Get user by email |
 | PATCH | `/admin/users/{user_id}` | Update user fields (name, image, max_concurrent_bots, data) |
-| POST | `/admin/users/{user_id}/tokens` | Generate a new API token for a user |
+| POST | `/admin/users/{user_id}/tokens?scope=user` | Generate a new API token for a user (scope: `user`, `bot`, `tx`, `admin`) |
 | DELETE | `/admin/tokens/{token_id}` | Revoke an API token |
 | GET | `/admin/stats/meetings-users` | Paginated meetings joined with user info |
 | GET | `/admin/analytics/users` | User table (no sensitive fields) |

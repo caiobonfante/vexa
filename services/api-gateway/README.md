@@ -8,6 +8,14 @@ Clients should not need to know the internal topology of Vexa services. The gate
 
 A FastAPI reverse proxy that forwards authenticated requests to internal services. It owns no database -- every endpoint proxies to a downstream service via `httpx`, preserving headers, query params, and request bodies. It also maintains a Redis-backed WebSocket hub for real-time meeting status updates.
 
+### Documentation
+- [Quickstart](../../docs/quickstart.mdx)
+- [Getting Started](../../docs/getting-started.mdx)
+- [Errors and Retries](../../docs/errors-and-retries.mdx)
+- [WebSocket API](../../docs/websocket.mdx)
+- [Token Scoping](../../docs/token-scoping.mdx)
+- [Security](../../docs/security.mdx)
+
 Key responsibilities:
 - Route bot management, transcription, recording, voice agent, and admin requests to the correct backend
 - Manage WebSocket connections that subscribe to meeting status via Redis Pub/Sub

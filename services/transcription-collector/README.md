@@ -8,9 +8,16 @@ Transcription segments arrive in Redis from the bot's per-speaker pipeline. Thes
 
 A background service that reads from Redis streams, filters non-informative segments, and writes finalized transcripts to PostgreSQL. It also exposes a REST API for transcript retrieval and meeting management.
 
+### Documentation
+- [Transcripts API](../../docs/api/transcripts.mdx)
+- [Meetings API](../../docs/api/meetings.mdx)
+- [Speaker Events](../../docs/speaker-events.mdx)
+- [Deferred Transcription](../../docs/deferred-transcription.mdx)
+- [Per-Speaker Audio](../../docs/per-speaker-audio.mdx)
+
 | Component | Details |
 |---|---|
-| Redis stream consumer | Reads `transcription_segments` and `speaker_events` streams via XREADGROUP |
+| Redis stream consumer | Reads `transcription_segments` and `speaker_events_relative` streams via XREADGROUP |
 | Redis hash | Per-meeting segment deduplication (mutable until confirmed) |
 | PostgreSQL writer | Persists finalized (immutable) segments |
 | Background processor | Periodically flushes confirmed segments from Redis to Postgres |
@@ -39,24 +46,24 @@ Each segment passes through multiple filters before persistence:
 
 ### Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/meetings` | List meetings for a user |
-| GET | `/transcripts/{platform}/{native_meeting_id}` | Fetch transcript segments |
-| PATCH | `/meetings/{platform}/{native_meeting_id}` | Update meeting metadata |
-| DELETE | `/meetings/{platform}/{native_meeting_id}` | Delete/anonymize a meeting |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | No | Health check |
+| GET | `/meetings` | Yes | List meetings for a user |
+| GET | `/transcripts/{platform}/{native_meeting_id}` | Yes | Fetch transcript segments |
+| PATCH | `/meetings/{platform}/{native_meeting_id}` | Yes | Update meeting metadata |
+| DELETE | `/meetings/{platform}/{native_meeting_id}` | Yes | Delete/anonymize a meeting |
 
 ### Known limitations
 
 | Area | Status | Detail |
 |------|--------|--------|
 | **Certainty** | HIGH | Pipeline and filtering well documented |
-| **Silent transcript failures** | Known | 22% of completed meetings have zero transcriptions. The collector does not detect or alert on this — segments simply never arrive from the bot. See [bot metrics research](/home/dima/dev/1/analytics/database/bot-metrics-research.md). |
+| **Silent transcript failures** | Known | 41% of completed meetings (30-day window, March 2026) have zero transcriptions. The collector does not detect or alert on this — segments simply never arrive from the bot. See [bot metrics research](/home/dima/dev/1/analytics/database/bot-metrics-research.md). |
 
 ### Dependencies
 
-- **[Redis](../redis.md)** -- source streams (`transcription_segments`, `speaker_events`), segment dedup hashes
+- **[Redis](../redis.md)** -- source streams (`transcription_segments`, `speaker_events_relative`), segment dedup hashes
 - **PostgreSQL** -- permanent transcript storage via shared-models ORM
 - **shared-models** -- ORM models, schemas, database session factory
 

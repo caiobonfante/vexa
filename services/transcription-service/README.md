@@ -8,6 +8,9 @@ Any client that speaks the OpenAI Whisper API can use it. The bot pipeline uses 
 
 Under the hood: faster-whisper behind an Nginx load balancer. Add workers to scale. GPU or CPU. One API endpoint, one docker-compose command.
 
+### Documentation
+- [Concepts](../../docs/concepts.mdx)
+
 ## What
 
 - **OpenAI Whisper API compatible** (`/v1/audio/transcriptions`) -- works with any client that speaks the OpenAI audio API.

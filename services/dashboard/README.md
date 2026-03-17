@@ -13,6 +13,9 @@ A Next.js web application that provides:
 - User/token management: create API keys, configure webhooks
 - Admin analytics: user and meeting statistics
 
+### Documentation
+- [Dashboard UI](../../docs/ui-dashboard.mdx)
+
 ### Dependencies
 
 - **api-gateway** -- all API calls route through the gateway
@@ -67,7 +70,7 @@ Notes:
 
 ## Zoom Notes
 
-Zoom meeting joins require additional setup in the Vexa backend (Zoom Meeting SDK + OAuth/OBF). See the Vexa repo doc: `docs/zoom-app-setup.md`.
+Zoom meeting joins require additional setup in the Vexa backend (Zoom Meeting SDK + OAuth/OBF). See the Vexa repo doc: `docs/zoom-app-setup.mdx`.
 
 ## Required Configuration
 
@@ -130,9 +133,9 @@ Runs vitest against `tests/` — covers `parseMeetingInput`, `parseUTCTimestamp`
 
 ## Related
 
-- [Vexa deployment guide](https://github.com/Vexa-ai/vexa/blob/main/docs/deployment.md)
-- [Vexa Lite deployment guide](https://github.com/Vexa-ai/vexa/blob/main/docs/vexa-lite-deployment.md)
-- [Vexa API guide](https://github.com/Vexa-ai/vexa/blob/main/docs/user_api_guide.md)
+- [Vexa deployment guide](https://github.com/Vexa-ai/vexa/blob/main/docs/deployment.mdx)
+- [Vexa Lite deployment guide](https://github.com/Vexa-ai/vexa/blob/main/docs/vexa-lite-deployment.mdx)
+- [Vexa API guide](https://github.com/Vexa-ai/vexa/blob/main/docs/user_api_guide.mdx)
 
 ## License
 

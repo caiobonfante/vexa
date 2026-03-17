@@ -15,6 +15,10 @@ what, the bot keeps each speaker's WebRTC audio track separate. This gives:
 
 ## What
 
+### Documentation
+- [Bot Overview](../../docs/bot-overview.mdx)
+- [Meeting IDs](../../docs/meeting-ids.mdx)
+
 - Joins Google Meet, Teams, and Zoom via browser automation (Playwright).
 - Per-speaker audio capture: each participant = separate audio stream.
 - Screen share tracks (unmapped to a participant tile) labeled "Presentation".

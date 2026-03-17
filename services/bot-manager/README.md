@@ -8,6 +8,12 @@ Each meeting bot runs as an isolated container (or process). Something needs to 
 
 A FastAPI service that orchestrates the full bot lifecycle: create meeting records, launch bot containers, process status callbacks from running bots, manage recordings and media files, and expose voice agent controls (speak, chat, screen share, avatar). It authenticates users via API tokens (`X-API-Key`), writes to PostgreSQL, coordinates through Redis, and fires webhooks on status changes.
 
+### Documentation
+- [Bot Overview](../../docs/bot-overview.mdx)
+- [Bots API](../../docs/api/bots.mdx)
+- [Interactive Bots](../../docs/interactive-bots.mdx)
+- [Interactive Bots API](../../docs/api/interactive-bots.mdx)
+
 Architecture position: sits between the api-gateway (which proxies client requests) and the bot containers (which call back to bot-manager's internal endpoints).
 
 ### Endpoints

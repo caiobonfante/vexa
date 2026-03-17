@@ -7,6 +7,9 @@ Before self-hosting, consider the hosted service at [vexa.ai](https://vexa.ai) â
 
 ## What
 
+### Documentation
+- [Deployment](../../docs/deployment.mdx)
+
 Runs all Vexa services via Docker Compose:
 - API Gateway (port 8056)
 - Admin API, Bot Manager, Transcription Collector, MCP
