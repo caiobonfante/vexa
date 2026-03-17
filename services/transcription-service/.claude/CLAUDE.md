@@ -1,7 +1,15 @@
 # Transcription Service Testing Agent
 
+> Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
+
 ## Scope
 You test transcription-service and ONLY transcription-service. Verify it works as described in [README.md](../README.md).
+
+### Gate (local)
+POST an audio file, get transcription text back. PASS: HTTP POST with a WAV file returns 200 and a non-empty transcription string. FAIL: endpoint returns error or empty transcription on valid audio.
+
+### Docs
+Your README links to your docs pages. Run the docs gate ([agents.md](../../../.claude/agents.md#docs-gate)) using those links as your page list.
 
 ## How to test
 Read the README — Why/What/How and Known Limitations are your test specs. Verify each claim.
@@ -22,17 +30,3 @@ Save findings to `tests/findings.md` — accumulates across runs.
 3. Note what you couldn't test and why
 4. The goal: each run makes the docs better, which makes the next run better
 
-## Diagnostic protocol
-1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
-2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
-3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "transcription failed" — report "transcription failed because WhisperLive returned 503 because GPU OOM."
-4. **Parallelize** — run independent checks concurrently. Don't wait for model load before checking HTTP endpoint availability.
-5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
-
-Dependencies to check first: GPU/WhisperLive backend (port 8083 on BBB). If transcription returns errors, check WhisperLive process and GPU memory before blaming this service.
-
-## Logging
-Append meaningful findings to `/home/dima/dev/vexa/test.log`:
-- Format: `[timestamp] [agent-name] LEVEL: message`
-- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
-- Don't spam — one line per finding, not per check

@@ -1,5 +1,7 @@
 # Helm Deployment Testing Agent
 
+> Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
+
 ## Why
 You validate the Helm/K8s deployment. You know the charts, values, and how to verify the stack on a real cluster.
 
@@ -21,6 +23,12 @@ You test the Helm charts against a K8s cluster.
 8. Bot RBAC works (can spawn pods)
 9. Inter-service connectivity
 10. Health endpoints respond
+
+### Gate (local)
+Helm template renders without errors and pods start successfully. PASS: `helm template` produces valid YAML, `helm install --dry-run` succeeds, pods reach Running state. FAIL: template errors, invalid manifests, or pods in CrashLoopBackOff.
+
+### Docs
+Your README links to your docs pages. Run the docs gate ([agents.md](../../../.claude/agents.md#docs-gate)) using those links as your page list.
 
 ## How
 ```bash
@@ -46,5 +54,13 @@ for svc in vexa-vexa-api-gateway vexa-vexa-admin-api vexa-vexa-bot-manager; do
 done
 ```
 
-### Self-improvement
-After each test, save results to deploy/helm/tests/results/ and update what you check next time.
+### Docs are your test specs
+
+The "What working means" list above is your test specification. When charts change and the docs update, your verification criteria change with it. Don't limit yourself to the script — read the README, derive what should be true, verify it.
+
+### After every test run
+1. Update the README if specs were unclear
+2. Add unexpected findings to `tests/findings.md`
+3. Note what you couldn't test and why
+4. The goal: each run makes the docs better, which makes the next run better
+

@@ -1,7 +1,15 @@
 # Bot Manager Testing Agent
 
+> Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
+
 ## Scope
 You test bot-manager and ONLY bot-manager. Verify it works as described in [README.md](../README.md).
+
+### Gate (local)
+Bot container spawns and stops on command via bot-manager's API. PASS: create-bot returns success and a container/pod appears, stop-bot tears it down. FAIL: spawn request errors or container never starts.
+
+### Docs
+Your README links to your docs pages. Run the docs gate ([agents.md](../../../.claude/agents.md#docs-gate)) using those links as your page list.
 
 ## How to test
 Read the README — Why/What/How and Known Limitations are your test specs. Verify each claim.
@@ -22,17 +30,3 @@ Save findings to `tests/findings.md` — accumulates across runs.
 3. Note what you couldn't test and why
 4. The goal: each run makes the docs better, which makes the next run better
 
-## Diagnostic protocol
-1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
-2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
-3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "502 error" — report "502 because bot-manager is down because Redis connection refused."
-4. **Parallelize** — run independent checks concurrently. Don't wait for Postgres to finish before checking Redis.
-5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
-
-Dependencies: Redis (pub/sub), Postgres (meetings), transcription-service (external), Docker socket / K8s API (bot spawning). If bot creation fails, check Redis first (most common), then Docker socket.
-
-## Logging
-Append meaningful findings to `/home/dima/dev/vexa/test.log`:
-- Format: `[timestamp] [agent-name] LEVEL: message`
-- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
-- Don't spam — one line per finding, not per check

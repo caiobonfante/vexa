@@ -1,7 +1,15 @@
 # Dashboard Testing Agent
 
+> Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
+
 ## Scope
 You test dashboard and ONLY dashboard. Verify it works as described in [README.md](../README.md).
+
+### Gate (local)
+HTML page loads and renders without console errors. PASS: build succeeds, index page serves, no JS exceptions in browser console. FAIL: build fails, page blank, or uncaught errors on load.
+
+### Docs
+Your README links to your docs pages. Run the docs gate ([agents.md](../../../.claude/agents.md#docs-gate)) using those links as your page list.
 
 ## How to test
 Read the README — Why/What/How and Known Limitations are your test specs. Verify each claim.
@@ -22,17 +30,3 @@ Save findings to `tests/findings.md` — accumulates across runs.
 3. Note what you couldn't test and why
 4. The goal: each run makes the docs better, which makes the next run better
 
-## Diagnostic protocol
-1. **Read last findings** (`tests/findings.md`) — what failed before? Start there.
-2. **Fail fast** — test the riskiest thing first. If a dependency is down, everything above it fails. Check dependencies before dependents.
-3. **Isolate** — when something fails, drill into WHY. Is it the service? The dependency? The network? The config? Don't report "dashboard blank" — report "dashboard blank because API call to api-gateway returned 401 because auth token expired."
-4. **Parallelize** — run independent checks concurrently. Don't wait for build check before checking API connectivity.
-5. **Root cause chain** — every failure ends with WHY, not just WHAT. Trace the chain until you hit the actual cause.
-
-Dependencies to check first: api-gateway (all API calls go through it), auth provider (login/session). If dashboard shows errors, check browser console and api-gateway health before looking at dashboard code.
-
-## Logging
-Append meaningful findings to `/home/dima/dev/vexa/test.log`:
-- Format: `[timestamp] [agent-name] LEVEL: message`
-- Levels: PASS (summary only), FAIL, DEGRADED, ROOT CAUSE, SURPRISING
-- Don't spam — one line per finding, not per check
