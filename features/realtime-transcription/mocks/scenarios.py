@@ -224,6 +224,94 @@ SCENARIOS = {
             "multilingual",
         ],
     },
+    "rapid-overlap": {
+        "description": "Fast-switching overlapping speech — tests 'eaten first seconds' problem",
+        "utterances": [
+            # Alice starts a sentence (3s duration expected)
+            {
+                "speaker": "Alice",
+                "text": "The deployment pipeline failed again last night during the rollout",
+                "start_s": 0.0,
+                "keywords": ["deployment", "pipeline", "failed", "rollout"],
+                "language": "en",
+            },
+            # Bob interrupts at 2s — overlaps with Alice for ~1s
+            {
+                "speaker": "Bob",
+                "text": "Wait which pipeline are you talking about the staging one",
+                "start_s": 2.0,
+                "keywords": ["pipeline", "staging"],
+                "language": "en",
+            },
+            # Carol interjects "yes exactly" at 3.5s — overlaps with Bob (0.5s duration)
+            {
+                "speaker": "Carol",
+                "text": "yes exactly",
+                "start_s": 3.5,
+                "keywords": [],
+                "advisory": True,
+            },
+            # Alice responds immediately after Bob (~0.2s gap from Bob's expected end ~4s)
+            {
+                "speaker": "Alice",
+                "text": "No the production one it broke the checkout flow",
+                "start_s": 4.2,
+                "keywords": ["production", "checkout"],
+                "language": "en",
+            },
+            # Rapid A->B->A->B with 0.3s gaps
+            {
+                "speaker": "Bob",
+                "text": "Did you check the logs",
+                "start_s": 6.5,
+                "keywords": ["logs"],
+                "language": "en",
+            },
+            {
+                "speaker": "Alice",
+                "text": "Yes memory spike",
+                "start_s": 7.8,
+                "keywords": ["memory"],
+                "language": "en",
+            },
+            {
+                "speaker": "Bob",
+                "text": "How much memory",
+                "start_s": 9.1,
+                "keywords": ["memory"],
+                "language": "en",
+            },
+            {
+                "speaker": "Alice",
+                "text": "Eight gigs on a four gig container",
+                "start_s": 10.4,
+                "keywords": ["gigs", "container"],
+                "language": "en",
+            },
+            # Final overlap: Bob and Alice speak simultaneously
+            {
+                "speaker": "Bob",
+                "text": "We need to fix the memory limits right now",
+                "start_s": 12.0,
+                "keywords": ["memory", "limits"],
+                "language": "en",
+            },
+            {
+                "speaker": "Alice",
+                "text": "I already opened a ticket for the on-call team",
+                "start_s": 12.5,
+                "keywords": ["ticket", "on-call"],
+                "language": "en",
+            },
+        ],
+        "checks": [
+            "keyword_attribution",
+            "no_cross_contamination",
+            "segment_duration",
+            "no_duplicates",
+        ],
+    },
+
     "chaos-meeting": {
         "description": "5-minute chaotic meeting: 3 speakers, heavy overlaps, noise, pauses, code-switching, crosstalk, filler words",
         "utterances": [
