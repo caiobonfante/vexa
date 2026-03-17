@@ -597,11 +597,20 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             let lastKnownParticipantCount = 0;
 
             const countParticipantTiles = (): number => {
+              // Count unique participant IDs, excluding the bot's own tile.
+              // The bot's tile is identified by data-self-name attribute (Google Meet marks
+              // the local user's tile this way). We only want to count OTHER participants
+              // so that the alone-timeout fires when nobody else is in the meeting.
               const participantElements = document.querySelectorAll('[data-participant-id]');
               const ids = new Set<string>();
               participantElements.forEach((el: Element) => {
                 const id = el.getAttribute('data-participant-id');
-                if (id) ids.add(id);
+                if (!id) return;
+                // Skip the bot's own tile — it has data-self-name or its ancestor does
+                const isSelf = el.hasAttribute('data-self-name') ||
+                  el.closest('[data-self-name]') !== null;
+                if (isSelf) return;
+                ids.add(id);
               });
               return ids.size;
             };
@@ -616,8 +625,9 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               const tileCount = countParticipantTiles();
               const inMeeting = isBotStillInMeeting();
               // If tiles show 0 but we're still in the meeting (e.g. screen share mode),
-              // keep the last known count (minimum 2) to avoid false "alone" triggers
-              if (tileCount === 0 && inMeeting && lastKnownParticipantCount > 1) {
+              // keep the last known count (minimum 1) to avoid false "alone" triggers
+              // (count excludes bot's own tile, so > 0 means at least one other person)
+              if (tileCount === 0 && inMeeting && lastKnownParticipantCount > 0) {
                 (window as any).logBot(`🔍 [Google Meet Participants] 0 tiles but Leave button present — keeping last count ${lastKnownParticipantCount} (screen share mode)`);
                 return new Array(lastKnownParticipantCount).fill('placeholder');
               }
@@ -681,21 +691,21 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
                   (window as any).logBot(`Participant check: Found ${currentParticipantCount} unique participants from central list.`);
                   lastParticipantCount = currentParticipantCount;
                   
-                  // Track if we've ever had multiple participants
-                  if (currentParticipantCount > 1) {
+                  // Track if we've ever had other participants (count excludes bot's own tile)
+                  if (currentParticipantCount > 0) {
                     hasEverHadMultipleParticipants = true;
-                    speakersIdentified = true; // Once we see multiple participants, we've identified speakers
+                    speakersIdentified = true; // Once we see other participants, we've identified speakers
                     (window as any).logBot("Speakers identified - switching to post-speaker monitoring mode");
                   }
                 }
 
-                if (currentParticipantCount <= 1) {
+                if (currentParticipantCount === 0) {
                   aloneTime++;
-                  
+
                   // Determine timeout based on whether speakers have been identified
                   const currentTimeout = speakersIdentified ? everyoneLeftTimeoutSeconds : startupAloneTimeoutSeconds;
                   const timeoutDescription = speakersIdentified ? "post-speaker" : "startup";
-                  
+
                   if (aloneTime >= currentTimeout) {
                     if (speakersIdentified) {
                       (window as any).logBot(`Google Meet meeting ended or bot has been alone for ${everyoneLeftTimeoutSeconds} seconds after speakers were identified. Stopping recorder...`);

@@ -43,6 +43,8 @@ export class SileroVAD {
     // Find model file
     const candidates = [
       path.resolve(__dirname, '..', '..', '..', 'node_modules', '@jjhbw', 'silero-vad', 'weights', 'silero_vad.onnx'),
+      path.resolve(__dirname, '..', '..', 'node_modules', '@jjhbw', 'silero-vad', 'weights', 'silero_vad.onnx'),
+      '/app/vexa-bot/core/node_modules/@jjhbw/silero-vad/weights/silero_vad.onnx',
       '/app/silero_vad.onnx',
     ];
 

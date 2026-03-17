@@ -90,10 +90,10 @@ export async function waitForGoogleMeetingAdmission(
     // Check for any visible admission indicator (multiple selectors for robustness)
     const initialAdmissionFound = await checkForGoogleAdmissionIndicators(page);
     
-    // Negative check: ensure we're not still in lobby/pre-join
-    const initialLobbyStillVisible = await checkForWaitingRoomIndicators(page);
-    
-    if (initialAdmissionFound && !initialLobbyStillVisible) {
+    // If admission indicators are found (e.g. "Leave call" button), the bot IS in the
+    // meeting.  Lobby-indicator false positives (reCAPTCHA, stale text) must not override
+    // a definitive admission signal.
+    if (initialAdmissionFound) {
       log(`Found Google Meet admission indicator: visible meeting controls - Bot is already admitted to the meeting!`);
       
       // Take screenshot when already admitted
@@ -193,18 +193,20 @@ export async function waitForGoogleMeetingAdmission(
           throw new Error("Bot admission was rejected by meeting admin");
         }
 
-        // Admission indicators
+        // Admission indicators — if meeting controls are visible, bot is admitted
+        // regardless of any false-positive lobby indicators (e.g. reCAPTCHA loading
+        // spinners, stale text nodes).  The "Leave call" button is definitive.
         const admissionFound = await checkForGoogleAdmissionIndicators(page);
-        const lobbyVisible = await checkForWaitingRoomIndicators(page);
-        if (admissionFound && !lobbyVisible) {
+        if (admissionFound) {
           log("✅ Bot admitted during polling window (meeting controls visible)");
           return true;
         }
 
-        // If lobby appears later, switch to waiting-room handling by breaking
+        // Only check lobby if no admission indicators found
+        const lobbyVisible = await checkForWaitingRoomIndicators(page);
         if (lobbyVisible) {
           log("ℹ️ Waiting room appeared during polling. Switching to waiting-room monitoring...");
-          
+
           // --- Call awaiting admission callback when waiting room appears during polling ---
           try {
             await callAwaitingAdmissionCallback(botConfig);
@@ -212,7 +214,7 @@ export async function waitForGoogleMeetingAdmission(
           } catch (callbackError: any) {
             log(`Warning: Failed to send awaiting admission callback: ${callbackError.message}. Continuing...`);
           }
-          
+
           stillInWaitingRoom = true;
           break;
         }
