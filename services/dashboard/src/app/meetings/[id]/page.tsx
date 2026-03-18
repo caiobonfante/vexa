@@ -30,6 +30,8 @@ import {
   Download,
   ClipboardCopy,
   Share,
+  Volume2,
+  Send,
 } from "lucide-react";
 import { AudioPlayer, type AudioPlayerHandle, type AudioFragment } from "@/components/recording/audio-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1819,6 +1821,11 @@ export default function MeetingDetailPage() {
             </CardContent>
           </Card>
 
+          {/* TTS - Speak in Meeting */}
+          {(currentMeeting.status === "active" || currentMeeting.status === "joining") && (
+            <TtsSpeakCard platform={currentMeeting.platform} nativeId={currentMeeting.platform_specific_id} />
+          )}
+
           {(currentMeeting.status === "completed" || currentMeeting.status === "failed") && (
             <Card className="border-destructive/30">
               <CardContent className="pt-6">
@@ -1947,5 +1954,73 @@ function MeetingDetailSkeleton() {
         </div>
       </div>
     </div>
+  );
+}
+
+function TtsSpeakCard({ platform, nativeId }: { platform: string; nativeId: string }) {
+  const [text, setText] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const speakTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  async function handleSpeak() {
+    if (!text.trim()) return;
+    setIsSpeaking(true);
+    // Keep stop button visible — estimate ~100ms per character for TTS playback
+    const estimatedMs = Math.max(3000, text.trim().length * 100);
+    if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+    speakTimeoutRef.current = setTimeout(() => setIsSpeaking(false), estimatedMs);
+    try {
+      const response = await fetch(`/api/vexa/bots/${platform}/${nativeId}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim(), voice: "alloy" }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      setText("");
+    } catch (error) {
+      toast.error("Speak failed: " + (error as Error).message);
+      setIsSpeaking(false);
+      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+    }
+  }
+
+  async function handleStop() {
+    try {
+      await fetch(`/api/vexa/bots/${platform}/${nativeId}/speak`, { method: "DELETE" });
+    } catch {}
+    setIsSpeaking(false);
+    if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Volume2 className="h-4 w-4" />
+          Speak
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2">
+          <Input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Type something to say..."
+            className="text-sm"
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSpeak(); } }}
+            disabled={isSpeaking}
+          />
+          {isSpeaking ? (
+            <Button size="sm" variant="destructive" onClick={handleStop}>
+              <StopCircle className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handleSpeak} disabled={!text.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
