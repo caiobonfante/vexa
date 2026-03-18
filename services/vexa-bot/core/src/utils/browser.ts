@@ -72,13 +72,9 @@ export class BrowserAudioService {
         }
         
         // Check if audio tracks are enabled
-        // Note: only check track.enabled (user-controllable). Do NOT check track.muted —
-        // it's a read-only WebRTC property set by the remote end. In Teams, audio tracks
-        // start muted when nobody is speaking and unmute when someone talks.
-        // A muted track still produces silence frames and is valid for capture.
-        const hasEnabledTracks = audioTracks.some((track: MediaStreamTrack) => track.enabled);
+        const hasEnabledTracks = audioTracks.some((track: MediaStreamTrack) => track.enabled && !track.muted);
         if (!hasEnabledTracks) {
-          (window as any).logBot(`[Audio] Element found but all audio tracks are disabled`);
+          (window as any).logBot(`[Audio] Element found but all audio tracks are disabled or muted`);
           return false;
         }
         

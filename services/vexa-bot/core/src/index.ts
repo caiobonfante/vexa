@@ -551,7 +551,7 @@ async function performGracefulLeave(
     try {
       log("[Graceful Leave] Attempting platform-specific leave...");
       if (currentPlatform === "google_meet") {
-         platformLeaveSuccess = await leaveGoogleMeet(page, currentBotConfig, reason);
+         platformLeaveSuccess = await leaveGoogleMeet(page);
       } else if (currentPlatform === "teams") {
          platformLeaveSuccess = await leaveMicrosoftTeams(page);
       } else {
@@ -1080,11 +1080,10 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
           speakerManager!.handleTranscriptionResult(speakerId, result.text);
         } else {
-          log(`[TranscriptionClient] ${speakerName}: empty result (no speech detected)`);
           speakerManager!.handleTranscriptionResult(speakerId, '');
         }
       } catch (err: any) {
-        log(`[TranscriptionClient] ${speakerName}: FAILED — ${err.message}`);
+        log(`[❌ FAILED] ${speakerName}: ${err.message}`);
         speakerManager!.handleTranscriptionResult(speakerId, '');
       }
     };
@@ -1357,10 +1356,6 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
 
     (window as any).logBot?.(`[PerSpeaker] Found ${mediaElements.length} media elements with audio`);
 
-    // Store references on window to prevent GC from collecting
-    // AudioContext/ScriptProcessor nodes (classic Web Audio GC bug)
-    (window as any).__vexaAudioStreams = [];
-
     let streamCount = 0;
     for (let i = 0; i < mediaElements.length; i++) {
       const el = mediaElements[i] as any;
@@ -1369,21 +1364,13 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
         if (!stream || stream.getAudioTracks().length === 0) continue;
 
         const ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
-        // Resume context in case autoplay policy suspended it
-        if (ctx.state === 'suspended') {
-          await ctx.resume();
-        }
         const source = ctx.createMediaStreamSource(stream);
         const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
 
         processor.onaudioprocess = (e: AudioProcessingEvent) => {
           const data = e.inputBuffer.getChannelData(0);
           // Only send if there's actual audio (not silence)
-          let maxVal = 0;
-          for (let j = 0; j < data.length; j++) {
-            const abs = data[j] < 0 ? -data[j] : data[j];
-            if (abs > maxVal) maxVal = abs;
-          }
+          const maxVal = Math.max(...Array.from(data).map(Math.abs));
           if (maxVal > 0.005) {
             (window as any).__vexaPerSpeakerAudioData(i, Array.from(data));
           }
@@ -1391,10 +1378,6 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
 
         source.connect(processor);
         processor.connect(ctx.destination);
-
-        // Prevent GC: store persistent references
-        (window as any).__vexaAudioStreams.push({ ctx, source, processor });
-
         streamCount++;
         (window as any).logBot?.(`[PerSpeaker] Stream ${i} started (track: ${stream.getAudioTracks()[0].id.substring(0, 12)})`);
       } catch (err: any) {
