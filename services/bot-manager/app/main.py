@@ -691,6 +691,18 @@ async def request_bot(
             "s3AccessKey": s3_access_key,
             "s3SecretKey": s3_secret_key,
         }
+
+        # Add git workspace config if user has it configured in user.data
+        user_data = current_user.data if isinstance(current_user.data, dict) else {}
+        git_workspace = user_data.get("workspace_git")
+        if git_workspace and isinstance(git_workspace, dict):
+            if git_workspace.get("repo"):
+                bot_config_data["workspaceGitRepo"] = git_workspace["repo"]
+            if git_workspace.get("token"):
+                bot_config_data["workspaceGitToken"] = git_workspace["token"]
+            if git_workspace.get("branch"):
+                bot_config_data["workspaceGitBranch"] = git_workspace["branch"]
+
         bot_config_json = json.dumps(bot_config_data)
 
         if start_browser_session_container is None:
@@ -3438,6 +3450,51 @@ async def internal_save_browser_session_storage(token: str, db: AsyncSession = D
         logger.error(f"Failed to update user.data: {e}", exc_info=True)
 
     return {"status": "ok", "message": "Storage save initiated"}
+
+
+@app.put("/auth/workspace-git",
+         summary="Configure git repo for workspace persistence",
+         dependencies=[Depends(get_user_and_token)])
+async def configure_workspace_git(
+    request: Request,
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a private GitHub repo for workspace sync instead of MinIO."""
+    user_token, current_user = auth_data
+    body = await request.json()
+    repo = body.get("repo")  # e.g. "https://github.com/user/bot-workspace.git"
+    token = body.get("token")  # GitHub PAT
+    branch = body.get("branch", "main")
+
+    if not repo:
+        raise HTTPException(status_code=400, detail="repo is required")
+
+    user_data = dict(current_user.data) if isinstance(current_user.data, dict) else {}
+    user_data["workspace_git"] = {"repo": repo, "token": token, "branch": branch}
+    current_user.data = user_data
+    attributes.flag_modified(current_user, "data")
+    await db.commit()
+
+    return {"status": "ok", "repo": repo, "branch": branch}
+
+
+@app.delete("/auth/workspace-git",
+            summary="Remove git workspace config, revert to MinIO",
+            dependencies=[Depends(get_user_and_token)])
+async def remove_workspace_git(
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove git workspace config. Workspace will sync to MinIO."""
+    user_token, current_user = auth_data
+    user_data = dict(current_user.data) if isinstance(current_user.data, dict) else {}
+    user_data.pop("workspace_git", None)
+    current_user.data = user_data
+    attributes.flag_modified(current_user, "data")
+    await db.commit()
+
+    return {"status": "ok", "message": "Workspace git removed, using MinIO"}
 
 
 # --- END Browser Session Endpoints ---

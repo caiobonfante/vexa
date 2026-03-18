@@ -36,12 +36,74 @@ function s3Sync(localDir: string, s3Path: string, config: BrowserSessionConfig, 
   }
 }
 
-function syncWorkspaceFromS3(config: BrowserSessionConfig): void {
-  s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'down');
+// --- Git workspace helpers ---
+
+function gitRepoUrl(config: BrowserSessionConfig): string {
+  const repo = config.workspaceGitRepo!;
+  const token = config.workspaceGitToken;
+  if (!token) return repo;
+  // Inject token into HTTPS URL: https://TOKEN@github.com/user/repo.git
+  return repo.replace('https://', `https://${token}@`);
 }
 
-function syncWorkspaceToS3(config: BrowserSessionConfig): void {
-  s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'up');
+function syncWorkspaceFromGit(config: BrowserSessionConfig): void {
+  const branch = config.workspaceGitBranch || 'main';
+  const url = gitRepoUrl(config);
+  console.log(`[browser-session] Git clone workspace from ${config.workspaceGitRepo} (${branch})`);
+  try {
+    if (existsSync(join(WORKSPACE_DIR, '.git'))) {
+      // Already cloned — pull latest
+      execSync(`git fetch origin && git reset --hard origin/${branch}`, { cwd: WORKSPACE_DIR, stdio: 'pipe', timeout: 60000 });
+      console.log('[browser-session] Git pull complete');
+    } else {
+      // Fresh clone
+      execSync(`git clone --branch ${branch} "${url}" ${WORKSPACE_DIR}`, { stdio: 'pipe', timeout: 120000 });
+      execSync('git config user.email "bot@vexa.ai"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      execSync('git config user.name "Vexa Bot"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      console.log('[browser-session] Git clone complete');
+    }
+  } catch (err: any) {
+    console.log(`[browser-session] Git clone/pull failed: ${err.message}`);
+  }
+}
+
+function syncWorkspaceToGit(config: BrowserSessionConfig): void {
+  const branch = config.workspaceGitBranch || 'main';
+  console.log(`[browser-session] Git push workspace to ${config.workspaceGitRepo}`);
+  try {
+    execSync('git add -A', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+    const status = execSync('git status --porcelain', { cwd: WORKSPACE_DIR, encoding: 'utf8' }).trim();
+    if (status) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      execSync(`git commit -m "save ${timestamp}"`, { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+    }
+    execSync(`git push origin ${branch}`, { cwd: WORKSPACE_DIR, stdio: 'pipe', timeout: 60000 });
+    console.log('[browser-session] Git push complete');
+  } catch (err: any) {
+    console.log(`[browser-session] Git push failed: ${err.message}`);
+  }
+}
+
+function useGitWorkspace(config: BrowserSessionConfig): boolean {
+  return !!(config.workspaceGitRepo);
+}
+
+// --- Workspace sync (git or S3) ---
+
+function syncWorkspaceDown(config: BrowserSessionConfig): void {
+  if (useGitWorkspace(config)) {
+    syncWorkspaceFromGit(config);
+  } else {
+    s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'down');
+  }
+}
+
+function syncWorkspaceUp(config: BrowserSessionConfig): void {
+  if (useGitWorkspace(config)) {
+    syncWorkspaceToGit(config);
+  } else {
+    s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'up');
+  }
 }
 
 function syncBrowserDataFromS3(config: BrowserSessionConfig): void {
@@ -58,32 +120,9 @@ function syncBrowserDataToS3(config: BrowserSessionConfig): void {
   s3Sync(BROWSER_DATA_DIR, `${config.userdataS3Path}/browser-data`, config, 'up', excludes);
 }
 
-function gitCommitWorkspace(): void {
-  try {
-    // Init repo if first time
-    if (!existsSync(join(WORKSPACE_DIR, '.git'))) {
-      execSync('git init', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
-      execSync('git config user.email "bot@vexa.ai"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
-      execSync('git config user.name "Vexa Bot"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
-      console.log('[browser-session] Initialized git repo in workspace');
-    }
-    // Stage and commit all changes
-    execSync('git add -A', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
-    const status = execSync('git status --porcelain', { cwd: WORKSPACE_DIR, encoding: 'utf8' }).trim();
-    if (status) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      execSync(`git commit -m "save ${timestamp}"`, { cwd: WORKSPACE_DIR, stdio: 'pipe' });
-      console.log('[browser-session] Git commit: workspace changes saved');
-    }
-  } catch (err: any) {
-    console.log(`[browser-session] Git commit skipped: ${err.message}`);
-  }
-}
-
 function saveAll(config: BrowserSessionConfig): void {
   console.log('[browser-session] Saving workspace...');
-  gitCommitWorkspace();
-  syncWorkspaceToS3(config);
+  syncWorkspaceUp(config);
   console.log('[browser-session] Saving browser data...');
   syncBrowserDataToS3(config);
   console.log('[browser-session] Save complete');
@@ -109,9 +148,9 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   mkdirSync(BROWSER_DATA_DIR, { recursive: true });
   mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-  // Download existing data from S3
+  // Download existing data
   syncBrowserDataFromS3(config);
-  syncWorkspaceFromS3(config);
+  syncWorkspaceDown(config);
 
   // Clean stale locks
   cleanStaleLocks();

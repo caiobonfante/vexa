@@ -44,6 +44,10 @@ export const BotConfigSchema = z.object({
   s3Bucket: z.string().optional(),
   s3AccessKey: z.string().optional(),
   s3SecretKey: z.string().optional(),
+  // Git-based workspace
+  workspaceGitRepo: z.string().optional(),
+  workspaceGitToken: z.string().optional(),
+  workspaceGitBranch: z.string().optional(),
 });
 
 
@@ -72,6 +76,9 @@ if (!rawConfig) {
       s3AccessKey: validatedConfig.s3AccessKey,
       s3SecretKey: validatedConfig.s3SecretKey,
       userdataS3Path: validatedConfig.userdataS3Path,
+      workspaceGitRepo: validatedConfig.workspaceGitRepo,
+      workspaceGitToken: validatedConfig.workspaceGitToken,
+      workspaceGitBranch: validatedConfig.workspaceGitBranch,
     };
     import('./browser-session').then(({ runBrowserSession }) => {
       runBrowserSession(sessionConfig).catch((error) => {

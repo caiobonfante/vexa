@@ -55,4 +55,8 @@ export type BrowserSessionConfig = {
   s3AccessKey?: string;
   s3SecretKey?: string;
   userdataS3Path?: string; // e.g. "users/123/browser-userdata"
+  // Git-based workspace (optional — if set, workspace syncs via git instead of S3)
+  workspaceGitRepo?: string;  // e.g. "https://github.com/user/bot-workspace.git"
+  workspaceGitToken?: string; // PAT for private repos
+  workspaceGitBranch?: string; // default: "main"
 }
