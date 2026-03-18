@@ -71,6 +71,22 @@ Key responsibilities:
 | * | `/admin/{path}` | All admin/analytics endpoints |
 | PUT | `/user/webhook` | Set user webhook URL |
 
+**Remote Browser** (proxied to bot-manager, token-authenticated)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/b/{token}` | Browser session dashboard page (embedded VNC + controls) |
+| GET/WS | `/b/{token}/vnc/{path}` | Proxy to noVNC web client (HTTP assets + websockify WebSocket) |
+| GET/WS | `/b/{token}/cdp/{path}` | Proxy to Chrome DevTools Protocol endpoint on the container (HTTP JSON + WebSocket) |
+| POST | `/b/{token}/save` | Trigger storage save (browser profile + workspace) to MinIO |
+
+**User Settings** (proxied to admin-api)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | `/user/workspace-git` | Set git workspace config (repo, token, branch) for browser sessions |
+| DELETE | `/user/workspace-git` | Remove git workspace config |
+
 **Other**
 
 | Method | Path | Description |
@@ -111,7 +127,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | `PUBLIC_BASE_URL` | Public-facing base URL for share links (e.g., `https://api.vexa.ai`) |
 | `TRANSCRIPT_SHARE_TTL_SECONDS` | Share link TTL (default: 900 = 15 min) |
 | `TRANSCRIPT_SHARE_TTL_MAX_SECONDS` | Max allowed TTL (default: 86400 = 24h) |
-| `CORS_ORIGINS` | Comma-separated allowed origins (default: `http://localhost:3000,http://localhost:3001`) |
+| `CORS_ORIGINS` | Comma-separated allowed origins for CORS (default: `http://localhost:3000,http://localhost:3001`). Controls `Access-Control-Allow-Origin` for all endpoints. |
 | `LOG_LEVEL` | Logging level |
 
 The service fails to start if any of `ADMIN_API_URL`, `BOT_MANAGER_URL`, `TRANSCRIPTION_COLLECTOR_URL`, or `MCP_URL` are missing.

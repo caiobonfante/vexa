@@ -21,18 +21,23 @@ Restore vexa-bot to a validated working state, then selectively re-apply improve
 
 ## HOW
 
-### Phase 1: Validate baseline (CURRENT)
+### Phase 1: Validate baseline (DONE)
 - [x] Clone repo to `/home/dima/dev/vexa-restore`
 - [x] Create branch `fix/restore-working-bot` from `30d0e30`
 - [x] Confirm bot is slim/silent by default (code audit: PASS)
-- [ ] Build bot from `30d0e30`
-- [ ] Test with real Google Meet — confirm transcription works
-- [ ] Test with real MS Teams — confirm transcription works
-- [ ] Both pass → baseline validated
+- [x] Build bot from `30d0e30`
+- [x] Test with real Google Meet — confirm transcription works
+- [x] Test with real MS Teams — confirm transcription works
+- [x] Both pass → baseline validated
 
-### Phase 2: Cherry-pick good stuff (one at a time, validate each)
+**Cherry-picked onto baseline:**
+- Categories B+C+D (non-breaking improvements): deploy refactor, documentation, feature agents, dashboard fixes
+- Remote browser chain (18 commits): browser sessions, VNC/CDP/SSH, persistent storage, git workspace, dashboard integration
+- Deploy refactor: consolidated deployment into `deploy/` directory, simplified to 2 modes (default + GPU)
 
-Each cherry-pick gets a real meeting test before moving to the next.
+### Phase 2: Cherry-pick bot runtime fixes (NEXT)
+
+Category A (bot runtime fixes from `c7acda6` and related commits) is next. Each cherry-pick gets a real meeting test before moving to the next.
 
 **Candidate 1: `c7acda6` — bot audio pipeline fixes (PARTIAL)**
 Good parts to take:
@@ -79,4 +84,6 @@ Skip:
 |------|----------|--------|
 | 2026-03-18 | Base = `30d0e30` | 4 branches froze here, confirmed working |
 | 2026-03-18 | Skip ring buffer from `c7acda6` | `ab2d814` confirmed it breaks Teams speaker detection |
-| | | |
+| 2026-03-18 | Cherry-pick remote browser chain | 18 commits: browser sessions are additive (new mode, no changes to meeting bot flow), safe to integrate before bot runtime fixes |
+| 2026-03-18 | Cherry-pick deploy refactor + docs | Categories B+C+D are infrastructure/docs only, no bot runtime changes |
+| 2026-03-18 | Browser sessions as first-class meetings | Reuses `POST /bots` with `mode=browser_session`, counts against concurrency limit, session token in Redis + meeting.data |

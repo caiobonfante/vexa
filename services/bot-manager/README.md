@@ -61,6 +61,17 @@ Architecture position: sits between the api-gateway (which proxies client reques
 | DELETE | `/bots/{meeting_id}/agent/chat` | Clear agent chat history |
 | POST | `/bots/{meeting_id}/agent/chat/reset` | Reset agent chat session |
 
+**Browser Sessions**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/bots` (with `mode=browser_session`) | Create a browser session (remote browser with VNC + CDP + SSH) |
+| POST | `/bots/{meeting_id}/save-browser-storage` | Trigger userdata sync from container to MinIO |
+| GET | `/internal/browser-sessions/{token}` | Resolve session token to container info (internal, used by api-gateway) |
+| POST | `/internal/browser-sessions/{token}/save` | Save browser session storage (internal, used by api-gateway) |
+
+Browser sessions reuse the `POST /bots` endpoint with `mode=browser_session` in the request body. They count against the user's `max_concurrent_bots` limit. The container exposes VNC (port 6080), CDP (port 9223), and SSH (port 22, mapped to a random host port). A session token is generated and stored in `meeting.data` and in Redis (`browser_session:{token}`) with a 24h TTL. Storage save is triggered via Redis pub/sub (`browser_session:{container_name}` channel).
+
 **Deferred Transcription**
 
 | Method | Path | Description |

@@ -223,6 +223,20 @@ vexa-bot/
     test_mock_meeting_e2e.js  -- end-to-end mock test
 ```
 
+## Browser Session Mode
+
+Activated when `BOT_CONFIG` contains `mode: "browser_session"`. Instead of joining a meeting, the bot runs a persistent Chromium instance accessible via VNC, CDP, and SSH.
+
+- **VNC**: noVNC on port 6080 (websockify proxies to x11vnc on display :99)
+- **CDP**: Chrome DevTools Protocol on port 9222 (socat exposes it on 0.0.0.0:9223 for Docker network access)
+- **SSH**: OpenSSH on port 22 (mapped to a random host port). Password is the `session_token` from BOT_CONFIG.
+- **Persistent browser profile**: Chromium user data stored at `/tmp/browser-data`, synced to/from MinIO (`users/{id}/browser-userdata/browser-data`) on startup and save.
+- **Workspace**: `/workspace` directory synced via git (if `workspaceGitRepo` is configured in BOT_CONFIG) or via MinIO. Git workspace auto-commits and pushes on save.
+- **Save triggers**: Redis pub/sub on channel `browser_session:{container_name}` -- `save_storage` message triggers sync, `stop` message saves and exits.
+- **Graceful shutdown**: SIGTERM/SIGINT saves all data before exit.
+
+Entry point: `core/src/browser-session.ts` (imported dynamically from `docker.ts` when mode is `browser_session`).
+
 ## Zoom SDK
 
 Zoom Meeting SDK binaries are proprietary and not included. Download from Zoom
