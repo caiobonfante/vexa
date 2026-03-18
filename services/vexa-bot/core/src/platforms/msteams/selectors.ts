@@ -350,6 +350,26 @@ export const teamsParticipantIdSelectors: string[] = [
   '[data-user-id]'
 ];
 
+// Teams live captions selectors
+export const teamsCaptionSelectors = {
+  /** Wrapper that contains all caption entries */
+  rendererWrapper: '[data-tid="closed-caption-renderer-wrapper"]',
+  /** Individual caption items (each has avatar + speaker + text) */
+  captionItem: '[data-tid="closed-captions-v2-items-renderer"]',
+  /** Speaker name element inside a caption item */
+  authorName: '[data-tid="author"]',
+  /** Caption text element inside a caption item */
+  captionText: '[data-tid="closed-caption-text"]',
+  /** Virtual list content container */
+  virtualListContent: '[data-tid="closed-caption-v2-virtual-list-content"]',
+  /** More menu button (to enable captions) */
+  moreButton: 'button[aria-label="More"]',
+  /** Language and speech submenu */
+  languageAndSpeech: '[role="menuitem"]:has-text("Language and speech")',
+  /** Show live captions menu item */
+  showLiveCaptions: '[role="menuitem"]:has-text("Show live captions"), [role="menuitemcheckbox"]:has-text("Show live captions")',
+};
+
 // Primary hangup button selector (most reliable)
 export const teamsPrimaryHangupButtonSelector = '#hangup-button';
 

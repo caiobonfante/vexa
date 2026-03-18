@@ -17,6 +17,12 @@ export interface TranscriptionSegment {
   absolute_end_time?: string;
   /** Stable segment identity: {session_uid}:{speakerId}:{sequenceNumber} */
   segment_id?: string;
+  /** Source of this segment: 'audio' (Whisper), 'caption' (Teams ASR), or 'merged' */
+  source?: 'audio' | 'caption' | 'merged';
+  /** Raw caption text from Teams ASR (if available) */
+  caption_text?: string;
+  /** How the speaker was determined: 'dom' (blue squares), 'caption', or 'both' */
+  speaker_source?: 'dom' | 'caption' | 'both';
 }
 
 export interface SpeakerEvent {

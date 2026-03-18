@@ -16,7 +16,8 @@ import {
   teamsStreamTypeSelectors,
   teamsAudioActivitySelectors,
   teamsParticipantIdSelectors,
-  teamsMeetingContainerSelectors
+  teamsMeetingContainerSelectors,
+  teamsCaptionSelectors
 } from "./selectors";
 
 // Modified to use new services - Teams recording functionality
@@ -91,6 +92,13 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
         audioActivitySelectors: string[];
         participantIdSelectors: string[];
         meetingContainerSelectors: string[];
+        captionSelectors: {
+          rendererWrapper: string;
+          captionItem: string;
+          authorName: string;
+          captionText: string;
+          virtualListContent: string;
+        };
       };
     }) => {
       const { botConfigData, selectors } = pageArgs;
@@ -829,11 +837,37 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               countParticipants();
               setInterval(countParticipants, 5000);
 
-              // ─── Per-speaker audio routing ──────────────────────────────
-              // Teams has ONE mixed audio stream. We route audio chunks to
-              // speaker buffers based on who the DOM says is currently speaking.
-              // The speakingStates map (populated by the observer above) tells
-              // us who's active. Registry maps IDs to names.
+              // ─── Per-speaker audio routing with caption-driven boundaries ─
+              // Teams has ONE mixed audio stream. We use two speaker signals:
+              //   1. CAPTIONS (primary): Teams live captions provide speaker name
+              //      with each text segment. Captions only fire when Teams ASR
+              //      detects real speech, so no false activations from mic noise.
+              //   2. DOM blue squares (fallback): voice-level-stream-outline +
+              //      vdi-frame-occlusion class. Used when captions unavailable.
+              //
+              // A ring buffer stores recent audio so that when a caption arrives
+              // (with inherent delay), we can look back and attribute the audio
+              // to the correct speaker retroactively.
+
+              const RING_BUFFER_SECONDS = 5;
+              const RING_BUFFER_SAMPLE_RATE = 16000;
+              const RING_BUFFER_CHUNK_SIZE = 4096;
+              const RING_BUFFER_MAX_CHUNKS = Math.ceil((RING_BUFFER_SECONDS * RING_BUFFER_SAMPLE_RATE) / RING_BUFFER_CHUNK_SIZE);
+
+              // Ring buffer: stores recent non-silent audio chunks with timestamps
+              interface RingBufferEntry {
+                data: Float32Array;
+                timestamp: number;
+              }
+              const ringBuffer: RingBufferEntry[] = [];
+              let captionsEnabled = false;
+              let lastCaptionSpeaker: string | null = null;
+              let lastCaptionText: string = '';
+              let lastCaptionTimestamp: number = 0;
+
+              // Track which ring buffer entries have already been flushed to a speaker
+              let ringBufferFlushedUpTo: number = 0;
+
               const setupPerSpeakerAudioRouting = () => {
                 const audioEl = document.querySelector('audio') as HTMLAudioElement | null;
                 if (!audioEl || !(audioEl.srcObject instanceof MediaStream)) {
@@ -850,6 +884,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 const ctx = new AudioContext({ sampleRate: 16000 });
                 const source = ctx.createMediaStreamSource(stream);
                 const processor = ctx.createScriptProcessor(4096, 1, 1);
+                const botNameLower = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
 
                 processor.onaudioprocess = (e: AudioProcessingEvent) => {
                   const data = e.inputBuffer.getChannelData(0);
@@ -861,35 +896,166 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   }
                   if (maxVal <= 0.005) return;
 
-                  // Find active speakers from DOM state (exclude bot itself)
-                  const botNameLower = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
-                  const activeSpeakerNames: string[] = [];
-                  for (const [id, state] of speakingStates) {
-                    if (state === 'speaking') {
-                      const name = registry.getNameById(id);
-                      if (!name) continue;
-                      const nameLower = name.toLowerCase();
-                      // Skip bot's own audio — match config name OR common bot name patterns
-                      if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
-                      activeSpeakerNames.push(name);
+                  const now = Date.now();
+                  const chunk = new Float32Array(data);
+
+                  if (captionsEnabled) {
+                    // CAPTION MODE: store in ring buffer, caption observer will flush
+                    ringBuffer.push({ data: chunk, timestamp: now });
+                    // Evict old entries beyond ring buffer window
+                    while (ringBuffer.length > RING_BUFFER_MAX_CHUNKS) {
+                      ringBuffer.shift();
+                      // Adjust flushed pointer if we evicted entries before it
+                      if (ringBufferFlushedUpTo > 0) ringBufferFlushedUpTo--;
                     }
-                  }
 
-                  if (activeSpeakerNames.length === 0) return;
+                    // If we have an active caption speaker, route current audio to them
+                    // (for ongoing speech after the initial lookback flush)
+                    if (lastCaptionSpeaker) {
+                      const nameLower = lastCaptionSpeaker.toLowerCase();
+                      if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
+                        const audioArray = Array.from(data);
+                        if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, audioArray);
+                        }
+                      }
+                    }
+                  } else {
+                    // FALLBACK MODE: use DOM blue squares (original behavior)
+                    const activeSpeakerNames: string[] = [];
+                    for (const [id, state] of speakingStates) {
+                      if (state === 'speaking') {
+                        const name = registry.getNameById(id);
+                        if (!name) continue;
+                        const nameLower = name.toLowerCase();
+                        if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
+                        activeSpeakerNames.push(name);
+                      }
+                    }
 
-                  // Route audio to each active speaker
-                  const audioArray = Array.from(data);
-                  for (const name of activeSpeakerNames) {
-                    if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                      (window as any).__vexaTeamsAudioData(name, audioArray);
+                    if (activeSpeakerNames.length === 0) return;
+
+                    const audioArray = Array.from(data);
+                    for (const name of activeSpeakerNames) {
+                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                        (window as any).__vexaTeamsAudioData(name, audioArray);
+                      }
                     }
                   }
                 };
 
                 source.connect(processor);
                 processor.connect(ctx.destination);
-                (window as any).logBot?.(`[Teams PerSpeaker] Audio routing active on stream ${stream.id}`);
+                (window as any).logBot?.('[Teams PerSpeaker] Audio routing active (caption-aware with ring buffer)');
               };
+
+              // ─── Caption observer ─────────────────────────────────────────
+              // Watches Teams live caption DOM for new entries. When a new
+              // caption appears with a speaker name, we:
+              //   1. Flush ring buffer audio to that speaker (lookback)
+              //   2. Set lastCaptionSpeaker so ongoing audio routes to them
+              //   3. Send caption text to Node.js for storage/matching
+              const captionSels = selectorsTyped.captionSelectors;
+              let captionObserver: MutationObserver | null = null;
+              let lastSeenCaptionCount = 0;
+
+              const processCaptions = () => {
+                const wrapper = document.querySelector(captionSels.rendererWrapper);
+                if (!wrapper) return;
+
+                const items = wrapper.querySelectorAll(captionSels.captionItem);
+                if (items.length === 0 || items.length <= lastSeenCaptionCount) return;
+
+                // Process only new caption entries
+                for (let i = lastSeenCaptionCount; i < items.length; i++) {
+                  const item = items[i];
+                  const container = item.closest('.fui-ChatMessageCompact') || item.parentElement?.parentElement?.parentElement;
+                  if (!container) continue;
+
+                  const authorEl = container.querySelector(captionSels.authorName);
+                  const textEl = container.querySelector(captionSels.captionText);
+                  if (!authorEl || !textEl) continue;
+
+                  const speaker = (authorEl.textContent || '').trim();
+                  const text = (textEl.textContent || '').trim();
+                  if (!speaker || !text) continue;
+
+                  const now = Date.now();
+                  const botNameLower2 = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
+                  const speakerLower = speaker.toLowerCase();
+                  if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) continue;
+
+                  // Speaker changed — flush ring buffer lookback
+                  if (speaker !== lastCaptionSpeaker) {
+                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
+                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
+
+                    // Flush unflushed ring buffer entries to new speaker
+                    const unflushed = ringBuffer.slice(ringBufferFlushedUpTo);
+                    if (unflushed.length > 0 && typeof (window as any).__vexaTeamsAudioData === 'function') {
+                      for (const entry of unflushed) {
+                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                      }
+                      (window as any).logBot?.('[Teams Captions] Flushed ' + unflushed.length +
+                        ' ring buffer chunks (' + ((unflushed.length * RING_BUFFER_CHUNK_SIZE / RING_BUFFER_SAMPLE_RATE) * 1000).toFixed(0) +
+                        'ms lookback) to ' + speaker);
+                    }
+                    ringBufferFlushedUpTo = ringBuffer.length;
+                  }
+
+                  lastCaptionSpeaker = speaker;
+                  lastCaptionText = text;
+                  lastCaptionTimestamp = now;
+
+                  // Send caption data to Node.js for storage
+                  if (typeof (window as any).__vexaTeamsCaptionData === 'function') {
+                    (window as any).__vexaTeamsCaptionData(speaker, text, now);
+                  }
+                }
+
+                lastSeenCaptionCount = items.length;
+              };
+
+              const startCaptionObserver = () => {
+                const wrapper = document.querySelector(captionSels.rendererWrapper);
+                if (!wrapper) {
+                  // Captions not enabled yet — check periodically
+                  return false;
+                }
+
+                captionsEnabled = true;
+                (window as any).logBot?.('[Teams Captions] Caption wrapper found — caption-driven routing ACTIVE');
+
+                captionObserver = new MutationObserver(() => {
+                  processCaptions();
+                });
+
+                captionObserver.observe(wrapper, {
+                  childList: true,
+                  subtree: true,
+                  characterData: true
+                });
+
+                // Initial scan
+                processCaptions();
+                return true;
+              };
+
+              // Try to detect if captions are already enabled; poll until found or give up
+              const captionDetectionInterval = setInterval(() => {
+                if (startCaptionObserver()) {
+                  clearInterval(captionDetectionInterval);
+                }
+              }, 2000);
+
+              // Also watch for the wrapper to appear via body mutation
+              const captionWrapperWatcher = new MutationObserver(() => {
+                if (!captionsEnabled && startCaptionObserver()) {
+                  captionWrapperWatcher.disconnect();
+                  clearInterval(captionDetectionInterval);
+                }
+              });
+              captionWrapperWatcher.observe(document.body, { childList: true, subtree: true });
 
               // Delay slightly to ensure audio element is ready
               setTimeout(setupPerSpeakerAudioRouting, 2000);
@@ -1133,7 +1299,8 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
         streamTypeSelectors: teamsStreamTypeSelectors,
         audioActivitySelectors: teamsAudioActivitySelectors,
         participantIdSelectors: teamsParticipantIdSelectors,
-        meetingContainerSelectors: teamsMeetingContainerSelectors
+        meetingContainerSelectors: teamsMeetingContainerSelectors,
+        captionSelectors: teamsCaptionSelectors
       } as any
     }
   );

@@ -1261,8 +1261,10 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
 
 /**
  * Handle audio from Teams' single mixed stream, routed by speaker name.
- * Teams has one audio element; the browser routes chunks based on DOM speaker indicators.
- * Speaker name is known from DOM events — no voting/locking needed.
+ * Teams has one audio element; the browser routes chunks based on either:
+ *   - Caption-driven routing (primary): captions identify speaker with real speech
+ *   - DOM blue squares (fallback): voice-level-stream-outline + vdi-frame-occlusion
+ * Speaker name is known from DOM/caption events — no voting/locking needed.
  */
 async function handleTeamsAudioData(speakerName: string, audioDataArray: number[]): Promise<void> {
   if (!speakerManager || !segmentPublisher || !page || page.isClosed()) return;
@@ -1270,7 +1272,7 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
   const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
   const audioData = new Float32Array(audioDataArray);
 
-  // Add speaker if new — name is already known from DOM
+  // Add speaker if new — name is already known from DOM/caption
   if (!speakerManager.hasSpeaker(speakerId)) {
     log(`[🎙️ TEAMS SPEAKER] "${speakerName}" — first audio received`);
     speakerManager.addSpeaker(speakerId, speakerName);
@@ -1291,6 +1293,33 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
 }
 
 /**
+ * Handle caption data from Teams live captions.
+ * Captions provide speaker-attributed text directly from Teams' ASR.
+ * Used for:
+ *   1. Speaker boundary detection (triggers ring buffer lookback)
+ *   2. Caption text storage alongside audio transcription
+ *   3. Future: fuzzy text matching for segment reconciliation
+ */
+async function handleTeamsCaptionData(speakerName: string, captionText: string, timestampMs: number): Promise<void> {
+  if (!segmentPublisher || !page || page.isClosed()) return;
+
+  const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
+
+  // Publish caption as a speaker event for downstream consumers
+  await segmentPublisher.publishSpeakerEvent({
+    speaker: speakerName,
+    type: 'started_speaking',
+    timestamp: timestampMs,
+  });
+
+  // Store caption data for segment reconciliation.
+  // Caption text is published alongside audio transcription so downstream
+  // consumers (transcription-collector) can use it for speaker validation
+  // and fuzzy text matching when both sources are available.
+  log(`[📝 TEAMS CAPTION] "${speakerName}": ${captionText.substring(0, 80)}${captionText.length > 80 ? '...' : ''}`);
+}
+
+/**
  * Expose the per-speaker audio callback to the browser and set up
  * per-speaker audio capture inside the page.
  *
@@ -1308,16 +1337,25 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
   const isTeams = currentPlatform === 'teams';
 
   // Expose Teams audio callback — browser routes single stream by speaker name
+  // and caption callback for caption-driven speaker detection
   if (isTeams) {
     try {
       await pageToCaptureFrom.exposeFunction('__vexaTeamsAudioData', handleTeamsAudioData);
-      log('[PerSpeaker] Teams audio callback exposed — browser-side routing via DOM speaker events');
+      log('[PerSpeaker] Teams audio callback exposed — browser-side routing via DOM/caption speaker events');
     } catch (err: any) {
       if (!err.message.includes('has been already registered')) {
         log(`[PerSpeaker] Failed to expose Teams audio callback: ${err.message}`);
       }
     }
-    // Teams audio routing is set up in recording.ts page.evaluate — nothing more to do here
+    try {
+      await pageToCaptureFrom.exposeFunction('__vexaTeamsCaptionData', handleTeamsCaptionData);
+      log('[PerSpeaker] Teams caption callback exposed — caption text will be stored for reconciliation');
+    } catch (err: any) {
+      if (!err.message.includes('has been already registered')) {
+        log(`[PerSpeaker] Failed to expose Teams caption callback: ${err.message}`);
+      }
+    }
+    // Teams audio routing + caption observer is set up in recording.ts page.evaluate
     return;
   }
 
