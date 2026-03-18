@@ -6,9 +6,10 @@ import { join } from 'path';
 import { getBrowserSessionArgs } from './constans';
 import { BrowserSessionConfig } from './types';
 
-const USERDATA_DIR = '/tmp/userdata';
+const BROWSER_DATA_DIR = '/tmp/browser-data';
+const WORKSPACE_DIR = '/workspace';
 
-// --- S3 sync helpers using aws CLI ---
+// --- S3 sync helpers ---
 
 function getS3Env(config: BrowserSessionConfig): Record<string, string> {
   return {
@@ -18,49 +19,59 @@ function getS3Env(config: BrowserSessionConfig): Record<string, string> {
   };
 }
 
-export function syncFromS3(config: BrowserSessionConfig): void {
-  if (!config.userdataS3Path || !config.s3Endpoint || !config.s3Bucket) {
-    console.log('[browser-session] No S3 path configured, starting with empty userdata');
-    return;
-  }
-  const s3Uri = `s3://${config.s3Bucket}/${config.userdataS3Path}`;
-  console.log(`[browser-session] Syncing userdata from ${s3Uri} ...`);
+function s3Sync(localDir: string, s3Path: string, config: BrowserSessionConfig, direction: 'up' | 'down', excludes: string[] = []): void {
+  if (!config.userdataS3Path || !config.s3Endpoint || !config.s3Bucket) return;
+  const s3Uri = `s3://${config.s3Bucket}/${s3Path}`;
+  const excludeArgs = excludes.map(e => `--exclude "${e}"`).join(' ');
+  const deleteArg = direction === 'up' ? '--delete' : '';
+  const [src, dst] = direction === 'down' ? [s3Uri, `${localDir}/`] : [`${localDir}/`, s3Uri];
+  console.log(`[browser-session] S3 sync ${direction}: ${src} → ${dst}`);
   try {
     execSync(
-      `aws s3 sync "${s3Uri}" "${USERDATA_DIR}/" --endpoint-url "${config.s3Endpoint}"`,
+      `aws s3 sync "${src}" "${dst}" --endpoint-url "${config.s3Endpoint}" ${deleteArg} ${excludeArgs}`,
       { env: getS3Env(config), stdio: 'inherit', timeout: 120000 }
     );
-    console.log('[browser-session] S3 download complete');
   } catch (err: any) {
-    // If the path doesn't exist yet (first time), aws s3 sync just does nothing
-    console.log(`[browser-session] S3 sync from failed (may be first-time): ${err.message}`);
+    console.log(`[browser-session] S3 sync ${direction} issue: ${err.message}`);
   }
 }
 
-export function syncToS3(config: BrowserSessionConfig): void {
-  if (!config.userdataS3Path || !config.s3Endpoint || !config.s3Bucket) {
-    console.log('[browser-session] No S3 path configured, skipping upload');
-    return;
-  }
-  const s3Uri = `s3://${config.s3Bucket}/${config.userdataS3Path}`;
-  console.log(`[browser-session] Syncing userdata to ${s3Uri} ...`);
-  try {
-    execSync(
-      `aws s3 sync "${USERDATA_DIR}/" "${s3Uri}" --endpoint-url "${config.s3Endpoint}" --delete`,
-      { env: getS3Env(config), stdio: 'inherit', timeout: 120000 }
-    );
-    console.log('[browser-session] S3 upload complete');
-  } catch (err: any) {
-    console.error(`[browser-session] S3 sync to failed: ${err.message}`);
-  }
+function syncWorkspaceFromS3(config: BrowserSessionConfig): void {
+  s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'down');
 }
 
-// --- Clean stale Chromium lock files that prevent launch after unclean shutdown ---
+function syncWorkspaceToS3(config: BrowserSessionConfig): void {
+  s3Sync(WORKSPACE_DIR, `${config.userdataS3Path}/workspace`, config, 'up');
+}
+
+function syncBrowserDataFromS3(config: BrowserSessionConfig): void {
+  s3Sync(BROWSER_DATA_DIR, `${config.userdataS3Path}/browser-data`, config, 'down');
+}
+
+function syncBrowserDataToS3(config: BrowserSessionConfig): void {
+  // Exclude Chromium cache and temp files that are large and transient
+  const excludes = [
+    'Cache/*', 'Code Cache/*', 'GrShaderCache/*', 'ShaderCache/*', 'GraphiteDawnCache/*',
+    'Service Worker/CacheStorage/*', 'BrowserMetrics*', '*-journal',
+    'SingletonLock', 'SingletonCookie', 'SingletonSocket',
+  ];
+  s3Sync(BROWSER_DATA_DIR, `${config.userdataS3Path}/browser-data`, config, 'up', excludes);
+}
+
+function saveAll(config: BrowserSessionConfig): void {
+  console.log('[browser-session] Saving workspace...');
+  syncWorkspaceToS3(config);
+  console.log('[browser-session] Saving browser data...');
+  syncBrowserDataToS3(config);
+  console.log('[browser-session] Save complete');
+}
+
+// --- Clean stale Chromium lock files ---
 
 function cleanStaleLocks(): void {
   const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
   for (const f of lockFiles) {
-    const p = join(USERDATA_DIR, f);
+    const p = join(BROWSER_DATA_DIR, f);
     if (existsSync(p)) {
       try { unlinkSync(p); } catch {}
       console.log(`[browser-session] Removed stale lock: ${f}`);
@@ -71,17 +82,19 @@ function cleanStaleLocks(): void {
 // --- Main entry point ---
 
 export async function runBrowserSession(config: BrowserSessionConfig): Promise<void> {
-  // Ensure userdata dir exists
-  mkdirSync(USERDATA_DIR, { recursive: true });
+  // Create directories
+  mkdirSync(BROWSER_DATA_DIR, { recursive: true });
+  mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-  // Download existing userdata from S3
-  syncFromS3(config);
+  // Download existing data from S3
+  syncBrowserDataFromS3(config);
+  syncWorkspaceFromS3(config);
 
-  // Clean stale locks from previous unclean shutdowns
+  // Clean stale locks
   cleanStaleLocks();
 
   // Launch persistent browser context
-  const context = await chromium.launchPersistentContext(USERDATA_DIR, {
+  const context = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
     headless: false,
     ignoreDefaultArgs: ['--enable-automation'],
     args: getBrowserSessionArgs(),
@@ -94,6 +107,8 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   await page.goto('about:blank');
 
   console.log('[browser-session] Browser session ready. VNC :6080, CDP :9222');
+  console.log(`[browser-session] Workspace: ${WORKSPACE_DIR}`);
+  console.log(`[browser-session] Browser data: ${BROWSER_DATA_DIR}`);
 
   // Set up Redis subscriber for commands
   const channelName = `browser_session:${config.container_name || 'default'}`;
@@ -108,11 +123,11 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
       console.log(`[browser-session] Redis command: ${message}`);
 
       if (message === 'save_storage') {
-        syncToS3(config);
+        saveAll(config);
         await publisher.publish(channelName, 'save_storage:done');
       } else if (message === 'stop') {
         console.log('[browser-session] Stop command received, saving and exiting...');
-        syncToS3(config);
+        saveAll(config);
         await context.close();
         process.exit(0);
       }
@@ -123,8 +138,8 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
 
   // Graceful shutdown
   const shutdown = async () => {
-    console.log('[browser-session] Shutting down, saving userdata...');
-    syncToS3(config);
+    console.log('[browser-session] Shutting down, saving...');
+    saveAll(config);
     await context.close();
     process.exit(0);
   };
