@@ -2,6 +2,37 @@ const { chromium } = require('playwright');
 const CDP_URL = process.argv[2] || 'http://localhost:9222';
 const POLL_INTERVAL = 3000;
 
+async function tryAdmit(page) {
+  return await page.evaluate(() => {
+    // Step 1: If confirmation dialog is open, click OK
+    const dialogOk = document.querySelector('button[data-mdc-dialog-action="ok"]');
+    if (dialogOk && dialogOk.offsetParent) {
+      dialogOk.click();
+      return 'dialog_confirmed';
+    }
+
+    // Step 2: Click individual "Admit" buttons next to person names (no dialog needed)
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      if (btn.textContent.trim() === 'Admit' && btn.offsetParent) {
+        btn.click();
+        return 'admitted';
+      }
+    }
+
+    // Step 3: Green pill visible? Click to open People panel so Admit buttons appear
+    const roleButtons = document.querySelectorAll('div[role="button"]');
+    for (const el of roleButtons) {
+      if (/Admit \d+ guest/.test(el.textContent || '') && el.offsetParent) {
+        el.click();
+        return 'pill_clicked';
+      }
+    }
+
+    return 'none';
+  }).catch(() => 'error');
+}
+
 async function main() {
   console.log('Connecting to ' + CDP_URL);
   const browser = await chromium.connectOverCDP(CDP_URL, { timeout: 15000 });
@@ -17,29 +48,16 @@ async function main() {
 
   while (true) {
     try {
-      // Check for green pill "Admit N guest(s)" in toolbar
-      const hasGuests = await page.evaluate(() => {
-        const els = document.querySelectorAll('div[role="button"]');
-        for (const el of els) {
-          if (/Admit \d+ guest/.test(el.textContent || '') && el.offsetParent) return true;
-        }
-        return false;
-      }).catch(() => false);
-
-      if (hasGuests) {
-        // Click the green pill
-        await page.locator('div[role="button"]').filter({ hasText: /Admit \d+ guest/ }).first().click();
-        // Wait for confirmation dialog
-        await page.waitForTimeout(800);
-        // Click "Admit all" button in dialog
-        const confirmBtn = page.getByRole('button', { name: 'Admit all', exact: true });
-        if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await confirmBtn.click({ force: true });
-          total++;
-          console.log(new Date().toLocaleTimeString() + ' Admitted (' + total + ')');
-          await page.waitForTimeout(1500);
-          continue;
-        }
+      const r = await tryAdmit(page);
+      if (r === 'admitted' || r === 'dialog_confirmed') {
+        total++;
+        console.log(new Date().toLocaleTimeString() + ' ' + r + ' (' + total + ')');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        continue;
+      } else if (r === 'pill_clicked') {
+        // Panel opening, loop back quickly to find Admit buttons
+        await new Promise(resolve => setTimeout(resolve, 800));
+        continue;
       }
     } catch (e) {
       if (e.message && (e.message.includes('destroyed') || e.message.includes('closed'))) {
