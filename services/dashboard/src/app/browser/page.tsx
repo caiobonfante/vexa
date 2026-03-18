@@ -5,8 +5,6 @@ import { Monitor, Plus, ExternalLink, Trash2, Loader2, Save, Copy } from "lucide
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const API_URL = process.env.NEXT_PUBLIC_VEXA_API_URL || "http://localhost:8056";
-
 interface BrowserSession {
   id: number;
   status: string;
@@ -19,28 +17,34 @@ interface BrowserSession {
 
 export default function BrowserPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
+  const [apiUrl, setApiUrl] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchActiveSession();
+    fetch("/api/config").then(r => r.json()).then(cfg => {
+      setApiUrl(cfg.publicApiUrl || cfg.apiUrl || "http://localhost:8056");
+      fetchActiveSession();
+    });
   }, []);
 
   async function fetchActiveSession() {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/vexa/bots/status");
+      const response = await fetch("/api/vexa/meetings");
       if (response.ok) {
         const data = await response.json();
-        const sessions = (Array.isArray(data) ? data : data.bots || [])
-          .filter((b: BrowserSession) => b.data?.mode === "browser_session" && b.status === "active");
+        const meetings = data.meetings || [];
+        const sessions = meetings
+          .filter((m: BrowserSession) => m.data?.mode === "browser_session" && m.status === "active");
         setSession(sessions[0] || null);
       }
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
     } finally {
       setIsLoading(false);
+      setIsCreating(false);
     }
   }
 
@@ -53,12 +57,11 @@ export default function BrowserPage() {
         body: JSON.stringify({ mode: "browser_session" }),
       });
       if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
-      setSession(data);
-      toast.success("Browser session created");
+      // After creating, wait a moment for container to start, then fetch active sessions
+      setTimeout(() => fetchActiveSession(), 3000);
+      toast.success("Browser session created — starting container...");
     } catch (error) {
       toast.error("Failed to create session: " + (error as Error).message);
-    } finally {
       setIsCreating(false);
     }
   }
@@ -68,7 +71,7 @@ export default function BrowserPage() {
     setIsSaving(true);
     try {
       const token = session.data.session_token;
-      const response = await fetch(`${API_URL}/b/${token}/save`, { method: "POST" });
+      const response = await fetch(`${apiUrl}/b/${token}/save`, { method: "POST" });
       if (!response.ok) throw new Error(await response.text());
       toast.success("Storage saved");
     } catch (error) {
@@ -90,8 +93,8 @@ export default function BrowserPage() {
   }
 
   const token = session?.data?.session_token;
-  const vncUrl = token ? `${API_URL}/b/${token}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${token}/vnc/websockify` : null;
-  const cdpUrl = token ? `${API_URL}/b/${token}/cdp` : null;
+  const vncUrl = token && apiUrl ? `${apiUrl}/b/${token}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${token}/vnc/websockify` : null;
+  const cdpUrl = token && apiUrl ? `${apiUrl}/b/${token}/cdp` : null;
 
   if (isLoading) {
     return (
@@ -116,7 +119,7 @@ export default function BrowserPage() {
           ) : (
             <Plus className="h-4 w-4 mr-2" />
           )}
-          Start Browser Session
+          {isCreating ? "Starting..." : "Start Browser Session"}
         </Button>
       </div>
     );
@@ -150,12 +153,16 @@ export default function BrowserPage() {
       </div>
 
       {/* Browser iframe */}
-      {vncUrl && (
+      {vncUrl ? (
         <iframe
           src={vncUrl}
           className="flex-1 w-full border-0"
           allow="clipboard-read; clipboard-write"
         />
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       )}
     </div>
   );
