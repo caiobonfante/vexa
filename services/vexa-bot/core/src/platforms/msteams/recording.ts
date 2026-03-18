@@ -664,18 +664,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 if (stateMachine.updateState(identity.id, detectionResult)) {
                   if (detectionResult.hasSignal) {
                     const newState: SpeakingState = detectionResult.isSpeaking ? 'speaking' : 'silent';
-                    const previousState = speakingStates.get(identity.id);
                     speakingStates.set(identity.id, newState);
-
-                    // Ring buffer lookback: when a speaker transitions to speaking,
-                    // send them the last 1.5s of audio from the ring buffer to recover
-                    // audio that arrived before the DOM speaking signal.
-                    if (newState === 'speaking' && previousState !== 'speaking') {
-                      const botNameLower = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
-                      if (!identity.name.toLowerCase().includes(botNameLower)) {
-                        onSpeakerStartLookback(identity.name);
-                      }
-                    }
 
                     debouncer.debounce(identity.id, () => {
                       emitEvent(newState, identity);
@@ -846,49 +835,6 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // speaker buffers based on who the DOM says is currently speaking.
               // The speakingStates map (populated by the observer above) tells
               // us who's active. Registry maps IDs to names.
-              //
-              // Ring buffer: keeps last 3s of audio so we can retroactively
-              // attribute audio when a speaker transition is detected (the DOM
-              // speaking signal lags real audio by ~1s + 300ms debounce).
-              const RING_BUFFER_SAMPLE_RATE = 16000;
-              const RING_BUFFER_DURATION_S = 3;
-              const LOOKBACK_ON_START_S = 1.5;
-              const RING_BUFFER_SAMPLES = RING_BUFFER_SAMPLE_RATE * RING_BUFFER_DURATION_S; // 48000
-              const LOOKBACK_SAMPLES = Math.floor(LOOKBACK_ON_START_S * RING_BUFFER_SAMPLE_RATE); // 24000
-              const ringBuffer = new Float32Array(RING_BUFFER_SAMPLES);
-              let ringWritePos = 0;
-              let ringBufferReady = false;
-
-              // Called when a speaker transitions silent → speaking.
-              // Extracts the last 1.5s from the ring buffer and sends it
-              // to that speaker's audio callback so the transcription service
-              // gets the audio that arrived before the DOM signal.
-              function onSpeakerStartLookback(speakerName: string) {
-                if (!ringBufferReady) return;
-
-                const startPos = (ringWritePos - LOOKBACK_SAMPLES + RING_BUFFER_SAMPLES) % RING_BUFFER_SAMPLES;
-                const lookbackAudio = new Float32Array(LOOKBACK_SAMPLES);
-                for (let i = 0; i < LOOKBACK_SAMPLES; i++) {
-                  lookbackAudio[i] = ringBuffer[(startPos + i) % RING_BUFFER_SAMPLES];
-                }
-
-                // Only send if the lookback audio contains non-silence
-                let maxVal = 0;
-                for (let j = 0; j < lookbackAudio.length; j++) {
-                  const abs = lookbackAudio[j] < 0 ? -lookbackAudio[j] : lookbackAudio[j];
-                  if (abs > maxVal) maxVal = abs;
-                }
-                if (maxVal <= 0.005) {
-                  (window as any).logBot?.(`[RingBuffer] Lookback for ${speakerName}: silent, skipping`);
-                  return;
-                }
-
-                if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                  (window as any).__vexaTeamsAudioData(speakerName, Array.from(lookbackAudio));
-                  (window as any).logBot?.(`[RingBuffer] Sent ${LOOKBACK_ON_START_S}s lookback audio to ${speakerName} (${LOOKBACK_SAMPLES} samples, peak=${maxVal.toFixed(4)})`);
-                }
-              }
-
               const setupPerSpeakerAudioRouting = () => {
                 const audioEl = document.querySelector('audio') as HTMLAudioElement | null;
                 if (!audioEl || !(audioEl.srcObject instanceof MediaStream)) {
@@ -908,18 +854,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
 
                 processor.onaudioprocess = (e: AudioProcessingEvent) => {
                   const data = e.inputBuffer.getChannelData(0);
-
-                  // Always write to ring buffer (even silence) so timestamps stay aligned
-                  for (let i = 0; i < data.length; i++) {
-                    ringBuffer[(ringWritePos + i) % RING_BUFFER_SAMPLES] = data[i];
-                  }
-                  ringWritePos = (ringWritePos + data.length) % RING_BUFFER_SAMPLES;
-                  if (!ringBufferReady && ringWritePos >= LOOKBACK_SAMPLES) {
-                    ringBufferReady = true;
-                    (window as any).logBot?.('[RingBuffer] Ready — enough audio buffered for lookback');
-                  }
-
-                  // Skip silence for routing (but ring buffer already has it)
+                  // Skip silence
                   let maxVal = 0;
                   for (let j = 0; j < data.length; j++) {
                     const abs = data[j] < 0 ? -data[j] : data[j];
@@ -952,7 +887,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
 
                 source.connect(processor);
                 processor.connect(ctx.destination);
-                (window as any).logBot?.(`[Teams PerSpeaker] Audio routing active on stream ${stream.id} (ring buffer: ${RING_BUFFER_DURATION_S}s, lookback: ${LOOKBACK_ON_START_S}s)`);
+                (window as any).logBot?.(`[Teams PerSpeaker] Audio routing active on stream ${stream.id}`);
               };
 
               // Delay slightly to ensure audio element is ready
