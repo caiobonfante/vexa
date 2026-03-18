@@ -63,9 +63,10 @@ When live captions are enabled (bot enables them automatically after joining via
 ```
 
 **Why captions are better than DOM blue squares:**
-- Captions only fire when Teams ASR detects **real speech** — no false activations from mic noise
-- Speaker attribution is always correct (Teams knows who's speaking from the server side)
-- Caption text can be used for fuzzy matching with Whisper output for segment reconciliation
+- **No false activations:** Captions only fire when Teams ASR detects **real speech** — not mic noise, breathing, or keyboard typing. Blue squares activate on any mic input, routing garbage audio to wrong speaker buffers and producing hallucinated transcription.
+- **100% speaker certainty:** Teams ASR knows exactly who is speaking from the server side. No guessing, no voting.
+- **Known activation time:** Each caption entry marks the exact moment Teams confirmed speech from a specific speaker — gives us a precise timestamp for when to start routing audio.
+- **Caption text as bonus:** Text can be stored for future segment reconciliation with Whisper output.
 
 **Ring buffer lookback:** A 5-second ring buffer stores non-silent audio chunks. When a caption arrives (with inherent ~1s delay), the ring buffer is flushed retroactively to the correct speaker. This solves the "eaten first seconds" problem.
 

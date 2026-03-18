@@ -5,13 +5,17 @@
 
 ## Problem
 
-Teams mixes all participants' audio into one stream. The bot routes audio chunks to speaker buffers based on DOM speaking indicators (`vdi-frame-occlusion` class). But:
+Teams mixes all participants' audio into one stream. The bot routes audio chunks to speaker buffers based on DOM speaking indicators (`vdi-frame-occlusion` class). Two fundamental problems:
 
-1. **DOM signal is ~1s late** — the speaking class appears about 1 second after the person starts talking (it's reactive, has natural latency)
-2. **300ms debounce** — the bot waits 300ms before acting on state changes to prevent flicker
-3. **Result:** the first ~1.3s of every speaker turn is either lost or attributed to the previous speaker
+1. **Delay (~1.3s)** — the speaking class appears about 1 second after the person starts talking + 300ms debounce. The first ~1.3s of every speaker turn is either lost or attributed to the previous speaker ("eaten first seconds").
 
-This causes "eaten first seconds" in transcripts — the beginning of what someone says is missing or attached to the wrong person.
+2. **False activations from mic noise** — DOM blue squares activate on ANY mic input: background noise, breathing, keyboard typing, paper rustling. This is NOT a speech signal — it's a mic activity signal. The bot routes garbage audio to the wrong speaker's buffer, polluting transcription with noise segments that waste Whisper inference and produce hallucinated text.
+
+Problem #2 is arguably worse than #1. The delay loses the beginning of real speech, but false activations inject **entirely fake speaker segments** into the transcript.
+
+**Captions solve both problems:**
+- Delay → ring buffer lookback recovers the first seconds
+- False activations → captions only fire when Teams ASR confirms **real speech from a specific speaker with 100% certainty**. No caption = no audio routing. Zero noise pollution.
 
 ## Current architecture
 
