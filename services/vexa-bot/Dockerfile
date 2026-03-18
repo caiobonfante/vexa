@@ -94,7 +94,12 @@ RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -
     socat \
     curl \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    openssh-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd \
+    && echo 'root:vexa' | chpasswd \
+    && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 # Copy workspace package files (for runtime dependencies)
 COPY --from=native-builder /app/vexa-bot/package*.json ./
@@ -133,8 +138,8 @@ RUN chmod +x /app/vexa-bot/entrypoint.sh
 # Set environment
 ENV DISPLAY=:99
 
-# Expose noVNC web interface for browser session mode
-EXPOSE 6080
+# Expose noVNC web interface and SSH for browser session mode
+EXPOSE 6080 22
 
 # Set working directory for runtime
 WORKDIR /app/vexa-bot/core

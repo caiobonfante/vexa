@@ -76,6 +76,10 @@ FBAPPS
   (while ! curl -s http://localhost:9222/json/version > /dev/null 2>&1; do sleep 1; done
   echo "[entrypoint] CDP ready, starting socat proxy on 0.0.0.0:9223"
   socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:localhost:9222) &
+
+  # SSH server for remote agent shell access
+  echo "[entrypoint] Starting SSH server on port 22"
+  /usr/sbin/sshd
 fi
 
 # Finally, run the bot using the built production wrapper

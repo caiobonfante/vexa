@@ -618,6 +618,9 @@ async def start_browser_session_container(
         "AutoRemove": False,  # Browser sessions persist until explicit stop
         "ExtraHosts": ["host.docker.internal:host-gateway"],
         "ShmSize": 2 * 1024 * 1024 * 1024,  # 2GB shared memory for Chromium
+        "PortBindings": {
+            "22/tcp": [{"HostPort": "0"}],  # Random host port for SSH
+        },
     }
 
     create_payload = {
@@ -628,10 +631,11 @@ async def start_browser_session_container(
             "vexa.mode": "browser_session",
         },
         "HostConfig": host_config,
-        # Expose ports within Docker network (no host port mapping)
+        # Expose ports within Docker network + SSH on random host port
         "ExposedPorts": {
             "6080/tcp": {},
             "9223/tcp": {},
+            "22/tcp": {},
         },
     }
 

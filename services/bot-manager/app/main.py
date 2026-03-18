@@ -724,13 +724,35 @@ async def request_bot(
             await db.commit()
             await db.refresh(new_meeting)
 
+            # Query the mapped SSH port from Docker
+            ssh_port = None
+            try:
+                session = get_socket_session()
+                docker_host = os.getenv("DOCKER_HOST", "unix://var/run/docker.sock")
+                if session:
+                    socket_path = docker_host.split('//', 1)[1]
+                    socket_path_encoded = f"/{socket_path}".replace("/", "%2F")
+                    inspect_url = f'http+unix://{socket_path_encoded}/containers/{container_id}/json'
+                    inspect_resp = session.get(inspect_url)
+                    if inspect_resp.status_code == 200:
+                        ports = inspect_resp.json().get("NetworkSettings", {}).get("Ports", {})
+                        ssh_bindings = ports.get("22/tcp")
+                        if ssh_bindings and len(ssh_bindings) > 0:
+                            ssh_port = int(ssh_bindings[0]["HostPort"])
+                            logger.info(f"Browser session SSH mapped to host port {ssh_port}")
+            except Exception as e:
+                logger.warning(f"Could not get SSH port mapping: {e}")
+
             # Store session_token → container mapping in Redis
             if redis_client:
-                session_data = json.dumps({
+                redis_data = {
                     "container_name": container_name,
                     "meeting_id": meeting_id,
                     "user_id": current_user.id,
-                })
+                }
+                if ssh_port:
+                    redis_data["ssh_port"] = ssh_port
+                session_data = json.dumps(redis_data)
                 await redis_client.set(
                     f"browser_session:{session_token}",
                     session_data,
@@ -740,8 +762,16 @@ async def request_bot(
 
             logger.info(f"Browser session container {container_id} started for meeting {meeting_id}")
 
-            # Return response — the URL will be constructed by the frontend/gateway
-            # Store the session_token in meeting.data so it's returned in the response
+            # Store ssh_port in meeting data so dashboard can display it
+            if ssh_port:
+                from sqlalchemy import text as sa_text
+                await db.execute(
+                    sa_text("UPDATE meetings SET data = data || :patch WHERE id = :id"),
+                    {"patch": json.dumps({"ssh_port": ssh_port}), "id": meeting_id},
+                )
+                await db.commit()
+                await db.refresh(new_meeting)
+
             return MeetingResponse.model_validate(new_meeting)
 
         except HTTPException:
