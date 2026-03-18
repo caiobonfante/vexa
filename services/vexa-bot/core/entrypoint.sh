@@ -70,6 +70,12 @@ FBAPPS
   fluxbox &
   x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
   websockify --web /usr/share/novnc 6080 localhost:5900 &
+
+  # CDP proxy: Chromium binds CDP to 127.0.0.1 only. Socat exposes it on 0.0.0.0:9223
+  # so the api-gateway can reach it from the Docker network.
+  (while ! curl -s http://localhost:9222/json/version > /dev/null 2>&1; do sleep 1; done
+  echo "[entrypoint] CDP ready, starting socat proxy on 0.0.0.0:9223"
+  socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:localhost:9222) &
 fi
 
 # Finally, run the bot using the built production wrapper

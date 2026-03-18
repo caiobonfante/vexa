@@ -1187,6 +1187,39 @@ async def browser_vnc_ws(websocket: WebSocket, token: str):
             pass
 
 
+@app.api_route("/b/{token}/cdp/{path:path}", methods=["GET"],
+               include_in_schema=False)
+async def browser_cdp_http(token: str, path: str, request: Request):
+    """HTTP proxy for CDP endpoints (e.g. /json/version) needed by Playwright connectOverCDP."""
+    session = await resolve_browser_session(token)
+    if not session:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+    container = session["container_name"]
+    try:
+        qs = f"?{request.url.query}" if request.url.query else ""
+        resp = await app.state.http_client.get(
+            f"http://{container}:9223/{path}{qs}", timeout=10.0,
+            headers={"Host": "localhost"}  # CDP rejects non-localhost Host headers
+        )
+        # Rewrite webSocketDebuggerUrl to point through our CDP WebSocket proxy
+        import re
+        host = request.headers.get('host', 'localhost:8056')
+        proxy_ws_url = f"ws://{host}/b/{token}/cdp"
+        content = re.sub(r'"webSocketDebuggerUrl":\s*"[^"]*"',
+                        f'"webSocketDebuggerUrl": "{proxy_ws_url}"',
+                        resp.text)
+        return Response(content=content, status_code=resp.status_code,
+                       headers={"content-type": resp.headers.get("content-type", "application/json")})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"CDP HTTP proxy error: {exc}")
+
+
+@app.websocket("/b/{token}/cdp-ws")
+async def browser_cdp_ws_direct(websocket: WebSocket, token: str):
+    """CDP WebSocket proxy (used by rewritten webSocketDebuggerUrl)."""
+    await browser_cdp_ws(websocket, token)
+
+
 @app.websocket("/b/{token}/cdp")
 async def browser_cdp_ws(websocket: WebSocket, token: str):
     """Bidirectional WebSocket proxy for Chrome DevTools Protocol."""
@@ -1200,12 +1233,15 @@ async def browser_cdp_ws(websocket: WebSocket, token: str):
     # Discover CDP WebSocket URL from the browser's /json/version endpoint
     try:
         resp = await app.state.http_client.get(
-            f"http://{container}:9222/json/version", timeout=10.0
+            f"http://{container}:9223/json/version", timeout=10.0,
+            headers={"Host": "localhost"}
         )
         version_info = resp.json()
         cdp_ws_url = version_info.get("webSocketDebuggerUrl", "")
-        # Replace localhost/127.0.0.1 with actual container name (Docker DNS)
-        cdp_ws_url = cdp_ws_url.replace("localhost", container).replace("127.0.0.1", container)
+        # Replace localhost with container:9223 (socat proxy port)
+        # Original may be ws://localhost/devtools/... or ws://localhost:9222/devtools/...
+        import re
+        cdp_ws_url = re.sub(r'ws://(localhost|127\.0\.0\.1)(:\d+)?/', f'ws://{container}:9223/', cdp_ws_url)
     except Exception as exc:
         logger.warning("Failed to discover CDP URL for %s: %s", container, exc)
         await websocket.close(code=4502)
@@ -1215,6 +1251,7 @@ async def browser_cdp_ws(websocket: WebSocket, token: str):
         await websocket.close(code=4502)
         return
 
+    print(f"CDP proxy: original URL={version_info.get('webSocketDebuggerUrl', '')}, rewritten URL={cdp_ws_url}", flush=True)
     await websocket.accept()
 
     try:
@@ -1222,6 +1259,7 @@ async def browser_cdp_ws(websocket: WebSocket, token: str):
             cdp_ws_url,
             max_size=64 * 1024 * 1024,  # 64 MB — CDP can send large payloads (screenshots)
             open_timeout=10,
+            additional_headers={"Host": "localhost"},  # CDP rejects non-localhost Host
         ) as upstream:
 
             async def client_to_upstream():

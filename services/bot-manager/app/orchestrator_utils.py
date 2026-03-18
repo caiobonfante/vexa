@@ -631,7 +631,7 @@ async def start_browser_session_container(
         # Expose ports within Docker network (no host port mapping)
         "ExposedPorts": {
             "6080/tcp": {},
-            "9222/tcp": {},
+            "9223/tcp": {},
         },
     }
 

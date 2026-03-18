@@ -80,7 +80,7 @@ FROM mcr.microsoft.com/playwright:v1.56.0-jammy AS runtime
 WORKDIR /app/vexa-bot
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     pulseaudio \
     xserver-xephyr \
@@ -91,6 +91,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     novnc \
     python3-websockify \
     awscli \
+    socat \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace package files (for runtime dependencies)
