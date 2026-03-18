@@ -93,6 +93,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -
     awscli \
     socat \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace package files (for runtime dependencies)

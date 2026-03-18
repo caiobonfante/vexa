@@ -58,8 +58,31 @@ function syncBrowserDataToS3(config: BrowserSessionConfig): void {
   s3Sync(BROWSER_DATA_DIR, `${config.userdataS3Path}/browser-data`, config, 'up', excludes);
 }
 
+function gitCommitWorkspace(): void {
+  try {
+    // Init repo if first time
+    if (!existsSync(join(WORKSPACE_DIR, '.git'))) {
+      execSync('git init', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      execSync('git config user.email "bot@vexa.ai"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      execSync('git config user.name "Vexa Bot"', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      console.log('[browser-session] Initialized git repo in workspace');
+    }
+    // Stage and commit all changes
+    execSync('git add -A', { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+    const status = execSync('git status --porcelain', { cwd: WORKSPACE_DIR, encoding: 'utf8' }).trim();
+    if (status) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      execSync(`git commit -m "save ${timestamp}"`, { cwd: WORKSPACE_DIR, stdio: 'pipe' });
+      console.log('[browser-session] Git commit: workspace changes saved');
+    }
+  } catch (err: any) {
+    console.log(`[browser-session] Git commit skipped: ${err.message}`);
+  }
+}
+
 function saveAll(config: BrowserSessionConfig): void {
   console.log('[browser-session] Saving workspace...');
+  gitCommitWorkspace();
   syncWorkspaceToS3(config);
   console.log('[browser-session] Saving browser data...');
   syncBrowserDataToS3(config);
