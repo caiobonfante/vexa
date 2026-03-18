@@ -57,8 +57,8 @@ MINIO_SECURE=false
 # Local GPU transcription (uncomment to self-host)
 # LOCAL_TRANSCRIPTION=true
 
-# Voice agent / TTS (optional)
-# OPENAI_API_KEY=your-key
+# TTS uses Piper (local, no API key needed)
+# Voice models auto-download from HuggingFace on first use
 
 # Billing hooks (optional — for hosted service)
 # POST_MEETING_HOOKS=https://your-billing-webhook

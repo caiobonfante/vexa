@@ -197,10 +197,10 @@ services:
     expose:
       - "8002"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com}
       - TTS_API_TOKEN=${TTS_API_TOKEN:-}
       - LOG_LEVEL=DEBUG
+    volumes:
+      - tts-voices:/app/voices
     init: true
     networks:
       - vexa_default
@@ -266,6 +266,7 @@ volumes:
   postgres-data:
   minio-data:
   recordings-data:
+  tts-voices:
 
 networks:
   vexa_default:
