@@ -176,7 +176,7 @@ async function main() {
   const speakerMeetings = {}; // speaker → meetingId
   for (const s of speakers) {
     if (!speakerKeys[s]) continue;
-    const botReq = { platform, native_meeting_id: nativeId, bot_name: s, meeting_url: MEETING_URL, voice_agent_enabled: true };
+    const botReq = { platform, native_meeting_id: nativeId, bot_name: s, meeting_url: MEETING_URL };
     if (passcode) botReq.passcode = passcode;
     const r = await api('POST', '/bots', botReq, speakerKeys[s]);
     if (r.s >= 400) {
