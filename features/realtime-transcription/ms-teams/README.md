@@ -18,16 +18,25 @@ The bot hooks this single stream with one AudioContext + ScriptProcessor, then r
 
 ### Audio Routing Architecture
 
-**File:** `services/vexa-bot/core/src/platforms/msteams/recording.ts` lines 832-893
+**File:** `services/vexa-bot/core/src/platforms/msteams/recording.ts`
+
+Teams audio routing uses two speaker detection signals with automatic fallback:
 
 ```
 Single <audio> element
   -> AudioContext({ sampleRate: 16000 })
   -> ScriptProcessor(4096, 1, 1)
   -> silence check (maxVal > 0.005)
-  -> lookup speakingStates map (populated by MutationObserver)
-  -> for each active speaker NAME:
-       __vexaTeamsAudioData(name, Array.from(data))
+  -> CAPTION MODE (primary, when live captions enabled):
+       -> write to ring buffer (5s, ~20 chunks)
+       -> caption MutationObserver detects new [data-tid="author"] + [data-tid="closed-caption-text"]
+       -> on speaker change: flush ring buffer lookback to new speaker
+       -> ongoing audio routes to current caption speaker
+       -> __vexaTeamsAudioData(name, Array.from(data))
+  -> FALLBACK MODE (when captions unavailable):
+       -> lookup speakingStates map (populated by DOM MutationObserver)
+       -> for each active speaker NAME:
+            __vexaTeamsAudioData(name, Array.from(data))
 ```
 
 Key difference from Google Meet: audio is routed by speaker **NAME** (string), not by element **index** (number). The callback signature is `__vexaTeamsAudioData(name: string, data: number[])`.
@@ -36,11 +45,33 @@ Key difference from Google Meet: audio is routed by speaker **NAME** (string), n
 
 ### Speaker Detection
 
-**File:** `services/vexa-bot/core/src/platforms/msteams/recording.ts` lines 440-620
+**File:** `services/vexa-bot/core/src/platforms/msteams/recording.ts`
 
-Teams speaker detection uses a completely different signal than Google Meet:
+Teams speaker detection uses two signals with automatic fallback:
 
-#### Primary Signal: `voice-level-stream-outline`
+#### Primary Signal: Live Captions (caption-driven) [UNTESTED]
+
+**File:** `recording.ts` (caption observer section) + `captions.ts`
+
+When live captions are enabled (bot enables them automatically after joining via More → Language and speech → Show live captions), the bot uses Teams ASR caption output as the primary speaker signal:
+
+```
+[data-tid="closed-caption-renderer-wrapper"]  -> MutationObserver
+  -> [data-tid="closed-captions-v2-items-renderer"]  -> individual caption entries
+     -> [data-tid="author"]                          -> speaker name
+     -> [data-tid="closed-caption-text"]             -> spoken text
+```
+
+**Why captions are better than DOM blue squares:**
+- Captions only fire when Teams ASR detects **real speech** — no false activations from mic noise
+- Speaker attribution is always correct (Teams knows who's speaking from the server side)
+- Caption text can be used for fuzzy matching with Whisper output for segment reconciliation
+
+**Ring buffer lookback:** A 5-second ring buffer stores non-silent audio chunks. When a caption arrives (with inherent ~1s delay), the ring buffer is flushed retroactively to the correct speaker. This solves the "eaten first seconds" problem.
+
+Captions are per-user and always available — the bot enables them for itself regardless of meeting settings.
+
+#### Fallback Signal: `voice-level-stream-outline` (DOM blue squares)
 
 ```typescript
 // From teamsSpeakingIndicators (selectors.ts:212-214)
@@ -110,30 +141,42 @@ A participant is only observed if it has the `voice-level-stream-outline` signal
 
 ### Audio Routing by Speaker Name
 
-**File:** `recording.ts` lines 837-890
+**File:** `recording.ts`
 
 When the ScriptProcessor fires with non-silent audio:
 
+**Caption mode (primary):**
+1. Store audio chunk in ring buffer (5s window)
+2. If `lastCaptionSpeaker` is set, route current audio to them
+3. On caption speaker change, flush unflushed ring buffer entries to new speaker (lookback)
+
+**Fallback mode (DOM blue squares):**
 1. Check `speakingStates` map for all entries where `state === 'speaking'`
 2. Get name from `ParticipantRegistry` (cached DOM name extraction)
 3. Filter out bot's own name
 4. For each active speaker name: `__vexaTeamsAudioData(name, audioArray)`
 
-**Node-side handler** (`index.ts:1268`):
+**Node-side handlers** (`index.ts`):
 
 ```typescript
+// Audio handler (both modes)
 async function handleTeamsAudioData(speakerName: string, audioDataArray: number[]): Promise<void> {
   const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
-  // Name is already known from DOM -- no voting/locking needed
+  // Name is already known from DOM/caption -- no voting/locking needed
   if (!speakerManager.hasSpeaker(speakerId)) {
     speakerManager.addSpeaker(speakerId, speakerName);
     segmentPublisher.publishSpeakerEvent({ speaker: speakerName, type: 'joined', timestamp: Date.now() });
   }
-  // ... feed audio to buffer
+  // VAD check, then feed audio to buffer
+}
+
+// Caption handler (stores caption text for reconciliation)
+async function handleTeamsCaptionData(speakerName: string, captionText: string, timestampMs: number): Promise<void> {
+  // Publish speaker event, log caption text for future fuzzy matching
 }
 ```
 
-No voting/locking for Teams -- the speaker name comes directly from DOM detection, so the name is known immediately.
+No voting/locking for Teams -- the speaker name comes directly from DOM/caption detection, so the name is known immediately.
 
 ### Name Extraction
 
@@ -153,8 +196,12 @@ Forbidden substrings filtered: `more_vert`, `mic_off`, `mic`, `videocam`, `camer
 
 | Selector | Purpose | Constant |
 |----------|---------|----------|
-| `[data-tid="voice-level-stream-outline"]` | Primary speaking signal | `teamsSpeakingIndicators`, `teamsVoiceLevelSelectors` |
+| `[data-tid="voice-level-stream-outline"]` | Fallback speaking signal (DOM blue squares) | `teamsSpeakingIndicators`, `teamsVoiceLevelSelectors` |
 | `.vdi-frame-occlusion` | Speaking = present, silent = absent | `teamsOcclusionSelectors` |
+| `[data-tid="closed-caption-renderer-wrapper"]` | Caption container (primary speaker signal) | `teamsCaptionSelectors.rendererWrapper` |
+| `[data-tid="closed-captions-v2-items-renderer"]` | Individual caption entries | `teamsCaptionSelectors.captionItem` |
+| `[data-tid="author"]` | Speaker name in caption | `teamsCaptionSelectors.authorName` |
+| `[data-tid="closed-caption-text"]` | Spoken text in caption | `teamsCaptionSelectors.captionText` |
 | `button[id="hangup-button"]` | Primary leave/hangup button | `teamsPrimaryHangupButtonSelector` |
 | `button[data-tid="hangup-main-btn"]` | Alternative hangup button | `teamsPrimaryLeaveButtonSelectors` |
 | `div[class*="___2u340f0"]` | Name div class pattern | `teamsNameSelectors` |
@@ -192,8 +239,10 @@ There is no Teams mock meeting equivalent to `mock.dev.vexa.ai/google-meet.html`
 
 | File | Purpose |
 |------|---------|
-| `services/vexa-bot/core/src/platforms/msteams/recording.ts` | Browser-side: speaker detection, audio routing, participant counting |
-| `services/vexa-bot/core/src/platforms/msteams/selectors.ts` | All Teams DOM selectors |
-| `services/vexa-bot/core/src/index.ts:1268-1295` | `handleTeamsAudioData()` -- Node-side handler |
-| `services/vexa-bot/core/src/index.ts:1309-1322` | Teams audio callback exposure |
-| `services/vexa-bot/core/src/services/speaker-identity.ts:191-302` | `resolveTeamsSpeakerName()` -- DOM traversal + voting/locking (used for fallback) |
+| `services/vexa-bot/core/src/platforms/msteams/recording.ts` | Browser-side: caption observer, ring buffer, speaker detection, audio routing, participant counting |
+| `services/vexa-bot/core/src/platforms/msteams/captions.ts` | Enable live captions after bot joins (More → Language and speech → Show live captions) |
+| `services/vexa-bot/core/src/platforms/msteams/selectors.ts` | All Teams DOM selectors including caption selectors |
+| `services/vexa-bot/core/src/index.ts` | `handleTeamsAudioData()` + `handleTeamsCaptionData()` -- Node-side handlers |
+| `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` | Triggers `enableTeamsLiveCaptions()` after admission |
+| `services/vexa-bot/core/src/services/segment-publisher.ts` | TranscriptionSegment with `source`, `caption_text`, `speaker_source` fields |
+| `services/vexa-bot/core/src/services/speaker-identity.ts` | `resolveTeamsSpeakerName()` -- DOM traversal + voting/locking (used for fallback) |

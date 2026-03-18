@@ -4,7 +4,7 @@
 
 ## Scope
 
-You test the MS Teams per-speaker transcription pipeline: bot joins a Teams meeting, hooks the single mixed audio stream, routes audio by DOM-based speaker detection (`voice-level-stream-outline` + `vdi-frame-occlusion`), transcribes via TranscriptionClient, and publishes confirmed segments to Redis.
+You test the MS Teams per-speaker transcription pipeline: bot joins a Teams meeting, hooks the single mixed audio stream, enables live captions, and routes audio using caption-driven speaker detection (primary) with DOM blue squares as fallback. A 5s ring buffer provides lookback for retroactive speaker attribution. Transcribes via TranscriptionClient and publishes confirmed segments to Redis.
 
 ### Gate (local)
 
@@ -23,11 +23,13 @@ Bot joins Teams mock -> audio routed per speaker via DOM signals -> Transcriptio
 
 | Edge | From | To | What to verify |
 |------|------|----|---------------|
-| Audio hook | Browser ScriptProcessor (single stream) | `handleTeamsAudioData(name, data)` | Non-silent audio arrives, routed to correct speaker name |
-| Speaker detection | MutationObserver on `voice-level-stream-outline` | `speakingStates` map | State transitions fire, `vdi-frame-occlusion` detected |
-| Audio routing | `speakingStates` lookup | `__vexaTeamsAudioData()` | Active speaker names resolved, audio sent |
+| Caption enable | `captions.ts` (post-join) | Teams UI menu clicks | Captions wrapper appears in DOM |
+| Caption observer | MutationObserver on `closed-caption-renderer-wrapper` | `lastCaptionSpeaker` + ring buffer flush | Speaker changes detected, lookback audio flushed |
+| Audio hook | Browser ScriptProcessor (single stream) | Ring buffer + `handleTeamsAudioData(name, data)` | Non-silent audio stored in ring buffer, routed to caption/DOM speaker |
+| Caption data | Browser `__vexaTeamsCaptionData()` | `handleTeamsCaptionData()` | Caption text + speaker logged |
+| Speaker detection (fallback) | MutationObserver on `voice-level-stream-outline` | `speakingStates` map | State transitions fire, `vdi-frame-occlusion` detected |
 | Transcription | `TranscriptionClient.transcribe()` | transcription-service | HTTP 200, non-empty text |
-| Publish | `SegmentPublisher` | Redis `transcription_segments` | XADD succeeds |
+| Publish | `SegmentPublisher` | Redis `transcription_segments` | XADD succeeds, includes source/caption fields |
 
 ### Counterparts
 

@@ -29,7 +29,7 @@ Bot joins meeting
 | Platform | Audio Model | Speaker Identity |
 |----------|------------|-----------------|
 | **Google Meet** | Per-element audio streams. Each participant = separate `<audio>` element with its own MediaStream srcObject. Clean single-voice audio per track. | Class mutations (`Oaajhc` = speaking, `gjg47c` = silence) + MutationObserver + 500ms polling fallback. Voting/locking: correlate speaking indicator with audio track. |
-| **MS Teams** | ONE mixed audio stream. Single `<audio>` element with RTCPeerConnection stream containing all participants mixed together. | DOM `voice-level-stream-outline` + `vdi-frame-occlusion` class detection. Audio chunks routed by speaker NAME (not index) based on who DOM says is currently speaking. |
+| **MS Teams** | ONE mixed audio stream. Single `<audio>` element with RTCPeerConnection stream containing all participants mixed together. | **Primary:** Live captions (`[data-tid="author"]` + `[data-tid="closed-caption-text"]`) with ring buffer lookback. Captions only fire on real speech — no false activations. **Fallback:** DOM `voice-level-stream-outline` + `vdi-frame-occlusion` class detection. Audio chunks routed by speaker NAME (not index). |
 
 Google Meet gives isolated per-speaker audio -- no diarization needed, overlapping speech handled naturally. Teams gives mixed audio that must be routed by DOM signals -- overlapping speech goes to all active speakers.
 
@@ -67,9 +67,11 @@ Google Meet gives isolated per-speaker audio -- no diarization needed, overlappi
  Teams:                                            handleTeamsAudioData(name, data)
    <audio> single mixed stream                        |
      -> AudioContext(16kHz)                           +-> speakerId = `teams-${name}`
-     -> ScriptProcessor(4096)                         |   (name known from DOM, no voting needed)
+     -> ScriptProcessor(4096)                         |   (name known from caption/DOM, no voting)
      -> silence check (>0.005)                        |
-     -> DOM speakingStates lookup                     v
+     -> ring buffer (5s)                            handleTeamsCaptionData(name, text, ts)
+     -> caption observer (primary)                    |
+        OR DOM speakingStates (fallback)              +-> log caption, publish speaker event
      -> __vexaTeamsAudioData(name, data) ----------> SpeakerStreamManager
                                                       |
                                                       +-> feedAudio(speakerId, Float32Array)
@@ -133,7 +135,7 @@ Google Meet gives isolated per-speaker audio -- no diarization needed, overlappi
 ### Key Behaviors
 
 - **Per-speaker isolation (Google Meet):** Each participant has a separate `<audio>` element. The bot creates one AudioContext + ScriptProcessor per element. Audio is pre-separated -- no diarization needed.
-- **Mixed stream routing (Teams):** One audio element, one ScriptProcessor. Browser-side DOM detection determines who is speaking. Audio chunks are routed to the active speaker's buffer by name.
+- **Mixed stream routing (Teams):** One audio element, one ScriptProcessor. **Primary:** live captions provide speaker name when Teams ASR detects real speech — audio routed via caption-driven boundaries with 5s ring buffer lookback. **Fallback:** DOM blue squares (`vdi-frame-occlusion` class) when captions unavailable. Caption text also stored for future segment reconciliation.
 - **Speaker identity locking:** Votes accumulate when exactly one speaker indicator is active while audio arrives on a track. After 3 votes with 70% ratio, the mapping locks permanently. One-name-per-track, one-track-per-name enforced.
 - **Confirmation-based emission:** Segments are NOT published on first transcription. The buffer resubmits every 2s. When the first 80% of the transcript matches across 2 consecutive submissions, the segment is confirmed and published. This prevents hallucination segments.
 - **Hard cap:** If wall-clock time exceeds 10s regardless of audio duration, the buffer force-flushes. Prevents mega-segments from accumulating during intermittent speech.
@@ -167,7 +169,8 @@ Google Meet gives isolated per-speaker audio -- no diarization needed, overlappi
 
 ### Known Limitations
 
-- First few seconds of a new speaker may show as empty until speaker identity locks (3 votes needed)
+- First few seconds of a new speaker may show as empty until speaker identity locks (3 votes needed, Google Meet only)
+- Teams: caption-driven routing [UNTESTED] — ring buffer lookback should recover first seconds, but needs real-meeting validation
 - Teams mixed audio means overlapping speech is duplicated to all active speakers' buffers
 - Language detection with probability < 0.3 discards the segment entirely (false negatives possible for rare languages)
 - Whisper inference adds 1-3s latency per submission on top of the 2s submit interval

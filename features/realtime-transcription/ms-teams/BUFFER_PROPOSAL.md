@@ -1,5 +1,8 @@
 # Retroactive Audio Attribution — Design Proposal
 
+> **Status:** IMPLEMENTED (commit `61f530d`, [UNTESTED]) — see `recording.ts` ring buffer + caption-driven routing.
+> The implementation goes beyond this proposal by using **live captions** as the primary speaker signal instead of DOM blue squares. Captions only fire on real speech, eliminating false activations from mic noise. Ring buffer lookback flushes audio to the correct speaker when a caption appears.
+
 ## Problem
 
 Teams mixes all participants' audio into one stream. The bot routes audio chunks to speaker buffers based on DOM speaking indicators (`vdi-frame-occlusion` class). But:
