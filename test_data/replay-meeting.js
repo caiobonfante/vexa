@@ -224,7 +224,9 @@ async function main() {
     console.log(`[${e.time}] +${el}s ${e.speaker}: "${short}"`);
 
     // Speak through speaker's bot (their API key) or listener
-    const speakKey = speakerKeys[e.speaker] || LISTENER_API_KEY;
+    const speakKey = speakerKeys[e.speaker];
+    if (!speakKey) { console.log(`  SKIP — no speaker bot for "${e.speaker}" (keys: ${Object.keys(speakerKeys).join(', ')})`); continue; }
+    console.log(`  → speaking as ${e.speaker} with key ${speakKey.substring(0, 15)}...`);
     const r = await api('POST', `/bots/${platform}/${nativeId}/speak`, { text: e.text, voice }, speakKey);
     if (r.s >= 400) console.log(`  SPEAK FAILED: ${JSON.stringify(r.d).substring(0, 80)}`);
 
