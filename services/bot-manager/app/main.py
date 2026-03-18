@@ -3415,18 +3415,27 @@ async def internal_save_browser_session_storage(token: str, db: AsyncSession = D
         logger.error(f"Failed to publish save_storage command: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to send save command")
 
-    # Update user.data.browser_userdata metadata
-    user = await db.get(User, user_id)
-    if user:
-        user_data = dict(user.data) if isinstance(user.data, dict) else {}
-        user_data["browser_userdata"] = {
+    # Update user.data.browser_userdata metadata via direct SQL update
+    try:
+        from sqlalchemy import update, text
+        browser_userdata = {
             "s3_path": f"users/{user_id}/browser-userdata",
             "storage_backend": "minio",
             "last_synced_at": datetime.utcnow().isoformat(),
         }
-        user.data = user_data
-        attributes.flag_modified(user, "data")
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(data=text(
+                f"COALESCE(data, '{{}}'::jsonb) || :patch::jsonb"
+            ))
+            .execution_options(synchronize_session=False)
+        )
+        await db.execute(stmt, {"patch": json.dumps({"browser_userdata": browser_userdata})})
         await db.commit()
+        logger.info(f"Updated browser_userdata for user {user_id}")
+    except Exception as e:
+        logger.error(f"Failed to update user.data: {e}", exc_info=True)
 
     return {"status": "ok", "message": "Storage save initiated"}
 
