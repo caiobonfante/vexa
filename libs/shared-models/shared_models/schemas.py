@@ -392,6 +392,14 @@ class MeetingCreate(BaseModel):
         False,
         description="Enable Claude agent in the bot container. Agent can control the browser, debug selectors, and modify code interactively."
     )
+    mode: Optional[str] = Field(
+        None,
+        description="Bot mode: 'browser_session' for remote browser access, or None for default meeting mode."
+    )
+    authenticated: Optional[bool] = Field(
+        False,
+        description="Use stored browser userdata for authenticated join. Requires prior browser_session setup."
+    )
 
     @field_validator('platform')
     @classmethod
@@ -495,13 +503,22 @@ class MeetingCreate(BaseModel):
         
         return v
 
+    @field_validator('mode')
+    @classmethod
+    def validate_mode(cls, v):
+        """Validate that mode is a supported value."""
+        if v is not None and v not in ('browser_session',):
+            raise ValueError(f"Invalid mode '{v}'. Must be one of: 'browser_session'")
+        return v
+
     @model_validator(mode='after')
     def validate_meeting_or_agent(self):
-        """Ensure at least one of meeting info or agent_enabled is provided."""
+        """Ensure at least one of meeting info, agent_enabled, or browser_session mode is provided."""
         has_meeting = self.platform is not None and self.native_meeting_id is not None
         has_agent = bool(self.agent_enabled)
-        if not has_meeting and not has_agent:
-            raise ValueError("Either provide platform + native_meeting_id for a meeting, or set agent_enabled=true")
+        has_browser_session = self.mode == "browser_session"
+        if not has_meeting and not has_agent and not has_browser_session:
+            raise ValueError("Either provide platform + native_meeting_id for a meeting, set agent_enabled=true, or set mode='browser_session'")
         return self
 
 class MeetingResponse(BaseModel): # Not inheriting from MeetingBase anymore to avoid duplicate fields if DB model is used directly

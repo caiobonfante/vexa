@@ -1,15 +1,16 @@
 import { runBot } from "."
 import { z } from 'zod';
-import { BotConfig } from "./types"; // Import the BotConfig type
+import { BotConfig, BrowserSessionConfig } from "./types"; // Import the BotConfig type
 
 // Define a schema that matches your JSON configuration
 export const BotConfigSchema = z.object({
-  platform: z.enum(["google_meet", "zoom", "teams"]),
-  meetingUrl: z.string().url().nullable(), // Allow null from BOT_CONFIG
-  botName: z.string(),
-  token: z.string(),
-  connectionId: z.string(),
-  nativeMeetingId: z.string(), // *** ADDED schema field ***
+  mode: z.enum(["meeting", "browser_session"]).default("meeting"),
+  platform: z.enum(["google_meet", "zoom", "teams"]).optional(),
+  meetingUrl: z.string().url().nullable().optional(), // Allow null from BOT_CONFIG
+  botName: z.string().optional(),
+  token: z.string().optional(),
+  connectionId: z.string().optional(),
+  nativeMeetingId: z.string().optional(), // *** ADDED schema field ***
   language: z.string().nullish(), // Optional language
   task: z.string().nullish(),     // Optional task
   transcribeEnabled: z.boolean().optional(),
@@ -33,6 +34,16 @@ export const BotConfigSchema = z.object({
   // Voice agent / meeting interaction interface
   voiceAgentEnabled: z.boolean().optional(),
   defaultAvatarUrl: z.string().url().optional(),
+  // Independent capability flags
+  videoReceiveEnabled: z.boolean().optional(),
+  cameraEnabled: z.boolean().optional(),
+  // Authenticated meeting mode / browser session S3 config
+  authenticated: z.boolean().optional(),
+  userdataS3Path: z.string().optional(),
+  s3Endpoint: z.string().optional(),
+  s3Bucket: z.string().optional(),
+  s3AccessKey: z.string().optional(),
+  s3SecretKey: z.string().optional(),
 });
 
 
@@ -47,13 +58,35 @@ if (!rawConfig) {
   // Parse the JSON string from the environment variable
   const parsedConfig = JSON.parse(rawConfig);
   // Validate and parse the config using zod
-  const botConfig: BotConfig = BotConfigSchema.parse(parsedConfig) as BotConfig;
+  const validatedConfig = BotConfigSchema.parse(parsedConfig);
 
-  // Run the bot with the validated configuration
-  runBot(botConfig).catch((error) => {
-    console.error("Error running bot:", error);
-    process.exit(1);
-  });
+  if (validatedConfig.mode === "browser_session") {
+    // Browser session mode — interactive browser with VNC + CDP
+    const sessionConfig: BrowserSessionConfig = {
+      mode: "browser_session",
+      redisUrl: validatedConfig.redisUrl,
+      container_name: validatedConfig.container_name,
+      botManagerCallbackUrl: validatedConfig.botManagerCallbackUrl,
+      s3Endpoint: validatedConfig.s3Endpoint,
+      s3Bucket: validatedConfig.s3Bucket,
+      s3AccessKey: validatedConfig.s3AccessKey,
+      s3SecretKey: validatedConfig.s3SecretKey,
+      userdataS3Path: validatedConfig.userdataS3Path,
+    };
+    import('./browser-session').then(({ runBrowserSession }) => {
+      runBrowserSession(sessionConfig).catch((error) => {
+        console.error("Error running browser session:", error);
+        process.exit(1);
+      });
+    });
+  } else {
+    // Meeting mode — validate required meeting fields and run bot
+    const botConfig: BotConfig = validatedConfig as BotConfig;
+    runBot(botConfig).catch((error) => {
+      console.error("Error running bot:", error);
+      process.exit(1);
+    });
+  }
 } catch (error) {
   console.error("Invalid BOT_CONFIG:", error);
   process.exit(1);

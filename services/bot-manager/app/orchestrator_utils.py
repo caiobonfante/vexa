@@ -157,6 +157,7 @@ async def start_bot_container(
     voice_agent_enabled: Optional[bool] = None,
     default_avatar_url: Optional[str] = None,
     agent_enabled: Optional[bool] = None,
+    extra_bot_config: Optional[Dict[str, Any]] = None,
 ) -> Optional[tuple[str, str]]:
     """
     Starts a vexa-bot container via requests_unixsocket AFTER checking user limit.
@@ -247,6 +248,9 @@ async def start_bot_container(
         bot_config_data["voiceAgentEnabled"] = bool(voice_agent_enabled)
     if default_avatar_url:
         bot_config_data["defaultAvatarUrl"] = default_avatar_url
+    # Merge extra bot config (e.g., authenticated mode S3 credentials)
+    if extra_bot_config and isinstance(extra_bot_config, dict):
+        bot_config_data.update(extra_bot_config)
     # Remove keys with None values before serializing
     cleaned_config_data = {k: v for k, v in bot_config_data.items() if v is not None}
     bot_config_json = json.dumps(cleaned_config_data)
@@ -571,3 +575,96 @@ async def verify_container_running(container_id: str) -> bool:
     except Exception as e:
         logger.error(f"[Verify Container] Unexpected error inspecting container {container_id}: {e}", exc_info=True)
         return False # Treat other errors as "not verifiable" or "not running"
+
+
+async def start_browser_session_container(
+    user_id: int,
+    meeting_id: int,
+    container_name: str,
+    bot_config_json: str,
+) -> Optional[tuple[str, str]]:
+    """
+    Starts a vexa-bot container in browser_session mode.
+
+    Key differences from meeting bot:
+    - Sets BOT_MODE=browser_session env var
+    - No AutoRemove (browser session stays until explicit stop)
+    - Ports 6080 (VNC) and 9222 (CDP) accessible within Docker network
+
+    Returns:
+        A tuple (container_id, container_name) if successful, (None, None) otherwise.
+    """
+    session = get_socket_session()
+    if not session:
+        logger.error("Cannot start browser session container, requests_unixsocket session not available.")
+        return None, None
+
+    logger.info(f"Starting browser session container '{container_name}' for user {user_id}, meeting {meeting_id}")
+
+    # Ensure absolute path for URL encoding
+    socket_path_relative = DOCKER_HOST.split('//', 1)[1]
+    socket_path_abs = f"/{socket_path_relative}"
+    socket_path_encoded = socket_path_abs.replace("/", "%2F")
+    socket_url_base = f'http+unix://{socket_path_encoded}'
+
+    environment = [
+        f"BOT_CONFIG={bot_config_json}",
+        f"BOT_MODE=browser_session",
+        f"LOG_LEVEL={os.getenv('LOG_LEVEL', 'INFO').upper()}",
+    ]
+
+    host_config = {
+        "NetworkMode": DOCKER_NETWORK,
+        "AutoRemove": False,  # Browser sessions persist until explicit stop
+        "ExtraHosts": ["host.docker.internal:host-gateway"],
+        "ShmSize": 2 * 1024 * 1024 * 1024,  # 2GB shared memory for Chromium
+    }
+
+    create_payload = {
+        "Image": BOT_IMAGE_NAME,
+        "Env": environment,
+        "Labels": {
+            "vexa.user_id": str(user_id),
+            "vexa.mode": "browser_session",
+        },
+        "HostConfig": host_config,
+        # Expose ports within Docker network (no host port mapping)
+        "ExposedPorts": {
+            "6080/tcp": {},
+            "9222/tcp": {},
+        },
+    }
+
+    create_url = f'{socket_url_base}/containers/create?name={container_name}'
+    start_url_template = f'{socket_url_base}/containers/{{}}/start'
+
+    container_id = None
+    try:
+        logger.info(f"Creating browser session container '{container_name}' ({BOT_IMAGE_NAME})...")
+        response = session.post(create_url, json=create_payload)
+        response.raise_for_status()
+        container_info = response.json()
+        container_id = container_info.get('Id')
+
+        if not container_id:
+            logger.error(f"Failed to create browser session container: No ID in response: {container_info}")
+            return None, None
+
+        logger.info(f"Browser session container {container_id} created. Starting...")
+
+        start_url = start_url_template.format(container_id)
+        response = session.post(start_url)
+
+        if response.status_code != 204:
+            logger.error(f"Failed to start browser session container {container_id}. Status: {response.status_code}, Response: {response.text}")
+            return None, None
+
+        logger.info(f"Successfully started browser session container {container_id} for meeting {meeting_id}")
+        return container_id, container_name
+
+    except RequestException as e:
+        logger.error(f"HTTP error starting browser session container: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Unexpected error starting browser session container: {e}", exc_info=True)
+
+    return None, None

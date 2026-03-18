@@ -31,4 +31,28 @@ export type BotConfig = {
   // Voice agent / meeting interaction interface
   voiceAgentEnabled?: boolean;  // Enable TTS, chat, screen share capabilities
   defaultAvatarUrl?: string;   // Custom default avatar image URL for virtual camera
+
+  // Independent capability flags
+  videoReceiveEnabled?: boolean;  // Receive+decode video from participants (default: false)
+  cameraEnabled?: boolean;        // Outgoing virtual camera/avatar (default: false)
+
+  // Authenticated meeting mode (uses persistent browser context with stored userdata)
+  authenticated?: boolean;
+  userdataS3Path?: string;   // e.g. "users/123/browser-userdata"
+  s3Endpoint?: string;
+  s3Bucket?: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
+}
+
+export type BrowserSessionConfig = {
+  mode: "browser_session";
+  redisUrl: string;
+  container_name?: string;
+  botManagerCallbackUrl?: string;
+  s3Endpoint?: string;
+  s3Bucket?: string;
+  s3AccessKey?: string;
+  s3SecretKey?: string;
+  userdataS3Path?: string; // e.g. "users/123/browser-userdata"
 }

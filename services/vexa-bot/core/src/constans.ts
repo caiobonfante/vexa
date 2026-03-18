@@ -56,3 +56,18 @@ export function getBrowserArgs(voiceAgentEnabled: boolean = false): string[] {
 
 // Default browser args for backward compatibility (voice agent disabled)
 export const browserArgs = getBrowserArgs(false);
+
+/**
+ * Browser args for interactive browser session mode (VNC + CDP).
+ * No incognito, no fake media — human interacts via VNC, agent via CDP.
+ */
+export function getBrowserSessionArgs(): string[] {
+  return [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-blink-features=AutomationControlled',
+    '--start-maximized',
+    '--remote-debugging-port=9222',
+    '--remote-debugging-address=0.0.0.0',
+  ];
+}

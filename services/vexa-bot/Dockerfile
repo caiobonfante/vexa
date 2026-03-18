@@ -86,6 +86,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xserver-xephyr \
     libssl3 \
     libxcb-xtest0 \
+    fluxbox \
+    x11vnc \
+    novnc \
+    python3-websockify \
+    awscli \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace package files (for runtime dependencies)
@@ -124,6 +129,9 @@ RUN chmod +x /app/vexa-bot/entrypoint.sh
 
 # Set environment
 ENV DISPLAY=:99
+
+# Expose noVNC web interface for browser session mode
+EXPOSE 6080
 
 # Set working directory for runtime
 WORKDIR /app/vexa-bot/core

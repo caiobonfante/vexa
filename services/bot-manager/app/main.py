@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 import logging
 import os
 import base64
+import secrets
 from typing import Optional, List, Dict, Any
 import redis.asyncio as aioredis
 import asyncio
@@ -23,7 +24,7 @@ from .config import BOT_IMAGE_NAME, REDIS_URL
 from app.orchestrators import (
     get_socket_session, close_docker_client, start_bot_container,
     stop_bot_container, _record_session_start, get_running_bots_status,
-    verify_container_running,
+    verify_container_running, start_browser_session_container,
 )
 # Note: get_running_bots_status and verify_container_running are abstracted
 # and work for both Docker containers and process orchestrator (Lite setup)
@@ -646,6 +647,99 @@ async def request_bot(
             await db.commit()
             raise HTTPException(status_code=500, detail=f"Agent container failed: {e}")
 
+    # --- Browser session mode: remote browser with VNC + CDP ---
+    if req.mode == "browser_session":
+        logger.info(f"Browser session request from user {current_user.id}")
+        session_token = secrets.token_urlsafe(24)
+
+        new_meeting = Meeting(
+            user_id=current_user.id,
+            platform="browser_session",
+            platform_specific_id=f"bs-{uuid_lib.uuid4().hex[:8]}",
+            status=MeetingStatus.ACTIVE.value,
+            start_time=datetime.utcnow(),
+            data={
+                "mode": "browser_session",
+                "session_token": session_token,
+            },
+        )
+        db.add(new_meeting)
+        await db.commit()
+        await db.refresh(new_meeting)
+        meeting_id = new_meeting.id
+        logger.info(f"Created browser_session meeting record with ID: {meeting_id}")
+
+        # Build MinIO/S3 config from environment (same env vars used for recordings)
+        s3_endpoint_raw = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+        s3_endpoint = s3_endpoint_raw if s3_endpoint_raw.startswith("http") else f"http://{s3_endpoint_raw}"
+        s3_bucket = os.environ.get("MINIO_BUCKET", "vexa-recordings")
+        s3_access_key = os.environ.get("MINIO_ACCESS_KEY", "")
+        s3_secret_key = os.environ.get("MINIO_SECRET_KEY", "")
+
+        container_name = f"vexa-bot-{meeting_id}-{uuid_lib.uuid4().hex[:8]}"
+        callback_url = f"http://bot-manager:8080/bots/internal/callback/exited"
+
+        bot_config_data = {
+            "mode": "browser_session",
+            "meeting_id": meeting_id,
+            "redisUrl": REDIS_URL,
+            "container_name": container_name,
+            "botManagerCallbackUrl": callback_url,
+            "userdataS3Path": f"users/{current_user.id}/browser-userdata",
+            "s3Endpoint": s3_endpoint,
+            "s3Bucket": s3_bucket,
+            "s3AccessKey": s3_access_key,
+            "s3SecretKey": s3_secret_key,
+        }
+        bot_config_json = json.dumps(bot_config_data)
+
+        if start_browser_session_container is None:
+            raise HTTPException(status_code=501, detail="Browser sessions not supported with this orchestrator")
+
+        try:
+            container_id, connection_id = await start_browser_session_container(
+                user_id=current_user.id,
+                meeting_id=meeting_id,
+                container_name=container_name,
+                bot_config_json=bot_config_json,
+            )
+            if not container_id:
+                new_meeting.status = MeetingStatus.FAILED.value
+                await db.commit()
+                raise HTTPException(status_code=500, detail="Failed to start browser session container")
+
+            new_meeting.bot_container_id = container_id
+            await db.commit()
+            await db.refresh(new_meeting)
+
+            # Store session_token → container mapping in Redis
+            if redis_client:
+                session_data = json.dumps({
+                    "container_name": container_name,
+                    "meeting_id": meeting_id,
+                    "user_id": current_user.id,
+                })
+                await redis_client.set(
+                    f"browser_session:{session_token}",
+                    session_data,
+                    ex=86400,  # 24h TTL
+                )
+                logger.info(f"Stored browser session token in Redis for meeting {meeting_id}")
+
+            logger.info(f"Browser session container {container_id} started for meeting {meeting_id}")
+
+            # Return response — the URL will be constructed by the frontend/gateway
+            # Store the session_token in meeting.data so it's returned in the response
+            return MeetingResponse.model_validate(new_meeting)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to start browser session container: {e}", exc_info=True)
+            new_meeting.status = MeetingStatus.FAILED.value
+            await db.commit()
+            raise HTTPException(status_code=500, detail=f"Browser session failed: {e}")
+
     logger.info(f"Received bot request for platform '{req.platform.value}' with native ID '{req.native_meeting_id}' from user {current_user.id}")
     native_meeting_id = req.native_meeting_id
 
@@ -881,6 +975,24 @@ async def request_bot(
                         "Continuing without OBF token."
                     )
 
+        # Build extra bot config for authenticated mode (browser userdata from MinIO)
+        authenticated_extra_config = None
+        if req.authenticated:
+            user_data = current_user.data if isinstance(current_user.data, dict) else {}
+            browser_userdata_info = user_data.get("browser_userdata")
+            if browser_userdata_info and isinstance(browser_userdata_info, dict):
+                logger.info(f"Authenticated mode enabled for meeting {meeting_id}, user {current_user.id}")
+                authenticated_extra_config = {
+                    "authenticated": True,
+                    "userdataS3Path": f"users/{current_user.id}/browser-userdata",
+                    "s3Endpoint": f"http://{os.environ.get('MINIO_ENDPOINT', 'minio:9000')}" if not os.environ.get("MINIO_ENDPOINT", "minio:9000").startswith("http") else os.environ.get("MINIO_ENDPOINT", "minio:9000"),
+                    "s3Bucket": os.environ.get("MINIO_BUCKET", "vexa-recordings"),
+                    "s3AccessKey": os.environ.get("MINIO_ACCESS_KEY", ""),
+                    "s3SecretKey": os.environ.get("MINIO_SECRET_KEY", ""),
+                }
+            else:
+                logger.warning(f"Authenticated mode requested but no browser_userdata found for user {current_user.id}")
+
         logger.info(f"Attempting to start bot container for meeting {meeting_id} (native: {native_meeting_id})...")
         container_id, connection_id = await start_bot_container(
             user_id=current_user.id,
@@ -899,6 +1011,7 @@ async def request_bot(
             voice_agent_enabled=req.voice_agent_enabled,
             default_avatar_url=req.default_avatar_url,
             agent_enabled=req.agent_enabled,
+            extra_bot_config=authenticated_extra_config,
         )
         container_start_time = datetime.utcnow()
         logger.info(f"Call to start_bot_container completed. Container ID: {container_id}, Connection ID: {connection_id}")
@@ -3190,6 +3303,135 @@ async def transcribe_meeting_recording(
     return {"status": "completed", "segment_count": len(mapped_segments), "language": detected_language}
 
 # --- END Deferred Transcription Endpoint ---
+
+
+# --- Browser Session Endpoints ---
+
+@app.post("/bots/{meeting_id}/storage/save",
+          summary="Save browser session storage to MinIO",
+          dependencies=[Depends(get_user_and_token)])
+async def save_browser_session_storage(
+    meeting_id: int,
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Triggers userdata sync from container to MinIO for a browser session."""
+    user_token, current_user = auth_data
+
+    # Verify meeting exists, is owned by user, is browser_session mode, and is active
+    meeting = await db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    meeting_data = meeting.data if isinstance(meeting.data, dict) else {}
+    if meeting_data.get("mode") != "browser_session":
+        raise HTTPException(status_code=400, detail="Meeting is not a browser session")
+    if meeting.status != MeetingStatus.ACTIVE.value:
+        raise HTTPException(status_code=400, detail="Browser session is not active")
+
+    # Get container name from meeting record
+    container_name = meeting.bot_container_id
+    if not container_name:
+        raise HTTPException(status_code=400, detail="No container associated with this browser session")
+
+    # Publish save command to Redis
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    # Use container name as channel — matches what browser-session.ts subscribes to
+    channel = f"browser_session:{container_name}"
+    try:
+        await redis_client.publish(channel, "save_storage")
+        logger.info(f"Published save_storage command to {channel} for meeting {meeting_id}")
+    except Exception as e:
+        logger.error(f"Failed to publish save_storage command: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send save command")
+
+    # Update user.data.browser_userdata metadata
+    user_data = dict(current_user.data) if isinstance(current_user.data, dict) else {}
+    user_data["browser_userdata"] = {
+        "s3_path": f"users/{current_user.id}/browser-userdata",
+        "storage_backend": "minio",
+        "last_synced_at": datetime.utcnow().isoformat(),
+    }
+    current_user.data = user_data
+    attributes.flag_modified(current_user, "data")
+    await db.commit()
+    await db.refresh(current_user)
+
+    logger.info(f"Updated browser_userdata metadata for user {current_user.id}")
+    return {"status": "ok", "message": "Storage save initiated"}
+
+
+@app.get("/internal/browser-sessions/{token}",
+         summary="Resolve browser session token to container info (internal)")
+async def resolve_browser_session_token(token: str):
+    """Internal endpoint for api-gateway to resolve a browser session token to container info."""
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    session_data = await redis_client.get(f"browser_session:{token}")
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Browser session not found or expired")
+
+    try:
+        data = json.loads(session_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=500, detail="Invalid session data")
+
+    return {
+        "container_name": data.get("container_name"),
+        "meeting_id": data.get("meeting_id"),
+        "user_id": data.get("user_id"),
+    }
+
+@app.post("/internal/browser-sessions/{token}/save",
+         summary="Save browser session storage (internal, called by api-gateway)")
+async def internal_save_browser_session_storage(token: str, db: AsyncSession = Depends(get_db)):
+    """Internal endpoint for api-gateway to trigger storage save via session token."""
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    session_data = await redis_client.get(f"browser_session:{token}")
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Browser session not found or expired")
+
+    data = json.loads(session_data)
+    meeting_id = data.get("meeting_id")
+    user_id = data.get("user_id")
+    container_name = data.get("container_name")
+
+    if not container_name:
+        raise HTTPException(status_code=400, detail="No container associated with session")
+
+    # Publish save command to Redis
+    channel = f"browser_session:{container_name}"
+    try:
+        await redis_client.publish(channel, "save_storage")
+        logger.info(f"Published save_storage command to {channel} for meeting {meeting_id}")
+    except Exception as e:
+        logger.error(f"Failed to publish save_storage command: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to send save command")
+
+    # Update user.data.browser_userdata metadata
+    user = await db.get(User, user_id)
+    if user:
+        user_data = dict(user.data) if isinstance(user.data, dict) else {}
+        user_data["browser_userdata"] = {
+            "s3_path": f"users/{user_id}/browser-userdata",
+            "storage_backend": "minio",
+            "last_synced_at": datetime.utcnow().isoformat(),
+        }
+        user.data = user_data
+        attributes.flag_modified(user, "data")
+        await db.commit()
+
+    return {"status": "ok", "message": "Storage save initiated"}
+
+
+# --- END Browser Session Endpoints ---
 
 
 if __name__ == "__main__":
