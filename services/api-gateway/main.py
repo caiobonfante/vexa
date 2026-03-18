@@ -928,6 +928,16 @@ async def forward_mcp_path(request: Request, path: str):
 
 # --- Removed internal ID resolution and full transcript fetching from Gateway ---
 
+# --- Auth routes (proxied to bot-manager) ---
+
+@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE"],
+               tags=["Auth"], include_in_schema=False)
+async def proxy_auth(path: str, request: Request):
+    """Proxy /auth/* routes to bot-manager."""
+    url = f"{BOT_MANAGER_URL}/auth/{path}"
+    return await forward_request(app.state.http_client, request.method, url, request)
+
+
 # --- Remote Browser Session Routes ---
 # Token-based access: /b/{token} serves UI, /b/{token}/vnc/* proxies noVNC, /b/{token}/cdp proxies CDP
 # No X-API-Key needed — the token IS the auth.

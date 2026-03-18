@@ -3429,21 +3429,21 @@ async def internal_save_browser_session_storage(token: str, db: AsyncSession = D
 
     # Update user.data.browser_userdata metadata via direct SQL update
     try:
-        from sqlalchemy import update, text
+        from sqlalchemy import update, type_coerce
+        from sqlalchemy.dialects.postgresql import JSONB as JSONB_TYPE
         browser_userdata = {
             "s3_path": f"users/{user_id}/browser-userdata",
             "storage_backend": "minio",
             "last_synced_at": datetime.utcnow().isoformat(),
         }
+        patch = {"browser_userdata": browser_userdata}
         stmt = (
             update(User)
             .where(User.id == user_id)
-            .values(data=text(
-                f"COALESCE(data, '{{}}'::jsonb) || :patch::jsonb"
-            ))
+            .values(data=User.data.op('||')(type_coerce(patch, JSONB_TYPE)))
             .execution_options(synchronize_session=False)
         )
-        await db.execute(stmt, {"patch": json.dumps({"browser_userdata": browser_userdata})})
+        await db.execute(stmt)
         await db.commit()
         logger.info(f"Updated browser_userdata for user {user_id}")
     except Exception as e:
@@ -3470,10 +3470,17 @@ async def configure_workspace_git(
     if not repo:
         raise HTTPException(status_code=400, detail="repo is required")
 
-    user_data = dict(current_user.data) if isinstance(current_user.data, dict) else {}
-    user_data["workspace_git"] = {"repo": repo, "token": token, "branch": branch}
-    current_user.data = user_data
-    attributes.flag_modified(current_user, "data")
+    from sqlalchemy import update, type_coerce
+    from sqlalchemy.dialects.postgresql import JSONB as JSONB_TYPE
+    workspace_git = {"repo": repo, "token": token, "branch": branch}
+    patch = {"workspace_git": workspace_git}
+    stmt = (
+        update(User)
+        .where(User.id == current_user.id)
+        .values(data=User.data.op('||')(type_coerce(patch, JSONB_TYPE)))
+        .execution_options(synchronize_session=False)
+    )
+    await db.execute(stmt)
     await db.commit()
 
     return {"status": "ok", "repo": repo, "branch": branch}
@@ -3488,10 +3495,14 @@ async def remove_workspace_git(
 ):
     """Remove git workspace config. Workspace will sync to MinIO."""
     user_token, current_user = auth_data
-    user_data = dict(current_user.data) if isinstance(current_user.data, dict) else {}
-    user_data.pop("workspace_git", None)
-    current_user.data = user_data
-    attributes.flag_modified(current_user, "data")
+    from sqlalchemy import update, text
+    stmt = (
+        update(User)
+        .where(User.id == current_user.id)
+        .values(data=text("data - 'workspace_git'"))
+        .execution_options(synchronize_session=False)
+    )
+    await db.execute(stmt)
     await db.commit()
 
     return {"status": "ok", "message": "Workspace git removed, using MinIO"}
