@@ -40,9 +40,6 @@ export function JoinModal() {
   const user = useAuthStore((state) => state.user);
 
   const [mode, setMode] = useState<"meeting" | "browser">("meeting");
-  const [gitRepo, setGitRepo] = useState("");
-  const [gitToken, setGitToken] = useState("");
-  const [gitBranch, setGitBranch] = useState("main");
   const [meetingInput, setMeetingInput] = useState("");
   const [platform, setPlatform] = useState<Platform>("google_meet");
   const [language, setLanguage] = useState("auto");
@@ -59,13 +56,6 @@ export function JoinModal() {
   useEffect(() => {
     if (!isOpen) {
       setMode("meeting");
-      // Load git config from localStorage
-      try {
-        const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
-        setGitRepo(git.repo || "");
-        setGitToken(git.token || "");
-        setGitBranch(git.branch || "main");
-      } catch {}
       setMeetingInput("");
       setPlatform("google_meet");
       setIsSubmitting(false);
@@ -205,13 +195,15 @@ export function JoinModal() {
     setIsSubmitting(true);
     try {
       const body: Record<string, string> = { mode: "browser_session" };
-      if (gitRepo && gitToken) {
-        // Save to localStorage for next time
-        localStorage.setItem("vexa-browser-git", JSON.stringify({ repo: gitRepo, token: gitToken, branch: gitBranch }));
-        body.workspaceGitRepo = gitRepo;
-        body.workspaceGitToken = gitToken;
-        body.workspaceGitBranch = gitBranch || "main";
-      }
+      // Read git workspace config from profile settings (localStorage)
+      try {
+        const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
+        if (git.repo && git.token) {
+          body.workspaceGitRepo = git.repo;
+          body.workspaceGitToken = git.token;
+          body.workspaceGitBranch = git.branch || "main";
+        }
+      } catch {}
       const response = await fetch("/api/vexa/bots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -277,37 +269,8 @@ export function JoinModal() {
         {mode === "browser" ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Remote browser with VNC, CDP, and SSH. Persistent storage across sessions.
+              Remote browser with VNC, CDP, and SSH. Configure git workspace in Profile settings.
             </p>
-
-            {/* Git workspace (collapsible) */}
-            <div className="space-y-2 border rounded-lg p-3">
-              <label className="text-xs font-medium text-muted-foreground">Git Workspace (optional)</label>
-              <Input
-                placeholder="https://github.com/you/workspace.git"
-                value={gitRepo}
-                onChange={(e) => setGitRepo(e.target.value)}
-                className="h-9 text-sm"
-              />
-              {gitRepo && (
-                <>
-                  <Input
-                    placeholder="github_pat_..."
-                    type="password"
-                    value={gitToken}
-                    onChange={(e) => setGitToken(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <Input
-                    placeholder="Branch (default: main)"
-                    value={gitBranch}
-                    onChange={(e) => setGitBranch(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                </>
-              )}
-            </div>
-
             <Button
               className="w-full h-12 text-base"
               onClick={handleBrowserSession}

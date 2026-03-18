@@ -797,6 +797,24 @@ async def set_user_webhook_proxy(request: Request):
     url = f"{ADMIN_API_URL}/user/webhook"
     return await forward_request(app.state.http_client, "PUT", url, request)
 
+@app.put("/user/workspace-git",
+         tags=["User"],
+         summary="Set git workspace config",
+         status_code=status.HTTP_200_OK,
+         dependencies=[Depends(api_key_scheme)])
+async def set_workspace_git_proxy(request: Request):
+    url = f"{ADMIN_API_URL}/user/workspace-git"
+    return await forward_request(app.state.http_client, "PUT", url, request)
+
+@app.delete("/user/workspace-git",
+         tags=["User"],
+         summary="Remove git workspace config",
+         status_code=status.HTTP_200_OK,
+         dependencies=[Depends(api_key_scheme)])
+async def delete_workspace_git_proxy(request: Request):
+    url = f"{ADMIN_API_URL}/user/workspace-git"
+    return await forward_request(app.state.http_client, "DELETE", url, request)
+
 # --- Admin API Routes --- 
 @app.api_route("/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], 
                tags=["Administration"],

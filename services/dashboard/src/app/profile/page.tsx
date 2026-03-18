@@ -8,6 +8,8 @@ import {
   Loader2,
   Plus,
   Check,
+  GitBranch,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -416,6 +418,155 @@ export default function ProfilePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Git Workspace */}
+      <GitWorkspaceCard />
     </div>
+  );
+}
+
+function GitWorkspaceCard() {
+  const [repo, setRepo] = useState("");
+  const [token, setToken] = useState("");
+  const [branch, setBranch] = useState("main");
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    // Load from server
+    fetch("/api/vexa/user/workspace-git").then(async (r) => {
+      // GET doesn't exist — load from user profile data instead
+    }).catch(() => {});
+    // Also check localStorage as fallback
+    try {
+      const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
+      if (git.repo) {
+        setRepo(git.repo);
+        setToken(git.token || "");
+        setBranch(git.branch || "main");
+        setSaved(true);
+      }
+    } catch {}
+  }, []);
+
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/vexa/user/workspace-git", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo, token, branch }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      // Also save to localStorage for the join modal to read
+      localStorage.setItem("vexa-browser-git", JSON.stringify({ repo, token, branch }));
+      setSaved(true);
+      toast.success("Git workspace saved");
+    } catch (error) {
+      toast.error("Save failed: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    try {
+      await fetch("/api/vexa/user/workspace-git", { method: "DELETE" });
+      localStorage.removeItem("vexa-browser-git");
+      setRepo("");
+      setToken("");
+      setBranch("main");
+      setSaved(false);
+      toast.success("Git workspace removed");
+    } catch {
+      toast.error("Failed to remove");
+    }
+  }
+
+  async function handleTest() {
+    setIsTesting(true);
+    try {
+      const repoPath = repo.replace("https://github.com/", "").replace(".git", "");
+      const response = await fetch(`https://api.github.com/repos/${repoPath}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (response.ok) {
+        toast.success("Connected — repo accessible");
+      } else if (response.status === 404) {
+        toast.error("Repo not found — check URL and token permissions");
+      } else {
+        toast.error(`GitHub API error: ${response.status}`);
+      }
+    } catch (error) {
+      toast.error("Connection failed: " + (error as Error).message);
+    } finally {
+      setIsTesting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <GitBranch className="h-5 w-5" />
+          Git Workspace
+          {saved && repo && <Check className="h-4 w-4 text-green-500" />}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Connect a GitHub repo to sync browser session workspace files. Use a fine-grained PAT scoped to the repo only.
+        </p>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Repository URL</Label>
+            <Input
+              placeholder="https://github.com/you/workspace.git"
+              value={repo}
+              onChange={(e) => { setRepo(e.target.value); setSaved(false); }}
+            />
+          </div>
+          {repo && (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">Personal Access Token</Label>
+                <Input
+                  placeholder="github_pat_..."
+                  type="password"
+                  value={token}
+                  onChange={(e) => { setToken(e.target.value); setSaved(false); }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Branch</Label>
+                <Input
+                  placeholder="main"
+                  value={branch}
+                  onChange={(e) => { setBranch(e.target.value); setSaved(false); }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleSave} disabled={!repo || isSaving}>
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Save
+          </Button>
+          {repo && token && (
+            <Button size="sm" variant="outline" onClick={handleTest} disabled={isTesting}>
+              {isTesting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Test
+            </Button>
+          )}
+          {saved && repo && (
+            <Button size="sm" variant="ghost" onClick={handleClear}>
+              Remove
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

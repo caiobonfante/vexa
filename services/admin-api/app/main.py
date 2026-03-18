@@ -191,6 +191,70 @@ async def set_user_webhook(
 
     return UserResponse.model_validate(user)
 
+
+class WorkspaceGitUpdate(BaseModel):
+    repo: Optional[str] = None
+    token: Optional[str] = None
+    branch: Optional[str] = "main"
+
+@user_router.put("/workspace-git",
+             response_model=UserResponse,
+             summary="Set git workspace config",
+             description="Configure a GitHub repo for browser session workspace sync.")
+async def set_workspace_git(
+    config: WorkspaceGitUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user.data is None:
+        user.data = {}
+
+    if config.repo:
+        user.data['workspace_git'] = {
+            'repo': config.repo,
+            'token': config.token or '',
+            'branch': config.branch or 'main',
+        }
+    else:
+        user.data.pop('workspace_git', None)
+
+    attributes.flag_modified(user, "data")
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    if user.created_at is None:
+        user.created_at = datetime.utcnow().replace(tzinfo=None)
+        db.add(user)
+        await db.commit()
+
+    logger.info(f"Updated workspace git config for user {user.email}")
+    return UserResponse.model_validate(user)
+
+
+@user_router.delete("/workspace-git",
+             response_model=UserResponse,
+             summary="Remove git workspace config")
+async def delete_workspace_git(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if user.data is None:
+        user.data = {}
+
+    user.data.pop('workspace_git', None)
+    attributes.flag_modified(user, "data")
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    if user.created_at is None:
+        user.created_at = datetime.utcnow().replace(tzinfo=None)
+        db.add(user)
+        await db.commit()
+
+    return UserResponse.model_validate(user)
+
 # --- Admin Endpoints (Copied and adapted from bot-manager/admin.py) --- 
 @admin_router.post("/users",
              response_model=UserResponse,
