@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Plus, RefreshCw, CreditCard, Video, Loader2, Search } from "lucide-react";
+import { Plus, RefreshCw, CreditCard, Video, Loader2, Search, Monitor } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
@@ -24,6 +24,7 @@ import { getWebappUrl } from "@/lib/docs/webapp-url";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePendingMeeting } from "@/hooks/use-pending-meeting";
+import { toast } from "sonner";
 
 function PlatformIcon({ platform }: { platform: string }) {
   if (platform === "google_meet") {
@@ -31,6 +32,9 @@ function PlatformIcon({ platform }: { platform: string }) {
   }
   if (platform === "teams") {
     return <Image src="/icons/icons8-teams-96.png" alt="Teams" width={20} height={20} className="rounded" />;
+  }
+  if (platform === "browser_session") {
+    return <Monitor className="h-5 w-5 text-muted-foreground" />;
   }
   return <Image src="/icons/icons8-zoom-96.png" alt="Zoom" width={20} height={20} className="rounded" />;
 }
@@ -71,12 +75,45 @@ function formatDate(dateStr: string): string {
 
 export default function MeetingsPage() {
   usePendingMeeting();
+  const router = useRouter();
   const { meetings, isLoadingMeetings, fetchMeetings, error, subscriptionRequired } = useMeetingsStore();
   const openJoinModal = useJoinModalStore((state) => state.openModal);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
   const [statusFilter, setStatusFilter] = useState<MeetingStatus | "all">("all");
+  const [isCreatingBrowser, setIsCreatingBrowser] = useState(false);
+
+  async function handleStartBrowserSession() {
+    setIsCreatingBrowser(true);
+    try {
+      const body: Record<string, string> = { mode: "browser_session" };
+      // Read git workspace config from localStorage
+      try {
+        const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
+        if (git.repo && git.token) {
+          body.workspaceGitRepo = git.repo;
+          body.workspaceGitToken = git.token;
+          body.workspaceGitBranch = git.branch || "main";
+        }
+      } catch {}
+      const response = await fetch("/api/vexa/bots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ detail: "Failed" }));
+        throw new Error(err.detail || "Failed to create session");
+      }
+      const meeting = await response.json();
+      // Navigate to the session
+      setTimeout(() => router.push(`/meetings/${meeting.id}`), 2000);
+    } catch (error) {
+      toast.error((error as Error).message);
+      setIsCreatingBrowser(false);
+    }
+  }
 
   useEffect(() => {
     fetchMeetings();
@@ -139,7 +176,11 @@ export default function MeetingsPage() {
               <RefreshCw className={`h-4 w-4 ${isLoadingMeetings ? "animate-spin" : ""}`} />
             </Button>
             {!subscriptionRequired && (
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={handleStartBrowserSession} disabled={isCreatingBrowser}>
+                  {isCreatingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Monitor className="mr-2 h-4 w-4" />}
+                  <span className="hidden sm:inline">Browser</span>
+                </Button>
                 <Button onClick={openJoinModal}>
                   <Plus className="mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">Join Meeting</span>
@@ -171,6 +212,7 @@ export default function MeetingsPage() {
                 <SelectItem value="google_meet">Google Meet</SelectItem>
                 <SelectItem value="teams">Teams</SelectItem>
                 <SelectItem value="zoom">Zoom</SelectItem>
+                <SelectItem value="browser_session">Browser</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as MeetingStatus | "all")}>

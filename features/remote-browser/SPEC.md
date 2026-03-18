@@ -1,4 +1,4 @@
-# Remote Browser — Integration with Meetings
+# Remote Browser — Integration with Meetings (IMPLEMENTED)
 
 ## WHY
 

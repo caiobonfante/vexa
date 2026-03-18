@@ -650,6 +650,29 @@ async def request_bot(
     # --- Browser session mode: remote browser with VNC + CDP ---
     if req.mode == "browser_session":
         logger.info(f"Browser session request from user {current_user.id}")
+
+        # Concurrency check — browser sessions count against max_concurrent_bots
+        user_limit = int(getattr(current_user, "max_concurrent_bots", 0) or 0)
+        if user_limit > 0:
+            count_stmt = select(func.count()).select_from(Meeting).where(
+                and_(
+                    Meeting.user_id == current_user.id,
+                    Meeting.status.in_([
+                        MeetingStatus.REQUESTED.value,
+                        MeetingStatus.JOINING.value,
+                        MeetingStatus.AWAITING_ADMISSION.value,
+                        MeetingStatus.ACTIVE.value,
+                    ])
+                )
+            )
+            count_result = await db.execute(count_stmt)
+            active_count = int(count_result.scalar() or 0)
+            if active_count >= user_limit:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Concurrent bot limit reached ({active_count}/{user_limit}). Stop an existing session first.",
+                )
+
         session_token = secrets.token_urlsafe(24)
 
         new_meeting = Meeting(

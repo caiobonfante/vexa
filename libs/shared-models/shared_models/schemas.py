@@ -180,6 +180,7 @@ class Platform(str, Enum):
     GOOGLE_MEET = "google_meet"
     ZOOM = "zoom"
     TEAMS = "teams"
+    BROWSER_SESSION = "browser_session"
     
     @property
     def bot_name(self) -> str:

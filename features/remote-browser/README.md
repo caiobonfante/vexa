@@ -12,13 +12,14 @@ Human handles what requires judgment (OAuth, CAPTCHAs, MFA). Agent handles what'
 
 ## What
 
-One API call → one URL → a live Chromium browser you can see, control, and script.
+Browser sessions are first-class meetings — created from the Meetings page, managed like any meeting, counted against `max_concurrent_bots`.
 
-- **VNC** — open the URL in a browser tab, see and interact with Chromium live
-- **CDP/Playwright** — `connectOverCDP(url + '/cdp')` for full programmatic control
+- **VNC** — see and interact with Chromium live, embedded in the meeting detail page
+- **CDP/Playwright** — `connectOverCDP(cdpUrl)` for full programmatic control
+- **SSH** — shell access into the container (port mapped automatically)
 - **Persistent workspace** — scripts, files, data survive container restarts (git or MinIO)
 - **Persistent browser state** — cookies, localStorage, IndexedDB survive restarts (MinIO)
-- **Auto-admit script** — runs inside the container, admits anyone who joins the lobby
+- **Connect Agent** — one-click copy of instructions to paste into Claude or any AI agent
 
 ## How it works
 
@@ -33,15 +34,57 @@ On start: download both. On save: upload both. On next start: everything is ther
 
 ### Storage options for workspace
 
-**Option A: MinIO (default)** — workspace syncs to `s3://vexa-recordings/users/{id}/browser-userdata/workspace/`. Git is initialized locally for version history. No external setup needed.
+**Option A: MinIO (default)** — workspace syncs to `s3://vexa-recordings/users/{id}/browser-userdata/workspace/`. No external setup needed.
 
-**Option B: GitHub (recommended for teams)** — workspace clones from a private GitHub repo. On save: commit + push. Full git history, PRs, collaboration. Configured via API.
+**Option B: GitHub (recommended for teams)** — workspace clones from a private GitHub repo. On save: commit + push. Full git history, PRs, collaboration. Configured via dashboard (stored in localStorage).
 
 Browser data always uses MinIO (Chromium profile is binary, not git-friendly).
 
 ---
 
-## Quick start
+## Quick start (Dashboard)
+
+### 1. Start a browser session
+
+Go to the Meetings page → click **Browser** button in the header.
+
+The session appears in your meetings list with a Monitor icon. Click it to open the VNC view.
+
+### 2. Connect an agent
+
+In the meeting detail view, click **Connect Agent** → sidebar opens with copy-pastable instructions:
+
+```js
+const { chromium } = require('playwright');
+const browser = await chromium.connectOverCDP('CDP_URL_FROM_DASHBOARD');
+const page = browser.contexts()[0].pages()[0];
+
+await page.goto('https://accounts.google.com');
+await page.screenshot({ path: 'screenshot.png' });
+await browser.close(); // disconnects only — browser stays alive
+```
+
+### 3. SSH into the container
+
+The Connect Agent sidebar also shows SSH access:
+
+```bash
+ssh root@localhost -p PORT_FROM_DASHBOARD
+# Password: vexa
+# Workspace: /workspace
+```
+
+### 4. Save storage
+
+Click **Save** in the toolbar. Saves workspace (git push or S3) + browser profile (S3).
+
+### 5. Stop
+
+Click **Stop** in the toolbar, or it stops like any other meeting.
+
+---
+
+## Quick start (API)
 
 ### 1. Create a browser session
 
@@ -55,51 +98,44 @@ curl -X POST http://localhost:8056/bots \
 Response:
 ```json
 {
-  "id": 9107,
+  "id": 42,
   "status": "active",
   "data": {
     "mode": "browser_session",
-    "session_token": "HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv"
+    "session_token": "HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv",
+    "ssh_port": 32789
   }
 }
 ```
 
-### 2. Open the browser
+### 2. Access the browser
 
 Dashboard (noVNC + toolbar):
 ```
 http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv
 ```
 
-### 3. Control via Playwright
-
+Playwright CDP:
 ```js
-const { chromium } = require('playwright');
 const browser = await chromium.connectOverCDP(
   'http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv/cdp'
 );
-const context = browser.contexts()[0];
-const page = context.pages()[0];
-
-await page.goto('https://accounts.google.com');
-// ... authenticate, navigate, script
-await page.screenshot({ path: 'screenshot.png' });
-
-await browser.close(); // disconnects only — browser stays alive
 ```
 
-### 4. Save storage
-
-Click **[Save]** in the dashboard toolbar, or:
+SSH:
 ```bash
+ssh root@localhost -p 32789
+# Password: vexa
+```
+
+### 3. Save and stop
+
+```bash
+# Save
 curl -X POST http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv/save
-```
 
-### 5. Stop and restart
-
-```bash
 # Stop
-curl -X DELETE http://localhost:8056/bots/google_meet/9107 \
+curl -X DELETE http://localhost:8056/bots/browser_session/bs-abc123 \
   -H "X-API-Key: YOUR_API_KEY"
 
 # Start again — everything restored
@@ -109,13 +145,11 @@ curl -X POST http://localhost:8056/bots \
   -d '{"mode": "browser_session"}'
 ```
 
-Open the new URL → all accounts logged in, all workspace files there.
-
 ---
 
 ## GitHub workspace setup
 
-Use a private GitHub repo to persist your workspace files (scripts, configs, data). Full git history, collaboration, PRs.
+Use a private GitHub repo to persist your workspace files (scripts, configs, data).
 
 ### 1. Create a private repo
 
@@ -126,132 +160,59 @@ Create a new private repo on GitHub (e.g., `my-bot-workspace`). Can be empty.
 Go to: https://github.com/settings/personal-access-tokens/new
 
 Settings:
-- **Token name**: `vexa-bot-workspace` (or whatever)
-- **Expiration**: 90 days (or custom)
+- **Token name**: `vexa-bot-workspace`
+- **Expiration**: 90 days
 - **Repository access**: "Only select repositories" → select your workspace repo
 - **Permissions**:
   - **Contents**: Read and write
   - **Metadata**: Read-only (auto-selected)
 - Everything else: No access
 
-Click "Generate token", copy the token (starts with `github_pat_...`).
+### 3. Configure in dashboard
 
-### 3. Configure via API
+Go to Meetings page → click **Browser** → configure Git Workspace settings (repo URL, PAT, branch). Settings are saved in localStorage and passed automatically when creating sessions.
+
+### 4. Configure via API
+
+Pass git config when creating the session:
 
 ```bash
-curl -X PUT http://localhost:8056/auth/workspace-git \
+curl -X POST http://localhost:8056/bots \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "repo": "https://github.com/YOUR_USER/my-bot-workspace.git",
-    "token": "github_pat_...",
-    "branch": "main"
+    "mode": "browser_session",
+    "workspaceGitRepo": "https://github.com/YOUR_USER/my-bot-workspace.git",
+    "workspaceGitToken": "github_pat_...",
+    "workspaceGitBranch": "main"
   }'
 ```
-
-### 4. Use it
-
-Next browser session will clone the repo into `/workspace/`. On save: commit + push. On next start: pull latest.
-
-```
-/workspace/                    ← cloned from your GitHub repo
-├── scripts/
-│   └── auto-admit.js          ← your scripts
-├── configs/
-│   └── settings.json          ← your configs
-└── data/                      ← any data files
-```
-
-### 5. Remove git config (revert to MinIO)
-
-```bash
-curl -X DELETE http://localhost:8056/auth/workspace-git \
-  -H "X-API-Key: YOUR_API_KEY"
-```
-
----
-
-## Auto-admit script
-
-Runs inside the container. Polls for lobby guests, clicks Admit.
-
-### Run manually
-
-```bash
-# Copy to workspace (persists across sessions)
-docker cp auto-admit.js CONTAINER:/workspace/scripts/auto-admit.js
-
-# Run inside the container
-docker exec -d -e NODE_PATH=/app/vexa-bot/core/node_modules CONTAINER \
-  sh -c 'node /workspace/scripts/auto-admit.js > /workspace/auto-admit.log 2>&1'
-```
-
-### Run via CDP from outside
-
-```js
-const { chromium } = require('playwright');
-const browser = await chromium.connectOverCDP('http://localhost:8056/b/TOKEN/cdp');
-const page = browser.contexts()[0].pages()[0]; // Google Meet page
-
-// Admit all waiting guests
-await page.evaluate(() => {
-  // Click individual Admit button
-  const buttons = document.querySelectorAll('button');
-  for (const btn of buttons) {
-    if (btn.textContent.trim() === 'Admit' && btn.offsetParent) {
-      btn.click();
-      return;
-    }
-  }
-  // Or click green pill to open People panel
-  const pills = document.querySelectorAll('div[role="button"]');
-  for (const el of pills) {
-    if (/Admit \d+ guest/.test(el.textContent) && el.offsetParent) {
-      el.click();
-    }
-  }
-});
-
-// If confirmation dialog appears
-await page.evaluate(() => {
-  const ok = document.querySelector('button[data-mdc-dialog-action="ok"]');
-  if (ok) ok.click();
-});
-```
-
-### Google Meet admit flow (selectors reference)
-
-| Element | Selector | Notes |
-|---------|----------|-------|
-| Green pill "Admit N guest(s)" | `div[role="button"]` matching `/Admit \d+ guest/` | Opens People panel |
-| Individual "Admit" button | `button` with exact text "Admit" | Next to person's name, no dialog |
-| "Admit all" link in panel | `div.qJDiDf` with text "Admit all" | Opens confirmation dialog |
-| Dialog confirm button | `button[data-mdc-dialog-action="ok"]` | Confirms "Admit all?" dialog |
-| Dialog cancel button | `button[data-mdc-dialog-action="cancel"]` | |
 
 ---
 
 ## Architecture
 
 ```
-POST /bots { mode: "browser_session" }
-      │
-      ▼
-bot-manager
-│  generates session token
-│  reads user.data.workspace_git (if configured)
-│  starts vexa-bot with mode=browser_session
-│  returns { url: "/b/{token}" }
+Meetings Page
+│  [Browser] button → POST /bots { mode: "browser_session" }
+│  → creates meeting record (platform=browser_session)
+│  → counts against max_concurrent_bots
+│  → starts container with VNC + CDP + SSH
 │
-      ▼
-vexa-bot (browser session mode)
+Meeting Detail (/meetings/{id})
+│  detects mode=browser_session → shows VNC view
+│  toolbar: Save, Connect Agent, Fullscreen, Stop
+│  Connect Agent sidebar: CDP URL, SSH, MCP
+│
+Container (vexa-bot, browser_session mode)
 │  downloads browser data from MinIO
 │  clones/pulls workspace from GitHub (or MinIO)
 │  launchPersistentContext('/tmp/browser-data')
-│  VNC (:6080) + CDP (:9223 via socat) exposed
+│  VNC (:6080) + CDP (:9223 via socat) + SSH (:22)
 │
-│  Human: opens /b/{token} → noVNC in browser tab
-│  Agent: connectOverCDP('/b/{token}/cdp') → Playwright
+│  Human: VNC iframe in dashboard
+│  Agent: connectOverCDP('/b/{token}/cdp')
+│  Shell: ssh root@host -p PORT
 │
 │  [Save] → git commit + push workspace (or S3 sync)
 │         → S3 sync browser data (excludes cache)
@@ -264,7 +225,7 @@ vexa-bot (browser session mode)
 /workspace/              ← user files, git-tracked (GitHub or MinIO)
 ├── scripts/
 │   └── auto-admit.js
-├── .git/                ← full git history
+├── .git/
 └── ...
 
 /tmp/browser-data/       ← Chromium profile (MinIO, excludes cache)
@@ -276,22 +237,6 @@ vexa-bot (browser session mode)
 └── Local State
 ```
 
-### MinIO layout
-
-```
-s3://vexa-recordings/users/{id}/browser-userdata/
-├── workspace/           ← user files (if not using GitHub)
-│   ├── .git/
-│   ├── scripts/
-│   └── ...
-└── browser-data/        ← Chromium profile (sans cache/journals)
-    ├── Default/
-    │   ├── Cookies
-    │   ├── Local Storage/
-    │   └── ...
-    └── Local State
-```
-
 ---
 
 ## API reference
@@ -300,10 +245,10 @@ s3://vexa-recordings/users/{id}/browser-userdata/
 
 ```
 POST   /bots { mode: "browser_session" }
-  → creates browser session, returns { id, data.session_token }
+  → creates browser session, returns { id, data.session_token, data.ssh_port }
 
-DELETE /bots/{platform}/{id}
-  → stops browser session (existing endpoint)
+DELETE /bots/browser_session/{platform_specific_id}
+  → stops browser session
 ```
 
 ### Browser access (token-authenticated, no API key needed)
@@ -315,16 +260,6 @@ GET  /b/{token}/vnc/{path}   → noVNC static files proxy
 WS   /b/{token}/cdp          → CDP WebSocket proxy
 GET  /b/{token}/cdp/{path}   → CDP HTTP proxy (e.g. /json/version)
 POST /b/{token}/save         → trigger storage save
-```
-
-### Workspace git configuration
-
-```
-PUT    /auth/workspace-git { repo, token, branch }
-  → configure GitHub repo for workspace sync
-
-DELETE /auth/workspace-git
-  → remove git config, revert to MinIO
 ```
 
 ### Storage save (internal)
@@ -347,28 +282,5 @@ POST /internal/browser-sessions/{token}/save
 | CPU | 0.5 core idle, 1 core active |
 | SHM | 2 GB |
 | Disk | ~50 MB workspace + ~20 MB browser data (excludes cache) |
-| Image size | +50 MB over base vexa-bot (VNC + awscli + git + socat) |
+| Image size | +50 MB over base vexa-bot (VNC + awscli + git + socat + sshd) |
 | MinIO | ~20-50 MB per user |
-
----
-
-## Gate
-
-One API call → one URL → everything works:
-
-1. **Browser** — open URL → live Chromium via noVNC
-2. **Agent** — `connectOverCDP(url + '/cdp')` → full Playwright API
-3. **Storage** — Save → browser data + workspace persisted
-4. **Persistence** — stop, restart → everything restored (accounts, files, git history)
-5. **Scripts** — `/workspace/scripts/` runs inside container, persists across sessions
-
-### Verified
-
-- [x] Create session via API → get URL
-- [x] Open URL → see live browser
-- [x] Playwright CDP via gateway → navigate, type, screenshot
-- [x] Authenticate Google account → profile persists across restarts
-- [x] Workspace files persist across restarts
-- [x] Git history preserved
-- [x] Auto-admit script runs inside container
-- [x] Individual Admit button click (no dialog needed)

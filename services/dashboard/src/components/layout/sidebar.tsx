@@ -21,7 +21,6 @@ import {
   Webhook,
   User,
   Bug,
-  Monitor,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,7 +36,6 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Meetings", href: "/meetings", icon: Video },
-  { name: "Browser", href: "/browser", icon: Monitor },
   ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
     ? [{ name: "Tracker", href: "/tracker", icon: Zap }]
     : []),

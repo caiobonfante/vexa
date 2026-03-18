@@ -86,6 +86,7 @@ import { getCookie, setCookie } from "@/lib/cookies";
 import { DocsLink } from "@/components/docs/docs-link";
 import { DecisionsPanel } from "@/components/decisions/decisions-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
+import { BrowserSessionView } from "@/components/meetings/browser-session-view";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_VEXA_PUBLIC_API_URL || "https://api.vexa.ai";
 
@@ -780,6 +781,11 @@ export default function MeetingDetailPage() {
     const mins = minutes % 60;
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
+
+  // If this is a browser session, show VNC view instead of transcript
+  if (currentMeeting?.data?.mode === "browser_session") {
+    return <BrowserSessionView meeting={currentMeeting} />;
+  }
 
   return (
     <div className="space-y-2 lg:space-y-6 h-full flex flex-col">
