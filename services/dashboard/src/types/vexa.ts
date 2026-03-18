@@ -244,6 +244,15 @@ export const PLATFORM_CONFIG = {
     pattern: /^\d{9,11}$/,
     placeholder: "85173157171",
   },
+  browser_session: {
+    name: "Browser",
+    color: "bg-gray-500",
+    textColor: "text-gray-700",
+    bgColor: "bg-gray-50",
+    icon: "monitor",
+    pattern: /^bs-/,
+    placeholder: "",
+  },
 } as const;
 
 export const MEETING_STATUS_CONFIG: Record<MeetingStatus, { label: string; color: string; bgColor: string }> = {

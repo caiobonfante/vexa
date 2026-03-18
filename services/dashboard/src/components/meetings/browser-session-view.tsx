@@ -64,7 +64,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
       });
   }, []);
 
-  const token = meeting.data?.session_token;
+  const token = meeting.data?.session_token as string | undefined;
   const isActive = meeting.status === "active" || meeting.status === "joining";
 
   // Session ended / no token
@@ -91,7 +91,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
     : null;
   const cdpUrl = apiUrl ? `${apiUrl}/b/${token}/cdp` : null;
   const mcpUrl = apiUrl ? `${apiUrl}/mcp` : null;
-  const sshPort = meeting.data?.ssh_port;
+  const sshPort = meeting.data?.ssh_port as number | undefined;
   const sshHost = apiUrl ? (() => { try { return new URL(apiUrl).hostname; } catch { return "localhost"; } })() : "localhost";
 
   const agentInstructions = cdpUrl

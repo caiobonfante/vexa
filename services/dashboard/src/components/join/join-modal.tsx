@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Video, Loader2, Sparkles, Globe, ChevronDown, Mic } from "lucide-react";
+import { Video, Loader2, Sparkles, Globe, ChevronDown, Mic, Monitor } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,10 @@ export function JoinModal() {
   const { config } = useRuntimeConfig();
   const user = useAuthStore((state) => state.user);
 
+  const [mode, setMode] = useState<"meeting" | "browser">("meeting");
+  const [gitRepo, setGitRepo] = useState("");
+  const [gitToken, setGitToken] = useState("");
+  const [gitBranch, setGitBranch] = useState("main");
   const [meetingInput, setMeetingInput] = useState("");
   const [platform, setPlatform] = useState<Platform>("google_meet");
   const [language, setLanguage] = useState("auto");
@@ -54,6 +58,14 @@ export function JoinModal() {
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
+      setMode("meeting");
+      // Load git config from localStorage
+      try {
+        const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
+        setGitRepo(git.repo || "");
+        setGitToken(git.token || "");
+        setGitBranch(git.branch || "main");
+      } catch {}
       setMeetingInput("");
       setPlatform("google_meet");
       setIsSubmitting(false);
@@ -189,6 +201,38 @@ export function JoinModal() {
     }
   }, [parsedInput, passcode, botName, language, transcribeEnabled, config, setActiveMeeting, setCurrentMeeting, closeModal, router, user]);
 
+  const handleBrowserSession = useCallback(async () => {
+    setIsSubmitting(true);
+    try {
+      const body: Record<string, string> = { mode: "browser_session" };
+      if (gitRepo && gitToken) {
+        // Save to localStorage for next time
+        localStorage.setItem("vexa-browser-git", JSON.stringify({ repo: gitRepo, token: gitToken, branch: gitBranch }));
+        body.workspaceGitRepo = gitRepo;
+        body.workspaceGitToken = gitToken;
+        body.workspaceGitBranch = gitBranch || "main";
+      }
+      const response = await fetch("/api/vexa/bots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ detail: "Failed" }));
+        throw new Error(err.detail || "Failed to create browser session");
+      }
+      const meeting = await response.json();
+      toast.success("Browser session starting...");
+      closeModal();
+      setTimeout(() => router.push(`/meetings/${meeting.id}`), 2000);
+    } catch (error) {
+      const { title, description } = getUserFriendlyError(error as Error);
+      toast.error(title, { description });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [closeModal, router]);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeModal()}>
       <DialogContent className="sm:max-w-md">
@@ -204,7 +248,87 @@ export function JoinModal() {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        {/* Mode toggle */}
+        <div className="flex gap-1 p-1 bg-muted rounded-lg mt-2">
+          <button
+            type="button"
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              mode === "meeting" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setMode("meeting")}
+          >
+            <Video className="h-3.5 w-3.5" />
+            Meeting
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              mode === "browser" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setMode("browser")}
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            Browser
+          </button>
+        </div>
+
+        {mode === "browser" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Remote browser with VNC, CDP, and SSH. Persistent storage across sessions.
+            </p>
+
+            {/* Git workspace (collapsible) */}
+            <div className="space-y-2 border rounded-lg p-3">
+              <label className="text-xs font-medium text-muted-foreground">Git Workspace (optional)</label>
+              <Input
+                placeholder="https://github.com/you/workspace.git"
+                value={gitRepo}
+                onChange={(e) => setGitRepo(e.target.value)}
+                className="h-9 text-sm"
+              />
+              {gitRepo && (
+                <>
+                  <Input
+                    placeholder="github_pat_..."
+                    type="password"
+                    value={gitToken}
+                    onChange={(e) => setGitToken(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                  <Input
+                    placeholder="Branch (default: main)"
+                    value={gitBranch}
+                    onChange={(e) => setGitBranch(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </>
+              )}
+            </div>
+
+            <Button
+              className="w-full h-12 text-base"
+              onClick={handleBrowserSession}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <Monitor className="mr-2 h-5 w-5" />
+                  Start Browser Session
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Meeting Input */}
           <div className="space-y-2">
             <Label htmlFor="meetingInput" className="sr-only">
@@ -420,6 +544,7 @@ export function JoinModal() {
             <DocsLink href="/docs/rest/bots#create-bot" />
           </div>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

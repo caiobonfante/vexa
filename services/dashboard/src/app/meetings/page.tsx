@@ -176,11 +176,7 @@ export default function MeetingsPage() {
               <RefreshCw className={`h-4 w-4 ${isLoadingMeetings ? "animate-spin" : ""}`} />
             </Button>
             {!subscriptionRequired && (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={handleStartBrowserSession} disabled={isCreatingBrowser}>
-                  {isCreatingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Monitor className="mr-2 h-4 w-4" />}
-                  <span className="hidden sm:inline">Browser</span>
-                </Button>
+              <div className="flex items-center">
                 <Button onClick={openJoinModal}>
                   <Plus className="mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">Join Meeting</span>
