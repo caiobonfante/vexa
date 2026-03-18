@@ -265,14 +265,12 @@ async def start_bot_container(
     # Agent-only mode (agent_enabled + no meeting_url): skip BOT_CONFIG → entrypoint does sleep infinity
     if not agent_enabled or meeting_url:
         environment.insert(0, f"BOT_CONFIG={bot_config_json}")
-    # Add voice agent environment variables (TTS service URL required)
-    if voice_agent_enabled:
-        tts_service_url = os.getenv("TTS_SERVICE_URL", "").strip()
-        if tts_service_url:
-            environment.append(f"TTS_SERVICE_URL={tts_service_url}")
-            logger.info(f"Added TTS_SERVICE_URL to bot environment: {tts_service_url}")
-        else:
-            logger.warning("voice_agent_enabled but TTS_SERVICE_URL not set - TTS will fail")
+    # Always pass TTS service URL so any bot can speak on demand
+    tts_service_url = os.getenv("TTS_SERVICE_URL", "").strip()
+    if tts_service_url:
+        environment.append(f"TTS_SERVICE_URL={tts_service_url}")
+    else:
+        logger.info("TTS_SERVICE_URL not set — TTS will be unavailable")
 
     # Add Zoom-specific environment variables if platform is Zoom
     if platform == "zoom":

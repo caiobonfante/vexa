@@ -1647,13 +1647,17 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     log(`[Chat] Initialization failed (non-fatal): ${err.message}`);
   }
 
-  // Always initialize TTS playback so speak commands work for all bots
+  // Always initialize TTS + mic so any bot can speak on demand
   if (!ttsPlaybackService) {
     ttsPlaybackService = new TTSPlaybackService();
     log('[TTS] Playback service initialized (available for all bots)');
   }
+  if (!microphoneService) {
+    microphoneService = new MicrophoneService(page, botConfig.platform);
+    log('[Mic] Microphone service initialized (available for all bots)');
+  }
 
-  // Initialize full voice agent services (mic, Redis events, etc.) if enabled
+  // Initialize full voice agent services (Redis events, etc.) if enabled
   if (botConfig.voiceAgentEnabled && browserInstance) {
     try {
       await initVoiceAgentServices(botConfig, page, browserInstance);

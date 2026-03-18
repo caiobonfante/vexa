@@ -867,9 +867,11 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   for (const [id, state] of speakingStates) {
                     if (state === 'speaking') {
                       const name = registry.getNameById(id);
-                      if (name && !name.toLowerCase().includes(botNameLower)) {
-                        activeSpeakerNames.push(name);
-                      }
+                      if (!name) continue;
+                      const nameLower = name.toLowerCase();
+                      // Skip bot's own audio — match config name OR common bot name patterns
+                      if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
+                      activeSpeakerNames.push(name);
                     }
                   }
 

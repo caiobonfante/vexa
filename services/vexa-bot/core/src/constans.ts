@@ -30,31 +30,19 @@ const baseBrowserArgs = [
  *   Omit the fake-audio-capture flag so Chromium reads from PulseAudio default
  *   source (virtual_mic remap of tts_sink.monitor), allowing TTS audio into meeting.
  */
+/**
+ * Get browser launch arguments.
+ *
+ * All bots use PulseAudio (no /dev/null). Silence is achieved by:
+ * - PulseAudio: tts_sink and virtual_mic muted at startup (entrypoint.sh)
+ * - Teams UI: mic muted after join (join.ts)
+ * - TTS: unmutes pactl + UI mic before speaking, re-mutes after
+ */
 export function getBrowserArgs(voiceAgentEnabled: boolean = false): string[] {
-  let args = [...baseBrowserArgs];
-
-  if (voiceAgentEnabled) {
-    // Audio: Omit --use-file-for-fake-audio-capture so Chromium reads from
-    // PulseAudio default source (virtual_mic → tts_sink.monitor).
-    // This allows TTS audio played to tts_sink to enter the meeting as mic input.
-    //
-    // Video: Keep --use-file-for-fake-video-capture=/dev/null (from base args).
-    // Our getUserMedia patch in the init script intercepts video requests and
-    // returns a canvas stream. The replaceTrack in enableCamera() swaps the
-    // WebRTC sender track for our canvas track.
-    //
-    // NOTE: Do NOT use --use-fake-device-for-media-stream here — it creates
-    // Chromium-internal fake devices that bypass PulseAudio entirely,
-    // preventing TTS audio from reaching the meeting.
-  } else {
-    // Silence mic input when voice agent is not active
-    args.push("--use-file-for-fake-audio-capture=/dev/null");
-  }
-
-  return args;
+  return [...baseBrowserArgs];
 }
 
-// Default browser args for backward compatibility (voice agent disabled)
+// Default browser args
 export const browserArgs = getBrowserArgs(false);
 
 /**

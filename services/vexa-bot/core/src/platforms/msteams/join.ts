@@ -459,5 +459,18 @@ export async function joinMicrosoftTeams(page: Page, botConfig: BotConfig): Prom
     log("⚠️ Join button not found — bot may not be able to enter the meeting");
   }
 
+  // Mute mic for transcription-only bots to prevent speaking indicator spam.
+  // Teams detects an active unmuted mic track even when audio source is /dev/null.
+  if (!botConfig.voiceAgentEnabled) {
+    log("Step 6b: Muting mic (transcription-only bot)...");
+    try {
+      await page.keyboard.press("Control+Shift+M");
+      await page.waitForTimeout(500);
+      log("✅ Mic muted via Ctrl+Shift+M");
+    } catch (error) {
+      log("ℹ️ Could not mute mic via keyboard shortcut");
+    }
+  }
+
   log("Step 7: Checking current state...");
 }
