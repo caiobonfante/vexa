@@ -70,7 +70,7 @@ The Connect Agent sidebar also shows SSH access:
 
 ```bash
 ssh root@localhost -p PORT_FROM_DASHBOARD
-# Password: vexa
+# Password: the session_token (shown in Connect Agent sidebar)
 # Workspace: /workspace
 ```
 
@@ -125,7 +125,7 @@ const browser = await chromium.connectOverCDP(
 SSH:
 ```bash
 ssh root@localhost -p 32789
-# Password: vexa
+# Password: the session_token (shown in Connect Agent sidebar)
 ```
 
 ### 3. Save and stop

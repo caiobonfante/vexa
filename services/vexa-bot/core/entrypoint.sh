@@ -77,7 +77,9 @@ FBAPPS
   echo "[entrypoint] CDP ready, starting socat proxy on 0.0.0.0:9223"
   socat TCP-LISTEN:9223,fork,reuseaddr,bind=0.0.0.0 TCP:localhost:9222) &
 
-  # SSH server for remote agent shell access
+  # SSH server — password is the session token (unique per session)
+  SSH_PASS=$(echo "$BOT_CONFIG" | node -e "try{const c=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));console.log(c.session_token||'vexa')}catch{console.log('vexa')}" 2>/dev/null || echo "vexa")
+  echo "root:$SSH_PASS" | chpasswd
   echo "[entrypoint] Starting SSH server on port 22"
   /usr/sbin/sshd
 fi

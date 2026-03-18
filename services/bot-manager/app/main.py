@@ -705,6 +705,7 @@ async def request_bot(
         bot_config_data = {
             "mode": "browser_session",
             "meeting_id": meeting_id,
+            "session_token": session_token,
             "redisUrl": REDIS_URL,
             "container_name": container_name,
             "botManagerCallbackUrl": callback_url,

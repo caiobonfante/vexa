@@ -97,7 +97,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -
     openssh-server \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd \
-    && echo 'root:vexa' | chpasswd \
     && sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
     && sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 

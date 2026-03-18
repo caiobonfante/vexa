@@ -107,7 +107,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           ? [
               `Shell access (SSH into the container):`,
               `  ssh root@${sshHost} -p ${sshPort}`,
-              `  Password: vexa`,
+              `  Password: ${token}`,
               `  Workspace: /workspace`,
               ``,
             ]
@@ -251,7 +251,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
                 <hr />
                 <CopyBlock
                   label="SSH"
-                  text={`ssh root@${sshHost} -p ${sshPort}\nPassword: vexa`}
+                  text={`ssh root@${sshHost} -p ${sshPort}\nPassword: ${token}`}
                 />
               </>
             )}
