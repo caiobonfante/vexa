@@ -868,25 +868,32 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
 
-              // Speaker timeline: records when each speaker started.
-              // Used to look up the correct speaker for a delayed audio chunk
-              // by its original timestamp.
+              // Speaker timeline: records when each speaker started AND when
+              // their caption last updated (effective end of their turn).
+              // Audio chunks between a speaker's lastCaptionUpdate and the next
+              // speaker's start are dropped — they're tail audio or silence gap.
               interface SpeakerEvent {
-                timestamp: number;
+                timestamp: number;      // when this speaker started (backdated)
                 speaker: string;
+                endTimestamp: number;    // last caption update for this speaker (set on speaker change)
               }
               const speakerTimeline: SpeakerEvent[] = [];
 
               function speakerAtTime(t: number): string | null {
-                // Find the last speaker event at or before timestamp t
-                let result: string | null = null;
+                // Find which speaker was active at timestamp t.
+                // Returns null if t falls in the gap between a speaker's end
+                // and the next speaker's start (tail/silence zone).
                 for (let i = speakerTimeline.length - 1; i >= 0; i--) {
-                  if (speakerTimeline[i].timestamp <= t) {
-                    result = speakerTimeline[i].speaker;
-                    break;
+                  const ev = speakerTimeline[i];
+                  if (t >= ev.timestamp) {
+                    // Check if chunk is past this speaker's end (tail zone)
+                    if (ev.endTimestamp > 0 && t > ev.endTimestamp) {
+                      return null; // gap between speakers — don't route
+                    }
+                    return ev.speaker;
                   }
                 }
-                return result;
+                return null;
               }
               let lastCaptionTimestamp: number = 0;
 
@@ -1038,13 +1045,23 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                     (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
                     ' (queued: ' + audioQueue.length + ' chunks)');
 
-                  // Record in timeline. Only backdate when there was a recent
-                  // speaker (active transition). After a silence gap (>3s since
-                  // last caption), don't backdate — the new speaker's audio in
-                  // the delay queue was silence/gap, not their opening words.
+                  // Close previous speaker's timeline entry: set their end time
+                  // to their last caption update. Audio after this point is tail/gap
+                  // and should NOT be routed to them.
+                  if (speakerTimeline.length > 0) {
+                    const prev = speakerTimeline[speakerTimeline.length - 1];
+                    if (prev.endTimestamp === 0) {
+                      prev.endTimestamp = lastCaptionTimestamp || now;
+                    }
+                  }
+
+                  // Record new speaker. Backdate by ~1s (caption delay) so that
+                  // audio chunks from the transition get the new speaker.
+                  // Exception: after silence gap (>3s), no backdate.
                   const silenceGap = lastCaptionTimestamp > 0 && (now - lastCaptionTimestamp) > 3000;
                   const backdateMs = silenceGap ? 0 : AUDIO_DELAY_MS;
-                  speakerTimeline.push({ timestamp: now - backdateMs, speaker });
+                  speakerTimeline.push({ timestamp: now - backdateMs, speaker, endTimestamp: 0 });
+
                   // Keep timeline bounded (last 60s)
                   while (speakerTimeline.length > 0 && now - speakerTimeline[0].timestamp > 60000) {
                     speakerTimeline.shift();
