@@ -1038,11 +1038,13 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                     (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
                     ' (queued: ' + audioQueue.length + ' chunks)');
 
-                  // Record in timeline. The caption fires ~1s after the speaker
-                  // actually started, so backdate the event by AUDIO_DELAY_MS.
-                  // This way, delayed audio chunks from the transition get the
-                  // correct speaker when looked up by their original timestamp.
-                  speakerTimeline.push({ timestamp: now - AUDIO_DELAY_MS, speaker });
+                  // Record in timeline. Only backdate when there was a recent
+                  // speaker (active transition). After a silence gap (>3s since
+                  // last caption), don't backdate — the new speaker's audio in
+                  // the delay queue was silence/gap, not their opening words.
+                  const silenceGap = lastCaptionTimestamp > 0 && (now - lastCaptionTimestamp) > 3000;
+                  const backdateMs = silenceGap ? 0 : AUDIO_DELAY_MS;
+                  speakerTimeline.push({ timestamp: now - backdateMs, speaker });
                   // Keep timeline bounded (last 60s)
                   while (speakerTimeline.length > 0 && now - speakerTimeline[0].timestamp > 60000) {
                     speakerTimeline.shift();
