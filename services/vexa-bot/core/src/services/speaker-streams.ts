@@ -282,29 +282,34 @@ export class SpeakerStreamManager {
 
   /**
    * Force-flush a speaker's buffer. Called when captions detect the speaker
-   * stopped (speaker change). Submits any unsubmitted audio for a final
-   * Whisper pass, emits the best available text, and fully resets.
+   * stopped (speaker change). If the buffer has enough audio, submits and
+   * emits. If too short (< minAudioDuration), keeps chunks in the buffer
+   * so they join the speaker's next segment.
    */
   flushSpeaker(speakerId: string): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
-    // If there's audio that hasn't been submitted yet, do a final submit.
-    // The result will arrive via handleTranscriptionResult and get emitted
-    // because we set pendingEmit to lastTranscript below.
+    const audioDurationSec = buffer.totalSamples / this.sampleRate;
+
+    // Too short for Whisper — keep chunks in the buffer. They'll be part
+    // of this speaker's next turn, or cleaned up by idle timeout.
+    if (audioDurationSec < this.minAudioDuration && !buffer.lastTranscript) {
+      log(`[SpeakerStreams] Flush skipped for "${buffer.speakerName}" (${audioDurationSec.toFixed(1)}s < ${this.minAudioDuration}s min, keeping for next turn)`);
+      return;
+    }
+
+    // Enough audio or we have a transcript — emit what we have.
     if (buffer.totalSamples > 0 && !buffer.inFlight) {
-      // Emit whatever text we have (even if not confirmed — speaker changed,
-      // so this is the best we'll get).
       if (!buffer.pendingEmit && buffer.lastTranscript) {
         buffer.pendingEmit = buffer.lastTranscript;
       }
-      // If we have audio but no transcript at all, submit for one final pass.
-      // Mark buffer as flushing so handleTranscriptionResult knows to emit immediately.
+      // Audio but no transcript yet — do a final Whisper submit.
       if (!buffer.pendingEmit && !buffer.lastTranscript) {
-        buffer.idleSubmitted = true; // reuse flag: next result will trigger cleanup
-        log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${(buffer.totalSamples/this.sampleRate).toFixed(1)}s audio, no transcript yet)`);
+        buffer.idleSubmitted = true;
+        log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${audioDurationSec.toFixed(1)}s audio, no transcript yet)`);
         this.submitBuffer(buffer);
-        return; // handleTranscriptionResult will handle cleanup
+        return;
       }
     }
 
