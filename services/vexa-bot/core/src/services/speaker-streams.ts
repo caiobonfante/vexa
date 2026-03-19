@@ -217,10 +217,12 @@ export class SpeakerStreamManager {
     const wallClockDurationSec = (Date.now() - buffer.bufferStartMs) / 1000;
     const idleMs = Date.now() - buffer.lastAudioTimestamp;
 
-    // Idle timeout — if no audio for 5s, speaker is done.
-    // First idle hit: submit remaining audio to Whisper for one last chance.
-    // Second idle hit (3s later): emit whatever we have and fully discard.
-    if (idleMs > 5000 && buffer.totalSamples > 0) {
+    // Idle timeout — if no audio for 15s, speaker is truly done.
+    // Caption speaker-change handles fast transitions (~1-2s). This idle
+    // timeout is the safety net for when captions don't fire. Set high
+    // (15s) because the browser silence filter drops quiet chunks, making
+    // natural speech pauses (2-5s) look like idle gaps.
+    if (idleMs > 15000 && buffer.totalSamples > 0) {
       if (!buffer.idleSubmitted && !buffer.inFlight) {
         // First idle: one final Whisper submission
         buffer.idleSubmitted = true;
