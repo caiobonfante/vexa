@@ -1335,10 +1335,22 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
  *   2. Caption text storage alongside audio transcription
  *   3. Future: fuzzy text matching for segment reconciliation
  */
+let lastNodeCaptionSpeaker: string | null = null;
+
 async function handleTeamsCaptionData(speakerName: string, captionText: string, timestampMs: number): Promise<void> {
   if (!segmentPublisher || !page || page.isClosed()) return;
 
   const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
+
+  // Speaker changed — force-flush the previous speaker's buffer.
+  // Their turn is over (caption confirms it). Publish whatever text
+  // they have pending so it doesn't bleed into their next turn.
+  if (lastNodeCaptionSpeaker && lastNodeCaptionSpeaker !== speakerName && speakerManager) {
+    const prevId = `teams-${lastNodeCaptionSpeaker.replace(/\s+/g, '_')}`;
+    speakerManager.flushSpeaker(prevId);
+    log(`[📝 FLUSH] "${lastNodeCaptionSpeaker}" buffer flushed on speaker change`);
+  }
+  lastNodeCaptionSpeaker = speakerName;
 
   // Publish caption as a speaker event for downstream consumers
   await segmentPublisher.publishSpeakerEvent({
@@ -1347,10 +1359,6 @@ async function handleTeamsCaptionData(speakerName: string, captionText: string, 
     timestamp: timestampMs,
   });
 
-  // Store caption data for segment reconciliation.
-  // Caption text is published alongside audio transcription so downstream
-  // consumers (transcription-collector) can use it for speaker validation
-  // and fuzzy text matching when both sources are available.
   log(`[📝 TEAMS CAPTION] "${speakerName}": ${captionText.substring(0, 80)}${captionText.length > 80 ? '...' : ''}`);
 }
 

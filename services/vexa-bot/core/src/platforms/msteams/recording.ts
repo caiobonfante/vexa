@@ -858,7 +858,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // (punctuation, capitalization) are ignored — they would
               // steal the next speaker's audio from the queue.
               // Max queue age 3s. Speaker change clears queue.
-              const MAX_QUEUE_AGE_MS = 3000;
+              const MAX_QUEUE_AGE_MS = 15000;
               const MIN_TEXT_GROWTH = 3; // chars — below this = refinement
               interface QueuedChunk {
                 data: Float32Array;

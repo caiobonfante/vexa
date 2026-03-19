@@ -236,7 +236,19 @@ export class SpeakerStreamManager {
     }
   }
 
-  private emitAndReset(buffer: SpeakerBuffer): void {
+  /**
+   * Force-flush a speaker's buffer. Called when captions detect the speaker
+   * stopped (speaker change). Publishes whatever text is pending and resets.
+   */
+  flushSpeaker(speakerId: string): void {
+    const buffer = this.buffers.get(speakerId);
+    if (!buffer) return;
+    if (buffer.pendingEmit || buffer.totalSamples > 0) {
+      this.emitAndReset(buffer, true); // full reset — discard all chunks
+    }
+  }
+
+  private emitAndReset(buffer: SpeakerBuffer, fullReset: boolean = false): void {
     if (buffer.pendingEmit && this.onSegmentConfirmed) {
       const endMs = Date.now();
       const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
@@ -244,11 +256,18 @@ export class SpeakerStreamManager {
       buffer.sequenceNumber++;
     }
 
-    // Keep chunks that arrived AFTER the last submission — they're the
-    // beginning of the next segment and must not be discarded.
-    const newChunks = buffer.chunks.slice(buffer.submittedChunkCount);
+    // Normal reset: keep chunks that arrived AFTER the last submission —
+    // they're the beginning of the next segment.
+    // Full reset (force-flush on speaker change): discard everything —
+    // the speaker is done, stale chunks would contaminate their next turn.
+    let newChunks: Float32Array[];
     let newSamples = 0;
-    for (const c of newChunks) newSamples += c.length;
+    if (fullReset) {
+      newChunks = [];
+    } else {
+      newChunks = buffer.chunks.slice(buffer.submittedChunkCount);
+      for (const c of newChunks) newSamples += c.length;
+    }
 
     buffer.chunks = newChunks;
     buffer.totalSamples = newSamples;
