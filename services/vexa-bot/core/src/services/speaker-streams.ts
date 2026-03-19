@@ -77,7 +77,7 @@ export class SpeakerStreamManager {
     this.minAudioDuration = config?.minAudioDuration ?? 3;
     this.submitInterval = config?.submitInterval ?? 3;
     this.confirmThreshold = config?.confirmThreshold ?? 2;
-    this.maxBufferDuration = config?.maxBufferDuration ?? 60;
+    this.maxBufferDuration = config?.maxBufferDuration ?? 120;
     this.sampleRate = config?.sampleRate ?? 16000;
   }
 
@@ -140,21 +140,20 @@ export class SpeakerStreamManager {
       return;
     }
 
-    // Fuzzy match: compare first 80% of the shorter string
+    // Track best transcript — always keep the latest stable version.
+    // DON'T emit on confirmation. Buffer keeps growing. Emission only
+    // happens on speaker change (flushSpeaker) or idle timeout —
+    // that's when we know the speaker is done and we have their full text.
     const compareLen = Math.floor(Math.min(trimmed.length, buffer.lastTranscript.length) * 0.8);
 
     if (compareLen > 20 && trimmed.substring(0, compareLen) === buffer.lastTranscript.substring(0, compareLen)) {
       buffer.confirmCount++;
     } else {
-      buffer.lastTranscript = trimmed;
       buffer.confirmCount = 1;
     }
 
-    if (buffer.confirmCount >= this.confirmThreshold) {
-      // Confirmed — emit and advance
-      buffer.pendingEmit = trimmed;
-      this.emitAndReset(buffer);
-    }
+    // Always update to the latest (longest/best) transcript
+    buffer.lastTranscript = trimmed;
   }
 
   removeSpeaker(speakerId: string): void {
@@ -248,7 +247,6 @@ export class SpeakerStreamManager {
         buffer.pendingEmit = buffer.lastTranscript;
       }
       this.emitAndReset(buffer);
-      // Still submit if there's audio left after reset
       return;
     }
 
