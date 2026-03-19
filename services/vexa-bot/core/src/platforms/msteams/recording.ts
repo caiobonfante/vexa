@@ -867,6 +867,27 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               let captionsEnabled = false;
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
+
+              // Speaker timeline: records when each speaker started.
+              // Used to look up the correct speaker for a delayed audio chunk
+              // by its original timestamp.
+              interface SpeakerEvent {
+                timestamp: number;
+                speaker: string;
+              }
+              const speakerTimeline: SpeakerEvent[] = [];
+
+              function speakerAtTime(t: number): string | null {
+                // Find the last speaker event at or before timestamp t
+                let result: string | null = null;
+                for (let i = speakerTimeline.length - 1; i >= 0; i--) {
+                  if (speakerTimeline[i].timestamp <= t) {
+                    result = speakerTimeline[i].speaker;
+                    break;
+                  }
+                }
+                return result;
+              }
               let lastCaptionTimestamp: number = 0;
 
               // Track which ring buffer entries have already been flushed to a speaker
@@ -906,15 +927,16 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   // Push to delay queue
                   audioQueue.push({ data: chunk, timestamp: now });
 
-                  // Flush chunks that are ≥1s old — by now captions have
-                  // updated lastCaptionSpeaker to the correct speaker
+                  // Flush chunks that are ≥1s old. Look up the correct speaker
+                  // for each chunk's original timestamp from the speaker timeline.
                   while (audioQueue.length > 0 && now - audioQueue[0].timestamp >= AUDIO_DELAY_MS) {
                     const entry = audioQueue.shift()!;
-                    if (lastCaptionSpeaker) {
-                      const nameLower = lastCaptionSpeaker.toLowerCase();
+                    const speaker = speakerAtTime(entry.timestamp);
+                    if (speaker) {
+                      const nameLower = speaker.toLowerCase();
                       if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
                         if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, Array.from(entry.data));
+                          (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
                         }
                       }
                     }
@@ -1015,9 +1037,16 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   (window as any).logBot?.('[Teams Captions] Speaker change: ' +
                     (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
                     ' (queued: ' + audioQueue.length + ' chunks)');
-                  // No re-tagging needed. The audio delay queue flushes chunks
-                  // using lastCaptionSpeaker at flush time (1s later), which by
-                  // then reflects the correct speaker from the caption stream.
+
+                  // Record in timeline. The caption fires ~1s after the speaker
+                  // actually started, so backdate the event by AUDIO_DELAY_MS.
+                  // This way, delayed audio chunks from the transition get the
+                  // correct speaker when looked up by their original timestamp.
+                  speakerTimeline.push({ timestamp: now - AUDIO_DELAY_MS, speaker });
+                  // Keep timeline bounded (last 60s)
+                  while (speakerTimeline.length > 0 && now - speakerTimeline[0].timestamp > 60000) {
+                    speakerTimeline.shift();
+                  }
                 }
 
                 lastCaptionSpeaker = speaker;
