@@ -849,17 +849,21 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // (with inherent delay), we can look back and attribute the audio
               // to the correct speaker retroactively.
 
-              const RING_BUFFER_SECONDS = 1;
-              const RING_BUFFER_SAMPLE_RATE = 16000;
               const RING_BUFFER_CHUNK_SIZE = 4096;
-              const RING_BUFFER_MAX_CHUNKS = Math.ceil((RING_BUFFER_SECONDS * RING_BUFFER_SAMPLE_RATE) / RING_BUFFER_CHUNK_SIZE);
+              const RING_BUFFER_SAMPLE_RATE = 16000;
 
-              // Ring buffer: stores recent non-silent audio chunks with timestamps
-              interface RingBufferEntry {
+              // ── Audio delay queue ──────────────────────────────────────
+              // Two independent streams: captions (speaker identity, ~1s delayed)
+              // and audio (real-time, no speaker info). We delay audio by 1s so
+              // that when we flush it, lastCaptionSpeaker already reflects the
+              // correct speaker from the caption stream. No buffer size limit
+              // needed — chunks flush as fast as they arrive, just 1s behind.
+              const AUDIO_DELAY_MS = 1000;
+              interface DelayedChunk {
                 data: Float32Array;
                 timestamp: number;
               }
-              const ringBuffer: RingBufferEntry[] = [];
+              const audioQueue: DelayedChunk[] = [];
               let captionsEnabled = false;
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
@@ -899,23 +903,19 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   const now = Date.now();
                   const chunk = new Float32Array(data);
 
-                  // Always store in ring buffer when captions enabled
-                  if (captionsEnabled) {
-                    ringBuffer.push({ data: chunk, timestamp: now });
-                    while (ringBuffer.length > RING_BUFFER_MAX_CHUNKS) {
-                      ringBuffer.shift();
-                      if (ringBufferFlushedUpTo > 0) ringBufferFlushedUpTo--;
-                    }
-                  }
+                  // Push to delay queue
+                  audioQueue.push({ data: chunk, timestamp: now });
 
-                  // Route audio to speaker via captions ONLY.
-                  // DOM blue squares are disabled — captions are the primary signal.
-                  if (lastCaptionSpeaker) {
-                    const nameLower = lastCaptionSpeaker.toLowerCase();
-                    if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
-                      const audioArray = Array.from(data);
-                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                        (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, audioArray);
+                  // Flush chunks that are ≥1s old — by now captions have
+                  // updated lastCaptionSpeaker to the correct speaker
+                  while (audioQueue.length > 0 && now - audioQueue[0].timestamp >= AUDIO_DELAY_MS) {
+                    const entry = audioQueue.shift()!;
+                    if (lastCaptionSpeaker) {
+                      const nameLower = lastCaptionSpeaker.toLowerCase();
+                      if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
+                        if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, Array.from(entry.data));
+                        }
                       }
                     }
                   }
@@ -1013,20 +1013,11 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 // 4 chunks × 256ms = ~1s — matches the typical caption delay.
                 if (speaker !== lastCaptionSpeaker) {
                   (window as any).logBot?.('[Teams Captions] Speaker change: ' +
-                    (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
-
-                  const LOOKBACK_CHUNKS = 4; // ~1s at 4096 samples / 16kHz
-                  const lookbackStart = Math.max(ringBufferFlushedUpTo, ringBuffer.length - LOOKBACK_CHUNKS);
-                  const lookback = ringBuffer.slice(lookbackStart);
-                  if (lookback.length > 0 && typeof (window as any).__vexaTeamsAudioData === 'function') {
-                    for (const entry of lookback) {
-                      (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
-                    }
-                    (window as any).logBot?.('[Teams Captions] Flushed ' + lookback.length +
-                      ' chunks (' + ((lookback.length * RING_BUFFER_CHUNK_SIZE / RING_BUFFER_SAMPLE_RATE) * 1000).toFixed(0) +
-                      'ms lookback) to ' + speaker);
-                  }
-                  ringBufferFlushedUpTo = ringBuffer.length;
+                    (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
+                    ' (queued: ' + audioQueue.length + ' chunks)');
+                  // No re-tagging needed. The audio delay queue flushes chunks
+                  // using lastCaptionSpeaker at flush time (1s later), which by
+                  // then reflects the correct speaker from the caption stream.
                 }
 
                 lastCaptionSpeaker = speaker;
