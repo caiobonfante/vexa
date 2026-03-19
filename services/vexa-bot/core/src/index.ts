@@ -1251,10 +1251,12 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     }
   }
 
-  // VAD check — only feed audio that contains speech
-  if (vadModel) {
+  // No VAD for Teams — caption staleness already gates audio routing.
+  // Whisper needs inter-word silence for accurate word boundaries.
+  // VAD is still used for Google Meet (per-speaker streams, no captions).
+  if (currentPlatform !== 'teams' && vadModel) {
     const hasSpeech = await vadModel.isSpeech(audioData);
-    if (!hasSpeech) return; // silence — don't buffer, don't transcribe
+    if (!hasSpeech) return;
   }
 
   speakerManager.feedAudio(speakerId, audioData);

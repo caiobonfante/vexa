@@ -852,22 +852,18 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               const RING_BUFFER_CHUNK_SIZE = 4096;
               const RING_BUFFER_SAMPLE_RATE = 16000;
 
-              // ── Audio delay queue ──────────────────────────────────────
-              // Two independent streams: captions (speaker identity, ~1s delayed)
-              // and audio (real-time, no speaker info). We delay audio by 1s so
-              // that when we flush it, lastCaptionSpeaker already reflects the
-              // correct speaker from the caption stream.
-              //
-              // Staleness check: if lastCaptionTimestamp is old (speaker stopped
-              // talking), don't route — cuts the previous speaker's tail and
-              // saves transcription compute on silence/gap audio.
-              const AUDIO_DELAY_MS = 1000;
-              const CAPTION_STALE_MS = 1500; // caption older than this = speaker stopped
-              interface DelayedChunk {
+              // ── Caption-driven audio routing ─────────────────────────
+              // Audio accumulates in a queue. On each caption text change,
+              // the queue is flushed to that speaker's buffer. Max queue
+              // age 3s — if no caption arrives in 3s, audio is dropped.
+              // No timer, no delay constant, no staleness threshold.
+              // The caption IS the flush trigger.
+              const MAX_QUEUE_AGE_MS = 3000;
+              interface QueuedChunk {
                 data: Float32Array;
                 timestamp: number;
               }
-              const audioQueue: DelayedChunk[] = [];
+              const audioQueue: QueuedChunk[] = [];
               let captionsEnabled = false;
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
@@ -893,55 +889,15 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
 
                 processor.onaudioprocess = (e: AudioProcessingEvent) => {
                   const data = e.inputBuffer.getChannelData(0);
-                  // Skip silence
-                  let maxVal = 0;
-                  for (let j = 0; j < data.length; j++) {
-                    const abs = data[j] < 0 ? -data[j] : data[j];
-                    if (abs > maxVal) maxVal = abs;
-                  }
-                  if (maxVal <= 0.005) return;
-
                   const now = Date.now();
-                  const chunk = new Float32Array(data);
 
-                  // Push to delay queue
-                  audioQueue.push({ data: chunk, timestamp: now });
+                  // Accumulate audio. Flushing happens in processCaptions.
+                  audioQueue.push({ data: new Float32Array(data), timestamp: now });
 
-                  // Flush chunks ≥1s old. Route to lastCaptionSpeaker if
-                  // their caption is still fresh (speaker still active).
-                  while (audioQueue.length > 0 && now - audioQueue[0].timestamp >= AUDIO_DELAY_MS) {
-                    const entry = audioQueue.shift()!;
-                    const captionAge = now - lastCaptionTimestamp;
-                    if (lastCaptionSpeaker && captionAge < CAPTION_STALE_MS) {
-                      const nameLower = lastCaptionSpeaker.toLowerCase();
-                      if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
-                        if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, Array.from(entry.data));
-                        }
-                      }
-                    }
-                    // else: caption stale (speaker stopped) — drop chunk
+                  // Drop entries older than 3s (no caption came = silence/gap)
+                  while (audioQueue.length > 0 && now - audioQueue[0].timestamp > MAX_QUEUE_AGE_MS) {
+                    audioQueue.shift();
                   }
-                  // DOM fallback DISABLED — keeping code for reference:
-                  // if (!routed) {
-                  //   const activeSpeakerNames: string[] = [];
-                  //   for (const [id, state] of speakingStates) {
-                  //     if (state === 'speaking') {
-                  //       const name = registry.getNameById(id);
-                  //       if (!name) continue;
-                  //       const nameLower = name.toLowerCase();
-                  //       if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
-                  //       activeSpeakerNames.push(name);
-                  //     }
-                  //   }
-                  //   if (activeSpeakerNames.length === 0) return;
-                  //   const audioArray = Array.from(data);
-                  //   for (const name of activeSpeakerNames) {
-                  //     if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                  //       (window as any).__vexaTeamsAudioData(name, audioArray);
-                  //     }
-                  //   }
-                  // }
                 };
 
                 source.connect(processor);
@@ -1018,6 +974,23 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 lastCaptionSpeaker = speaker;
                 lastCaptionText = text;
                 lastCaptionTimestamp = now;
+
+                // ── Flush audio queue to this speaker ──────────────────
+                // Caption text changed = speaker is active. Send all
+                // accumulated audio to their buffer.
+                if (!speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
+                  let flushed = 0;
+                  while (audioQueue.length > 0) {
+                    const entry = audioQueue.shift()!;
+                    if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                      (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                    }
+                    flushed++;
+                  }
+                  if (flushed > 0) {
+                    (window as any).logBot?.('[Teams Captions] Flushed ' + flushed + ' chunks to ' + speaker);
+                  }
+                }
 
                 if (typeof (window as any).__vexaTeamsCaptionData === 'function') {
                   (window as any).__vexaTeamsCaptionData(speaker, text, now);
