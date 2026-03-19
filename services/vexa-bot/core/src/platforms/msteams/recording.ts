@@ -853,12 +853,13 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               const RING_BUFFER_SAMPLE_RATE = 16000;
 
               // ── Caption-driven audio routing ─────────────────────────
-              // Audio accumulates in a queue. On each caption text change,
-              // the queue is flushed to that speaker's buffer. Max queue
-              // age 3s — if no caption arrives in 3s, audio is dropped.
-              // No timer, no delay constant, no staleness threshold.
-              // The caption IS the flush trigger.
+              // Audio accumulates in a queue. Flushed to speaker when
+              // caption text GROWS (new words spoken). Refinements
+              // (punctuation, capitalization) are ignored — they would
+              // steal the next speaker's audio from the queue.
+              // Max queue age 3s. Speaker change clears queue.
               const MAX_QUEUE_AGE_MS = 3000;
+              const MIN_TEXT_GROWTH = 3; // chars — below this = refinement
               interface QueuedChunk {
                 data: Float32Array;
                 timestamp: number;
@@ -868,6 +869,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
               let lastCaptionTimestamp: number = 0;
+              let lastFlushedTextLength: number = 0;
 
               const setupPerSpeakerAudioRouting = () => {
                 const audioEl = document.querySelector('audio') as HTMLAudioElement | null;
@@ -966,30 +968,58 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) return;
 
                 if (speaker !== lastCaptionSpeaker) {
-                  (window as any).logBot?.('[Teams Captions] Speaker change: ' +
-                    (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
-                    ' (queued: ' + audioQueue.length + ' chunks)');
+                  // Speaker changed. Queue contains new speaker's audio
+                  // (~1-1.5s accumulated during caption delay). Flush to
+                  // new speaker to preserve their opening words.
+                  lastFlushedTextLength = 0;
+                  const queued = audioQueue.length;
+                  if (queued > 0 && !speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
+                    let flushed = 0;
+                    while (audioQueue.length > 0) {
+                      const entry = audioQueue.shift()!;
+                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                      }
+                      flushed++;
+                    }
+                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
+                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
+                      ' (flushed ' + flushed + ' chunks to new speaker)');
+                  } else {
+                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
+                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
+                  }
                 }
 
                 lastCaptionSpeaker = speaker;
                 lastCaptionText = text;
                 lastCaptionTimestamp = now;
 
-                // ── Flush audio queue to this speaker ──────────────────
-                // Caption text changed = speaker is active. Send all
-                // accumulated audio to their buffer.
-                if (!speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
-                  let flushed = 0;
-                  while (audioQueue.length > 0) {
-                    const entry = audioQueue.shift()!;
-                    if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                      (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                // ── Flush only when text GREW (new words spoken) ─────
+                // Refinements (punctuation, case) change text by 1-2 chars.
+                // New words grow by 5+. Skip refinements to prevent
+                // stealing the next speaker's audio from the queue.
+                // Compare against PREVIOUS text length (not cumulative max)
+                // because Teams replaces caption text per entry, not appends.
+                const textGrowth = text.length - lastFlushedTextLength;
+                // Flush when: text grew by >3 chars (new words), OR text is
+                // shorter (new caption entry = new sentence, always flush)
+                if (textGrowth > MIN_TEXT_GROWTH || text.length < lastFlushedTextLength) {
+                  if (!speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
+                    let flushed = 0;
+                    while (audioQueue.length > 0) {
+                      const entry = audioQueue.shift()!;
+                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                      }
+                      flushed++;
                     }
-                    flushed++;
+                    if (flushed > 0) {
+                      (window as any).logBot?.('[Teams Captions] Flushed ' + flushed + ' chunks to ' + speaker +
+                        ' (text ' + (textGrowth > 0 ? '+' + textGrowth : textGrowth) + ' chars)');
+                    }
                   }
-                  if (flushed > 0) {
-                    (window as any).logBot?.('[Teams Captions] Flushed ' + flushed + ' chunks to ' + speaker);
-                  }
+                  lastFlushedTextLength = text.length;
                 }
 
                 if (typeof (window as any).__vexaTeamsCaptionData === 'function') {
