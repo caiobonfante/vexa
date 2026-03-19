@@ -69,7 +69,12 @@ if [ "$BOT_MODE" = "browser_session" ]; then
 FBAPPS
   fluxbox &
   x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
+  autocutsel -s PRIMARY &
+  autocutsel -s CLIPBOARD &
+
+  # websockify bridges VNC (port 5900) to web (port 6080) for noVNC
   websockify --web /usr/share/novnc 6080 localhost:5900 &
+  echo "[entrypoint] websockify started on port 6080"
 
   # CDP proxy: Chromium binds CDP to 127.0.0.1 only. Socat exposes it on 0.0.0.0:9223
   # so the api-gateway can reach it from the Docker network.
@@ -82,8 +87,15 @@ FBAPPS
   echo "root:$SSH_PASS" | chpasswd
   echo "[entrypoint] Starting SSH server on port 22"
   /usr/sbin/sshd
-fi
 
-# Finally, run the bot using the built production wrapper
-# This wrapper (e.g., docker.js generated from docker.ts) will read the BOT_CONFIG env variable.
-node dist/docker.js
+  # Run node and keep container alive even if node crashes
+  echo "[entrypoint] Starting browser session node process..."
+  node dist/docker.js
+  EXIT_CODE=$?
+  echo "[entrypoint] node dist/docker.js exited with code $EXIT_CODE — keeping container alive for VNC access"
+  # Keep alive so VNC + websockify remain accessible
+  wait
+else
+  # Meeting mode — run the bot using the built production wrapper
+  node dist/docker.js
+fi
