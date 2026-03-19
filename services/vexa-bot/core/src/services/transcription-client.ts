@@ -4,6 +4,9 @@ export interface TranscriptionSegment {
   start: number;
   end: number;
   text: string;
+  avg_logprob?: number;
+  no_speech_prob?: number;
+  compression_ratio?: number;
 }
 
 export interface TranscriptionResult {
@@ -166,6 +169,9 @@ export class TranscriptionClient {
           start: s.start || 0,
           end: s.end || 0,
           text: s.text || '',
+          avg_logprob: s.avg_logprob,
+          no_speech_prob: s.no_speech_prob,
+          compression_ratio: s.compression_ratio,
         })),
       };
     } finally {

@@ -1041,15 +1041,48 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
           const prob = result.language_probability ?? 0;
           log(`[🌐 LANGUAGE] ${speakerName} → ${result.language} (prob=${prob.toFixed(2)}${lang ? ', explicit' : ''})`);
 
-          // Discard low-confidence auto-detected results (likely gibberish)
-          // Only apply when auto-detecting — explicit language is always trusted
+          // ── Quality gate: discard low-confidence segments ──────────
+          // Short noisy audio → wrong language → hallucinated garbage.
+          // Check multiple signals from Whisper before accepting.
+
+          // 1. Language confidence (auto-detect only)
           if (!lang && prob > 0 && prob < 0.3) {
-            log(`[🚫 LOW CONFIDENCE] ${speakerName} | prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
+            log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
             speakerManager!.handleTranscriptionResult(speakerId, '');
             return;
           }
 
-          // Filter hallucinations before publishing
+          // 2. Per-segment quality signals (avg_logprob, no_speech_prob, compression_ratio)
+          if (result.segments && result.segments.length > 0) {
+            const seg = result.segments[0]; // primary segment
+            const noSpeech = seg.no_speech_prob ?? 0;
+            const logProb = seg.avg_logprob ?? 0;
+            const compression = seg.compression_ratio ?? 1;
+            const duration = (seg.end || 0) - (seg.start || 0);
+
+            // High no_speech_prob + low logprob = noise, not speech
+            if (noSpeech > 0.5 && logProb < -0.7) {
+              log(`[🚫 NO SPEECH] ${speakerName} | no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${result.text}" — discarded`);
+              speakerManager!.handleTranscriptionResult(speakerId, '');
+              return;
+            }
+
+            // Very low logprob on short audio = garbage
+            if (logProb < -0.8 && duration < 2.0) {
+              log(`[🚫 LOW QUALITY] ${speakerName} | logprob=${logProb.toFixed(2)} dur=${duration.toFixed(1)}s | "${result.text}" — discarded`);
+              speakerManager!.handleTranscriptionResult(speakerId, '');
+              return;
+            }
+
+            // High compression ratio = repetitive output (hallucination pattern)
+            if (compression > 2.4) {
+              log(`[🚫 REPETITIVE] ${speakerName} | compression=${compression.toFixed(1)} | "${result.text}" — discarded`);
+              speakerManager!.handleTranscriptionResult(speakerId, '');
+              return;
+            }
+          }
+
+          // 3. Phrase-based hallucination filter
           if (isHallucination(result.text)) {
             log(`[🚫 HALLUCINATION] ${speakerName} | "${result.text}"`);
             speakerManager!.handleTranscriptionResult(speakerId, '');
