@@ -849,7 +849,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // (with inherent delay), we can look back and attribute the audio
               // to the correct speaker retroactively.
 
-              const RING_BUFFER_SECONDS = 5;
+              const RING_BUFFER_SECONDS = 1;
               const RING_BUFFER_SAMPLE_RATE = 16000;
               const RING_BUFFER_CHUNK_SIZE = 4096;
               const RING_BUFFER_MAX_CHUNKS = Math.ceil((RING_BUFFER_SECONDS * RING_BUFFER_SAMPLE_RATE) / RING_BUFFER_CHUNK_SIZE);
@@ -1006,16 +1006,16 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 const speakerLower = speaker.toLowerCase();
                 if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) return;
 
-                // Speaker changed — flush RECENT ring buffer entries to new speaker.
-                // Caption arrives ~1-1.5s after speech starts. Only flush audio from
-                // the lookback window (last ~1.5s), NOT the entire buffer — the older
-                // entries belong to the previous speaker.
+                // Speaker changed — flush ~1s lookback to recover first words.
+                // Caption arrives ~1s after new speaker starts. The lookback window
+                // must be short enough to avoid the previous speaker's tail audio
+                // but long enough to recover the new speaker's opening words.
+                // 4 chunks × 256ms = ~1s — matches the typical caption delay.
                 if (speaker !== lastCaptionSpeaker) {
                   (window as any).logBot?.('[Teams Captions] Speaker change: ' +
                     (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
 
-                  // Lookback window: ~1.5s of audio = ~6 chunks at 4096/16kHz (~256ms each)
-                  const LOOKBACK_CHUNKS = 6;
+                  const LOOKBACK_CHUNKS = 4; // ~1s at 4096 samples / 16kHz
                   const lookbackStart = Math.max(ringBufferFlushedUpTo, ringBuffer.length - LOOKBACK_CHUNKS);
                   const lookback = ringBuffer.slice(lookbackStart);
                   if (lookback.length > 0 && typeof (window as any).__vexaTeamsAudioData === 'function') {
