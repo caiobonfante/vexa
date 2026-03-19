@@ -402,7 +402,30 @@ async def _get_full_transcript_segments(
 
         deduped.append(seg)
 
-    return deduped
+    # 7. Group by speaker turns: prevent interleaving when timestamps
+    # overlap across speakers. If a segment has the same speaker as
+    # the one before the current different-speaker segment, and the
+    # gap is small (<5s), insert it next to its speaker group.
+    reordered: List[TranscriptionSegment] = list(deduped)
+    changed = True
+    while changed:
+        changed = False
+        i = 1
+        while i < len(reordered) - 1:
+            prev = reordered[i - 1]
+            curr = reordered[i]
+            nxt = reordered[i + 1]
+            # Pattern: A, B, A — where curr(B) is sandwiched between
+            # two segments from the same speaker(A), and the gap is small
+            if ((prev.speaker or '') == (nxt.speaker or '') and
+                (prev.speaker or '') != (curr.speaker or '') and
+                nxt.start_time - prev.end_time < 5.0):
+                # Move nxt before curr: [prev, nxt, curr]
+                reordered[i], reordered[i + 1] = reordered[i + 1], reordered[i]
+                changed = True
+            i += 1
+
+    return reordered
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(request: Request, db: AsyncSession = Depends(get_db)):
