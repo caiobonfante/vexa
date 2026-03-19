@@ -71,10 +71,14 @@ export class BrowserAudioService {
           return false;
         }
         
-        // Check if audio tracks are enabled
-        const hasEnabledTracks = audioTracks.some((track: MediaStreamTrack) => track.enabled && !track.muted);
+        // Check if audio tracks are enabled.
+        // Note: track.muted is a read-only WebRTC property set by the remote end.
+        // Teams initially delivers tracks with muted=true until someone speaks.
+        // We accept tracks that are enabled (even if muted) — the ScriptProcessor
+        // will get silence until actual audio flows, which is fine.
+        const hasEnabledTracks = audioTracks.some((track: MediaStreamTrack) => track.enabled);
         if (!hasEnabledTracks) {
-          (window as any).logBot(`[Audio] Element found but all audio tracks are disabled or muted`);
+          (window as any).logBot(`[Audio] Element found but all audio tracks are disabled`);
           return false;
         }
         

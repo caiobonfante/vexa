@@ -899,49 +899,46 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   const now = Date.now();
                   const chunk = new Float32Array(data);
 
+                  // Always store in ring buffer when captions enabled
                   if (captionsEnabled) {
-                    // CAPTION MODE: store in ring buffer, caption observer will flush
                     ringBuffer.push({ data: chunk, timestamp: now });
-                    // Evict old entries beyond ring buffer window
                     while (ringBuffer.length > RING_BUFFER_MAX_CHUNKS) {
                       ringBuffer.shift();
-                      // Adjust flushed pointer if we evicted entries before it
                       if (ringBufferFlushedUpTo > 0) ringBufferFlushedUpTo--;
                     }
+                  }
 
-                    // If we have an active caption speaker, route current audio to them
-                    // (for ongoing speech after the initial lookback flush)
-                    if (lastCaptionSpeaker) {
-                      const nameLower = lastCaptionSpeaker.toLowerCase();
-                      if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
-                        const audioArray = Array.from(data);
-                        if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, audioArray);
-                        }
-                      }
-                    }
-                  } else {
-                    // FALLBACK MODE: use DOM blue squares (original behavior)
-                    const activeSpeakerNames: string[] = [];
-                    for (const [id, state] of speakingStates) {
-                      if (state === 'speaking') {
-                        const name = registry.getNameById(id);
-                        if (!name) continue;
-                        const nameLower = name.toLowerCase();
-                        if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
-                        activeSpeakerNames.push(name);
-                      }
-                    }
-
-                    if (activeSpeakerNames.length === 0) return;
-
-                    const audioArray = Array.from(data);
-                    for (const name of activeSpeakerNames) {
+                  // Route audio to speaker via captions ONLY.
+                  // DOM blue squares are disabled — captions are the primary signal.
+                  if (lastCaptionSpeaker) {
+                    const nameLower = lastCaptionSpeaker.toLowerCase();
+                    if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
+                      const audioArray = Array.from(data);
                       if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                        (window as any).__vexaTeamsAudioData(name, audioArray);
+                        (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, audioArray);
                       }
                     }
                   }
+                  // DOM fallback DISABLED — keeping code for reference:
+                  // if (!routed) {
+                  //   const activeSpeakerNames: string[] = [];
+                  //   for (const [id, state] of speakingStates) {
+                  //     if (state === 'speaking') {
+                  //       const name = registry.getNameById(id);
+                  //       if (!name) continue;
+                  //       const nameLower = name.toLowerCase();
+                  //       if (nameLower.includes(botNameLower) || nameLower.includes('vexa')) continue;
+                  //       activeSpeakerNames.push(name);
+                  //     }
+                  //   }
+                  //   if (activeSpeakerNames.length === 0) return;
+                  //   const audioArray = Array.from(data);
+                  //   for (const name of activeSpeakerNames) {
+                  //     if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                  //       (window as any).__vexaTeamsAudioData(name, audioArray);
+                  //     }
+                  //   }
+                  // }
                 };
 
                 source.connect(processor);
@@ -959,61 +956,86 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               let captionObserver: MutationObserver | null = null;
               let lastSeenCaptionCount = 0;
 
+              // ── Caption DOM variance ──────────────────────────────────────
+              // Teams renders captions differently for host vs guest:
+              //
+              //   HOST:  wrapper > window-wrapper > virtual-list-content
+              //            > items-renderer > ChatMessageCompact > author + text
+              //
+              //   GUEST: wrapper > window-wrapper > virtual-list-content
+              //            > (div) > author + text  (NO items-renderer wrapper)
+              //
+              // The ONLY stable elements across both views are:
+              //   [data-tid="author"]           — speaker name
+              //   [data-tid="closed-caption-text"] — caption text
+              //
+              // These always appear as sibling-adjacent pairs in document order
+              // inside the wrapper. We find them directly and pair by index.
+              // This is robust against any container restructuring Teams may do.
+              // ────────────────────────────────────────────────────────────────
+
+              let lastProcessedCaptionKey = '';
+
               const processCaptions = () => {
                 const wrapper = document.querySelector(captionSels.rendererWrapper);
                 if (!wrapper) return;
 
-                const items = wrapper.querySelectorAll(captionSels.captionItem);
-                if (items.length === 0 || items.length <= lastSeenCaptionCount) return;
+                // Find author/text atoms directly — the only stable data-tids
+                const authorEls = wrapper.querySelectorAll('[data-tid="author"]');
+                const textEls = wrapper.querySelectorAll('[data-tid="closed-caption-text"]');
 
-                // Process only new caption entries
-                for (let i = lastSeenCaptionCount; i < items.length; i++) {
-                  const item = items[i];
-                  const container = item.closest('.fui-ChatMessageCompact') || item.parentElement?.parentElement?.parentElement;
-                  if (!container) continue;
+                if (authorEls.length === 0 || textEls.length === 0) return;
 
-                  const authorEl = container.querySelector(captionSels.authorName);
-                  const textEl = container.querySelector(captionSels.captionText);
-                  if (!authorEl || !textEl) continue;
+                // Use the LAST pair — most recent caption entry.
+                // Authors and texts appear in matched pairs in document order.
+                const lastAuthor = authorEls[authorEls.length - 1];
+                const lastText = textEls[textEls.length - 1];
 
-                  const speaker = (authorEl.textContent || '').trim();
-                  const text = (textEl.textContent || '').trim();
-                  if (!speaker || !text) continue;
+                const speaker = (lastAuthor.textContent || '').trim();
+                const text = (lastText.textContent || '').trim();
+                if (!speaker || !text) return;
 
-                  const now = Date.now();
-                  const botNameLower2 = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
-                  const speakerLower = speaker.toLowerCase();
-                  if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) continue;
+                // Deduplicate: Teams updates text in-place as ASR refines.
+                // Only process when speaker changes or text grows significantly.
+                const captionKey = speaker + '::' + text;
+                if (captionKey === lastProcessedCaptionKey) return;
+                lastProcessedCaptionKey = captionKey;
 
-                  // Speaker changed — flush ring buffer lookback
-                  if (speaker !== lastCaptionSpeaker) {
-                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
-                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
+                const now = Date.now();
+                const botNameLower2 = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
+                const speakerLower = speaker.toLowerCase();
+                if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) return;
 
-                    // Flush unflushed ring buffer entries to new speaker
-                    const unflushed = ringBuffer.slice(ringBufferFlushedUpTo);
-                    if (unflushed.length > 0 && typeof (window as any).__vexaTeamsAudioData === 'function') {
-                      for (const entry of unflushed) {
-                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
-                      }
-                      (window as any).logBot?.('[Teams Captions] Flushed ' + unflushed.length +
-                        ' ring buffer chunks (' + ((unflushed.length * RING_BUFFER_CHUNK_SIZE / RING_BUFFER_SAMPLE_RATE) * 1000).toFixed(0) +
-                        'ms lookback) to ' + speaker);
+                // Speaker changed — flush RECENT ring buffer entries to new speaker.
+                // Caption arrives ~1-1.5s after speech starts. Only flush audio from
+                // the lookback window (last ~1.5s), NOT the entire buffer — the older
+                // entries belong to the previous speaker.
+                if (speaker !== lastCaptionSpeaker) {
+                  (window as any).logBot?.('[Teams Captions] Speaker change: ' +
+                    (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
+
+                  // Lookback window: ~1.5s of audio = ~6 chunks at 4096/16kHz (~256ms each)
+                  const LOOKBACK_CHUNKS = 6;
+                  const lookbackStart = Math.max(ringBufferFlushedUpTo, ringBuffer.length - LOOKBACK_CHUNKS);
+                  const lookback = ringBuffer.slice(lookbackStart);
+                  if (lookback.length > 0 && typeof (window as any).__vexaTeamsAudioData === 'function') {
+                    for (const entry of lookback) {
+                      (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
                     }
-                    ringBufferFlushedUpTo = ringBuffer.length;
+                    (window as any).logBot?.('[Teams Captions] Flushed ' + lookback.length +
+                      ' chunks (' + ((lookback.length * RING_BUFFER_CHUNK_SIZE / RING_BUFFER_SAMPLE_RATE) * 1000).toFixed(0) +
+                      'ms lookback) to ' + speaker);
                   }
-
-                  lastCaptionSpeaker = speaker;
-                  lastCaptionText = text;
-                  lastCaptionTimestamp = now;
-
-                  // Send caption data to Node.js for storage
-                  if (typeof (window as any).__vexaTeamsCaptionData === 'function') {
-                    (window as any).__vexaTeamsCaptionData(speaker, text, now);
-                  }
+                  ringBufferFlushedUpTo = ringBuffer.length;
                 }
 
-                lastSeenCaptionCount = items.length;
+                lastCaptionSpeaker = speaker;
+                lastCaptionText = text;
+                lastCaptionTimestamp = now;
+
+                if (typeof (window as any).__vexaTeamsCaptionData === 'function') {
+                  (window as any).__vexaTeamsCaptionData(speaker, text, now);
+                }
               };
 
               const startCaptionObserver = () => {
@@ -1026,7 +1048,12 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 captionsEnabled = true;
                 (window as any).logBot?.('[Teams Captions] Caption wrapper found — caption-driven routing ACTIVE');
 
-                captionObserver = new MutationObserver(() => {
+                let captionMutationCount = 0;
+                captionObserver = new MutationObserver((mutations) => {
+                  captionMutationCount++;
+                  if (captionMutationCount <= 3 || captionMutationCount % 50 === 0) {
+                    (window as any).logBot?.('[Teams Captions] MutationObserver fired (#' + captionMutationCount + ', ' + mutations.length + ' mutations)');
+                  }
                   processCaptions();
                 });
 
@@ -1038,6 +1065,29 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
 
                 // Initial scan
                 processCaptions();
+
+                // Backup: poll every 500ms in case MutationObserver misses changes
+                // (Teams may use virtual DOM updates that don't trigger mutations)
+                let pollCount = 0;
+                setInterval(() => {
+                  pollCount++;
+                  processCaptions();
+                  // Deep DOM inspection every 5 seconds for debugging
+                  if (pollCount % 10 === 0) {
+                    const w = document.querySelector(captionSels.rendererWrapper);
+                    if (w) {
+                      const items = w.querySelectorAll(captionSels.captionItem);
+                      const allTids = Array.from(w.querySelectorAll('[data-tid]')).map(el => el.getAttribute('data-tid'));
+                      const childCount = w.children.length;
+                      const innerLen = w.innerHTML.length;
+                      (window as any).logBot?.('[Teams Captions POLL] wrapper children=' + childCount +
+                        ', items=' + items.length + ', data-tids=[' + allTids.join(',') + '], innerHTML.length=' + innerLen);
+                    } else {
+                      (window as any).logBot?.('[Teams Captions POLL] wrapper GONE');
+                    }
+                  }
+                }, 500);
+
                 return true;
               };
 

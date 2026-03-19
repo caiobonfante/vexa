@@ -8,16 +8,10 @@ You test the MS Teams per-speaker transcription pipeline: bot joins a Teams meet
 
 ### Gate (local)
 
-Bot joins Teams mock -> audio routed per speaker via DOM signals -> TranscriptionClient logs show HTTP 200 with non-empty text -> segments in Redis with correct speaker names.
+Bot joins live Teams meeting -> captions enabled -> audio routed per speaker via caption boundaries (or DOM fallback) -> TranscriptionClient logs show HTTP 200 with non-empty text -> segments in Redis with correct speaker names.
 
 **PASS:** Audio routed to correct speakers, transcription returns non-empty text, segments in Redis with correct names.
 **FAIL:** Audio not captured, wrong speaker routing, transcription empty, or segments missing.
-
-**Note:** Teams mock meeting does not exist yet. Gate cannot be tested until a mock is built that simulates:
-- Single `<audio>` element with MediaStream srcObject
-- `[data-tid="voice-level-stream-outline"]` elements in participant tiles
-- `vdi-frame-occlusion` class toggling for speaking state
-- Participant name elements matching `teamsNameSelectors`
 
 ### Edges
 
@@ -40,14 +34,13 @@ Bot joins Teams mock -> audio routed per speaker via DOM signals -> Transcriptio
 
 ## How to test
 
-**Currently blocked:** No Teams mock meeting exists.
-
-When mock is available:
-1. Ensure compose stack is running
-2. POST to bot-manager to create a bot targeting Teams mock URL
+1. Create a live Teams meeting via browser session
+2. POST to bot-manager to create a bot targeting the Teams meeting URL
 3. Watch bot logs for:
-   - `[Teams PerSpeaker] Audio routing active on stream {id}`
-   - `[TEAMS SPEAKER] "{name}" -- first audio received` for each speaker
+   - `[Captions] ✅ Live captions enabled successfully`
+   - `[Teams Captions] Speaker change: (none) → {name}`
+   - `[Teams PerSpeaker] Audio routing active (caption-aware with ring buffer)`
+   - `[TEAMS SPEAKER] "{name}" — first audio received` for each speaker
    - TranscriptionClient HTTP 200 responses
 4. Check Redis: segments with Teams speaker names
 5. Check REST: `GET /transcripts/{meeting_id}`

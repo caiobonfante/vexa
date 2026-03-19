@@ -49,18 +49,27 @@ Key difference from Google Meet: audio is routed by speaker **NAME** (string), n
 
 Teams speaker detection uses two signals with automatic fallback:
 
-#### Primary Signal: Live Captions (caption-driven) [UNTESTED]
+#### Primary Signal: Live Captions (caption-driven)
 
 **File:** `recording.ts` (caption observer section) + `captions.ts`
 
-When live captions are enabled (bot enables them automatically after joining via More → Language and speech → Show live captions), the bot uses Teams ASR caption output as the primary speaker signal:
+When live captions are enabled (bot enables them automatically after joining via More → Captions), the bot uses Teams ASR caption output as the primary speaker signal:
 
 ```
-[data-tid="closed-caption-renderer-wrapper"]  -> MutationObserver
-  -> [data-tid="closed-captions-v2-items-renderer"]  -> individual caption entries
-     -> [data-tid="author"]                          -> speaker name
-     -> [data-tid="closed-caption-text"]             -> spoken text
+[data-tid="closed-caption-renderer-wrapper"]     <- top-level container (MutationObserver + 500ms poll)
+  └─ [data-tid="author"]                         <- speaker name (stable atom)
+  └─ [data-tid="closed-caption-text"]            <- spoken text (stable atom)
 ```
+
+**DOM variance (host vs guest):** Teams renders different container structures around the caption atoms:
+- **Host:** `wrapper > virtual-list-content > items-renderer > ChatMessageCompact > author + text`
+- **Guest (bot):** `wrapper > virtual-list-content > (div) > author + text` (NO items-renderer)
+
+The only stable selectors are `[data-tid="author"]` and `[data-tid="closed-caption-text"]`. The observer finds these directly inside the wrapper and pairs them by index. Do NOT rely on `closed-captions-v2-items-renderer` — it only exists in the host view.
+
+**Caption enablement also differs by role:**
+- **Host:** More → Language and speech → Show live captions (`menuitemcheckbox`)
+- **Guest (bot):** More → Captions (`menuitem`, direct toggle)
 
 **Why captions are better than DOM blue squares:**
 - **No false activations:** Captions only fire when Teams ASR detects **real speech** — not mic noise, breathing, or keyboard typing. Blue squares activate on any mic input, routing garbage audio to wrong speaker buffers and producing hallucinated transcription.
@@ -223,12 +232,9 @@ Full selector lists: `services/vexa-bot/core/src/platforms/msteams/selectors.ts`
 | Browser | Chromium | MS Edge (required, fallback to Chromium) |
 | Media warm-up | Not needed | Required before pre-join |
 
-### No Mock Meeting Yet
+### Testing
 
-There is no Teams mock meeting equivalent to `mock.dev.vexa.ai/google-meet.html`. Testing requires a real Teams meeting or building a Teams mock that simulates:
-- Single mixed audio element with `srcObject` MediaStream
-- `[data-tid="voice-level-stream-outline"]` elements in participant tiles
-- `vdi-frame-occlusion` class toggling for speaking state
+Testing uses **real live Teams meetings** created on-demand via browser sessions. No mock meetings needed — real platform behavior, real audio, real speaker detection, real captions.
 
 ### Out of scope
 - Org-only meetings (authenticated users only) — bot joins as anonymous guest, gets rejected
