@@ -32,6 +32,8 @@ interface SpeakerBuffer {
   sequenceNumber: number;
   /** Wall-clock time (ms) when audio was last fed to this buffer */
   lastAudioTimestamp: number;
+  /** Whether we already submitted a final idle attempt */
+  idleSubmitted: boolean;
 }
 
 export interface SpeakerStreamManagerConfig {
@@ -75,7 +77,7 @@ export class SpeakerStreamManager {
     this.minAudioDuration = config?.minAudioDuration ?? 3;
     this.submitInterval = config?.submitInterval ?? 3;
     this.confirmThreshold = config?.confirmThreshold ?? 2;
-    this.maxBufferDuration = config?.maxBufferDuration ?? 15;
+    this.maxBufferDuration = config?.maxBufferDuration ?? 60;
     this.sampleRate = config?.sampleRate ?? 16000;
   }
 
@@ -96,6 +98,7 @@ export class SpeakerStreamManager {
       submittedSamples: 0,
       sequenceNumber: 0,
       lastAudioTimestamp: Date.now(),
+      idleSubmitted: false,
     });
 
     const timer = setInterval(() => this.trySubmit(speakerId), this.submitInterval * 1000);
@@ -110,6 +113,7 @@ export class SpeakerStreamManager {
     buffer.chunks.push(audioData);
     buffer.totalSamples += audioData.length;
     buffer.lastAudioTimestamp = Date.now();
+    buffer.idleSubmitted = false; // new audio arrived — reset idle state
   }
 
   handleTranscriptionResult(speakerId: string, transcript: string): void {
@@ -118,9 +122,23 @@ export class SpeakerStreamManager {
 
     buffer.inFlight = false;
 
-    if (!transcript || transcript.trim().length === 0) return;
+    if (!transcript || transcript.trim().length === 0) {
+      // Empty result after a flush-submit — clean up
+      if (buffer.idleSubmitted) {
+        this.emitAndReset(buffer, true);
+      }
+      return;
+    }
 
     const trimmed = transcript.trim();
+
+    // If this was a flush-submit (speaker changed or idle), emit immediately
+    // without waiting for confirmation — this is the last chance for this buffer.
+    if (buffer.idleSubmitted) {
+      buffer.pendingEmit = trimmed;
+      this.emitAndReset(buffer, true);
+      return;
+    }
 
     // Fuzzy match: compare first 80% of the shorter string
     const compareLen = Math.floor(Math.min(trimmed.length, buffer.lastTranscript.length) * 0.8);
@@ -200,23 +218,27 @@ export class SpeakerStreamManager {
     const wallClockDurationSec = (Date.now() - buffer.bufferStartMs) / 1000;
     const idleMs = Date.now() - buffer.lastAudioTimestamp;
 
-    // Idle timeout — if no audio for 5s, speaker is done. Publish
-    // confirmed text and fully discard. Prevents stale tails from
-    // contaminating the speaker's next turn.
+    // Idle timeout — if no audio for 5s, speaker is done.
+    // First idle hit: submit remaining audio to Whisper for one last chance.
+    // Second idle hit (3s later): emit whatever we have and fully discard.
     if (idleMs > 5000 && buffer.totalSamples > 0) {
-      // First idle hit: submit remaining audio to Whisper for one last chance.
-      // Next idle hit (3s later): discard. This gives Whisper time to process
-      // the final words before we clean up.
-      if (!buffer.pendingEmit && buffer.totalSamples > 0 && !buffer.inFlight) {
-        log(`[SpeakerStreams] Idle submit for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, submitting remaining audio)`);
+      if (!buffer.idleSubmitted && !buffer.inFlight) {
+        // First idle: one final Whisper submission
+        buffer.idleSubmitted = true;
+        log(`[SpeakerStreams] Idle submit for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, final submission)`);
         this.submitBuffer(buffer);
         return;
       }
-      if (buffer.lastTranscript) {
-        buffer.pendingEmit = buffer.lastTranscript;
+      if (buffer.idleSubmitted && !buffer.inFlight) {
+        // Second idle: Whisper had its chance. Emit and clean up.
+        if (buffer.lastTranscript) {
+          buffer.pendingEmit = buffer.lastTranscript;
+        }
+        log(`[SpeakerStreams] Idle cleanup for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, discarding buffer)`);
+        this.emitAndReset(buffer, true);
+        return;
       }
-      log(`[SpeakerStreams] Idle timeout for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle)`);
-      this.emitAndReset(buffer, true);
+      // inFlight — waiting for Whisper result, do nothing
       return;
     }
 
@@ -260,13 +282,34 @@ export class SpeakerStreamManager {
 
   /**
    * Force-flush a speaker's buffer. Called when captions detect the speaker
-   * stopped (speaker change). Publishes whatever text is pending and resets.
+   * stopped (speaker change). Submits any unsubmitted audio for a final
+   * Whisper pass, emits the best available text, and fully resets.
    */
   flushSpeaker(speakerId: string): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
+
+    // If there's audio that hasn't been submitted yet, do a final submit.
+    // The result will arrive via handleTranscriptionResult and get emitted
+    // because we set pendingEmit to lastTranscript below.
+    if (buffer.totalSamples > 0 && !buffer.inFlight) {
+      // Emit whatever text we have (even if not confirmed — speaker changed,
+      // so this is the best we'll get).
+      if (!buffer.pendingEmit && buffer.lastTranscript) {
+        buffer.pendingEmit = buffer.lastTranscript;
+      }
+      // If we have audio but no transcript at all, submit for one final pass.
+      // Mark buffer as flushing so handleTranscriptionResult knows to emit immediately.
+      if (!buffer.pendingEmit && !buffer.lastTranscript) {
+        buffer.idleSubmitted = true; // reuse flag: next result will trigger cleanup
+        log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${(buffer.totalSamples/this.sampleRate).toFixed(1)}s audio, no transcript yet)`);
+        this.submitBuffer(buffer);
+        return; // handleTranscriptionResult will handle cleanup
+      }
+    }
+
     if (buffer.pendingEmit || buffer.totalSamples > 0) {
-      this.emitAndReset(buffer, true); // full reset — discard all chunks
+      this.emitAndReset(buffer, true);
     }
   }
 
@@ -301,5 +344,6 @@ export class SpeakerStreamManager {
     buffer.lastAudioTimestamp = Date.now();
     buffer.submittedChunkCount = 0;
     buffer.submittedSamples = 0;
+    buffer.idleSubmitted = false;
   }
 }

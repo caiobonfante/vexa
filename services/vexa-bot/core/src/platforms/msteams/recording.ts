@@ -858,7 +858,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // (punctuation, capitalization) are ignored — they would
               // steal the next speaker's audio from the queue.
               // Max queue age 3s. Speaker change clears queue.
-              const MAX_QUEUE_AGE_MS = 15000;
+              const MAX_QUEUE_AGE_MS = 3000;
               const MIN_TEXT_GROWTH = 3; // chars — below this = refinement
               interface QueuedChunk {
                 data: Float32Array;
@@ -893,10 +893,17 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   const data = e.inputBuffer.getChannelData(0);
                   const now = Date.now();
 
-                  // Accumulate audio. Flushing happens in processCaptions.
+                  // Skip silence — don't queue chunks with no speech energy.
+                  // This prevents silence from being flushed to the wrong speaker
+                  // on speaker transitions.
+                  let sum = 0;
+                  for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+                  const rms = Math.sqrt(sum / data.length);
+                  if (rms < 0.01) return;
+
                   audioQueue.push({ data: new Float32Array(data), timestamp: now });
 
-                  // Drop entries older than 3s (no caption came = silence/gap)
+                  // Drop entries older than MAX_QUEUE_AGE_MS
                   while (audioQueue.length > 0 && now - audioQueue[0].timestamp > MAX_QUEUE_AGE_MS) {
                     audioQueue.shift();
                   }
@@ -974,6 +981,14 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   lastFlushedTextLength = 0;
                   const queued = audioQueue.length;
                   if (queued > 0 && !speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
+                    // Only flush recent chunks (last 2s) — the caption delay lookback.
+                    // Older chunks are stale silence from the gap between speakers.
+                    const lookbackCutoff = now - 2000;
+                    let discarded = 0;
+                    while (audioQueue.length > 0 && audioQueue[0].timestamp < lookbackCutoff) {
+                      audioQueue.shift();
+                      discarded++;
+                    }
                     let flushed = 0;
                     while (audioQueue.length > 0) {
                       const entry = audioQueue.shift()!;
@@ -984,7 +999,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                     }
                     (window as any).logBot?.('[Teams Captions] Speaker change: ' +
                       (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
-                      ' (flushed ' + flushed + ' chunks to new speaker)');
+                      ' (flushed ' + flushed + ' chunks, discarded ' + discarded + ' stale)');
                   } else {
                     (window as any).logBot?.('[Teams Captions] Speaker change: ' +
                       (lastCaptionSpeaker || '(none)') + ' → ' + speaker);

@@ -1335,10 +1335,21 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
  *   2. Caption text storage alongside audio transcription
  *   3. Future: fuzzy text matching for segment reconciliation
  */
+let lastCaptionSpeakerId: string | null = null;
+
 async function handleTeamsCaptionData(speakerName: string, captionText: string, timestampMs: number): Promise<void> {
   if (!segmentPublisher || !page || page.isClosed()) return;
 
   const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
+
+  // When caption speaker changes, flush the PREVIOUS speaker's buffer immediately.
+  // This prevents cross-speaker contamination — the old speaker's buffer gets emitted
+  // before any of the new speaker's audio leaks into it.
+  if (lastCaptionSpeakerId && lastCaptionSpeakerId !== speakerId && speakerManager) {
+    log(`[PerSpeaker] Caption speaker change: flushing "${speakerManager.getSpeakerName(lastCaptionSpeakerId) || lastCaptionSpeakerId}" buffer`);
+    speakerManager.flushSpeaker(lastCaptionSpeakerId);
+  }
+  lastCaptionSpeakerId = speakerId;
 
   // Publish caption as a speaker event for downstream consumers
   await segmentPublisher.publishSpeakerEvent({
