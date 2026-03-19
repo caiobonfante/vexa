@@ -30,6 +30,8 @@ interface SpeakerBuffer {
   submittedSamples: number;
   /** Monotonic sequence number for segment_id generation */
   sequenceNumber: number;
+  /** Wall-clock time (ms) when audio was last fed to this buffer */
+  lastAudioTimestamp: number;
 }
 
 export interface SpeakerStreamManagerConfig {
@@ -93,6 +95,7 @@ export class SpeakerStreamManager {
       submittedChunkCount: 0,
       submittedSamples: 0,
       sequenceNumber: 0,
+      lastAudioTimestamp: Date.now(),
     });
 
     const timer = setInterval(() => this.trySubmit(speakerId), this.submitInterval * 1000);
@@ -106,6 +109,7 @@ export class SpeakerStreamManager {
     if (!buffer) return;
     buffer.chunks.push(audioData);
     buffer.totalSamples += audioData.length;
+    buffer.lastAudioTimestamp = Date.now();
   }
 
   handleTranscriptionResult(speakerId: string, transcript: string): void {
@@ -194,11 +198,29 @@ export class SpeakerStreamManager {
 
     const audioDurationSec = buffer.totalSamples / this.sampleRate;
     const wallClockDurationSec = (Date.now() - buffer.bufferStartMs) / 1000;
+    const idleMs = Date.now() - buffer.lastAudioTimestamp;
+
+    // Idle timeout — if no audio for 5s, speaker is done. Publish
+    // confirmed text and fully discard. Prevents stale tails from
+    // contaminating the speaker's next turn.
+    if (idleMs > 5000 && buffer.totalSamples > 0) {
+      // First idle hit: submit remaining audio to Whisper for one last chance.
+      // Next idle hit (3s later): discard. This gives Whisper time to process
+      // the final words before we clean up.
+      if (!buffer.pendingEmit && buffer.totalSamples > 0 && !buffer.inFlight) {
+        log(`[SpeakerStreams] Idle submit for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, submitting remaining audio)`);
+        this.submitBuffer(buffer);
+        return;
+      }
+      if (buffer.lastTranscript) {
+        buffer.pendingEmit = buffer.lastTranscript;
+      }
+      log(`[SpeakerStreams] Idle timeout for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle)`);
+      this.emitAndReset(buffer, true);
+      return;
+    }
 
     // Hard cap — force emit based on WALL CLOCK time (not audio duration).
-    // Audio duration can be much shorter than wall clock when VAD filters
-    // silence or audio arrives in bursts. Without wall-clock cap, buffers
-    // accumulate for minutes producing mega-segments.
     if (wallClockDurationSec >= this.maxBufferDuration) {
       if (buffer.lastTranscript) {
         buffer.pendingEmit = buffer.lastTranscript;
@@ -276,6 +298,7 @@ export class SpeakerStreamManager {
     buffer.pendingEmit = null;
     buffer.inFlight = false;
     buffer.bufferStartMs = Date.now();
+    buffer.lastAudioTimestamp = Date.now();
     buffer.submittedChunkCount = 0;
     buffer.submittedSamples = 0;
   }
