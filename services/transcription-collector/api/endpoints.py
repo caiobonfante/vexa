@@ -184,7 +184,9 @@ async def _get_full_transcript_segments(
     merged_segments_with_abs_time: Dict[str, Tuple[datetime, TranscriptionSegment]] = {}
 
     for segment in db_segments:
-        key = f"{segment.start_time:.3f}"
+        # Key must include speaker to avoid collisions when two speakers
+        # have segments with the same start_time (common with mixed audio)
+        key = f"{segment.speaker or ''}:{segment.start_time:.3f}"
         session_uid = segment.session_uid
         session_start = session_times.get(session_uid)
         if session_uid and session_start:
@@ -308,6 +310,13 @@ async def _get_full_transcript_segments(
             continue
 
         last = deduped[-1]
+        # Different speakers can legitimately have overlapping timestamps
+        # (mixed audio stream, per-speaker buffers with independent timing).
+        # Only dedup within the same speaker.
+        if (seg.speaker or '') != (last.speaker or ''):
+            deduped.append(seg)
+            continue
+
         same_text = (seg.text or "").strip() == (last.text or "").strip()
         overlaps = max(seg.start_time, last.start_time) < min(seg.end_time, last.end_time)
 
