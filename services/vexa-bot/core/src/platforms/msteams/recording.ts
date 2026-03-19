@@ -856,9 +856,13 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               // Two independent streams: captions (speaker identity, ~1s delayed)
               // and audio (real-time, no speaker info). We delay audio by 1s so
               // that when we flush it, lastCaptionSpeaker already reflects the
-              // correct speaker from the caption stream. No buffer size limit
-              // needed — chunks flush as fast as they arrive, just 1s behind.
+              // correct speaker from the caption stream.
+              //
+              // Staleness check: if lastCaptionTimestamp is old (speaker stopped
+              // talking), don't route — cuts the previous speaker's tail and
+              // saves transcription compute on silence/gap audio.
               const AUDIO_DELAY_MS = 1000;
+              const CAPTION_STALE_MS = 1500; // caption older than this = speaker stopped
               interface DelayedChunk {
                 data: Float32Array;
                 timestamp: number;
@@ -867,38 +871,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               let captionsEnabled = false;
               let lastCaptionSpeaker: string | null = null;
               let lastCaptionText: string = '';
-
-              // Speaker timeline: records when each speaker started AND when
-              // their caption last updated (effective end of their turn).
-              // Audio chunks between a speaker's lastCaptionUpdate and the next
-              // speaker's start are dropped — they're tail audio or silence gap.
-              interface SpeakerEvent {
-                timestamp: number;      // when this speaker started (backdated)
-                speaker: string;
-                endTimestamp: number;    // last caption update for this speaker (set on speaker change)
-              }
-              const speakerTimeline: SpeakerEvent[] = [];
-
-              function speakerAtTime(t: number): string | null {
-                // Find which speaker was active at timestamp t.
-                // Returns null if t falls in the gap between a speaker's end
-                // and the next speaker's start (tail/silence zone).
-                for (let i = speakerTimeline.length - 1; i >= 0; i--) {
-                  const ev = speakerTimeline[i];
-                  if (t >= ev.timestamp) {
-                    // Check if chunk is past this speaker's end (tail zone)
-                    if (ev.endTimestamp > 0 && t > ev.endTimestamp) {
-                      return null; // gap between speakers — don't route
-                    }
-                    return ev.speaker;
-                  }
-                }
-                return null;
-              }
               let lastCaptionTimestamp: number = 0;
-
-              // Track which ring buffer entries have already been flushed to a speaker
-              let ringBufferFlushedUpTo: number = 0;
 
               const setupPerSpeakerAudioRouting = () => {
                 const audioEl = document.querySelector('audio') as HTMLAudioElement | null;
@@ -934,19 +907,20 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   // Push to delay queue
                   audioQueue.push({ data: chunk, timestamp: now });
 
-                  // Flush chunks that are ≥1s old. Look up the correct speaker
-                  // for each chunk's original timestamp from the speaker timeline.
+                  // Flush chunks ≥1s old. Route to lastCaptionSpeaker if
+                  // their caption is still fresh (speaker still active).
                   while (audioQueue.length > 0 && now - audioQueue[0].timestamp >= AUDIO_DELAY_MS) {
                     const entry = audioQueue.shift()!;
-                    const speaker = speakerAtTime(entry.timestamp);
-                    if (speaker) {
-                      const nameLower = speaker.toLowerCase();
+                    const captionAge = now - lastCaptionTimestamp;
+                    if (lastCaptionSpeaker && captionAge < CAPTION_STALE_MS) {
+                      const nameLower = lastCaptionSpeaker.toLowerCase();
                       if (!nameLower.includes(botNameLower) && !nameLower.includes('vexa')) {
                         if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                          (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                          (window as any).__vexaTeamsAudioData(lastCaptionSpeaker, Array.from(entry.data));
                         }
                       }
                     }
+                    // else: caption stale (speaker stopped) — drop chunk
                   }
                   // DOM fallback DISABLED — keeping code for reference:
                   // if (!routed) {
@@ -1035,37 +1009,10 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 const speakerLower = speaker.toLowerCase();
                 if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) return;
 
-                // Speaker changed — flush ~1s lookback to recover first words.
-                // Caption arrives ~1s after new speaker starts. The lookback window
-                // must be short enough to avoid the previous speaker's tail audio
-                // but long enough to recover the new speaker's opening words.
-                // 4 chunks × 256ms = ~1s — matches the typical caption delay.
                 if (speaker !== lastCaptionSpeaker) {
                   (window as any).logBot?.('[Teams Captions] Speaker change: ' +
                     (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
                     ' (queued: ' + audioQueue.length + ' chunks)');
-
-                  // Close previous speaker's timeline entry: set their end time
-                  // to their last caption update. Audio after this point is tail/gap
-                  // and should NOT be routed to them.
-                  if (speakerTimeline.length > 0) {
-                    const prev = speakerTimeline[speakerTimeline.length - 1];
-                    if (prev.endTimestamp === 0) {
-                      prev.endTimestamp = lastCaptionTimestamp || now;
-                    }
-                  }
-
-                  // Record new speaker. Backdate by ~1s (caption delay) so that
-                  // audio chunks from the transition get the new speaker.
-                  // Exception: after silence gap (>3s), no backdate.
-                  const silenceGap = lastCaptionTimestamp > 0 && (now - lastCaptionTimestamp) > 3000;
-                  const backdateMs = silenceGap ? 0 : AUDIO_DELAY_MS;
-                  speakerTimeline.push({ timestamp: now - backdateMs, speaker, endTimestamp: 0 });
-
-                  // Keep timeline bounded (last 60s)
-                  while (speakerTimeline.length > 0 && now - speakerTimeline[0].timestamp > 60000) {
-                    speakerTimeline.shift();
-                  }
                 }
 
                 lastCaptionSpeaker = speaker;
@@ -1105,7 +1052,8 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 // Initial scan
                 processCaptions();
 
-                // Backup: poll every 500ms in case MutationObserver misses changes
+                // Backup: poll every 200ms in case MutationObserver misses changes
+                // (faster poll = tighter speaker transition gaps)
                 // (Teams may use virtual DOM updates that don't trigger mutations)
                 let pollCount = 0;
                 setInterval(() => {
@@ -1125,7 +1073,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                       (window as any).logBot?.('[Teams Captions POLL] wrapper GONE');
                     }
                   }
-                }, 500);
+                }, 200);
 
                 return true;
               };
