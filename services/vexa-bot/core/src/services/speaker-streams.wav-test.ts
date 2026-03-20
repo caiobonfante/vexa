@@ -90,6 +90,8 @@ async function main() {
   let totalWhisperMs = 0;
   const confirmed: string[] = [];
   let lastDraft = '';
+  let latestWords: {word: string; start: number; end: number; probability: number}[] = [];
+  const allWords: typeof latestWords = [];
   mgr.onSegmentReady = async (speakerId, speakerName, audioBuffer) => {
     whisperCalls++;
     const durSec = (audioBuffer.length / SAMPLE_RATE).toFixed(1);
@@ -102,10 +104,14 @@ async function main() {
 
       if (result?.text) {
         const text = result.text.trim();
+        const words = result.segments?.flatMap(s => s.words || []) || [];
         if (text !== lastDraft) {
-          console.log(`  [${ts()}s] DRAFT  | ${elapsed}ms | "${text}"`);
+          const wordCount = words.length > 0 ? ` | ${words.length} words` : '';
+          console.log(`  [${ts()}s] DRAFT  | ${elapsed}ms${wordCount} | "${text}"`);
           lastDraft = text;
         }
+        // Store latest words for summary
+        if (words.length > 0) latestWords = words;
         mgr.handleTranscriptionResult(speakerId, text);
       } else {
         mgr.handleTranscriptionResult(speakerId, '');
@@ -119,6 +125,10 @@ async function main() {
 
   mgr.onSegmentConfirmed = (speakerId, speakerName, text) => {
     confirmed.push(text);
+    if (latestWords.length > 0) {
+      allWords.push(...latestWords);
+      latestWords = [];
+    }
     console.log(`\n  ✓ [${ts()}s] CONFIRMED | "${text}"\n`);
   };
 
@@ -275,6 +285,13 @@ async function main() {
     const accuracy = total > 0 ? ((matches / total) * 100).toFixed(1) : '0';
     console.log(`  │`);
     console.log(`  │ ACCURACY: ${accuracy}% (${matches}/${total} words match, ${missing} missing, ${extra} extra)`);
+  }
+
+  if (allWords.length > 0) {
+    console.log(`  │`);
+    console.log(`  │ WORD TIMESTAMPS (${allWords.length} words):`);
+    const wordLine = allWords.map(w => `${w.word.trim()}[${w.start.toFixed(2)}s]`).join(' ');
+    wrap(wordLine, '  │  ');
   }
 
   console.log(`  └─────────────────────────────────────────────────\n`);

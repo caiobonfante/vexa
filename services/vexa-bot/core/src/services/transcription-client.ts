@@ -1,5 +1,12 @@
 import { log } from '../utils';
 
+export interface TranscriptionWord {
+  word: string;
+  start: number;
+  end: number;
+  probability: number;
+}
+
 export interface TranscriptionSegment {
   start: number;
   end: number;
@@ -7,6 +14,7 @@ export interface TranscriptionSegment {
   avg_logprob?: number;
   no_speech_prob?: number;
   compression_ratio?: number;
+  words?: TranscriptionWord[];
 }
 
 export interface TranscriptionResult {
@@ -128,6 +136,13 @@ export class TranscriptionClient {
       ));
     }
 
+    // Request word-level timestamps
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="timestamp_granularities"\r\n\r\n` +
+      `word\r\n`
+    ));
+
     // End boundary
     parts.push(Buffer.from(`--${boundary}--\r\n`));
 
@@ -172,6 +187,7 @@ export class TranscriptionClient {
           avg_logprob: s.avg_logprob,
           no_speech_prob: s.no_speech_prob,
           compression_ratio: s.compression_ratio,
+          words: s.words,
         })),
       };
     } finally {

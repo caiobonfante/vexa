@@ -379,6 +379,7 @@ async def transcribe_audio(
         # Transcribe (with optional temperature fallback)
         requested_temp = float(temperature) if temperature else 0.0
         temps = TEMPERATURE_FALLBACK_CHAIN if USE_TEMPERATURE_FALLBACK else [requested_temp]
+        want_word_timestamps = "word" in timestamp_granularities
 
         logger.info(
             f"Worker {WORKER_ID} starting transcription - requested_temp: {requested_temp}, "
@@ -412,7 +413,7 @@ async def transcribe_audio(
                         "threshold": VAD_FILTER_THRESHOLD,
                         "min_silence_duration_ms": VAD_MIN_SILENCE_DURATION_MS,
                     },
-                    word_timestamps=False,
+                    word_timestamps=want_word_timestamps,
                 )
             
             segments_list, info = await asyncio.get_event_loop().run_in_executor(
@@ -423,21 +424,26 @@ async def transcribe_audio(
             # Convert segments to list (faster-whisper returns generator)
             segments: List[Dict[str, Any]] = []
             for idx, segment in enumerate(segments_list):
-                segments.append({
+                seg_dict: Dict[str, Any] = {
                     "id": idx,
                     "seek": 0,
                     "start": segment.start,
                     "end": segment.end,
                     "text": segment.text,
-                    "tokens": [],  # Not needed for PoC
+                    "tokens": [],
                     "temperature": t,
                     "avg_logprob": segment.avg_logprob,
                     "compression_ratio": segment.compression_ratio,
                     "no_speech_prob": segment.no_speech_prob,
-                    # Add audio_ fields that RemoteTranscriber looks for
                     "audio_start": segment.start,
                     "audio_end": segment.end,
-                })
+                }
+                if want_word_timestamps and hasattr(segment, 'words') and segment.words:
+                    seg_dict["words"] = [
+                        {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                        for w in segment.words
+                    ]
+                segments.append(seg_dict)
             last_segments = segments
 
             if _looks_like_silence(segments):
