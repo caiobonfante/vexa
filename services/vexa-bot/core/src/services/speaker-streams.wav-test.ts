@@ -153,6 +153,40 @@ async function main() {
   mgr.flushSpeaker('s1');
   await new Promise(r => setTimeout(r, 2000));
 
+  // Deduplicate and join confirmed segments into clean output.
+  // Segments may overlap at boundaries — Whisper sometimes repeats the
+  // last few words of the previous segment at the start of the next.
+  function deduplicateSegments(segments: string[]): string {
+    if (segments.length === 0) return '';
+    let result = segments[0];
+    for (let i = 1; i < segments.length; i++) {
+      const prev = result;
+      const next = segments[i];
+      // Find overlap: check if the end of prev matches the start of next
+      const prevWords = prev.split(/\s+/);
+      const nextWords = next.split(/\s+/);
+      let bestOverlap = 0;
+      // Try matching last N words of prev with first N words of next
+      for (let n = Math.min(8, prevWords.length, nextWords.length); n >= 2; n--) {
+        const prevTail = prevWords.slice(-n).join(' ').toLowerCase();
+        const nextHead = nextWords.slice(0, n).join(' ').toLowerCase();
+        if (prevTail === nextHead) {
+          bestOverlap = n;
+          break;
+        }
+      }
+      if (bestOverlap > 0) {
+        // Skip overlapping words from next
+        result = result + ' ' + nextWords.slice(bestOverlap).join(' ');
+      } else {
+        result = result + ' ' + next;
+      }
+    }
+    return result.replace(/\s+/g, ' ').trim();
+  }
+
+  const fullTranscript = deduplicateSegments(confirmed);
+
   // Summary
   console.log(`  ┌─────────────────────────────────────────────────`);
   console.log(`  │ Audio:     ${totalDuration.toFixed(1)}s`);
@@ -160,8 +194,22 @@ async function main() {
   console.log(`  │ Whisper:   ${whisperCalls} calls, avg ${whisperCalls > 0 ? (totalWhisperMs / whisperCalls).toFixed(0) : 0}ms`);
   console.log(`  │ Segments:  ${confirmed.length}`);
   console.log(`  │`);
-  console.log(`  │ TRANSCRIPT:`);
+  console.log(`  │ SEGMENTS:`);
   confirmed.forEach((t, i) => console.log(`  │  ${i + 1}. "${t}"`));
+  console.log(`  │`);
+  console.log(`  │ COMBINED OUTPUT:`);
+  // Word-wrap at 70 chars
+  const words = fullTranscript.split(' ');
+  let line = '  │  ';
+  for (const w of words) {
+    if (line.length + w.length + 1 > 75) {
+      console.log(line);
+      line = '  │  ' + w;
+    } else {
+      line += (line.length > 5 ? ' ' : '') + w;
+    }
+  }
+  if (line.length > 5) console.log(line);
   console.log(`  └─────────────────────────────────────────────────\n`);
 
   mgr.removeAll();
