@@ -112,7 +112,9 @@ async function main() {
         }
         // Store latest words for summary
         if (words.length > 0) latestWords = words;
-        mgr.handleTranscriptionResult(speakerId, text);
+        // Pass Whisper's last segment end time for precise offset clipping
+        const lastSeg = result.segments?.[result.segments.length - 1];
+        mgr.handleTranscriptionResult(speakerId, text, lastSeg?.end);
       } else {
         mgr.handleTranscriptionResult(speakerId, '');
       }

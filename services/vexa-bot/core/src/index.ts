@@ -1112,7 +1112,10 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             });
           }
 
-          speakerManager!.handleTranscriptionResult(speakerId, result.text);
+          // Pass Whisper's last segment end time for precise offset advancement
+          const lastSeg = result.segments?.[result.segments.length - 1];
+          const segEndSec = lastSeg?.end;
+          speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec);
         } else {
           speakerManager!.handleTranscriptionResult(speakerId, '');
         }

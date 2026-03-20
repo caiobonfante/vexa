@@ -112,7 +112,15 @@ export class SpeakerStreamManager {
     buffer.idleSubmitted = false;
   }
 
-  handleTranscriptionResult(speakerId: string, transcript: string): void {
+  /**
+   * Handle Whisper result. Pass segmentEndSec from the last completed segment
+   * so the offset advances to Whisper's boundary, not the full buffer size.
+   *
+   * @param segmentEndSec - end time (seconds) of the last segment Whisper returned,
+   *                        relative to the start of the submitted audio. If undefined,
+   *                        falls back to trimming the full submitted window.
+   */
+  handleTranscriptionResult(speakerId: string, transcript: string, segmentEndSec?: number): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
@@ -145,9 +153,9 @@ export class SpeakerStreamManager {
     }
 
     if (buffer.confirmCount >= this.confirmThreshold) {
-      // CONFIRMED — emit and advance the offset. Don't reset the buffer.
+      // CONFIRMED — emit and advance offset to Whisper's segment boundary.
       this.emitSegment(buffer, trimmed);
-      this.advanceOffset(buffer);
+      this.advanceOffset(buffer, segmentEndSec);
     }
   }
 
@@ -325,12 +333,23 @@ export class SpeakerStreamManager {
   }
 
   /**
-   * Advance the offset past confirmed audio. Trim the front of the buffer.
-   * The buffer continues — unconfirmed tail chunks stay for the next submission.
+   * Advance the offset to Whisper's segment boundary. Trim confirmed audio.
+   * The buffer continues — audio after the segment boundary stays for next submission.
+   *
+   * @param segmentEndSec - Whisper's last segment end time (seconds relative to
+   *                        submitted audio start). If undefined, trims the full
+   *                        unconfirmed window (fallback, loses boundary context).
    */
-  private advanceOffset(buffer: SpeakerBuffer): void {
-    // Mark all current audio as confirmed
-    buffer.confirmedSamples = buffer.totalSamples;
+  private advanceOffset(buffer: SpeakerBuffer, segmentEndSec?: number): void {
+    if (segmentEndSec !== undefined) {
+      // Advance to Whisper's segment boundary — preserves audio context
+      // after the boundary for the next submission
+      const samplesToAdvance = Math.floor(segmentEndSec * this.sampleRate);
+      buffer.confirmedSamples += Math.min(samplesToAdvance, this.unconfirmedSamples(buffer));
+    } else {
+      // Fallback: trim everything (old behavior, loses boundary words)
+      buffer.confirmedSamples = buffer.totalSamples;
+    }
 
     // Trim confirmed chunks from the front to free memory
     this.trimBuffer(buffer);
