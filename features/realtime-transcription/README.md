@@ -11,12 +11,12 @@ This is the #1 product feature. Users need live, speaker-attributed transcripts 
 ```
 Bot joins meeting
   -> per-speaker audio capture (platform-specific)
-  -> speaker identity resolution (voting/locking)
-  -> VAD filtering (Silero, silence threshold 0.005)
-  -> SpeakerStreamManager buffering (confirmation-based)
-  -> TranscriptionClient.transcribe() (HTTP POST WAV multipart to transcription-service)
-  -> confirmation (2 consecutive fuzzy matches)
-  -> SegmentPublisher: Redis XADD to `transcription_segments` stream + PUBLISH to pub/sub
+  -> speaker identity resolution (voting/locking for GMeet, caption name for Teams)
+  -> SpeakerStreamManager buffering (offset-based, sliding window)
+  -> TranscriptionClient.transcribe() (HTTP POST WAV to transcription-service)
+  -> Whisper returns segments with start/end/text
+  -> completed segments advance the offset, partial stays for re-transcription
+  -> SegmentPublisher: Redis XADD to `transcription_segments` stream
   -> transcription-collector consumes stream
   -> speaker mapping + Redis Hash (mutable, live segments)
   -> background task: Redis Hash -> Postgres (immutable, after 30s threshold)
@@ -24,141 +24,147 @@ Bot joins meeting
   -> REST delivery (historical, from Postgres + Redis Hash merge)
 ```
 
-### Platform Architecture Difference
+### Platform Architecture
 
-| Platform | Audio Model | Speaker Identity |
-|----------|------------|-----------------|
-| **Google Meet** | Per-element audio streams. Each participant = separate `<audio>` element with its own MediaStream srcObject. Clean single-voice audio per track. | Class mutations (`Oaajhc` = speaking, `gjg47c` = silence) + MutationObserver + 500ms polling fallback. Voting/locking: correlate speaking indicator with audio track. |
-| **MS Teams** | ONE mixed audio stream. Single `<audio>` element with RTCPeerConnection stream containing all participants mixed together. | **Primary:** Live captions (`[data-tid="author"]` + `[data-tid="closed-caption-text"]`) with ring buffer lookback. Captions only fire on real speech — no false activations. **Fallback:** DOM `voice-level-stream-outline` + `vdi-frame-occlusion` class detection. Audio chunks routed by speaker NAME (not index). |
+| Platform | Audio Model | Speaker Identity | Audio Quality |
+|----------|------------|-----------------|---------------|
+| **Google Meet** | Per-element audio streams. Each participant = separate `<audio>` element. Clean single-voice audio per track. | Speaking class mutations + MutationObserver + polling fallback. Voting/locking: correlate speaking indicator with audio track index. | Clean — one voice per stream, no diarization needed |
+| **MS Teams** | ONE mixed audio stream. Single `<audio>` element with all participants mixed. | **Primary:** Live captions (`[data-tid="author"]`). Captions only fire on real speech. **Fallback:** DOM `voice-level-stream-outline` + `vdi-frame-occlusion`. | Mixed — all speakers combined, routed by caption timing |
 
-Google Meet gives isolated per-speaker audio -- no diarization needed, overlapping speech handled naturally. Teams gives mixed audio that must be routed by DOM signals -- overlapping speech goes to all active speakers.
+### Buffer Management: The WhisperLive Algorithm
 
-### Key Constants
+The core buffering algorithm is ported from the WhisperLive service (`services/WhisperLive/whisper_live/server.py`, removed at commit `752e075` but algorithm preserved). This is the reference implementation.
 
-| Constant | Value | Source |
-|----------|-------|--------|
-| Sample rate | 16000 Hz | `index.ts:1337` `TARGET_SAMPLE_RATE` |
-| ScriptProcessor buffer | 4096 samples | `index.ts:1338` `BUFFER_SIZE` |
-| Silence threshold | 0.005 (max amplitude) | `index.ts:1387` |
-| Speaker lock votes | 3 | `speaker-identity.ts:30` `LOCK_THRESHOLD` |
-| Speaker lock ratio | 70% | `speaker-identity.ts:32` `LOCK_RATIO` |
-| Min audio before submit | 2s | `index.ts:1020` `minAudioDuration` |
-| Submit interval | 2s | `index.ts:1021` `submitInterval` |
-| Confirm threshold | 2 consecutive matches | `index.ts:1022` `confirmThreshold` |
-| Max buffer (wall-clock hard cap) | 10s | `index.ts:1023` `maxBufferDuration` |
-| Immutability threshold | 30s | `transcription-collector/config.py:20` `IMMUTABILITY_THRESHOLD` |
-| Background task interval | 10s | `transcription-collector/config.py:19` `BACKGROUND_TASK_INTERVAL` |
-| Speaker detection polling | 500ms | `googlemeet/recording.ts:584` `setInterval` |
-| State machine debounce | 200ms | `msteams/recording.ts:425` `MIN_STATE_CHANGE_MS` |
-
-### Data Flow Diagram
+**Two offset pointers into a continuous audio stream:**
 
 ```
- BROWSER (Playwright page.evaluate)                NODE.JS (vexa-bot process)
- ================================                  ===========================
+frames_offset                timestamp_offset
+     |                            |
+     v                            v
+[====confirmed/discarded==========|=====unprocessed audio=====>]
+                                  ^
+                          next Whisper submission starts here
+```
 
- Google Meet:                                      handlePerSpeakerAudioData(index, data)
-   <audio> per participant                            |
-     -> AudioContext(16kHz)                           +-> resolveSpeakerName(page, index, 'googlemeet')
-     -> ScriptProcessor(4096)                         |     query __vexaGetAllParticipantNames()
-     -> silence check (>0.005)                        |     speaking.length === 1 -> recordTrackVote()
-     -> __vexaPerSpeakerAudioData(i, data) --------->|     LOCK_THRESHOLD=3, LOCK_RATIO=0.7
-                                                      |
- Teams:                                            handleTeamsAudioData(name, data)
-   <audio> single mixed stream                        |
-     -> AudioContext(16kHz)                           +-> speakerId = `teams-${name}`
-     -> ScriptProcessor(4096)                         |   (name known from caption/DOM, no voting)
-     -> silence check (>0.005)                        |
-     -> ring buffer (5s)                            handleTeamsCaptionData(name, text, ts)
-     -> caption observer (primary)                    |
-        OR DOM speakingStates (fallback)              +-> log caption, publish speaker event
-     -> __vexaTeamsAudioData(name, data) ----------> SpeakerStreamManager
-                                                      |
-                                                      +-> feedAudio(speakerId, Float32Array)
-                                                      +-> trySubmit() every 2s
-                                                      |     audioDuration >= 2s? -> submitBuffer()
-                                                      |     wallClock >= 10s? -> force flush
-                                                      |
-                                                      +-> onSegmentReady -> TranscriptionClient
-                                                      |     .transcribe(audioBuffer, language)
-                                                      |     HTTP POST multipart/form-data WAV
-                                                      |     -> transcription-service (Whisper)
-                                                      |     <- { text, language, language_probability }
-                                                      |
-                                                      +-> handleTranscriptionResult()
-                                                      |     fuzzy match first 80% of shorter string
-                                                      |     confirmCount >= 2? -> emit
-                                                      |
-                                                      +-> onSegmentConfirmed
-                                                            |
-                                                            v
-                                                      SegmentPublisher
-                                                        XADD transcription_segments { payload: JSON }
-                                                        PUBLISH meeting:{id}:transcription (flat JSON)
-                                                            |
-                                                            v
-                                                  transcription-collector
-                                                    XREADGROUP on transcription_segments
-                                                    -> speaker mapping
-                                                    -> HSET meeting:{id}:segments (Redis Hash, mutable)
-                                                    -> PUBLISH for WebSocket subscribers
-                                                            |
-                                                     +------+------+
-                                                     |             |
-                                                     v             v
-                                              Background task   api-gateway
-                                              (every 10s)        WebSocket
-                                              check updated_at    -> client (live)
-                                              > 30s? immutable
-                                              INSERT Postgres
-                                                     |
-                                                     v
-                                              api-gateway REST
-                                              GET /transcripts/{meeting_id}
-                                              merges Redis Hash + Postgres
-                                                -> client (historical)
+- **`frames_offset`** — start of audio buffer in memory (oldest retained audio)
+- **`timestamp_offset`** — start of unprocessed audio (confirmed audio is before this)
+
+**How it works:**
+
+1. Audio chunks append continuously to the buffer
+2. Each Whisper submission sends `buffer[timestamp_offset:]` — only unprocessed audio, NOT the full buffer
+3. Whisper returns **segments** (each with start, end, text, completed flag)
+4. **Completed segments**: append to transcript, advance `timestamp_offset` by segment end time
+5. **Last segment** (partial): send to client as live update, do NOT advance offset — this audio will be re-sent with more context next time
+6. **Same output repeated N times** (`same_output_threshold`): the partial IS complete — append to transcript, advance offset
+7. Buffer hard cap (45s): when exceeded, discard oldest 30s, advance `frames_offset`
+
+**Key insight: Whisper decides what's complete, not our code.** Whisper's segment boundaries ARE the natural sentence/phrase boundaries. We just track which segments are confirmed (appeared in 2+ consecutive results) and advance the pointer past them.
+
+**What this means for implementation:**
+
+| Concern | WhisperLive approach | Current SpeakerStreamManager |
+|---------|---------------------|------------------------------|
+| What gets sent to Whisper | `buffer[timestamp_offset:]` (unprocessed only) | Full buffer every time (re-sends confirmed audio) |
+| On confirmation | Advance offset pointer, keep buffer | `emitAndReset` — clears chunks, resets transcript |
+| Buffer lifetime | Continuous until speaker ends or hard cap | Reset every confirmation (~6-8s) |
+| Segment boundaries | Whisper's native segments (start/end/text) | Fuzzy 80% prefix match on full transcript string |
+| Sliding window | 45s max, discard 30s oldest, retain 5s | No window — full buffer or full reset |
+
+### Data Flow
+
+```
+ BROWSER (page.evaluate)                   NODE.JS (vexa-bot)
+ ======================                   ==================
+
+ Google Meet:                              handlePerSpeakerAudioData(index, data)
+   <audio> per participant                    |
+     -> AudioContext(16kHz)                   +-> resolveSpeakerName (voting/locking)
+     -> ScriptProcessor(4096)                 |
+     -> silence check (>0.005)                v
+     -> __vexaPerSpeakerAudioData(i, data)   SpeakerStreamManager.feedAudio()
+                                              |
+ Teams:                                    handleTeamsAudioData(name, data)
+   <audio> single mixed stream                |
+     -> AudioContext(16kHz)                   +-> speakerId = `teams-${name}`
+     -> ScriptProcessor(4096)                 |   (name from caption, no voting)
+     -> RMS silence filter (< 0.01)           v
+     -> audioQueue (3s max age)            SpeakerStreamManager.feedAudio()
+     -> caption observer (speaker name)       |
+     -> flush on caption text growth          |
+     -> 2s lookback on speaker change         |
+                                              v
+ handleTeamsCaptionData(name, text, ts)    trySubmit() every 2s
+   -> flushSpeaker(previous) on change       submit buffer[timestamp_offset:]
+   -> skip flush if < 2s audio               -> TranscriptionClient.transcribe()
+                                              -> HTTP POST WAV to Whisper
+                                              -> segments with start/end/text
+                                              |
+                                              v
+                                           handleTranscriptionResult()
+                                              completed segments -> advance offset, emit
+                                              partial segment -> update live draft
+                                              same output Nx -> confirm and advance
+                                              |
+                                              v
+                                           SegmentPublisher -> Redis
+                                              -> transcription-collector
+                                              -> Redis Hash (mutable 30s)
+                                              -> Postgres (immutable)
+                                              -> WebSocket (live) + REST (historical)
 ```
 
 ### Components
 
 | Component | Role | Key file |
 |-----------|------|----------|
-| **vexa-bot** | Joins meeting, captures per-speaker audio, runs speaker identity, buffers, transcribes | `services/vexa-bot/core/src/index.ts` |
-| **speaker-identity** | Track-to-speaker voting/locking (Google Meet) and DOM traversal (Teams) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
-| **speaker-streams** | Per-speaker buffering with confirmation-based segment emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
+| **vexa-bot** | Joins meeting, captures audio, runs pipeline | `services/vexa-bot/core/src/index.ts` |
+| **speaker-streams** | Per-speaker buffering with offset-based advancement | `services/vexa-bot/core/src/services/speaker-streams.ts` |
+| **speaker-identity** | Track-to-speaker voting/locking (Google Meet) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
 | **segment-publisher** | Redis XADD + PUBLISH for segments and speaker events | `services/vexa-bot/core/src/services/segment-publisher.ts` |
-| **transcription-client** | HTTP POST WAV multipart to transcription-service | `services/vexa-bot/core/src/services/transcription-client.ts` |
-| **transcription-service** | Whisper inference on audio chunks | `services/transcription-service/main.py` |
-| **transcription-collector** | Consumes Redis stream, maps speakers, writes Redis Hash + Postgres | `services/transcription-collector/main.py` |
-| **api-gateway** | WebSocket (live via Redis pub/sub) + REST (historical from Postgres + Redis Hash) | `services/api-gateway/` |
+| **transcription-client** | HTTP POST WAV to transcription-service | `services/vexa-bot/core/src/services/transcription-client.ts` |
+| **transcription-service** | faster-whisper inference, returns segments | `services/transcription-service/main.py` |
+| **transcription-collector** | Consumes Redis stream, maps speakers, persists | `services/transcription-collector/main.py` |
+| **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |
+
+### Teams-Specific: Caption-Driven Pipeline
+
+Teams has one mixed audio stream. Speaker attribution uses live captions:
+
+1. **Audio queue** (browser): chunks accumulate with timestamps, max age 3s, RMS silence filter drops quiet chunks
+2. **Caption observer**: MutationObserver on `[data-tid="closed-caption-renderer-wrapper"]`, polls every 200ms as backup
+3. **On caption text growth**: flush audio queue to the caption's speaker name via `__vexaTeamsAudioData(speaker, data)`
+4. **On speaker change in captions**: flush previous speaker's SpeakerStreamManager buffer (if >= 2s audio), flush queue to new speaker with 2s lookback (discard older stale chunks)
+5. **Idle timeout (15s)**: if no audio arrives for 15s, submit remaining buffer and clean up. Set high because browser silence filter makes natural speech pauses look like idle gaps.
 
 ### Key Behaviors
 
-- **Per-speaker isolation (Google Meet):** Each participant has a separate `<audio>` element. The bot creates one AudioContext + ScriptProcessor per element. Audio is pre-separated -- no diarization needed.
-- **Mixed stream routing (Teams):** One audio element, one ScriptProcessor. **Primary:** live captions provide speaker name when Teams ASR detects real speech — audio routed via caption-driven boundaries with 5s ring buffer lookback. **Fallback:** DOM blue squares (`vdi-frame-occlusion` class) when captions unavailable. Caption text also stored for future segment reconciliation.
-- **Speaker identity locking:** Votes accumulate when exactly one speaker indicator is active while audio arrives on a track. After 3 votes with 70% ratio, the mapping locks permanently. One-name-per-track, one-track-per-name enforced.
-- **Confirmation-based emission:** Segments are NOT published on first transcription. The buffer resubmits every 2s. When the first 80% of the transcript matches across 2 consecutive submissions, the segment is confirmed and published. This prevents hallucination segments.
-- **Hard cap:** If wall-clock time exceeds 10s regardless of audio duration, the buffer force-flushes. Prevents mega-segments from accumulating during intermittent speech.
-- **GC prevention:** `window.__vexaAudioStreams` holds persistent references to AudioContext/ScriptProcessor/source nodes to prevent garbage collection (classic Web Audio API GC bug).
-- **Mutable then immutable:** Segments live in Redis Hash (mutable) for 30s. During this window, speaker names and text can be updated. After 30s, the background task writes them to Postgres (immutable) and removes from Redis.
-- **Dual delivery:** Live clients receive segments via WebSocket (Redis pub/sub). Historical clients fetch via REST (merged Redis Hash + Postgres).
-- **Language detection:** Auto-detected per speaker on first chunk. Results with probability < 0.3 are discarded. Explicit language setting overrides auto-detection.
+- **Offset-based buffer advancement:** Confirmed segments advance `timestamp_offset`. Next Whisper submission sends only unprocessed audio. Buffer stays continuous — no reset, no scatter.
+- **Speaker change = buffer flush:** When captions indicate a new speaker, the previous speaker's buffer is flushed (emit + full reset). Short segments (< 2s) stay in buffer for the speaker's next turn.
+- **Whisper segments, not string matching:** Whisper returns native segments with start/end times. Completed segments (all except last) get emitted. The last segment is partial — re-sent with more context on the next submission.
+- **Same-output confirmation:** When the partial segment text repeats N times (same_output_threshold), it's confirmed as complete and emitted. This is the original WhisperLive algorithm.
+- **Silence filter:** Browser-side RMS check (< 0.01 for Teams, > 0.005 for GMeet) prevents silent chunks from entering the pipeline. Prevents silence contamination on speaker transitions.
+- **Mutable then immutable:** Segments live in Redis Hash for 30s (updates allowed), then written to Postgres (permanent).
+- **Language detection:** Auto-detected per speaker. Results with probability < 0.3 discarded. Explicit language overrides. Whisper supports ~100 languages with adaptive detection.
 
 ## How
 
 ### Verify
 
 1. Start the compose stack: `make all` (from `deploy/compose/`)
-2. Create a bot for a 3-speaker mock meeting (Google Meet mock at `mock.dev.vexa.ai/google-meet.html`)
-3. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
-4. Verify live segments arrive with speaker names (Alice, Bob, Carol)
-5. After meeting ends, verify `GET /transcripts/{meeting_id}` returns all segments with correct speaker attribution
-6. Compare WS delivery to REST -- same segments, same speakers
+2. Create a live meeting (Google Meet or Teams) using a browser session
+3. Send a bot to join the meeting
+4. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
+5. Speak in the meeting — verify live segments arrive with correct speaker names
+6. After meeting ends, verify `GET /transcripts/{meeting_id}` returns all segments
+7. Compare WS delivery to REST — same segments, same speakers
+
+Testing uses **real live meetings** created on-demand via browser sessions.
 
 ### Platform-Specific Docs
 
-- [Google Meet flow](google-meet/README.md) -- per-element audio, class-based speaker detection
-- [MS Teams flow](ms-teams/README.md) -- mixed stream, DOM-based speaker routing
+- [Google Meet flow](google-meet/README.md)
+- [MS Teams flow](ms-teams/README.md)
 
 ### Documentation Pages
 
@@ -169,9 +175,19 @@ Google Meet gives isolated per-speaker audio -- no diarization needed, overlappi
 
 ### Known Limitations
 
-- First few seconds of a new speaker may show as empty until speaker identity locks (3 votes needed, Google Meet only)
-- Teams: caption-driven routing [UNTESTED] — ring buffer lookback should recover first seconds, but needs real-meeting validation
-- Teams mixed audio means overlapping speech is duplicated to all active speakers' buffers
-- Language detection with probability < 0.3 discards the segment entirely (false negatives possible for rare languages)
-- Whisper inference adds 1-3s latency per submission on top of the 2s submit interval
-- Google Meet obfuscated class names (`Oaajhc`, `gjg47c`) may change with Meet UI updates -- selectors.ts must be updated
+- **Teams mixed audio**: overlapping speech within the caption delay window (~1-2s) cannot be separated. Fast back-to-back turns may attribute audio to the wrong speaker.
+- **Teams captions assume one language**: if a speaker switches language, captions produce gibberish. Whisper auto-detects correctly but the caption routing may be disrupted.
+- **Google Meet class names**: obfuscated (`Oaajhc`, `gjg47c`), may change with Meet UI updates.
+- **First seconds**: new speakers may show empty until identity locks (3 votes, Google Meet) or first caption (Teams).
+- **Whisper latency**: 1-3s per submission on top of the 2s submit interval.
+
+### Implementation Status (as of 2026-03-20)
+
+The SpeakerStreamManager currently uses full-buffer-reset on confirmation (the old approach). The WhisperLive offset-based algorithm described above is the target architecture. Key changes needed:
+
+1. Add `timestampOffset` / `framesOffset` to SpeakerBuffer
+2. `submitBuffer` sends `chunks[timestampOffset:]` not full buffer
+3. Use Whisper's native segments (start/end/text/completed) instead of fuzzy string matching
+4. On completed segments: advance offset, emit, keep buffer
+5. On partial segment: update live draft, don't advance
+6. Sliding window: trim buffer front when exceeding max size (120s)
