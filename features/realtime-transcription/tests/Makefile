@@ -3,6 +3,10 @@ BOT  := $(ROOT)/services/vexa-bot
 TEST := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
 PLAYER := $(shell which paplay 2>/dev/null || which aplay 2>/dev/null || which ffplay 2>/dev/null)
 
+# Transcription service — override to test against a different instance
+export TRANSCRIPTION_URL ?= http://localhost:8085/v1/audio/transcriptions
+export TRANSCRIPTION_TOKEN ?= 32c59b9f654f1b6e376c6f020d79897d
+
 .PHONY: audio unit play play-short play-medium play-long play-all test help
 
 help:
@@ -16,7 +20,9 @@ help:
 	@echo "  make play FILE=x — custom WAV file"
 	@echo "  make play-all    — all test files sequentially"
 	@echo "  make test        — unit + all pipeline tests"
+	@echo "  make play TX_URL=http://host:port/v1/audio/transcriptions TX_TOKEN=xxx"
 	@echo ""
+	@echo "Transcription: $(TRANSCRIPTION_URL)"
 	@echo "Audio playback: $(if $(PLAYER),$(PLAYER),NOT AVAILABLE — install pulseaudio-utils)"
 
 audio:
