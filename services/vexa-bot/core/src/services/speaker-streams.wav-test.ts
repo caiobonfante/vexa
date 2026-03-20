@@ -1,22 +1,28 @@
 /**
- * Real-time pipeline test: feeds a WAV file at actual playback speed
- * through SpeakerStreamManager → TranscriptionClient → Whisper.
+ * Pipeline test: feeds a WAV file through SpeakerStreamManager → Whisper.
  *
- * Audio is fed chunk-by-chunk at the real sample rate (~256ms per chunk).
- * The SpeakerStreamManager's internal timer drives submissions — no manual
- * trySubmit calls. You see transcription appear as if listening live.
+ * Two modes:
+ *   --realtime (default): feeds at playback speed, hear audio + see logs live
+ *   --fast: feeds 2s of audio, waits for Whisper response, feeds next 2s, repeat
+ *           Same submission pattern as realtime, just no wall-clock waiting.
  *
- * Usage: npx ts-node core/src/services/speaker-streams.wav-test.ts [wav-file]
+ * Usage:
+ *   npx ts-node core/src/services/speaker-streams.wav-test.ts [wav-file] [--fast|--realtime]
  */
 
 import * as fs from 'fs';
 import { SpeakerStreamManager } from './speaker-streams';
 import { TranscriptionClient } from './transcription-client';
 
+const args = process.argv.slice(2);
+const FAST_MODE = args.includes('--fast');
+const wavArg = args.find(a => !a.startsWith('--'));
+
 const SAMPLE_RATE = 16000;
 const CHUNK_SIZE = 4096;
 const CHUNK_DURATION_MS = (CHUNK_SIZE / SAMPLE_RATE) * 1000; // ~256ms
-const WAV_PATH = process.argv[2] || '/tmp/test-speech.wav';
+const SUBMIT_INTERVAL_SAMPLES = 2 * SAMPLE_RATE; // 2s worth of samples
+const WAV_PATH = wavArg || '/tmp/test-speech.wav';
 const TX_URL = process.env.TRANSCRIPTION_URL || 'http://localhost:8085/v1/audio/transcriptions';
 const TX_TOKEN = process.env.TRANSCRIPTION_TOKEN || '32c59b9f654f1b6e376c6f020d79897d';
 
@@ -63,10 +69,11 @@ async function main() {
   const totalDuration = audio.length / SAMPLE_RATE;
   const totalChunks = Math.ceil(audio.length / CHUNK_SIZE);
 
+  const mode = FAST_MODE ? 'FAST (submit→wait→submit)' : 'REAL-TIME playback';
   console.log(`\n  File:     ${WAV_PATH}`);
   console.log(`  Duration: ${totalDuration.toFixed(1)}s (${totalChunks} chunks at ${CHUNK_DURATION_MS.toFixed(0)}ms each)`);
   console.log(`  Whisper:  ${TX_URL}`);
-  console.log(`  Mode:     REAL-TIME playback\n`);
+  console.log(`  Mode:     ${mode}\n`);
 
   const txClient = new TranscriptionClient({
     serviceUrl: TX_URL,
@@ -125,31 +132,44 @@ async function main() {
   };
 
   // Start playback
-  console.log(`  [0.0s] ▶ Playing ${totalDuration.toFixed(1)}s of audio in real-time...\n`);
+  console.log(`  [0.0s] ▶ ${FAST_MODE ? 'Processing' : 'Playing'} ${totalDuration.toFixed(1)}s of audio...\n`);
   mgr.addSpeaker('s1', 'Speaker');
 
-  // Feed chunks at real-time speed
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, audio.length);
-    mgr.feedAudio('s1', audio.subarray(start, end));
+  if (FAST_MODE) {
+    // Fast mode: feed all audio instantly, let the internal timer drive
+    // submissions at the same 2s interval. We just wait for it to finish.
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, audio.length);
+      mgr.feedAudio('s1', audio.subarray(start, end));
+    }
+    console.log(`  [${ts()}s] All audio fed. Waiting for timer-driven submissions...\n`);
 
-    // Progress indicator every 5s of audio
-    const audioSec = (i * CHUNK_SIZE) / SAMPLE_RATE;
-    if (i > 0 && Math.floor(audioSec) % 5 === 0 && Math.floor(((i - 1) * CHUNK_SIZE) / SAMPLE_RATE) % 5 !== 0) {
-      console.log(`  [${ts()}s] ░░░ ${audioSec.toFixed(0)}s / ${totalDuration.toFixed(0)}s audio played ░░░`);
+    // Wait for the timer to process everything — estimate based on audio duration
+    // Timer fires every 2s, each Whisper call ~200ms, confirmation every ~4s
+    const estimatedTime = (totalDuration / 2) * 500 + 3000;
+    await new Promise(r => setTimeout(r, estimatedTime));
+
+  } else {
+    // Real-time mode: feed at playback speed, timer drives submissions
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, audio.length);
+      mgr.feedAudio('s1', audio.subarray(start, end));
+
+      const audioSec = (i * CHUNK_SIZE) / SAMPLE_RATE;
+      if (i > 0 && Math.floor(audioSec) % 5 === 0 && Math.floor(((i - 1) * CHUNK_SIZE) / SAMPLE_RATE) % 5 !== 0) {
+        console.log(`  [${ts()}s] ░░░ ${audioSec.toFixed(0)}s / ${totalDuration.toFixed(0)}s audio played ░░░`);
+      }
+
+      await new Promise(r => setTimeout(r, CHUNK_DURATION_MS));
     }
 
-    // Real-time pacing
-    await new Promise(r => setTimeout(r, CHUNK_DURATION_MS));
+    // Wait for in-flight Whisper calls
+    await new Promise(r => setTimeout(r, 3000));
   }
 
-  console.log(`  [${ts()}s] ■ Playback complete. Waiting for final transcription...\n`);
-
-  // Wait for in-flight Whisper calls
-  await new Promise(r => setTimeout(r, 3000));
-
-  // Flush remaining
+  console.log(`  [${ts()}s] ■ Complete. Flushing remaining buffer...\n`);
   mgr.flushSpeaker('s1');
   await new Promise(r => setTimeout(r, 2000));
 
