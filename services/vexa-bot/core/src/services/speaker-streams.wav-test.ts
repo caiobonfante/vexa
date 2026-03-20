@@ -3,8 +3,8 @@
  * SpeakerStreamManager → TranscriptionClient → Whisper.
  *
  * Audio is fed chunk-by-chunk at the actual sample rate (~256ms per chunk).
- * The SpeakerStreamManager's internal timer drives submissions.
- * You see transcription appear as if listening live.
+ * The SpeakerStreamManager's internal 2s timer drives submissions — same
+ * as production. Play audio alongside with `make play`.
  *
  * Usage: npx ts-node core/src/services/speaker-streams.wav-test.ts [wav-file]
  */
@@ -90,11 +90,9 @@ async function main() {
   let totalWhisperMs = 0;
   const confirmed: string[] = [];
   let lastDraft = '';
-
   mgr.onSegmentReady = async (speakerId, speakerName, audioBuffer) => {
     whisperCalls++;
     const durSec = (audioBuffer.length / SAMPLE_RATE).toFixed(1);
-    // Don't log submissions — too noisy. Log results only.
 
     const start = Date.now();
     try {
@@ -116,6 +114,7 @@ async function main() {
       console.log(`  [${ts()}s] ERROR  | ${err.message}`);
       mgr.handleTranscriptionResult(speakerId, '');
     }
+
   };
 
   mgr.onSegmentConfirmed = (speakerId, speakerName, text) => {
