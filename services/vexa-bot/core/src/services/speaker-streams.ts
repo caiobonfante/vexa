@@ -142,10 +142,10 @@ export class SpeakerStreamManager {
       return;
     }
 
-    // Fuzzy match: compare first 80% of the shorter string
-    const compareLen = Math.floor(Math.min(trimmed.length, buffer.lastTranscript.length) * 0.8);
-
-    if (compareLen > 20 && trimmed.substring(0, compareLen) === buffer.lastTranscript.substring(0, compareLen)) {
+    // Full string match — same as WhisperLive's same_output_threshold.
+    // Text must be identical across consecutive submissions. This ensures
+    // Whisper has fully stabilized before we confirm and advance the offset.
+    if (trimmed === buffer.lastTranscript) {
       buffer.confirmCount++;
     } else {
       buffer.lastTranscript = trimmed;
