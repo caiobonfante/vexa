@@ -493,18 +493,20 @@ async function runPartB(): Promise<void> {
 
   // ── 4. Build speaker boundaries from real caption events ────────
   //
-  // Caption timestamps are relative to first caption event.
-  // Audio offsets are relative to first TTS send time.
-  // The gap between them: first caption arrived at wall-clock T,
-  // first TTS was sent at wall-clock T-delta. From the data:
-  //   First GT send: 1774018355.367 (Alice SENT)
-  //   First caption: 2026-03-20T14:52:38.051 = some absolute time
-  // The delta between TTS send and first caption is the delivery latency.
-  // In the reference data, first caption at relative 0s corresponds to
-  // audio offset 0s (they start together in our reconstruction).
-  // So caption timestamps map directly to audio offsets.
+  // Caption timestamps are relative to the first event in the log file
+  // (a DOM speaker_end at 0.0s). The first caption_text arrives at ~26.6s.
+  // Our audio starts at 0.0s (first TTS placed at offset 0).
+  // So we rebase: caption time - first_caption_time = audio time.
 
-  const boundaries = captionsToSpeakerBoundaries(captionEvents);
+  const firstCaptionTime = captionEvents.length > 0 ? captionEvents[0].timestamp : 0;
+  const rebasedCaptions = captionEvents.map(c => ({
+    ...c,
+    timestamp: c.timestamp - firstCaptionTime,
+  }));
+
+  console.log(`\n  Caption rebase: first caption at ${firstCaptionTime.toFixed(1)}s → shifted to 0.0s`);
+
+  const boundaries = captionsToSpeakerBoundaries(rebasedCaptions);
 
   console.log(`\n  Speaker boundaries (from real captions):`);
   for (const b of boundaries) {
@@ -606,8 +608,8 @@ async function runPartB(): Promise<void> {
   const captionLog: { speaker: string; timestamp: number }[] = [];
   const captionTimers: ReturnType<typeof setTimeout>[] = [];
 
-  for (const ce of captionEvents) {
-    const delayMs = ce.timestamp * 1000; // relative timestamp in seconds -> ms
+  for (const ce of rebasedCaptions) {
+    const delayMs = Math.max(0, ce.timestamp * 1000); // rebased timestamp -> ms
     const timer = setTimeout(() => {
       captionLog.push({ speaker: ce.speaker, timestamp: ce.timestamp });
     }, delayMs);
