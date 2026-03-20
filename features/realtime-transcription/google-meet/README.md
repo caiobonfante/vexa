@@ -2,129 +2,73 @@
 
 ## Why
 
-Google Meet provides the cleanest audio pipeline of any supported platform. Each participant gets a separate `<audio>` element with its own MediaStream -- no diarization needed, no mixed audio, no cross-talk. This is the reference implementation for the per-speaker transcription pipeline.
+Google Meet provides the cleanest audio pipeline of any supported platform. Each participant gets a separate `<audio>` element with its own MediaStream — true **multi-channel audio**. No diarization needed, no mixed audio, no cross-talk. This is the equivalent of multichannel transcription, the industry gold standard for accuracy.
 
 ## What
 
-### Per-Element Audio Streams
-
-Google Meet renders one `<audio>` (or `<video>`) DOM element per participant. Each element's `srcObject` is a `MediaStream` with that participant's audio track. The bot creates one `AudioContext` + `ScriptProcessor` per element, producing isolated per-speaker audio.
+### Architecture: N Independent Pipelines
 
 ```
-Participant A: <audio srcObject=MediaStream_A> -> AudioContext_A -> ScriptProcessor_A
-Participant B: <audio srcObject=MediaStream_B> -> AudioContext_B -> ScriptProcessor_B
-Participant C: <audio srcObject=MediaStream_C> -> AudioContext_C -> ScriptProcessor_C
+Participant A ──→ <audio> A ──→ AudioContext A ──→ ScriptProcessor A ──→ SpeakerStreamManager A ──→ Whisper ──→ segments A
+Participant B ──→ <audio> B ──→ AudioContext B ──→ ScriptProcessor B ──→ SpeakerStreamManager B ──→ Whisper ──→ segments B
+Participant C ──→ <audio> C ──→ AudioContext C ──→ ScriptProcessor C ──→ SpeakerStreamManager C ──→ Whisper ──→ segments C
 ```
 
-Each ScriptProcessor calls `__vexaPerSpeakerAudioData(index, data)` where `index` is the element's position in the DOM-discovered media element list.
+Each participant has its own:
+- Audio element with isolated MediaStream
+- AudioContext at 16kHz
+- ScriptProcessor (4096 buffer)
+- SpeakerStreamManager instance (offset-based sliding window)
+- Independent Whisper submissions
 
-### Audio Capture Setup
+The callback `__vexaPerSpeakerAudioData(index, data)` routes by element index. Each index maps to one SpeakerStreamManager identified as `speaker-{index}`.
 
-**File:** `services/vexa-bot/core/src/index.ts` lines 1335-1406 (`startPerSpeakerAudioCapture`)
+### Audio Capture
 
-1. `page.evaluate()` runs inside the browser context
-2. Discovers active media elements: `document.querySelectorAll('audio, video')` filtered by `!el.paused && el.srcObject instanceof MediaStream && srcObject.getAudioTracks().length > 0`
-3. Retries up to 10 times with 2s delay (20s total wait)
-4. For each element:
-   - `new AudioContext({ sampleRate: 16000 })` -- 16kHz mono
-   - `ctx.createScriptProcessor(4096, 1, 1)` -- 4096 sample buffer
-   - `processor.onaudioprocess`: check max amplitude > 0.005, then call `__vexaPerSpeakerAudioData(i, Array.from(data))`
+**File:** `services/vexa-bot/core/src/index.ts` (`startPerSpeakerAudioCapture`)
+
+1. `page.evaluate()` discovers active media elements: `<audio>` and `<video>` filtered by `!el.paused && srcObject.getAudioTracks().length > 0`
+2. Retries up to 10 times (20s total)
+3. Per element: `new AudioContext({ sampleRate: 16000 })` → `createScriptProcessor(4096, 1, 1)`
+4. Silence filter: `maxVal > 0.005` before sending
 5. References stored on `window.__vexaAudioStreams` to prevent GC
 
-### Speaker Identity Resolution
+### Speaker Identity: Voting/Locking
+
+**The problem:** Google Meet doesn't expose which audio element belongs to which participant.
+
+**The solution:** Correlate "which track has audio" with "which DOM tile shows speaking."
 
 **Files:**
-- `services/vexa-bot/core/src/services/speaker-identity.ts` -- voting/locking logic
-- `services/vexa-bot/core/src/platforms/googlemeet/recording.ts` -- browser-side speaker detection
+- `speaker-identity.ts` — voting/locking logic
+- `googlemeet/recording.ts` — browser-side speaking detection
 
-The bot needs to map audio track index -> participant name. Google Meet doesn't expose this mapping directly. The bot infers it by correlating:
+**Flow:**
+1. Audio arrives on track N → `handlePerSpeakerAudioData(N, data)`
+2. Query browser: `__vexaGetAllParticipantNames()` → `{ names: {id: name}, speaking: [name] }`
+3. If exactly 1 speaker active: `recordTrackVote(N, speakerName)`
+4. After `LOCK_THRESHOLD=3` votes with `LOCK_RATIO=0.7`: mapping locks permanently
+5. Constraints: one-name-per-track, one-track-per-name
 
-1. **Which track has audio** (ScriptProcessor fires with non-silent data)
-2. **Which participant's DOM tile shows "speaking"** (class mutations + indicator elements)
+**Speaking detection (browser-side):**
+- MutationObserver on class changes within `[data-participant-id]` containers
+- Watches for speaking classes: `Oaajhc`, `HX2H7`, `wEsLMd`, `OgVli`
+- Silence class: `gjg47c`
+- 500ms polling fallback for cases where mutations don't fire
 
-#### Speaking Detection (browser-side, in `recording.ts`)
+### Buffer Management
 
-Two detection methods run in parallel:
+Uses the same offset-based sliding window as Teams (see [parent README](../README.md)):
 
-**Primary: MutationObserver on class attribute changes**
-- Observes all elements within `[data-participant-id]` containers
-- Watches for `attributeFilter: ['class']` with `subtree: true`
-- On mutation, checks for speaking classes and indicators
-
-**Fallback: 500ms polling interval**
-- `setInterval(() => { ... }, 500)` at `recording.ts:584`
-- Scans all participant tiles for speaking indicators
-- Catches cases where class mutations don't fire (e.g., CSS animations)
-
-#### Speaking Class Names (`selectors.ts`)
-
-```typescript
-// Speaking (from googleSpeakingClassNames)
-'Oaajhc'  // Primary Google Meet speaking animation class
-'HX2H7'   // Alternative speaking class
-'wEsLMd'  // Another speaking indicator
-'OgVli'   // Additional speaking class
-
-// Silence (from googleSilenceClassNames)
-'gjg47c'  // Primary Google Meet silence class
-```
-
-These are obfuscated Google Meet class names that change with UI updates. The selectors also include generic fallbacks (`speaking`, `active-speaker`, `silent`, `muted`, etc.).
-
-#### Speaking Indicators (`selectors.ts`)
-
-```typescript
-// From googleSpeakingIndicators
-'.Oaajhc'  // Speaking animation class
-'.HX2H7'   // Alternative speaking class
-'.wEsLMd'  // Another speaking indicator
-'.OgVli'   // Additional speaking class
-```
-
-#### Detection Logic
-
-```
-hasSpeakingIndicator(container):
-  check googleSpeakingIndicators selectors for visible elements
-
-inferSpeakingFromClasses(container, classList):
-  speakingClasses.some(cls => classList.contains(cls)) OR descendant has speaking class
-  silenceClasses.some(cls => classList.contains(cls))
-  Speaking wins over silence
-
-isCurrentlySpeaking = indicatorSpeaking OR classInference.speaking
-```
-
-#### Voting/Locking (Node-side, in `speaker-identity.ts`)
-
-When `handlePerSpeakerAudioData(index, data)` fires:
-
-1. Call `resolveSpeakerName(page, index, 'googlemeet', botName)`
-2. `resolveGoogleMeetSpeakerName()` calls `queryBrowserState(page)` which calls `__vexaGetAllParticipantNames()` in the browser
-3. Returns `{ names: Record<string, string>, speaking: string[] }`
-4. If exactly 1 speaker is active (`speaking.length === 1`):
-   - `recordTrackVote(trackIndex, speakerName)`
-   - Increments vote count for that track->name pair
-5. After `LOCK_THRESHOLD=3` votes with `LOCK_RATIO=0.7` (70% of total votes):
-   - Mapping locks permanently: `lockedMappings.set(trackIndex, name)`
-   - Never re-evaluated
-6. Constraints: one-name-per-track, one-track-per-name. If name is taken by another track, vote is skipped.
-
-#### Name Resolution (`recording.ts`)
-
-Participant names extracted from DOM tiles in priority order:
-1. `span.notranslate` -- primary Meet name element
-2. Google name selectors from `googleNameSelectors` (`.zWGUib`, `.cS7aqe.N2K3jd`, `.XWGOtd`, etc.)
-3. `[data-self-name]` attribute
-4. `aria-label` on container
-5. `[data-tooltip]` on descendants
-6. Fallback: `Google Participant ({data-participant-id})`
-
-Junk names are filtered: `Google Participant (spaces/...)`, `Google Participant (devices/...)`.
+- Each speaker gets independent `SpeakerStreamManager` instance
+- `submitBuffer` sends only unprocessed audio
+- Completed Whisper segments advance the offset
+- VAD (Silero, when available) filters silence before buffer — reduces Whisper calls
+- Speaker leaving/muting triggers idle timeout → clean buffer flush
 
 ### GC Prevention
 
-**Critical:** Web Audio API ScriptProcessor nodes are garbage collected if no JavaScript reference holds them. The bot stores all references on `window.__vexaAudioStreams`:
+**Critical:** Web Audio API `ScriptProcessor` nodes are garbage collected if no JavaScript reference holds them. All references stored on `window.__vexaAudioStreams`:
 
 ```typescript
 (window as any).__vexaAudioStreams.push({ ctx, source, processor });
@@ -132,27 +76,37 @@ Junk names are filtered: `Google Participant (spaces/...)`, `Google Participant 
 
 Without this, audio capture silently stops within seconds.
 
-### Key Selectors (from `selectors.ts`)
+### Differences from MS Teams
 
-| Selector | Purpose | File reference |
-|----------|---------|---------------|
-| `[data-participant-id]` | Primary participant tile selector | `googleParticipantSelectors` |
-| `span.notranslate` | Participant name text | `googleNameSelectors` |
-| `.Oaajhc` | Speaking animation class | `googleSpeakingIndicators` |
-| `.gjg47c` | Silence class | `googleSilenceClassNames` |
-| `button[aria-label="Leave call"]` | Primary leave button (also used for "still in meeting" detection) | `googleLeaveSelectors` |
-| `button[aria-label^="People"]` | People panel button (clicked to stabilize DOM) | `googlePeopleButtonSelectors` |
-| `[jsname="BOHaEe"]` | Meeting container | `googleMeetingContainerSelectors` |
+| Aspect | Google Meet | MS Teams |
+|--------|-----------|----------|
+| Audio | N per-speaker streams | 1 mixed stream |
+| SpeakerStreamManager | N instances (one per channel) | 1 instance (mixed) |
+| Speaker identity | DOM voting/locking (inferred) | Caption author (explicit) |
+| Diarization | Not needed | Caption boundaries |
+| Overlapping speech | Natural separation | Both in same stream |
+| VAD | Silero per stream (when available) | Browser-side RMS filter |
+| Silence filter | `maxVal > 0.005` per element | `RMS < 0.01` on mixed stream |
 
-Full selector lists: `services/vexa-bot/core/src/platforms/googlemeet/selectors.ts`
+### Key Selectors
 
-### Mock Meeting
+| Selector | Purpose |
+|----------|---------|
+| `[data-participant-id]` | Participant tile |
+| `span.notranslate` | Participant name |
+| `.Oaajhc` | Speaking animation class |
+| `.gjg47c` | Silence class |
+| `button[aria-label="Leave call"]` | Leave button |
+| `[jsname="BOHaEe"]` | Meeting container |
 
-Test mock at `mock.dev.vexa.ai/google-meet.html` -- 3 speakers (Alice, Bob, Carol) with Edge TTS-generated audio. Used for automated testing without real Google Meet accounts.
+These are obfuscated Google Meet class names. They change with UI updates — `selectors.ts` must be updated.
 
-### Out of scope
-- Domain-restricted meetings (org-only) — bot joins as unauthenticated guest, gets rejected
-- Google Classroom meetings — untested, likely same as standard
+### Known Limitations
+
+1. **Obfuscated class names** — Google Meet uses compiled class names that change with deployments
+2. **First seconds** — speaker identity requires 3 votes to lock; first audio may be unnamed
+3. **Domain-restricted meetings** — bot joins as unauthenticated guest, may be rejected by org policy
+4. **Multiple speakers simultaneously** — voting only works when exactly 1 speaker is active; during overlap, no votes cast, existing locks used
 
 ## How
 
@@ -160,11 +114,13 @@ Test mock at `mock.dev.vexa.ai/google-meet.html` -- 3 speakers (Alice, Bob, Caro
 
 | File | Purpose |
 |------|---------|
-| `services/vexa-bot/core/src/index.ts:1302-1406` | `startPerSpeakerAudioCapture()` -- browser-side AudioContext/ScriptProcessor setup |
-| `services/vexa-bot/core/src/index.ts:1095-1200` | `handlePerSpeakerAudioData()` -- Node-side audio handler, speaker resolution, VAD, buffer feed |
-| `services/vexa-bot/core/src/services/speaker-identity.ts` | Track->speaker voting/locking, browser state queries |
-| `services/vexa-bot/core/src/services/speaker-streams.ts` | `SpeakerStreamManager` -- per-speaker buffering with confirmation |
-| `services/vexa-bot/core/src/services/transcription-client.ts` | HTTP POST WAV to transcription-service |
-| `services/vexa-bot/core/src/services/segment-publisher.ts` | Redis XADD + PUBLISH for confirmed segments |
-| `services/vexa-bot/core/src/platforms/googlemeet/recording.ts` | Browser-side speaker detection, MutationObserver, participant counting |
-| `services/vexa-bot/core/src/platforms/googlemeet/selectors.ts` | All Google Meet DOM selectors (speaking classes, name selectors, indicators) |
+| `index.ts` (`startPerSpeakerAudioCapture`) | Browser-side AudioContext/ScriptProcessor per element |
+| `index.ts` (`handlePerSpeakerAudioData`) | Node-side: speaker resolution, VAD, buffer feed |
+| `speaker-identity.ts` | Track→speaker voting/locking, browser state queries |
+| `speaker-streams.ts` | SpeakerStreamManager — offset-based sliding window (shared) |
+| `googlemeet/recording.ts` | Browser-side speaker detection, MutationObserver, participant counting |
+| `googlemeet/selectors.ts` | All Google Meet DOM selectors |
+
+### Testing
+
+Real live Google Meet meetings. No mocks — real platform behavior, real audio, real speaker detection. Test with 2+ participants speaking and verify speaker attribution locks correctly within first few seconds.
