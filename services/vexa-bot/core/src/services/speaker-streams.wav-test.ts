@@ -88,13 +88,16 @@ async function main() {
 
   let whisperCalls = 0;
   let totalWhisperMs = 0;
+  let totalAudioSentSec = 0; // cumulative audio duration sent to Whisper
   const confirmed: string[] = [];
+  let firstConfirmWallMs = 0; // wall time of first confirmation
   let lastDraft = '';
   let latestWords: {word: string; start: number; end: number; probability: number}[] = [];
   const allWords: typeof latestWords = [];
   mgr.onSegmentReady = async (speakerId, speakerName, audioBuffer) => {
     whisperCalls++;
-    const durSec = (audioBuffer.length / SAMPLE_RATE).toFixed(1);
+    const durSec = audioBuffer.length / SAMPLE_RATE;
+    totalAudioSentSec += durSec;
 
     const start = Date.now();
     try {
@@ -127,6 +130,7 @@ async function main() {
 
   mgr.onSegmentConfirmed = (speakerId, speakerName, text) => {
     confirmed.push(text);
+    if (!firstConfirmWallMs) firstConfirmWallMs = Date.now() - t0;
     if (latestWords.length > 0) {
       allWords.push(...latestWords);
       latestWords = [];
@@ -212,12 +216,24 @@ async function main() {
     if (line.length > prefix.length) console.log(line);
   };
 
+  // Metrics
+  const wallTimeSec = (Date.now() - t0) / 1000;
+  const rtf = totalWhisperMs / 1000 / totalDuration; // Whisper processing time / audio duration
+  const audioReprocessFactor = totalAudioSentSec / totalDuration; // how many times audio was sent
+  const firstConfirmLatency = firstConfirmWallMs ? (firstConfirmWallMs / 1000).toFixed(1) : 'N/A';
+
   // Summary
   console.log(`  ┌─────────────────────────────────────────────────`);
-  console.log(`  │ Audio:     ${totalDuration.toFixed(1)}s`);
-  console.log(`  │ Wall time: ${ts()}s`);
-  console.log(`  │ Whisper:   ${whisperCalls} calls, avg ${whisperCalls > 0 ? (totalWhisperMs / whisperCalls).toFixed(0) : 0}ms`);
-  console.log(`  │ Segments:  ${confirmed.length}`);
+  console.log(`  │ Audio:      ${totalDuration.toFixed(1)}s`);
+  console.log(`  │ Wall time:  ${wallTimeSec.toFixed(1)}s`);
+  console.log(`  │ Whisper:    ${whisperCalls} calls, avg ${whisperCalls > 0 ? (totalWhisperMs / whisperCalls).toFixed(0) : 0}ms`);
+  console.log(`  │ Segments:   ${confirmed.length}`);
+  console.log(`  │`);
+  console.log(`  │ PERFORMANCE:`);
+  console.log(`  │  RTF (Real-Time Factor):  ${rtf.toFixed(2)}x (Whisper time / audio time, <1 = real-time capable)`);
+  console.log(`  │  Audio reprocess factor:  ${audioReprocessFactor.toFixed(1)}x (total audio sent / audio duration)`);
+  console.log(`  │  First confirm latency:   ${firstConfirmLatency}s (wall time to first confirmed segment)`);
+  console.log(`  │  Total audio to Whisper:  ${totalAudioSentSec.toFixed(1)}s (cumulative across ${whisperCalls} calls)`);
   console.log(`  │`);
   console.log(`  │ SEGMENTS:`);
   confirmed.forEach((t, i) => console.log(`  │  ${i + 1}. "${t}"`));

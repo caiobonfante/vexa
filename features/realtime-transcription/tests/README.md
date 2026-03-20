@@ -27,12 +27,31 @@ Audio playback and transcription happen simultaneously: you hear the speech and 
 - `CONFIRMED` — 2 consecutive Whisper results matched. Segment emitted, offset advances. This is the pipeline output.
 
 **End-of-test output:**
+- `PERFORMANCE` — RTF (real-time factor), audio reprocess factor, first confirm latency
 - `SEGMENTS` — individual confirmed segments in order
 - `GROUND TRUTH` — original TTS input text
 - `PIPELINE OUTPUT` — segments joined and deduplicated into one clean transcript
 - `WORD DIFF` — LCS-based word-level comparison: `[-missing-]` `{+extra+}`
 - `ACCURACY` — percentage of ground truth words matched
 - `WORD TIMESTAMPS` — per-word timing from Whisper (`word[start_time]`)
+
+### Performance metrics
+
+| Metric | What it measures | Good | Bad |
+|--------|-----------------|------|-----|
+| **RTF** | Whisper processing time / audio duration | <1.0 (real-time capable) | >1.0 (can't keep up) |
+| **Audio reprocess factor** | Total audio sent to Whisper / audio duration | 2-4x (efficient) | >10x (re-sending too much) |
+| **First confirm latency** | Wall time until first confirmed segment | <10s | >30s (buffer never confirms) |
+
+### Pass/fail criteria
+
+Tests don't auto-pass/fail. The output is for **manual validation**:
+
+- **Content accuracy** — are the actual words correct? Number format diffs ("thirty" → "30") are expected, not errors.
+- **Boundary quality** — are segments split at natural sentence breaks? Mid-word splits ("AP PI") are bugs.
+- **Completeness** — is the full text captured? Missing words at segment boundaries or end-of-stream are bugs.
+- **Hallucinations** — are there invented words ("excited") at segment boundaries? These are bugs.
+- **Performance** — RTF should be <1.0. Reprocess factor should be <5x. First confirm should be <15s for multi-segment speech.
 
 ### Test audio files (`audio/`)
 
