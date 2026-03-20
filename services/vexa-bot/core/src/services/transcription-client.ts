@@ -36,6 +36,9 @@ export interface TranscriptionClientConfig {
   retryDelayMs?: number;
   /** Sample rate of input audio. Default: 16000 */
   sampleRate?: number;
+  /** Max speech segment duration in seconds. Whisper forces a segment split at this length.
+   *  Lower values = more frequent confirmations = faster output. Default: 15 */
+  maxSpeechDurationSec?: number;
 }
 
 /**
@@ -49,6 +52,7 @@ export class TranscriptionClient {
   private maxRetries: number;
   private retryDelayMs: number;
   private sampleRate: number;
+  private maxSpeechDurationSec: number | undefined;
 
   constructor(config: TranscriptionClientConfig) {
     // Ensure serviceUrl ends with the transcriptions endpoint
@@ -60,6 +64,7 @@ export class TranscriptionClient {
     this.maxRetries = config.maxRetries ?? 3;
     this.retryDelayMs = config.retryDelayMs ?? 1000;
     this.sampleRate = config.sampleRate ?? 16000;
+    this.maxSpeechDurationSec = config.maxSpeechDurationSec;
   }
 
   /**
@@ -142,6 +147,15 @@ export class TranscriptionClient {
       `Content-Disposition: form-data; name="timestamp_granularities"\r\n\r\n` +
       `word\r\n`
     ));
+
+    // Max speech segment duration (controls how often Whisper splits segments)
+    if (this.maxSpeechDurationSec !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="max_speech_duration_s"\r\n\r\n` +
+        `${this.maxSpeechDurationSec}\r\n`
+      ));
+    }
 
     // End boundary
     parts.push(Buffer.from(`--${boundary}--\r\n`));

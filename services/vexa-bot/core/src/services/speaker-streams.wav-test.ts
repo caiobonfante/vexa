@@ -71,13 +71,14 @@ async function main() {
     serviceUrl: TX_URL,
     apiToken: TX_TOKEN,
     sampleRate: SAMPLE_RATE,
+    maxSpeechDurationSec: 15,
   });
 
   const mgr = new SpeakerStreamManager({
     sampleRate: SAMPLE_RATE,
-    minAudioDuration: 2,
-    submitInterval: 2,
-    confirmThreshold: 2,
+    minAudioDuration: 3,
+    submitInterval: 3,
+    confirmThreshold: 3,
     maxBufferDuration: 120,
     idleTimeoutSec: 15,
   });

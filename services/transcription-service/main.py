@@ -90,6 +90,7 @@ NO_REPEAT_NGRAM_SIZE = _env_int("NO_REPEAT_NGRAM_SIZE", 3)
 VAD_FILTER = _env_bool("VAD_FILTER", True)
 VAD_FILTER_THRESHOLD = _env_float("VAD_FILTER_THRESHOLD", 0.5)
 VAD_MIN_SILENCE_DURATION_MS = _env_int("VAD_MIN_SILENCE_DURATION_MS", 160)
+VAD_MAX_SPEECH_DURATION_S = _env_float("VAD_MAX_SPEECH_DURATION_S", 15.0)  # max segment length before forced split
 
 # Temperature fallback chain
 USE_TEMPERATURE_FALLBACK = _env_bool("USE_TEMPERATURE_FALLBACK", False)
@@ -271,6 +272,8 @@ async def transcribe_audio(
     prompt: Optional[str] = Form(None),
     response_format: str = Form("verbose_json"),
     timestamp_granularities: str = Form("segment"),
+    max_speech_duration_s: Optional[str] = Form(None),
+    min_silence_duration_ms: Optional[str] = Form(None),
     transcription_tier_form: Optional[str] = Form(None, alias="transcription_tier"),
     task: str = Form("transcribe"),
     _: bool = Depends(verify_api_token)
@@ -381,9 +384,14 @@ async def transcribe_audio(
         temps = TEMPERATURE_FALLBACK_CHAIN if USE_TEMPERATURE_FALLBACK else [requested_temp]
         want_word_timestamps = "word" in timestamp_granularities
 
+        # Per-request VAD overrides (with defaults from env)
+        req_max_speech = float(max_speech_duration_s) if max_speech_duration_s else VAD_MAX_SPEECH_DURATION_S
+        req_min_silence = int(min_silence_duration_ms) if min_silence_duration_ms else VAD_MIN_SILENCE_DURATION_MS
+
         logger.info(
             f"Worker {WORKER_ID} starting transcription - requested_temp: {requested_temp}, "
-            f"temps: {temps}, language: {language}, task: {task}, vad_filter: {VAD_FILTER}"
+            f"temps: {temps}, language: {language}, task: {task}, vad_filter: {VAD_FILTER}, "
+            f"max_speech={req_max_speech}s, min_silence={req_min_silence}ms"
         )
 
         best: Optional[Tuple[str, str, float, List[Dict[str, Any]]]] = None
@@ -411,7 +419,8 @@ async def transcribe_audio(
                     vad_filter=VAD_FILTER,
                     vad_parameters={
                         "threshold": VAD_FILTER_THRESHOLD,
-                        "min_silence_duration_ms": VAD_MIN_SILENCE_DURATION_MS,
+                        "min_silence_duration_ms": req_min_silence,
+                        "max_speech_duration_s": req_max_speech,
                     },
                     word_timestamps=want_word_timestamps,
                 )
