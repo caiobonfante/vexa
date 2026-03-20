@@ -38,7 +38,7 @@ generate "medium-paragraph" \
 generate "long-monologue" \
   "Let me walk through the full product roadmap. We are planning to release version three point zero in April. It includes a completely redesigned dashboard with real time analytics, a new notification system supporting push notifications on mobile devices, and an improved API with better rate limiting. The engineering team has been working on these features for six weeks. We are also investing in machine learning capabilities for our recommendation engine. Early tests show a thirty percent improvement in click through rates. Additionally we are exploring partnerships with several enterprise clients who have expressed interest in our platform. The sales team has been working closely with these prospects and we expect to close at least three major deals by the end of the quarter."
 
-generate "two-speakers" \
+generate "long-dialogue" \
   "Good morning everyone. I want to discuss the quarterly results. Revenue is up fifteen percent compared to last quarter and our customer base has grown significantly. That is great news. I think the marketing team deserves a lot of credit for the new campaign. The digital advertising spend was very efficient this quarter."
 
 echo ""
