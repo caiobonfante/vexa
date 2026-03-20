@@ -1,0 +1,27 @@
+=== DIVERSE TEST 2026-03-20T18:41:45+03:00 ===
+--- Round 1: Long monologue ---
+[GT] 1774021305.613126837 Alice "Let me walk through the full product roadmap. We are planning to release version three point zero in April. It includes a completely redesigned dashboard with real time analytics, a new notification system supporting push notifications on mobile devices, and an improved API with better rate limiting. The engineering team has been working on these features for six weeks."
+--- Round 2: Short interjections ---
+[GT] 1774021330.638229769 Bob "Sounds great."
+[GT] 1774021334.664720481 Charlie "Agreed."
+[GT] 1774021338.686911390 Alice "Thanks."
+[GT] 1774021342.706491775 Bob "OK."
+--- Round 3: 15s silence ---
+[GT] 1774021346.730852750 SILENCE_START
+[GT] 1774021361.734953922 SILENCE_END
+--- Round 4: Rapid exchange ---
+[GT] 1774021361.738471854 Alice "Can we discuss the budget for next quarter?"
+[GT] 1774021367.764151093 Bob "I think we need at least two hundred thousand for cloud infrastructure."
+[GT] 1774021375.786955350 Charlie "That seems reasonable given the growth numbers we are seeing."
+--- Round 5: Back-to-back ---
+[GT] 1774021383.811499943 Alice "What about marketing spend?"
+[GT] 1774021387.836176190 Bob "One fifty for digital campaigns."
+[GT] 1774021391.858112435 Charlie "Plus fifty for events."
+[GT] 1774021395.880122889 Alice "OK let us finalize this by end of week."
+--- Round 6: Charlie monologue ---
+[GT] 1774021403.902430748 Charlie "I want to add some context about the European expansion. We launched in Germany and France last quarter. Both markets exceeded our targets by twenty percent. The localization team did an excellent job adapting the product for these markets."
+--- Round 7: Quick confirmations ---
+[GT] 1774021421.928682509 Alice "Perfect."
+[GT] 1774021424.953769108 Bob "Well done."
+[GT] 1774021427.975558909 Charlie "Great meeting everyone."
+[GT] 1774021432.996467358 TEST_END
