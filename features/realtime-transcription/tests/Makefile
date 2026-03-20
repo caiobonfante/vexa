@@ -1,36 +1,74 @@
 ROOT := $(shell git rev-parse --show-toplevel)
 BOT  := $(ROOT)/services/vexa-bot
+FEATURE := $(ROOT)/features/realtime-transcription
 TEST := $(shell cd "$(dir $(lastword $(MAKEFILE_LIST)))" && pwd)
 PLAYER := $(shell which paplay 2>/dev/null || which aplay 2>/dev/null || which ffplay 2>/dev/null)
 
-# Transcription service — override to test against a different instance
+# Load feature .env if it exists (infra config lives there, not here)
+# Create from .env.example: cp $(FEATURE)/.env.example $(FEATURE)/.env
+-include $(FEATURE)/.env
+export
+
+# Fallback defaults if no .env (CI, quick local runs)
 export TRANSCRIPTION_URL ?= http://localhost:8085/v1/audio/transcriptions
-export TRANSCRIPTION_TOKEN ?= 32c59b9f654f1b6e376c6f020d79897d
+export TRANSCRIPTION_TOKEN ?=
 
 AUDIO := $(TEST)/audio
 WAVS := $(AUDIO)/short-sentence.wav $(AUDIO)/medium-paragraph.wav $(AUDIO)/long-monologue.wav $(AUDIO)/long-dialogue.wav
 
-.PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers play-all test help
+.PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers play-all test env-check smoke help
 
 help:
 	@echo "Usage:"
-	@echo "  make audio       — generate test WAV files (needs tts-service)"
-	@echo "  make unit        — run unit tests (mocked Whisper)"
-	@echo "  make play        — play medium-paragraph (audio + transcription)"
-	@echo "  make play-short  — short-sentence (~3s)"
-	@echo "  make play-medium — medium-paragraph (~14s)"
-	@echo "  make play-long   — long-monologue (~43s)"
-	@echo "  make play-noisy-office — noisy office background"
-	@echo "  make play-noisy-cafe   — noisy cafe background"
-	@echo "  make play-noisy-silence — speech + 30s silence/noise gap + speech"
-	@echo "  make play-speakers     — 3-speaker attribution pipeline test"
-	@echo "  make play FILE=x — custom WAV file"
-	@echo "  make play-all    — all test files sequentially"
-	@echo "  make test        — unit + all pipeline tests"
-	@echo "  make play TRANSCRIPTION_URL=... TRANSCRIPTION_TOKEN=..."
 	@echo ""
-	@echo "Transcription: $(TRANSCRIPTION_URL)"
-	@echo "Audio playback: $(if $(PLAYER),$(PLAYER),NOT AVAILABLE — install pulseaudio-utils)"
+	@echo "  Env setup (Stage 0):"
+	@echo "    make env-check  — verify .env exists and show config"
+	@echo "    make smoke      — one utterance end-to-end, verify infra works"
+	@echo ""
+	@echo "  Collection run (Stage 1):"
+	@echo "    make audio      — generate test WAV files from scripts (needs tts-service)"
+	@echo ""
+	@echo "  Sandbox iteration (Stage 2):"
+	@echo "    make unit        — unit tests (mocked Whisper, instant)"
+	@echo "    make play        — replay medium-paragraph (default)"
+	@echo "    make play-short  — replay short-sentence (~3s)"
+	@echo "    make play-medium — replay medium-paragraph (~14s)"
+	@echo "    make play-long   — replay long-monologue (~43s)"
+	@echo "    make play-noisy-office — replay with office noise"
+	@echo "    make play-noisy-cafe   — replay with cafe noise"
+	@echo "    make play-noisy-silence — replay with 30s silence gap"
+	@echo "    make play-speakers     — 3-speaker attribution replay"
+	@echo "    make play-replay       — replay real meeting collected data"
+	@echo "    make play FILE=x       — replay custom WAV"
+	@echo "    make play-all          — all replays sequentially"
+	@echo "    make test              — unit + all replays"
+	@echo ""
+	@echo "  Config (from $(FEATURE)/.env):"
+	@echo "    Transcription: $(TRANSCRIPTION_URL)"
+	@echo "    Model: $(or $(MODEL_SIZE),not set)"
+	@echo "    Platform: $(or $(PLATFORM),not set)"
+	@echo "    Audio playback: $(if $(PLAYER),$(PLAYER),NOT AVAILABLE)"
+
+# --- Stage 0: Env setup ---
+
+env-check:
+	@if [ ! -f "$(FEATURE)/.env" ]; then \
+		echo "ERROR: $(FEATURE)/.env not found"; \
+		echo "Create it: cp $(FEATURE)/.env.example $(FEATURE)/.env"; \
+		echo "Then fill in actual values for your environment."; \
+		exit 1; \
+	fi
+	@echo "Feature .env: $(FEATURE)/.env"
+	@echo "---"
+	@grep -v '^#' "$(FEATURE)/.env" | grep -v '^$$' | sort
+	@echo "---"
+	@echo "Transcription URL: $(TRANSCRIPTION_URL)"
+	@echo "Model: $(or $(MODEL_SIZE),not set in .env)"
+
+smoke: env-check $(AUDIO)/short-sentence.wav
+	@echo "Smoke test: sending short-sentence.wav through pipeline..."
+	@cd $(BOT) && npx ts-node core/src/services/speaker-streams.wav-test.ts $(AUDIO)/short-sentence.wav
+	@echo "Smoke test passed — infra is working."
 
 # Generate audio only if files don't exist
 $(WAVS): $(TEST)/generate-test-audio.sh

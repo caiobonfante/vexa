@@ -1,16 +1,18 @@
-# Real-World Data Replay
+# Replay Architecture
+
+**Replay** is the core of the **inner loop** — see [glossary](../../README.md#glossary) for terms.
 
 ## Why
 
-Live meetings are expensive to run — browser automation, TTS credits, platform flakiness. But synthetic tests use made-up caption timing that may not match reality. Real-world replay bridges this: collect data from a live meeting once (exact caption events, exact timestamps, exact audio), then replay it offline as many times as needed. This is the cheap inner loop of our [dev-test cycle](README.md#why-this-design) — the closest to production accuracy without running a live meeting.
+A **collection run** is expensive: browser automation, TTS credits, platform flakiness. But synthetic tests use made-up caption timing that may not match reality. **Replay** bridges this: run one **collection run** to capture **collected data** (exact caption events, exact timestamps, exact audio), then **replay** it in the **sandbox** as many times as needed. This is the cheap **inner loop** — the closest to production **scoring** without running a live meeting.
 
-## What We Collected
+## Collected data
 
-### Meeting: 2026-03-20, 3 speakers (Alice bot, Bob bot, Dmitry host)
+### Collection run: 2026-03-20, 3 speakers (Alice bot, Bob bot, Dmitry host)
 
-Two conversation sessions in one meeting:
+Two **scenarios** in one **collection run**:
 
-**Session 1 — Normal turns:**
+**Scenario 1 — Normal turns (>2s gaps):**
 | Speaker | Text (TTS input) | Send time |
 |---------|------------------|-----------|
 | Alice | "Good morning everyone. I want to start by reviewing our product metrics from last month. We had over fifty thousand active users which is a new record for us." | 14:52:35 |
@@ -18,7 +20,7 @@ Two conversation sessions in one meeting:
 | Alice | "Sure. Europe grew by twenty percent, Asia by fifteen percent, and North America by ten percent." | 14:53:03 |
 | Bob | "Makes sense. Localization always helps." | 14:53:13 |
 
-**Session 2 — Overlap + back-to-back:**
+**Scenario 2 — Overlap + back-to-back (<3s gaps):**
 | Speaker | Text (TTS input) | Send time | Notes |
 |---------|------------------|-----------|-------|
 | Alice | "Let me walk through the full product roadmap...redesigned dashboard." | 14:55:12 | ~10s utterance |
@@ -26,17 +28,17 @@ Two conversation sessions in one meeting:
 | Alice | "Yes fully backwards compatible." | 14:55:32 | Quick reply |
 | Bob | "Great thanks." | 14:55:35 | 3s after Alice |
 
-### Data Files
+### Data files
 
-| File | Content | Size |
-|------|---------|------|
-| `reference-timestamped-data.json` | 350 events with ISO timestamps: 143 caption texts, 10 speaker changes, 77 flushes, 42 drafts, 14 confirmed, 31+33 DOM events | 2568 lines |
-| `reference-timestamped-events.txt` | Raw timestamped log lines from `docker logs --timestamps` | Source for JSON |
-| `reference-caption-data.json` | Structured events without timestamps (initial extraction) | 273 events |
-| `reference-ground-truth-normal.txt` | TTS send timestamps for session 1 | Unix timestamps |
-| `reference-ground-truth-overlap.txt` | TTS send timestamps for session 2 | Unix timestamps |
-| `reference-bot-logs.txt` | Filtered pipeline events (no timestamps) | 157 lines |
-| `reference-raw-logs-full.txt` | Complete bot logs (gitignored, large) | Full output |
+| File | Type | Size |
+|------|------|------|
+| `reference-timestamped-data.json` | **Collected data**: 350 events (143 caption texts, 10 speaker changes, 77 flushes, 42 drafts, 14 confirmed, 31+33 DOM events) | 2568 lines |
+| `reference-timestamped-events.txt` | **Collected data**: raw timestamped log lines from `docker logs --timestamps` | Source for JSON |
+| `reference-caption-data.json` | **Collected data**: structured **caption boundary** events without timestamps | 273 events |
+| `reference-ground-truth-normal.txt` | **Ground truth**: TTS send timestamps for scenario 1 **script** | Unix timestamps |
+| `reference-ground-truth-overlap.txt` | **Ground truth**: TTS send timestamps for scenario 2 **script** | Unix timestamps |
+| `reference-bot-logs.txt` | **Collected data**: filtered pipeline events (no timestamps) | 157 lines |
+| `reference-raw-logs-full.txt` | **Collected data**: complete bot logs (gitignored, large) | Full output |
 
 ### Audio Files (TTS, already in `audio/`)
 
@@ -46,25 +48,25 @@ Two conversation sessions in one meeting:
 | `medium-paragraph.wav` | Bob | ~14s |
 | `long-monologue.wav` | Alice | ~43s |
 
-## Observed Caption Patterns
+## Observed caption boundary behavior
 
 Documented in detail: [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md)
 
-Key numbers for replay:
+Key numbers for **replay** (from **collected data**):
 
 | Parameter | Observed Value |
 |-----------|---------------|
 | Caption update cadence | ~400ms between word-by-word updates |
 | Updates per 10s turn | ~25 |
-| Caption delay (first word of new speaker) | ~1.5-2.5s from speech start |
-| Caption delay (within turn) | ~300-500ms from word spoken |
+| **Caption boundary** delay (first word of new speaker) | ~1.5-2.5s from speech start |
+| **Caption boundary** delay (within turn) | ~300-500ms from word spoken |
 | Sentence split frequency | Every 5-8s of speech |
 | Speaker change | Atomic, instant, no overlap in captions |
 | Overlap handling | First speaker truncated mid-word |
 
-## How to Replay
+## How to replay
 
-### Timeline (Session 1, relative to first event at T=0)
+### Timeline (scenario 1, relative to first event at T=0)
 
 ```
  0.0s                          26.6s         40.2s         54.8s         64.5s
@@ -78,17 +80,17 @@ Key numbers for replay:
                           event fires      change        change         change
 ```
 
-### Replay Architecture
+### Replay architecture
 
 ```
-Audio file (reconstructed from TTS WAVs)
+Audio (from collected data — reconstructed from TTS WAVs)
   |
   v
 SpeakerStreamManager (real-time chunk feeding)
   |
   v
 Whisper (word timestamps)
-  |                              Caption events (from reference-timestamped-data.json)
+  |                              Caption events (collected data → caption boundaries)
   |                                |
   v                                v
 speaker-mapper                  captionsToSpeakerBoundaries
@@ -97,40 +99,43 @@ speaker-mapper                  captionsToSpeakerBoundaries
 mapWordsToSpeakers(whisperWords, captionBoundaries)
   |
   v
-Attributed segments → compare to ground truth
+Attributed segments → scoring against ground truth
 ```
 
-### Implementation Steps
+### Replay steps
 
-1. **Reconstruct audio**: Read ground truth send times, concatenate TTS WAVs with correct gap timing
-2. **Load caption events**: Parse `reference-timestamped-data.json`, compute relative timestamps from session start
+1. **Reconstruct audio**: Read **ground truth** send times, concatenate TTS WAVs with correct gap timing
+2. **Load collected data**: Parse `reference-timestamped-data.json`, compute relative timestamps from session start
 3. **Feed audio at real-time speed**: Same as existing pipeline tests
-4. **Replay caption events via timers**: At each event's relative timestamp, fire the caption callback
+4. **Replay caption events via timers**: At each event's relative timestamp, fire the caption callback → **caption boundaries**
 5. **Collect Whisper word timestamps**: From confirmed segments
-6. **Run speaker-mapper**: With caption-derived boundaries
-7. **Score**: Per-word attribution accuracy against ground truth time ranges
+6. **Run speaker-mapper**: Map words to speakers using **caption boundaries**
+7. **Score**: Per-word attribution accuracy against **ground truth** time ranges
 
-### Expected Accuracy
+### Expected scoring by scenario
 
-Based on observed caption delay (~1.5s mean) and the unit test results:
-- **Normal turns (>2s gap)**: ~95%+ attribution accuracy — caption delay doesn't matter because the gap absorbs it
-- **Quick back-to-back (<3s gap)**: ~80-85% — first few words of new speaker fall in previous speaker's delayed boundary
-- **Overlap**: ~70-75% — truncated speaker loses words, overlapping audio attributed to whoever caption shows
+Based on observed **caption boundary** delay (~1.5s mean):
+- **Normal turns scenario (>2s gap)**: ~95%+ — **caption boundary** delay doesn't matter because the gap absorbs it
+- **Rapid exchange scenario (<3s gap)**: ~80-85% — first few words of new speaker fall in previous speaker's delayed **caption boundary**
+- **Overlap scenario**: ~70-75% — truncated speaker loses words, overlapping audio attributed to whoever caption shows
 
 ### Run
 
 ```bash
-make play-replay    # replay real meeting data (when implemented)
+make play-replay    # replay collected data in sandbox
 ```
-## Diverse test replay analysis (2026-03-20)
 
-Replayed 16 GT utterances against 14 real caption boundaries.
-Caption boundary accuracy: 13/16 = 81%.
+## Scoring results: diverse scenario replay (2026-03-20)
 
-3 misattributed by Teams captions (not pipeline):
-- 'Thanks.' (Alice at 33.1s) → Charlie boundary (29.5-44.4s)
-- 'OK.' (Bob at 37.1s) → Charlie boundary
-- 'Plus fifty for events.' (Charlie at 86.2s) → Bob boundary (82.3-90.3s)
+**Replay** of 16 **ground truth** utterances against 14 real **caption boundaries**.
+**Scoring**: 13/16 = 81% caption boundary accuracy.
+
+3 misattributed by Teams **caption boundaries** (not pipeline):
+- 'Thanks.' (Alice at 33.1s) → Charlie **caption boundary** (29.5-44.4s)
+- 'OK.' (Bob at 37.1s) → Charlie **caption boundary**
+- 'Plus fifty for events.' (Charlie at 86.2s) → Bob **caption boundary** (82.3-90.3s)
 
 Theoretical with carry-forward + mapper: 15/17 = 88%
+
+**Plateau**: remaining 2 errors are platform-level **caption boundary** misattribution — can't be fixed in pipeline. Need new **scenarios** to test workarounds (e.g., using audio energy to override **caption boundaries**).
 

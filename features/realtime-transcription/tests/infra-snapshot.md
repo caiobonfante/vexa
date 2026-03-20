@@ -4,25 +4,22 @@ Frozen record of infrastructure state. Sandbox tests MUST match these configs ex
 
 ## Transcription Service
 
-**Endpoint:** `http://localhost:8085/v1/audio/transcriptions` (via nginx LB)
-**Auth:** `Authorization: Bearer 32c59b9f654f1b6e376c6f020d79897d`
+**Endpoint:** `http://localhost:8083/v1/audio/transcriptions` (dev instance, via nginx LB)
+**Auth:** `Authorization: Bearer {set, length 26}`
 **Model:** `large-v3-turbo`, device=cuda, compute_type=int8
+**Source:** `/home/dima/dev/vexa-restore/services/transcription-service/` (compose project: `transcription-service`)
 
-**3 workers, all on same image:**
-- transcription-worker-1: `sha256:80eea` — has `want_word_timestamps`, `VAD_MAX_SPEECH_DURATION_S`
-- transcription-worker-2: `sha256:a4f61` — same
-- transcription-worker-3: `sha256:72db0` — same
-
-**Source:** `/home/dima/prod/prod-transcription-service/main.py`
-(copied from `/home/dima/dev/vexa-restore/services/transcription-service/main.py`)
+**2 workers on GPUs 2-3:**
+- transcription-service-transcription-worker-1-1
+- transcription-service-transcription-worker-2-1
 
 **Word timestamps:** Returned when `timestamp_granularities=word` is sent as form field.
-Verified: 3/3 workers return 8 words for `short-sentence.wav` via curl.
+Verified: smoke test returns 8 words for `short-sentence.wav` — 100% accuracy.
 
 **VAD defaults (env):**
-- `VAD_MAX_SPEECH_DURATION_S=15.0`
-- `VAD_MIN_SILENCE_DURATION_MS=160`
-- `VAD_FILTER=True`
+- `VAD_MAX_SPEECH_DURATION_S=15.0` (default in main.py)
+- `VAD_MIN_SILENCE_DURATION_MS=160` (default in main.py)
+- `VAD_FILTER=True` (default in main.py)
 
 **Per-request overrides (form fields):**
 - `max_speech_duration_s` — overrides VAD_MAX_SPEECH_DURATION_S
@@ -89,13 +86,58 @@ idleTimeoutSec: 15
 ## Sandbox Requirements
 
 For sandbox tests to match production:
-1. Use `TRANSCRIPTION_URL=http://localhost:8085/v1/audio/transcriptions`
-2. Use `TRANSCRIPTION_TOKEN=32c59b9f654f1b6e376c6f020d79897d`
+1. Use `TRANSCRIPTION_URL=http://localhost:8083/v1/audio/transcriptions`
+2. Use `TRANSCRIPTION_TOKEN=dev-rt-transcription-2026`
 3. TranscriptionClient config must match production (NO `maxSpeechDurationSec` unless production adds it)
 4. SpeakerStreamManager config must match production (3/3/3/120/15)
-5. All 3 transcription workers must have word timestamp support
+5. Both transcription workers must have word timestamp support
 
-## Collection Run Data (this snapshot)
+## .env (redacted)
+
+```
+TRANSCRIPTION_URL=http://localhost:8083/v1/audio/transcriptions
+TRANSCRIPTION_TOKEN={set, length 26}
+MODEL_SIZE=large-v3-turbo
+COMPUTE_TYPE=int8
+DEVICE=cuda
+BEAM_SIZE=5
+VAD_FILTER=true
+VAD_FILTER_THRESHOLD=0.5
+NO_SPEECH_THRESHOLD=0.6
+MAX_CONCURRENT_TRANSCRIPTIONS=2
+SUBMIT_INTERVAL=3
+CONFIRM_THRESHOLD=3
+MIN_AUDIO_DURATION=3
+MAX_BUFFER_DURATION=120
+IDLE_TIMEOUT_SEC=15
+MAX_SPEECH_DURATION_SEC=15
+TTS_URL=http://localhost:8002/v1/audio/speech
+TTS_VOICE=en_US-lessac-medium
+PLATFORM=ms-teams
+API_GATEWAY_URL=http://localhost:8066
+REDIS_URL=redis://localhost:6379
+POSTGRES_URL=postgresql://postgres:postgres@localhost:5448/vexa_restore
+BOT_IMAGE_NAME=vexa-bot-restore:dev
+```
+
+## Health Checks (2026-03-20)
+
+| Service | Endpoint | Result |
+|---------|----------|--------|
+| Transcription (dev) | `http://localhost:8083/health` | 200 OK |
+| API Gateway | `http://localhost:8066/` | 200 (Welcome to Vexa API Gateway) |
+| Postgres | `psql localhost:5448` | SELECT 1 OK |
+| Redis | `docker exec redis-1 PING` | PONG (not host-exposed) |
+| TTS | `vexa-restore-tts-service-1:8002` | Running (not host-exposed) |
+
+## Smoke Test
+
+```
+short-sentence.wav -> 100% accuracy, 8/8 words, RTF 0.18x
+Word timestamps: all 8 present with valid offsets
+```
+
+## Collection Run Data (from previous snapshot)
 
 **Meeting:** 9336586979259
 **Date:** 2026-03-20 17:28-17:33 UTC

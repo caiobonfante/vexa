@@ -1,0 +1,492 @@
+# Features
+
+Features are **jobs to be done** — not code, not services, not infrastructure. A feature has a purpose you can explain, develop against, and validate. Features use the codebase; they don't own it.
+
+## Glossary
+
+These terms are used consistently across all feature docs. Use them by name.
+
+| Term | Definition |
+|------|-----------|
+| **Feature** | A job to be done. Has purpose, can be explained, developed, validated. Uses the codebase, doesn't own it. |
+| **Ground truth** | What should have happened — the script TTS bots speak from. Speaker, text, timestamp. The input IS the truth. |
+| **Script** | The utterances, speakers, timing, and scenario design fed to TTS bots during a collection run. Doubles as ground truth. |
+| **Scenario** | A specific pattern designed into a script: normal turns, rapid exchanges, overlaps, silence gaps, single-word utterances. Each targets a known weakness. |
+| **Collection run** | A live meeting session where bots speak from a script and we capture everything. The expensive outer loop. |
+| **Collected data** | Everything captured during a collection run: audio, caption events, speaker changes, pipeline output — all timestamped. |
+| **Sandbox** | Offline replay environment. Feeds collected data through the pipeline without meetings, bots, or API costs. The cheap inner loop. |
+| **Replay** | A single execution of collected data through the pipeline in sandbox. `make play-replay`. |
+| **Scoring** | Comparing pipeline output to ground truth. Word-level attribution accuracy, content diff, utterance capture rate. |
+| **Plateau** | When sandbox iteration stops improving — remaining errors are in scenarios not covered by current collected data. Triggers a new collection run. |
+| **Inner loop** | Sandbox iteration: change code, replay, score. Seconds per cycle. Free. |
+| **Outer loop** | Collection run → sandbox iteration → plateau → new collection run. Days per cycle. Expensive. |
+| **Gate** | Binary pass/fail validation. A feature passes when all certainty checks >= 80. |
+| **Certainty score** | 0-95 confidence in a gate check, tied to specific evidence. No evidence = 0. Mock caps at 90. Real-world = 95. |
+| **Edge** | Boundary where data crosses between features or services. Each side owns its contract. |
+| **Caption boundary** | The timestamp where platform captions switch speakers. The raw signal speaker-mapper works from. |
+| **Infra snapshot** | Frozen record of the infrastructure state used during a collection run: service versions, model config, pipeline params, network topology. Saved alongside collected data so the sandbox can reproduce the same conditions. |
+| **Collection manifest** | Pre-flight document produced during EXPAND. Specifies what to collect, why, and how — script, scenarios, data capture plan, scoring criteria, infra snapshot requirements, replay readiness. Required before a collection run. |
+| **Env setup** | Stage where infrastructure is configured and verified before a collection run. Ensures services are running, configs match the collection manifest, and capture pipelines are functional. |
+| **Findings** | What broke, why, what to do next. Tracked in `findings.md` with certainty scores. |
+
+## Features vs services
+
+**Services** (`services/`) are infrastructure — a transcription service, an API gateway, a bot manager. They exist to be composed. A service doesn't know why it's being called.
+
+**Features** (`features/`) are the reason services exist. A feature like `realtime-transcription` orchestrates speaker-streams, transcription-client, segment-publisher, speaker-mapper, transcription-collector, and api-gateway into a pipeline that does something a user cares about: live speaker-attributed transcription.
+
+```
+features/                          services/
+  realtime-transcription/    USES    vexa-bot/
+    google-meet/             USES    transcription-service/
+    ms-teams/                USES    transcription-collector/
+    zoom/                    USES    api-gateway/
+  speaking-bot/              USES    tts-service/, vexa-bot/, bot-manager/
+  browser-control/           USES    vexa-bot/ (CDP, PulseAudio)
+  ...
+```
+
+A feature can be explained to someone who doesn't read code. A service can't — it's a building block.
+
+## What a feature contains
+
+```
+features/{name}/
+  README.md              # Why / What / How — the feature spec
+  .claude/CLAUDE.md      # Scope, gate, edges, certainty table
+  .env.example           # Committed template — all vars with defaults/placeholders
+  .env                   # Gitignored — actual values for this environment
+  tests/
+    README.md            # Test strategy, datasets, results
+    findings.md          # Certainty table, gate verdict, action items
+    infra-snapshot.md    # Infra state from last collection run (committed)
+    ground-truth/        # Collected real-world data (if applicable)
+    audio/               # Test audio files (if applicable)
+    Makefile             # Stage-aware test commands (reads from ../.env)
+  {platform}/            # Platform-specific implementations (if multi-platform)
+```
+
+### .env.example / .env — Infrastructure config
+
+Each **feature** has its own `.env.example` (committed) and `.env` (gitignored). This separates feature-level infra config from the global stack config.
+
+**Why per-feature:** Different **features** in development may need different infra — one feature testing with `large-v3-turbo` while another tests with `base` for speed, one pointing at GPU transcription while another uses CPU. The feature `.env` is the single source of truth for what infra that feature is using right now.
+
+**`.env.example`** — committed, documents every variable the feature needs:
+```bash
+# Transcription service
+TRANSCRIPTION_URL=http://localhost:8085/v1/audio/transcriptions
+TRANSCRIPTION_TOKEN=
+MODEL_SIZE=large-v3-turbo
+COMPUTE_TYPE=int8
+
+# Pipeline params
+SUBMIT_INTERVAL=3
+CONFIRM_THRESHOLD=3
+MIN_AUDIO_DURATION=3
+MAX_BUFFER_DURATION=120
+IDLE_TIMEOUT_SEC=15
+
+# Platform
+PLATFORM=ms-teams
+
+# Stack
+API_GATEWAY_URL=http://localhost:8066
+REDIS_URL=redis://localhost:6379
+POSTGRES_URL=postgresql://postgres:postgres@localhost:5448/vexa_restore
+```
+
+**`.env`** — gitignored, actual values for this machine/environment. Created during **env setup** by copying `.env.example` and filling in real values.
+
+The feature's `Makefile` and test scripts read from `.env`. The **infra snapshot** records the `.env` values at the time of a **collection run**.
+
+### tests/Makefile — Stage-aware commands
+
+The `Makefile` is the instrument for executing each stage. It reads config from the feature's `.env` so infra is configured in one place, not duplicated across scripts.
+
+Every feature Makefile should expose targets mapped to stages:
+
+| Stage | Targets | What they do |
+|-------|---------|-------------|
+| **Env setup** | `make env-check` | Verify `.env` exists, show config |
+| | `make smoke` | One utterance end-to-end — proves infra works |
+| **Collection run** | `make audio` | Generate WAVs from **scripts** via TTS |
+| **Sandbox iteration** | `make unit` | Unit tests (mocked, instant) |
+| | `make play-*` | **Replay** specific WAV through pipeline |
+| | `make play-replay` | **Replay** real **collected data** |
+| | `make test` | Full **scoring** run (unit + all replays) |
+
+The Makefile loads `.env` via `-include ../. env` and exports all vars. Fallback defaults allow CI/quick runs without a `.env`, but the feature `.env` is the source of truth for local development.
+
+### README.md — Why / What / How
+
+Every feature README follows this structure:
+- **Why** — the problem this feature solves, from the user's perspective
+- **What** — what it does, its architecture, key behaviors, components used
+- **How** — how to run, verify, and develop it
+
+The README is the feature spec. If the README says it does something, the code must do it. If the code does something, the README must say it.
+
+### CLAUDE.md — Scope, gate, edges
+
+Defines what the feature owns and what it dispatches:
+- **Scope** — what you test, what you don't
+- **Gate** — binary pass/fail criteria with certainty scores
+- **Edges** — data contracts with other features and services
+- **Counterparts** — related features and services
+
+### tests/ — Validation
+
+Where the feature proves it works. See [validation cycle](#validation-cycle) below.
+
+## Validation cycle
+
+Features that interact with real-world systems (meetings, speech, platforms) follow a **collect-once, iterate-many** cycle. The real world is expensive. The sandbox is free.
+
+### The cycle
+
+```
+1. COLLECT                        2. ITERATE                     3. EXPAND
+   Real world                        Sandbox                        Back to real world
+   ──────────                        ───────                        ─────────────────
+   Run the feature in prod-like      Replay collected data          Design new scenarios
+   conditions (live meeting,         offline through the pipeline   that cover gaps found
+   real platform, real users)        Score against ground truth     in step 2
+                                     Change code, re-score
+   Collect everything:               in seconds — no meetings,     Collect new dataset
+   - inputs (audio, events)          no bots, no API costs         Feed into sandbox
+   - platform behavior (captions,                                  Repeat
+     DOM events, timing)             Hit accuracy ceiling?
+   - pipeline output (segments,      Need new scenarios? ──────►
+     drafts, confirmations)
+   - ground truth (scripts = truth)
+```
+
+### Why this way
+
+The real-world environment is not controllable and expensive to run against repeatedly. A live meeting involves browser automation, TTS API calls, network latency, platform-specific behavior — all slow, flaky, and costly. You can't iterate by running 50 live meetings a day.
+
+But you **need** real platform behavior — caption delays, DOM quirks, overlap truncation — because synthetic data won't surface those issues.
+
+So: collect reality once, iterate against it many times. Only go back to real world when the current dataset can't teach you anything new.
+
+### Artifacts
+
+Each **feature** that uses this cycle maintains in `tests/`:
+
+| Artifact | Purpose | Example |
+|----------|---------|---------|
+| **Ground truth** | What should have happened — the source of truth | TTS **scripts** with send timestamps |
+| **Collected data** | What the platform actually did — raw events with timestamps | Caption events, speaker changes, DOM mutations |
+| **Replay** test | Feeds **collected data** through pipeline offline | `make play-replay` |
+| **Scoring** | Compares pipeline output to **ground truth** | Word-level attribution accuracy, content diff |
+| **Findings** | What broke, why, what to collect next | `findings.md` with **certainty scores** |
+
+## Stages
+
+The validation cycle has four stages. Know which stage you are in. Each stage has a purpose, allowed actions, constraints, and exit criteria. Do not mix stages.
+
+### How to determine your stage
+
+```
+Is the infra running and verified for this feature?
+  NO  → you are in ENV SETUP
+  YES → Do you have collected data + ground truth + replay test?
+          NO  → you are in COLLECTION RUN
+          YES → run replay, check scoring
+                Is scoring improving between iterations?
+                  YES → you are in SANDBOX ITERATION
+                  NO  → you are in EXPAND
+```
+
+---
+
+### Stage 0: ENV SETUP
+
+**Purpose:** Configure and verify the infrastructure so you have a working environment to test against. Different **features** may need different infra configurations — Whisper model, compute type, pipeline params, service versions. You must set this up and prove it works before spending time on a **collection run**.
+
+**Entry conditions:**
+- Starting work on a **feature** for the first time
+- **Collection manifest** specifies infra requirements that don't match current setup
+- Infra changed since last run (service upgrade, config drift, different machine)
+
+**What you do:**
+1. **Read the collection manifest** (or feature CLAUDE.md if first time) — what infra does this feature need?
+2. **Create `.env` from `.env.example`** — copy `features/{name}/.env.example` to `features/{name}/.env`, fill in actual values for this machine/environment. If `.env` already exists, verify it matches the manifest requirements.
+3. **Start services** — `make up` or equivalent, using the config from `.env`
+4. **Verify each service** — health checks, version checks, config checks. Every service in the `.env` must be reachable and returning expected versions.
+5. **Run a smoke test** — send one utterance through the full pipeline, verify output arrives. This proves the feature's full path works end-to-end with this infra.
+6. **Record the infra snapshot** — save `tests/infra-snapshot.md` with the `.env` values and verification results
+
+#### Infra snapshot
+
+An **infra snapshot** is a frozen record of the infrastructure configuration. It's saved as `tests/infra-snapshot.md` (committed) alongside your **collected data** so the **sandbox** can reproduce identical conditions.
+
+The **infra snapshot** has two parts:
+
+**1. The `.env` values** — copy of the feature's `.env` at the time of the **collection run**. This is the primary record — it contains the actual config used.
+
+**2. Verified service state** — proof that services were running and healthy with those configs:
+
+```markdown
+## Infra snapshot: {date}
+
+### Environment
+Source: `features/{name}/.env`
+```
+TRANSCRIPTION_URL=http://localhost:8085/v1/audio/transcriptions
+TRANSCRIPTION_TOKEN=your-token-here
+MODEL_SIZE=large-v3-turbo
+COMPUTE_TYPE=int8
+SUBMIT_INTERVAL=3
+CONFIRM_THRESHOLD=3
+MIN_AUDIO_DURATION=3
+...
+```
+
+### Service verification
+| Service | Image/Version | Health check | Result |
+|---------|--------------|-------------|--------|
+| transcription-service | faster-whisper, large-v3-turbo, int8 | GET /health | 200 OK |
+| redis | 7.0-alpine | PING | PONG |
+| postgres | 17-alpine | SELECT 1 | ok |
+| tts-service | piper, en_US-lessac-medium | GET /health | 200 OK |
+| bot-manager | vexa-bot-restore:dev | GET /health | 200 OK |
+
+### Smoke test
+Sent: "Hello world" via TTS → pipeline → confirmed segment
+Result: "Hello world." received in {X}ms
+```
+
+**Why the snapshot matters:** If you change `MODEL_SIZE` from `large-v3-turbo` to `base` between **collection run** and **sandbox iteration**, your **scoring** is comparing apples to oranges. The snapshot lets you verify the **sandbox** is running the same infra as the **collection run**.
+
+**Constraints:**
+- Do NOT start a **collection run** until every service in the snapshot is verified healthy
+- Do NOT assume previous infra is still valid — always re-verify after any gap in time
+- Do NOT mix infra from different stacks (e.g., transcription-service on port 8085 from main stack with bot on restore stack port 8066)
+- Record the **infra snapshot** even if "nothing changed" — the snapshot is evidence, not a guess
+
+**Exit criteria:**
+- All required services are running and healthy
+- **Infra snapshot** is recorded
+- A smoke test passes: send one utterance through the full pipeline, verify output
+- If entering COLLECTION RUN: infra matches **collection manifest** requirements
+- If entering SANDBOX ITERATION: infra matches the **infra snapshot** from the **collection run** that produced the **collected data**
+
+**Log:** `STAGE: env-setup started — feature: {name}, platform: {platform}`
+**Log:** `STAGE: env-setup complete — {N} services verified, infra snapshot saved`
+
+---
+
+### Stage 1: COLLECTION RUN
+
+**Purpose:** Capture real-world behavior that the **sandbox** can replay. You are gathering data, not improving the pipeline. **Collection runs are expensive** — you need to get everything in one shot.
+
+**Entry conditions:**
+- **Env setup** complete — all services healthy, **infra snapshot** recorded
+- No **collected data** exists for this **feature** or platform, OR
+- **Plateau** reached in **sandbox** — need new **scenarios**, OR
+- Platform behavior changed — existing **collected data** may be stale
+- A **collection manifest** exists (see below)
+
+#### Collection manifest (required before running)
+
+Before you run anything, produce a **collection manifest** — a document that specifies exactly what you're collecting and why. This is the contract between EXPAND and COLLECTION RUN. If you can't fill this out, you're not ready to collect.
+
+```markdown
+## Collection manifest: {name}
+
+### Why this collection run
+{What plateau/gap triggered this? Link to findings.}
+
+### Hypothesis
+{What do you believe is the root cause of the remaining errors? What will this data prove or disprove?}
+
+### Script
+| # | Speaker | Utterance | Timing | Scenario |
+|---|---------|-----------|--------|----------|
+| 1 | Alice   | "..."     | T+0s   | normal-turns |
+| 2 | Bob     | "..."     | T+12s  | normal-turns |
+| ...
+
+### Scenarios covered
+| Scenario | What it tests | Expected behavior | How to score |
+|----------|--------------|-------------------|--------------|
+| normal-turns | >2s gaps between speakers | Clean attribution | Word-level accuracy |
+| rapid-exchange | <1s gaps | Caption boundary delay | Boundary word accuracy |
+| ...
+
+### Infra requirements
+What .env config does this collection run need? What must differ from default?
+
+| Variable | Required value | Why |
+|----------|---------------|-----|
+| MODEL_SIZE | large-v3-turbo | Production model — scoring must reflect real accuracy |
+| COMPUTE_TYPE | int8 | Matches production |
+| MIN_AUDIO_DURATION | 3 | Current default — baseline before tuning |
+| PLATFORM | ms-teams | Testing Teams caption boundaries |
+| ... | | |
+
+### Data to capture
+| Data | Source | Format | Why needed |
+|------|--------|--------|------------|
+| Audio | TTS WAV output | WAV, per-utterance + combined | Replay through Whisper |
+| Caption events | DOM MutationObserver | JSON, timestamped | Replay caption boundaries |
+| Speaker changes | DOM author switches | JSON, timestamped | Speaker-mapper input |
+| Pipeline output | Bot logs | JSON, timestamped | Baseline to beat |
+| Ground truth | Script send times | TXT, Unix timestamps | Scoring reference |
+| Infra snapshot | .env + health checks | Markdown | Reproduce conditions in sandbox |
+
+### Capture checklist
+For each data type, specify: where it comes from, how it's logged, and how you'll verify it was captured.
+
+### Replay readiness
+How will this data be fed into the sandbox? What replay test will consume it?
+What .env values must the sandbox match? (Reference the infra snapshot.)
+```
+
+**Why the manifest matters:** A **collection run** costs real time and money. If you forget to capture **caption boundary** events, or your timestamps aren't synced, or you didn't include a control **scenario**, the entire run is wasted. The manifest forces you to think through what you need before you spend the budget.
+
+#### What you do
+
+1. **Write the collection manifest** — fill out every section above
+2. **Review the manifest** — does every **scenario** have scoring criteria? Is every data type accounted for? Will the **replay** test be able to consume this data?
+3. Set up the meeting environment (live meeting, TTS bots, platform)
+4. **Verify capture is working** before running the full **script** — send one test utterance, check that all data types are being logged with timestamps
+5. Run the bots — they speak from the **script**
+6. Capture **everything** with timestamps. Refer to the manifest's data table — every row must be captured.
+7. Save the **script** as **ground truth** (speaker, text, send timestamp)
+8. Save all captured data as **collected data**
+9. **Verify completeness against the manifest** — for each data type in the manifest, confirm the file exists, has the expected format, and covers all **scenarios**
+10. Run a smoke **replay** — feed the data through the pipeline once to verify it's consumable
+
+#### Constraints
+
+- Do NOT start without a **collection manifest** — if you can't articulate what you need, you'll miss it
+- Do NOT change pipeline code during a **collection run** — you're capturing a baseline, not iterating
+- Do NOT discard partial or "bad" data — it may reveal real platform behavior
+- Do NOT run multiple **scripts** in one session unless the **scenarios** are independent (different time windows)
+- Do NOT assume capture is working — verify each data source is logging before running the full **script**
+
+#### Exit criteria
+
+- **Collection manifest** is complete and all data types are captured
+- **Ground truth** file exists with all utterances, speakers, timestamps
+- **Collected data** files exist: every row in the manifest's data table has a corresponding file
+- A **replay** test can load and feed this data through the pipeline offline
+- **Scoring** produces a baseline number
+- No gaps: every **scenario** in the manifest has corresponding data in the **collected data**
+
+**Log:** `STAGE: collection-run started — manifest: {name}, platform: {platform}, scenarios: {list}`
+**Log:** `STAGE: collection-run complete — {N} utterances, {M} events, {K} data files, baseline scoring: {X}%`
+
+---
+
+### Stage 2: SANDBOX ITERATION (inner loop)
+
+**Purpose:** Improve the pipeline by replaying **collected data** and measuring improvement via **scoring**. This is where development happens.
+
+**Entry conditions:**
+- **Collected data** + **ground truth** + **replay** test exist
+- **Scoring** is not at **plateau**
+
+**What you do:**
+1. **Replay** — run `make play-replay` (or equivalent) to feed **collected data** through the pipeline
+2. **Score** — compare output to **ground truth**, get accuracy numbers
+3. **Diagnose** — find the root cause of errors (not symptoms). Trace through pipeline: buffer thresholds? **caption boundary** delay? confidence filter? speaker-mapper logic?
+4. **Fix** — make the minimal code change to address the root cause
+5. **Replay** again — re-score, verify improvement
+6. **Log** the delta — what changed, what improved, what regressed
+
+Repeat steps 1-6. Each iteration should take seconds to minutes, not hours.
+
+**Constraints:**
+- Do NOT run live meetings — you are in the **sandbox**, work only with **collected data**
+- Do NOT modify **ground truth** or **collected data** — they are immutable records of what happened
+- Do NOT add **scenarios** that aren't in the **collected data** — if you need new scenarios, exit to EXPAND
+- Do NOT skip **scoring** after a fix — every change must be measured
+- Follow the [diagnose → fix → verify → audit](../.claude/agents.md#phases) phase discipline within each iteration
+
+**Exit criteria (to EXPAND):**
+- **Scoring** has stopped improving across 3+ iterations
+- Remaining errors are in **scenarios** not covered by current **collected data**
+- You can articulate exactly which **scenarios** you need — this becomes the input to EXPAND
+
+**Exit criteria (to GATE):**
+- **Scoring** meets target accuracy for all **scenarios** in the **collected data**
+- All **certainty scores** in **findings** are >= 80
+
+**Log:** `SANDBOX: iteration {N} — scoring: {X}% → {Y}% (delta: {+/-Z}%) — fix: {description}`
+**Log:** `SANDBOX: plateau reached — scoring stuck at {X}% for {N} iterations — errors in: {scenarios not covered}`
+
+---
+
+### Stage 3: EXPAND
+
+**Purpose:** Design new **scenarios** and **scripts** that target known weaknesses, then produce a **collection manifest** for the next **collection run**. This is where you decide what data you need and why — before spending the budget.
+
+**Entry conditions:**
+- **Plateau** in **sandbox** — remaining errors traced to missing **scenarios**
+- You can name the specific **scenarios** needed
+
+**What you do:**
+1. Review **findings** — what errors remain? What **scenarios** cause them? Be specific: "5/17 utterances lost, all single-word, all followed by speaker change within 1s"
+2. Formulate a hypothesis: "Short phrases are lost because `minAudioDuration=3s` prevents submission. We need a **scenario** with many sub-1s utterances to measure the true loss rate and test alternative flush thresholds."
+3. Design new **scenarios** that target those errors specifically:
+   - Each **scenario** should isolate one variable (e.g., "single-word utterances followed by speaker change")
+   - Reuse working **scenarios** from previous **scripts** as controls — you need to verify you didn't regress
+   - Define how each **scenario** will be **scored** — what's the expected output, what counts as correct?
+4. Write the **collection manifest** (see [Stage 1](#stage-1-collection-run) for template):
+   - **Script** with speakers, utterances, timing, **scenario** labels
+   - **Data to capture** — every data type you need, where it comes from, how it's logged
+   - **Replay readiness** — how the **sandbox** will consume this data
+5. Review: does the manifest cover the hypothesis? Will you have enough data to confirm or disprove it?
+
+**Constraints:**
+- Do NOT guess what data you need — base **scenario** design on specific errors from **findings**
+- Do NOT design **scenarios** you can't **score** — every **scenario** needs a clear expected output
+- Do NOT combine too many new **scenarios** in one **script** — isolate variables so **scoring** is unambiguous
+- Do NOT skip the hypothesis — if you don't know why you're collecting, the data is wasted
+- Do NOT skip control **scenarios** — include **scenarios** that already work to catch regressions
+
+**Exit criteria:**
+- **Collection manifest** is complete (every section filled, every **scenario** has **scoring** criteria)
+- Hypothesis is documented and testable
+- **Script** covers both new **scenarios** and control **scenarios**
+- Ready for Stage 1 (COLLECTION RUN)
+
+**Log:** `EXPAND: plateau at {X}% — {N} errors in scenarios: {list}`
+**Log:** `EXPAND: manifest ready — scenarios: {list} — hypothesis: {description}`
+
+---
+
+### Stage transitions
+
+```
+                    ┌─────────────────────────┐
+                    │                         │
+                    v                         │
+             COLLECTION RUN                   │
+                    │                         │
+                    │ data collected           │
+                    v                         │
+            SANDBOX ITERATION ──plateau──► EXPAND
+                    │
+                    │ target met
+                    v
+                   GATE
+```
+
+**Rules:**
+- You must be in exactly one stage at a time
+- Log every stage transition with the reason
+- Never skip SANDBOX ITERATION — even if you think the code is right, **replay** and **score** to prove it
+- EXPAND always leads back to COLLECTION RUN — you don't iterate in sandbox on scenarios you haven't collected data for
+
+## Feature lifecycle
+
+1. **Define** — Write the README (Why / What / How) and CLAUDE.md (scope, **gate**, **edges**)
+2. **Collection run** — Run the **feature** against real-world conditions, capture **collected data** and **ground truth**
+3. **Sandbox iteration** — **Replay**, **score**, diagnose, fix, repeat (**inner loop**)
+4. **Expand** — Hit **plateau**, design new **scenarios**, new **script**, new **collection run** (**outer loop**)
+5. **Gate** — All **certainty scores** >= 80, docs gate passes

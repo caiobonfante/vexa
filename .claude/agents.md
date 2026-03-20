@@ -234,6 +234,38 @@ No inconsistencies found.
 - **Log every finding:** `DOCS: README claims PORT=8085 but code defaults to 8056 — fixing README`
 - **Docs gate is not optional.** If you skip it, your overall gate is FAIL.
 
+## Validation cycle
+
+Features that interact with real-world systems follow a **collect-once, iterate-many** cycle. **Glossary** and full stage definitions: [features/README.md](../features/README.md#validation-cycle).
+
+**Know your stage.** The cycle has four stages with strict boundaries — like phases, don't mix them:
+
+| Stage | Purpose | You DO | You DON'T |
+|-------|---------|--------|-----------|
+| **Env setup** | Configure and verify infra | Create `.env` from `.env.example`, start services, verify health, record **infra snapshot** | Change pipeline code, collect data, iterate |
+| **Collection run** | Capture real-world behavior | Run bots from **script**, save **collected data** + **ground truth** + **infra snapshot** | Change pipeline code, discard data, iterate |
+| **Sandbox iteration** | Improve the pipeline | **Replay**, **score**, diagnose, fix, re-score | Run live meetings, modify **collected data**, change infra config |
+| **Expand** | Design what to collect next | Review **findings**, design **scenarios**, write **collection manifest** | Guess what data you need, skip hypothesis |
+
+**Transitions:**
+- **Env setup** → **Collection run**: when all services healthy, `.env` matches **collection manifest** requirements, smoke test passes, **infra snapshot** recorded
+- **Env setup** → **Sandbox iteration**: when infra matches the **infra snapshot** from the **collection run** that produced the **collected data**
+- **Collection run** → **Sandbox iteration**: when **collected data** + **ground truth** + **replay** test exist and **scoring** produces a baseline
+- **Sandbox iteration** → **Expand**: when you hit a **plateau** (scoring stuck for 3+ iterations, remaining errors in uncovered **scenarios**)
+- **Expand** → **Env setup**: when **collection manifest** is ready and infra requirements differ from current `.env`
+- **Expand** → **Collection run**: when **collection manifest** is ready and infra is already set up
+- **Sandbox iteration** → **Gate**: when **scoring** meets target and all **certainty scores** >= 80
+
+**How to determine your stage** when you start:
+1. Is the infra running and verified for this **feature**? Does `.env` exist and do services match it? No → **Env setup**
+2. Do **collected data** + **ground truth** + **replay** exist? No → **Collection run**
+3. Is **scoring** improving between iterations? Yes → **Sandbox iteration**
+4. Is **scoring** stuck with errors in uncovered **scenarios**? → **Expand**
+
+Log every stage transition: `STAGE: env-setup → collection-run — all services verified, infra snapshot saved`
+
+Full stage protocol with entry conditions, constraints, and exit criteria: [features/README.md#stages](../features/README.md#stages)
+
 ## Lessons
 
 - Don't stack workarounds. Find the root cause, fix it, remove anything else you added along the way.

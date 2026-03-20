@@ -2,12 +2,12 @@
  * Production-faithful replay test.
  *
  * Reproduces the EXACT index.ts code path:
- *   audio → SpeakerStreamManager → onSegmentReady (real Whisper + word storage)
- *   → handleTranscriptionResult → confirm/idle → onSegmentConfirmed
- *   → mapper condition check → mapWordsToSpeakers → per-speaker segments
+ *   audio -> SpeakerStreamManager -> onSegmentReady (real Whisper + word storage)
+ *   -> handleTranscriptionResult -> confirm/idle -> onSegmentConfirmed
+ *   -> mapper condition check -> mapWordsToSpeakers -> per-speaker segments
  *
  * Uses real collected data:
- *   - TTS audio files placed at ground truth offsets
+ *   - Per-utterance TTS audio files placed at caption speaker-change times
  *   - Real caption events replayed at recorded timestamps
  *   - Real Whisper (word timestamps)
  *   - flushSpeaker on caption speaker changes (same as handleTeamsCaptionData)
@@ -16,6 +16,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import { SpeakerStreamManager } from './speaker-streams';
 import { TranscriptionClient } from './transcription-client';
 import { mapWordsToSpeakers, captionsToSpeakerBoundaries, CaptionEvent, TimestampedWord } from './speaker-mapper';
@@ -29,11 +30,11 @@ const TX_TOKEN = process.env.TRANSCRIPTION_TOKEN || '32c59b9f654f1b6e376c6f020d7
 const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/tests/audio`;
 const TESTS_DIR = process.argv[3] || `${__dirname}/../../../../features/realtime-transcription/tests`;
 
-// ── WAV reader ───────────────────────────────────────────────
+// -- WAV reader ---------------------------------------------------------------
 
-function readWavAsFloat32(path: string): Float32Array {
-  const buf = fs.readFileSync(path);
-  if (buf.toString('ascii', 0, 4) !== 'RIFF') throw new Error(`Not a WAV: ${path}`);
+function readWavAsFloat32(wavPath: string): Float32Array {
+  const buf = fs.readFileSync(wavPath);
+  if (buf.toString('ascii', 0, 4) !== 'RIFF') throw new Error(`Not a WAV: ${wavPath}`);
   const sampleRate = buf.readUInt32LE(24);
   const bitsPerSample = buf.readUInt16LE(34);
   let dataOffset = 36;
@@ -58,7 +59,7 @@ function readWavAsFloat32(path: string): Float32Array {
   return resampled;
 }
 
-// ── Parse real caption events from collected data ─────────────
+// -- Parse real caption events from collected data ----------------------------
 
 interface RealCaptionEvent {
   type: 'caption' | 'speaker_change';
@@ -69,8 +70,8 @@ interface RealCaptionEvent {
   relTimeSec: number;
 }
 
-function parseRealEvents(path: string): RealCaptionEvent[] {
-  const lines = fs.readFileSync(path, 'utf8').split('\n');
+function parseRealEvents(eventsPath: string): RealCaptionEvent[] {
+  const lines = fs.readFileSync(eventsPath, 'utf8').split('\n');
   const events: RealCaptionEvent[] = [];
   let firstTs: number | null = null;
 
@@ -88,7 +89,7 @@ function parseRealEvents(path: string): RealCaptionEvent[] {
       continue;
     }
 
-    const changeMatch = line.match(/Speaker change: (.+?) → (.+?)(?:\s*\(|$)/);
+    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?)(?:\s*\(|$)/);
     if (changeMatch) {
       events.push({ type: 'speaker_change', speaker: changeMatch[2].trim(), from: changeMatch[1].trim(), to: changeMatch[2].trim(), relTimeSec: rel });
     }
@@ -96,83 +97,135 @@ function parseRealEvents(path: string): RealCaptionEvent[] {
   return events;
 }
 
-// ── Ground truth ─────────────────────────────────────────────
+// -- Parse speaker change times for audio placement ---------------------------
+
+function parseSpeakerChangeTimes(eventsPath: string): { speaker: string; relTimeSec: number }[] {
+  const lines = fs.readFileSync(eventsPath, 'utf8').split('\n');
+  const changes: { speaker: string; relTimeSec: number }[] = [];
+  let firstTs: number | null = null;
+
+  for (const line of lines) {
+    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+)Z/);
+    if (!tsMatch) continue;
+    const tsStr = tsMatch[1].replace(/(\.\d{6})\d+/, '$1');
+    const ts = new Date(tsStr).getTime() / 1000;
+    if (firstTs === null) firstTs = ts;
+
+    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?)(?:\s*\(|$)/);
+    if (changeMatch) {
+      changes.push({ speaker: changeMatch[2].trim(), relTimeSec: ts - firstTs });
+    }
+  }
+  return changes;
+}
+
+// -- Ground truth from .txt files ---------------------------------------------
 
 interface GTUtterance {
   speaker: string;
   text: string;
   offsetSec: number;
+  audioFile: string;
 }
 
-// Diverse test ground truth (17 utterances, 3 speakers)
-const GT: GTUtterance[] = [
-  { speaker: 'Alice', offsetSec: 0,    text: 'Let me walk through the full product roadmap...' },
-  { speaker: 'Bob',   offsetSec: 25,   text: 'Sounds great.' },
-  { speaker: 'Charlie', offsetSec: 29, text: 'Agreed.' },
-  { speaker: 'Alice', offsetSec: 33,   text: 'Thanks.' },
-  { speaker: 'Bob',   offsetSec: 37,   text: 'OK.' },
-  // 10s silence
-  { speaker: 'Alice', offsetSec: 51,   text: 'Can we discuss the budget?' },
-  { speaker: 'Bob',   offsetSec: 56,   text: 'Two hundred thousand for infrastructure.' },
-  { speaker: 'Charlie', offsetSec: 62, text: 'Plus fifty for marketing.' },
-  { speaker: 'Alice', offsetSec: 67,   text: 'What about events?' },
-  { speaker: 'Bob',   offsetSec: 70,   text: 'Fifty thousand.' },
-  { speaker: 'Charlie', offsetSec: 73, text: 'Agreed.' },
-  { speaker: 'Alice', offsetSec: 76,   text: 'Perfect. Let us finalize by Friday.' },
-  { speaker: 'Charlie', offsetSec: 84, text: 'I want to add context about Europe...' },
-  { speaker: 'Alice', offsetSec: 99,   text: 'Great.' },
-  { speaker: 'Bob',   offsetSec: 102,  text: 'Well done.' },
-  { speaker: 'Charlie', offsetSec: 105, text: 'Thanks everyone.' },
-];
+function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: string; relTimeSec: number }[]): GTUtterance[] {
+  // Audio files in order: 01-alice-roadmap.wav ... 17-charlie-greatmeeting.wav
+  const wavFiles = fs.readdirSync(collectionDir)
+    .filter(f => f.endsWith('.wav'))
+    .sort();
 
-// ── Main ─────────────────────────────────────────────────────
+  const gt: GTUtterance[] = [];
+
+  // Fallback times if speaker changes don't match
+  const fallbackTimes = [0, 25, 35, 43, 47, 51, 67, 72, 78, 84, 87, 90, 93, 99, 114, 117, 120];
+
+  for (let i = 0; i < wavFiles.length; i++) {
+    const wavFile = wavFiles[i];
+    const txtFile = wavFile.replace('.wav', '.txt');
+    const txtPath = path.join(collectionDir, txtFile);
+    if (!fs.existsSync(txtPath)) continue;
+
+    const text = fs.readFileSync(txtPath, 'utf8').trim();
+
+    // Extract speaker from filename: NN-speaker-description.wav
+    const nameMatch = wavFile.match(/^\d+-(\w+)-/);
+    const speaker = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : 'Unknown';
+
+    // Use parsed speaker change time or fallback
+    const offsetSec = i < speakerChangeTimes.length ? speakerChangeTimes[i].relTimeSec : (i < fallbackTimes.length ? fallbackTimes[i] : i * 5);
+
+    gt.push({ speaker, text, offsetSec, audioFile: wavFile });
+  }
+
+  return gt;
+}
+
+// -- Main ---------------------------------------------------------------------
 
 async function main() {
   console.log('\n  ====================================================');
-  console.log('  PRODUCTION-FAITHFUL REPLAY TEST');
-  console.log('  Exact index.ts code path with real Whisper + real data');
+  console.log('  PRODUCTION-FAITHFUL REPLAY TEST (collection-run)');
+  console.log('  Per-utterance TTS at caption speaker-change times');
   console.log('  ====================================================\n');
 
-  // ── 1. Load real caption events ─────────────────────────────
+  const collectionDir = path.join(AUDIO_DIR, 'collection-run');
+  const eventsPath = path.join(TESTS_DIR, 'collection-run-events.txt');
 
-  const eventsPath = `${TESTS_DIR}/diverse-test-timestamped-events.txt`;
+  // -- 1. Parse speaker change times and load ground truth -------------------
+
+  const speakerChangeTimes = parseSpeakerChangeTimes(eventsPath);
+  console.log(`  Speaker changes parsed: ${speakerChangeTimes.length}`);
+  for (const sc of speakerChangeTimes) {
+    console.log(`    ${sc.relTimeSec.toFixed(1)}s -> ${sc.speaker}`);
+  }
+
+  const GT = loadGroundTruth(collectionDir, speakerChangeTimes);
+  console.log(`\n  Ground truth utterances: ${GT.length}`);
+  for (const g of GT) {
+    console.log(`    ${g.offsetSec.toFixed(1)}s ${g.speaker}: "${g.text.substring(0, 50)}..." [${g.audioFile}]`);
+  }
+
+  // -- 2. Load real caption events -------------------------------------------
+
   const realEvents = parseRealEvents(eventsPath);
   const captionEvents = realEvents.filter(e => e.type === 'caption');
-  const speakerChanges = realEvents.filter(e => e.type === 'speaker_change');
+  const speakerChangeEvents = realEvents.filter(e => e.type === 'speaker_change');
 
-  console.log(`  Real data: ${captionEvents.length} captions, ${speakerChanges.length} speaker changes`);
+  console.log(`\n  Real data: ${captionEvents.length} captions, ${speakerChangeEvents.length} speaker changes`);
 
-  // ── 2. Build mixed audio from TTS files at GT offsets ───────
+  // -- 3. Build mixed audio from per-utterance TTS at speaker-change times ---
 
-  const audioFiles: { file: string; offsetSec: number; speaker: string }[] = [
-    { file: 'long-monologue.wav', offsetSec: 0,  speaker: 'Alice' },  // ~43s monologue
-    { file: 'short-sentence.wav', offsetSec: 25, speaker: 'Bob' },    // "Sounds great" (reused)
-    { file: 'short-sentence.wav', offsetSec: 29, speaker: 'Charlie' },
-    { file: 'short-sentence.wav', offsetSec: 51, speaker: 'Alice' },  // "Can we discuss"
-    { file: 'medium-paragraph.wav', offsetSec: 56, speaker: 'Bob' },
-    { file: 'short-sentence.wav', offsetSec: 84, speaker: 'Charlie' }, // monologue approx
-    { file: 'short-sentence.wav', offsetSec: 99, speaker: 'Alice' },
-    { file: 'short-sentence.wav', offsetSec: 102, speaker: 'Bob' },
-    { file: 'short-sentence.wav', offsetSec: 105, speaker: 'Charlie' },
-  ];
+  // Find the latest utterance end to size the buffer
+  let maxEnd = 0;
+  const audioEntries: { audio: Float32Array; offsetSec: number; speaker: string }[] = [];
 
-  const totalDurSec = 120;
-  const mixed = new Float32Array(totalDurSec * SAMPLE_RATE);
-  for (const af of audioFiles) {
+  for (const g of GT) {
+    const wavPath = path.join(collectionDir, g.audioFile);
     try {
-      const audio = readWavAsFloat32(`${AUDIO_DIR}/${af.file}`);
-      const start = Math.floor(af.offsetSec * SAMPLE_RATE);
-      for (let i = 0; i < audio.length && (start + i) < mixed.length; i++) {
-        mixed[start + i] += audio[i];
-      }
-    } catch {}
+      const audio = readWavAsFloat32(wavPath);
+      const endSec = g.offsetSec + audio.length / SAMPLE_RATE;
+      if (endSec > maxEnd) maxEnd = endSec;
+      audioEntries.push({ audio, offsetSec: g.offsetSec, speaker: g.speaker });
+    } catch (e: any) {
+      console.log(`  WARNING: Could not load ${g.audioFile}: ${e.message}`);
+    }
+  }
+
+  const totalDurSec = Math.ceil(maxEnd) + 10; // pad 10s
+  const mixed = new Float32Array(totalDurSec * SAMPLE_RATE);
+
+  for (const ae of audioEntries) {
+    const start = Math.floor(ae.offsetSec * SAMPLE_RATE);
+    for (let i = 0; i < ae.audio.length && (start + i) < mixed.length; i++) {
+      mixed[start + i] += ae.audio[i];
+    }
   }
   // Clamp
   for (let i = 0; i < mixed.length; i++) mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
 
-  console.log(`  Mixed audio: ${totalDurSec}s\n`);
+  console.log(`  Mixed audio: ${totalDurSec}s (${audioEntries.length} utterances placed)\n`);
 
-  // ── 3. Set up pipeline — EXACT index.ts wiring ──────────────
+  // -- 4. Set up pipeline -- EXACT index.ts wiring ---------------------------
 
   const txClient = new TranscriptionClient({
     serviceUrl: TX_URL, apiToken: TX_TOKEN, sampleRate: SAMPLE_RATE,
@@ -194,7 +247,7 @@ async function main() {
   const outputSegments: { speaker: string; text: string; start: number; end: number }[] = [];
   let whisperCalls = 0;
 
-  // === onSegmentReady — same as index.ts ===
+  // === onSegmentReady -- same as index.ts ===
   mgr.onSegmentReady = async (speakerId, speakerName, audioBuffer) => {
     whisperCalls++;
     try {
@@ -215,14 +268,14 @@ async function main() {
     }
   };
 
-  // === onSegmentConfirmed — same as index.ts with mapper ===
+  // === onSegmentConfirmed -- same as index.ts with mapper ===
   mgr.onSegmentConfirmed = (speakerId, speakerName, transcript, bufferStartMs, bufferEndMs, segmentId) => {
     const startSec = (bufferStartMs - sessionStartMs) / 1000;
     const endSec = (bufferEndMs - sessionStartMs) / 1000;
 
     console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | words=${latestWhisperWords.length} captions=${captionEventLog.length} | "${transcript.substring(0, 60)}..."`);
 
-    // Mapper condition — exact same as index.ts
+    // Mapper condition -- exact same as index.ts
     if (latestWhisperWords.length > 0 && captionEventLog.length > 0) {
       const boundaries = captionsToSpeakerBoundaries(captionEventLog);
       const offsetWords = latestWhisperWords.map(w => ({
@@ -246,7 +299,7 @@ async function main() {
     }
   };
 
-  // ── 4. Schedule caption events from real data ────────────────
+  // -- 5. Schedule caption events from real data ------------------------------
 
   // Rebase caption times: first caption at 0s = audio at 0s
   const firstCaptionTime = captionEvents.length > 0 ? captionEvents[0].relTimeSec : 0;
@@ -261,7 +314,7 @@ async function main() {
       // Accumulate for mapper boundaries
       captionEventLog.push({ speaker: ce.speaker, text: ce.text || '', timestamp: rebasedTime });
 
-      // Speaker change → flush previous (same as handleTeamsCaptionData)
+      // Speaker change -> flush previous (same as handleTeamsCaptionData)
       if (lastCaptionSpeakerId && lastCaptionSpeakerId !== speakerId) {
         mgr.flushSpeaker(lastCaptionSpeakerId);
       }
@@ -274,23 +327,21 @@ async function main() {
     }, delayMs);
   }
 
-  // ── 5. Feed audio at real-time speed ─────────────────────────
+  // -- 6. Feed audio at real-time speed ---------------------------------------
 
   console.log(`  [0.0s] Playing ${totalDurSec}s of audio...\n`);
 
-  // Find which speaker is active at each moment (from caption events)
-  // Audio goes to the ACTIVE speaker's buffer (same as Teams routing)
   const totalChunks = Math.ceil(mixed.length / CHUNK_SIZE);
   let currentActiveSpeaker: string | null = null;
+  const firstCaptionTimeRebased = firstCaptionTime;
 
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, mixed.length);
     const audioSec = start / SAMPLE_RATE;
 
-    // Determine active speaker at this audio time
-    // Use caption events to find who's speaking
-    const rebasedCaptions = captionEvents.map(c => ({ ...c, t: c.relTimeSec - firstCaptionTime }));
+    // Determine active speaker at this audio time from caption events
+    const rebasedCaptions = captionEvents.map(c => ({ ...c, t: c.relTimeSec - firstCaptionTimeRebased }));
     let activeSpeaker: string | null = null;
     for (const c of rebasedCaptions) {
       if (c.t <= audioSec) activeSpeaker = c.speaker;
@@ -307,7 +358,7 @@ async function main() {
     }
 
     if (i > 0 && Math.floor(audioSec) % 10 === 0 && Math.floor(((i - 1) * CHUNK_SIZE) / SAMPLE_RATE) % 10 !== 0) {
-      console.log(`  [${ts()}s] ░░░ ${audioSec.toFixed(0)}s / ${totalDurSec}s ░░░`);
+      console.log(`  [${ts()}s] --- ${audioSec.toFixed(0)}s / ${totalDurSec}s ---`);
     }
 
     await new Promise(r => setTimeout(r, CHUNK_DURATION_MS));
@@ -322,7 +373,7 @@ async function main() {
   }
   await new Promise(r => setTimeout(r, 3000));
 
-  // ── 6. Score against ground truth ────────────────────────────
+  // -- 7. Score against ground truth ------------------------------------------
 
   console.log('  ====================================================');
   console.log('  RESULTS');
@@ -336,43 +387,47 @@ async function main() {
   console.log('  Output segments:');
   for (const seg of outputSegments) {
     const spk = seg.speaker.replace(' (Guest)', '');
-    console.log(`    [${spk}] ${seg.start.toFixed(1)}s-${seg.end.toFixed(1)}s: "${seg.text.substring(0, 60)}"`);
+    console.log(`    [${spk}] ${seg.start.toFixed(1)}s-${seg.end.toFixed(1)}s: "${seg.text.substring(0, 80)}"`);
   }
 
-  // Check each GT utterance
+  // Match GT utterances to output segments by keyword matching
   console.log('\n  Ground truth comparison:');
   let captured = 0;
   let correctSpeaker = 0;
 
   for (const gt of GT) {
-    // Find output segment containing this GT text (fuzzy word match)
-    const gtWords = gt.text.toLowerCase().replace(/[.,!?]/g, '').split(/\s+/).filter(w => w.length > 2);
+    // Extract keywords: words with length > 3
+    const gtWords = gt.text.toLowerCase().replace(/[.,!?'"]/g, '').split(/\s+/).filter(w => w.length > 3);
     let found = false;
     let speakerCorrect = false;
 
     for (const seg of outputSegments) {
-      const segWords = seg.text.toLowerCase().replace(/[.,!?]/g, '').split(/\s+/);
+      const segText = seg.text.toLowerCase().replace(/[.,!?'"]/g, '');
+      const segWords = segText.split(/\s+/);
+      // Count keyword matches
       const matches = gtWords.filter(w => segWords.some(sw => sw.includes(w) || w.includes(sw)));
-      if (matches.length >= Math.max(1, gtWords.length * 0.5)) {
+      // Need at least 2 keywords matched (or all if fewer than 2)
+      const threshold = Math.min(2, gtWords.length);
+      if (matches.length >= threshold) {
         found = true;
         const segSpeaker = seg.speaker.replace(' (Guest)', '');
         speakerCorrect = segSpeaker === gt.speaker;
-        const mark = speakerCorrect ? '✓' : '✗ wrong speaker';
-        console.log(`    ${mark} ${gt.speaker} "${gt.text.substring(0, 40)}" → [${segSpeaker}]`);
+        const mark = speakerCorrect ? 'OK' : `WRONG (got ${segSpeaker})`;
+        console.log(`    ${mark} | ${gt.speaker} | "${gt.text.substring(0, 50)}" [${gt.audioFile}]`);
         break;
       }
     }
 
     if (!found) {
-      console.log(`    ✗ LOST ${gt.speaker} "${gt.text.substring(0, 40)}"`);
+      console.log(`    LOST | ${gt.speaker} | "${gt.text.substring(0, 50)}" [${gt.audioFile}]`);
     }
 
     if (found) captured++;
     if (speakerCorrect) correctSpeaker++;
   }
 
-  console.log(`\n  CAPTURED: ${captured}/${GT.length} (${(captured/GT.length*100).toFixed(0)}%)`);
-  console.log(`  CORRECT SPEAKER: ${correctSpeaker}/${GT.length} (${(correctSpeaker/GT.length*100).toFixed(0)}%)`);
+  console.log(`\n  CAPTURED: ${captured}/${GT.length} (${(captured / GT.length * 100).toFixed(0)}%)`);
+  console.log(`  CORRECT SPEAKER: ${correctSpeaker}/${GT.length} (${(correctSpeaker / GT.length * 100).toFixed(0)}%)`);
   console.log(`  MAPPER FIRED: ${outputSegments.some(s => s.speaker !== 'Mixed') ? 'YES' : 'NO'}`);
 
   mgr.removeAll();

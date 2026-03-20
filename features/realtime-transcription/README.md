@@ -2,7 +2,7 @@
 
 ## Why
 
-Core feature. A bot joins a meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients via WebSocket and REST API.
+Core **feature**. A bot joins a meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients via WebSocket and REST API. This feature follows the [validation cycle](../README.md#validation-cycle) — see [glossary](../README.md#glossary) for terms.
 
 ## What
 
@@ -141,9 +141,9 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 - Word-level timestamps from Whisper (`timestamp_granularities=word`)
 - Tested: 92.7% content accuracy on 43s monologue, zero boundary artifacts
 
-**Step 2 (done):** Tested on MS Teams with TTS speaker bots.
-- 5 conversation runs, 18 utterances each
-- Validated: monologues, speaker transitions, short utterances, multilingual (Russian)
+**Step 2 (done):** Tested on MS Teams via **collection runs** with TTS bots.
+- 5 **collection runs**, 18 utterances each across multiple **scenarios**
+- Validated: monologue **scenario**, speaker transition **scenario**, short utterance **scenario**, multilingual (Russian)
 
 **Step 3 (pending):** Test on Google Meet.
 
@@ -154,9 +154,9 @@ Whisper returns per-segment quality signals (`no_speech_prob`, `avg_logprob`, `c
 - `avg_logprob < -0.8 && duration < 2.0` → hallucinated garbage from silence
 - `compression_ratio > 2.4` → repetitive loops
 
-Tested: 18/18 silence hallucinations filtered on 60s dead silence. Zero false positives on real speech.
+**Scoring**: 18/18 silence hallucinations filtered on 60s dead silence. Zero false positives on real speech.
 
-**Known issue:** Full string match never confirms mid-stream (Whisper output keeps changing slightly as buffer grows). Segments only emit on idle timeout or speaker change. Next step: process Whisper's segments array — emit completed segments directly, only use same-output match for the last partial segment (the WhisperLive approach).
+**Finding:** Full string match never confirms mid-stream (Whisper output keeps changing slightly as buffer grows). Segments only emit on idle timeout or speaker change. Next step: process Whisper's segments array — emit completed segments directly, only use same-output match for the last partial segment (the WhisperLive approach).
 
 ### Current Config
 
@@ -171,11 +171,14 @@ Tested: 18/18 silence hallucinations filtered on 60s dead silence. Zero false po
 
 ### Verify
 
+**Gate** validation:
 1. `make all` from `deploy/compose/`
 2. Create a live meeting, send a bot
 3. Connect WS, speak, verify live segments with correct speakers
 4. `GET /transcripts/{meeting_id}` — same segments
-5. Test: monologue >60s, rapid multi-speaker, multilingual
+5. Test **scenarios**: monologue >60s, rapid multi-speaker, multilingual
+
+**Sandbox** iteration: see [tests/README.md](tests/README.md) for **replay**, **scoring**, and **collection run** details.
 
 ### Platform-Specific Docs
 

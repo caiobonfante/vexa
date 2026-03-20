@@ -1,6 +1,19 @@
 # Realtime Transcription Feature Agent
 
 > Shared protocol: [agents.md](../../../.claude/agents.md) -- phases, diagnostics, logging, gate rules
+> Validation cycle: [features/README.md](../../README.md#validation-cycle) -- stages, glossary, collection manifest
+> Feature .env: `features/realtime-transcription/.env` (from `.env.example`)
+
+## On entry: determine your stage
+
+Before doing anything else, determine which stage you are in. Check in order:
+
+1. **Does `.env` exist and is infra verified?** Read `features/realtime-transcription/.env` and `tests/infra-snapshot.md`. If either is missing or stale → you are in **ENV SETUP** → run `/env-setup`
+2. **Does collected data + ground truth + replay exist?** Check `tests/` for ground truth files, collected data, and `make play-replay` target. If missing → you are in **COLLECTION RUN** → run `/collect`
+3. **Is scoring improving?** Read `tests/findings.md` for latest scoring. Run `make play-replay` if needed. If scoring is improving → you are in **SANDBOX ITERATION** → run `/iterate`
+4. **Is scoring stuck?** If plateau (same score for 3+ iterations, errors in uncovered scenarios) → you are in **EXPAND** → run `/expand`
+
+Log: `STAGE: determined {stage} for realtime-transcription — reason: {why}`
 
 ## Scope
 
