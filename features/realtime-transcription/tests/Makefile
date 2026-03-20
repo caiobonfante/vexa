@@ -7,6 +7,9 @@ PLAYER := $(shell which paplay 2>/dev/null || which aplay 2>/dev/null || which f
 export TRANSCRIPTION_URL ?= http://localhost:8085/v1/audio/transcriptions
 export TRANSCRIPTION_TOKEN ?= 32c59b9f654f1b6e376c6f020d79897d
 
+AUDIO := $(TEST)/audio
+WAVS := $(AUDIO)/short-sentence.wav $(AUDIO)/medium-paragraph.wav $(AUDIO)/long-monologue.wav $(AUDIO)/long-dialogue.wav
+
 .PHONY: audio unit play play-short play-medium play-long play-all test help
 
 help:
@@ -20,13 +23,16 @@ help:
 	@echo "  make play FILE=x — custom WAV file"
 	@echo "  make play-all    — all test files sequentially"
 	@echo "  make test        — unit + all pipeline tests"
-	@echo "  make play TX_URL=http://host:port/v1/audio/transcriptions TX_TOKEN=xxx"
+	@echo "  make play TRANSCRIPTION_URL=... TRANSCRIPTION_TOKEN=..."
 	@echo ""
 	@echo "Transcription: $(TRANSCRIPTION_URL)"
 	@echo "Audio playback: $(if $(PLAYER),$(PLAYER),NOT AVAILABLE — install pulseaudio-utils)"
 
-audio:
+# Generate audio only if files don't exist
+$(WAVS): $(TEST)/generate-test-audio.sh
 	@bash $(TEST)/generate-test-audio.sh
+
+audio: $(WAVS)
 
 unit:
 	@cd $(BOT) && npx ts-node core/src/services/speaker-streams.test.ts
@@ -38,14 +44,14 @@ define run_with_audio
 	cd $(BOT) && npx ts-node core/src/services/speaker-streams.wav-test.ts $(1)
 endef
 
-play-short: audio
-	$(call run_with_audio,$(TEST)/audio/short-sentence.wav)
+play-short: $(AUDIO)/short-sentence.wav
+	$(call run_with_audio,$(AUDIO)/short-sentence.wav)
 
-play-medium: audio
-	$(call run_with_audio,$(TEST)/audio/medium-paragraph.wav)
+play-medium: $(AUDIO)/medium-paragraph.wav
+	$(call run_with_audio,$(AUDIO)/medium-paragraph.wav)
 
-play-long: audio
-	$(call run_with_audio,$(TEST)/audio/long-monologue.wav)
+play-long: $(AUDIO)/long-monologue.wav
+	$(call run_with_audio,$(AUDIO)/long-monologue.wav)
 
 play: play-medium
 
