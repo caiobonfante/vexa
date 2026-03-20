@@ -212,14 +212,17 @@ export class SpeakerStreamManager {
    * Force-flush on speaker change. If enough audio, emit and full reset.
    * If too short, keep chunks for the speaker's next turn.
    */
-  flushSpeaker(speakerId: string): void {
+  /**
+   * @param force - if true, flush regardless of minAudioDuration (end-of-stream)
+   */
+  flushSpeaker(speakerId: string, force: boolean = false): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
     const unconfirmedSec = this.unconfirmedSamples(buffer) / this.sampleRate;
 
-    // Too short — keep for next turn
-    if (unconfirmedSec < this.minAudioDuration && !buffer.lastTranscript) {
+    // Too short — keep for next turn (unless forced)
+    if (!force && unconfirmedSec < this.minAudioDuration && !buffer.lastTranscript) {
       log(`[SpeakerStreams] Flush skipped for "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s < ${this.minAudioDuration}s, keeping for next turn)`);
       return;
     }

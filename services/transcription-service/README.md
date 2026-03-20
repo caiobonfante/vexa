@@ -80,8 +80,12 @@ All configuration is via environment variables. Copy `.env.example` and adjust.
 | `MAX_CONCURRENT_TRANSCRIPTIONS` | `2` | Concurrent model calls per worker |
 | `FAIL_FAST_WHEN_BUSY` | `true` | Return 503 immediately when busy |
 | `BUSY_RETRY_AFTER_S` | `1` | Retry-After header value (seconds) |
-| `REPETITION_PENALTY` | `1.1` | Penalize repeated tokens (>1.0 = penalize). Prevents "they are saying they are saying..." loops |
-| `NO_REPEAT_NGRAM_SIZE` | `3` | Hard-block any N-word phrase from repeating in the output |
+| `REPETITION_PENALTY` | `1.1` | Penalize repeated tokens (>1.0 = penalize) |
+| `NO_REPEAT_NGRAM_SIZE` | `3` | Hard-block any N-word phrase from repeating |
+| `VAD_MAX_SPEECH_DURATION_S` | `15.0` | Max segment length before forced split. Lower = shorter segments = faster pipeline confirmation |
+| `VAD_MIN_SILENCE_DURATION_MS` | `160` | Min silence to trigger segment split |
+
+These can be overridden per-request via form fields `max_speech_duration_s` and `min_silence_duration_ms`.
 
 Full list with quality/VAD tuning parameters: `.env.example`.
 

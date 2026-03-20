@@ -31,20 +31,15 @@ trySubmit() fires every 2s ────→ submitBuffer(): combine ALL chunks in
 handleTranscriptionResult()     quality gate (no_speech, logprob, hallucination filter)
     |
     v
-fuzzy match: does text match previous result?
+full string match: does text exactly match previous result?
     |
-    yes (2 consecutive) ──→ CONFIRMED: emit segment, reset buffer
+    yes (3 consecutive) ──→ CONFIRMED: emit segment, advance offset
     no ──→ update lastTranscript, wait for next submission
 ```
 
-**The problem with current implementation:** `submitBuffer` sends the FULL buffer every time. On confirmation, `emitAndReset` clears the buffer and starts fresh. This causes:
-- Scatter: frequent resets produce many small segments (~6-8s each)
-- Growing buffer: without reset, Whisper gets 30s, 60s, 120s of audio
-- Context loss: reset clears `lastTranscript`, next Whisper call starts cold
+### Buffer Management: Offset-Based Sliding Window
 
-### Target Architecture: Offset-Based Sliding Window
-
-Ported from the WhisperLive service we used to run (`services/WhisperLive/whisper_live/server.py`, removed at `752e075`). The algorithm that was working.
+Ported from the WhisperLive service (`services/WhisperLive/whisper_live/server.py`, removed at `752e075`).
 
 **Two offset pointers into a continuous audio stream:**
 
@@ -131,26 +126,36 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 
 ## How
 
-### Implementation Plan
+### Implementation Status
 
-**Step 0 (done):** Document what exists and the target architecture.
+**Step 0 (done):** Document architecture.
 
-**Step 1 — Baseline: offset-based SpeakerStreamManager.**
-Port WhisperLive algorithm into `speaker-streams.ts`:
-- Add `timestampOffset`, `framesOffset` to SpeakerBuffer
-- `submitBuffer` sends `chunks[timestampOffset:]`, not full buffer
-- Use Whisper's native segments (start/end/text/completed) from transcription-service response
-- On completed segments: advance offset, emit, keep buffer
-- On partial: update live draft, don't advance
-- Sliding window: trim buffer front when exceeding max size (120s)
+**Step 1 (done):** Offset-based SpeakerStreamManager.
+- `confirmedSamples` pointer tracks confirmed audio, `submitBuffer` sends only unconfirmed
+- Offset advances to Whisper's `segment.end` boundary (not full buffer)
+- Full string match for confirmation (3 consecutive identical outputs)
+- `maxSpeechDurationSec=15` — Whisper VAD forces segment splits, shorter segments
+- Word-level timestamps from Whisper (`timestamp_granularities=word`)
+- Tested: 92.7% content accuracy on 43s monologue, zero boundary artifacts
 
-Platform-agnostic — same SpeakerStreamManager for both GMeet and Teams.
+**Step 2 (done):** Tested on MS Teams with TTS speaker bots.
+- 5 conversation runs, 18 utterances each
+- Validated: monologues, speaker transitions, short utterances, multilingual (Russian)
 
-**Step 2 — Test on MS Teams.**
-Harder case (mixed audio). Validate: long monologues, speaker transitions, short utterances, multilingual.
+**Step 3 (pending):** Test on Google Meet.
 
-**Step 3 — Test on Google Meet.**
-Easier case (per-channel). Validate: per-channel independence, voting/locking, no regression.
+**Known issue:** Full string match never confirms mid-stream (Whisper output keeps changing slightly as buffer grows). Segments only emit on idle timeout or speaker change. Next step: process Whisper's segments array — emit completed segments directly, only use same-output match for the last partial segment (the WhisperLive approach).
+
+### Current Config
+
+| Parameter | Value | Why |
+|-----------|-------|-----|
+| `submitInterval` | 3s | Balance between latency and Whisper efficiency |
+| `confirmThreshold` | 3 | 3 identical outputs — ensures text fully stabilized |
+| `minAudioDuration` | 3s | Don't submit tiny chunks |
+| `maxBufferDuration` | 120s | Trim buffer front at 2 min |
+| `idleTimeoutSec` | 15s | High because browser silence filter makes pauses look idle |
+| `maxSpeechDurationSec` | 15s | Whisper forces segment split — shorter segments confirm faster |
 
 ### Verify
 

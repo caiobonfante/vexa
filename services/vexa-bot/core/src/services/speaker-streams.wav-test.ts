@@ -160,7 +160,7 @@ async function main() {
   await new Promise(r => setTimeout(r, 3000));
 
   console.log(`  [${ts()}s] ■ Complete. Flushing remaining buffer...\n`);
-  mgr.flushSpeaker('s1');
+  mgr.flushSpeaker('s1', true); // force=true — end of stream, process regardless of min duration
   await new Promise(r => setTimeout(r, 2000));
 
   // Deduplicate and join confirmed segments into clean output.

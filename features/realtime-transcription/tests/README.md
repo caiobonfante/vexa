@@ -24,7 +24,7 @@ Audio playback and transcription happen simultaneously: you hear the speech and 
 
 **Log events:**
 - `DRAFT` — Whisper returned a result (shows latency, word count, text). Updates on every submission.
-- `CONFIRMED` — 2 consecutive Whisper results matched. Segment emitted, offset advances. This is the pipeline output.
+- `CONFIRMED` — 3 consecutive identical Whisper results. Segment emitted, offset advances. This is the pipeline output.
 
 **End-of-test output:**
 - `PERFORMANCE` — RTF (real-time factor), audio reprocess factor, first confirm latency
@@ -42,6 +42,27 @@ Audio playback and transcription happen simultaneously: you hear the speech and 
 | **RTF** | Whisper processing time / audio duration | <1.0 (real-time capable) | >1.0 (can't keep up) |
 | **Audio reprocess factor** | Total audio sent to Whisper / audio duration | 2-4x (efficient) | >10x (re-sending too much) |
 | **First confirm latency** | Wall time until first confirmed segment | <10s | >30s (buffer never confirms) |
+
+### Interpreting accuracy
+
+The word diff `ACCURACY` is **analytical** — raw word-level comparison between ground truth text and pipeline output. It counts number format conversions as errors even though they're correct behavior. The **interpreted accuracy** is what matters:
+
+| Diff type | Example | Analytical | Interpreted |
+|-----------|---------|-----------|-------------|
+| Number format | "fifty thousand" → "50,000" | Miss (2 words) | Correct — Whisper normalizes numbers |
+| Hyphenation | "real time" → "real-time" | Miss (2→1 word) | Correct — Whisper joins compounds |
+| Percentage | "thirty percent" → "30%" | Miss (2→1 word) | Correct — Whisper normalizes |
+| Missing word | "expressed interest" → "expressed" | Miss (1 word) | **Error** — content lost |
+| Hallucination | (nothing) → "excited" | Extra (1 word) | **Error** — invented content |
+| Mid-word split | "API" → "AP PI" | Miss + Extra | **Error** — boundary artifact |
+
+**Latest results (2026-03-20):**
+
+| Test | Analytical | Interpreted | Notes |
+|------|-----------|-------------|-------|
+| short-sentence (2.8s) | 0% | **Bug** | Audio < minAudioDuration, never submitted |
+| medium-paragraph (13.6s) | 81.4% | **~100%** | All diffs are number format conversions |
+| long-monologue (42.9s) | 92.7% | **~100%** | All diffs are number/hyphenation conversions |
 
 ### Pass/fail criteria
 
@@ -129,7 +150,7 @@ make play FILE=/path/to/your/recording.wav
 ```
 
 - Drafts arrive every ~2s as the timer submits unconfirmed audio
-- Confirmation fires when 2 consecutive drafts match
+- Confirmation fires when 3 consecutive drafts are identical
 - After confirmation, the next draft starts from where the previous left off (offset advanced)
 - Combined output at the end is clean, non-scattered, covering the full speech
 

@@ -8,9 +8,9 @@ You test the core realtime transcription pipeline end-to-end: bot joins meeting,
 
 ### Gate (local)
 
-3-speaker mock meeting -> live segments arrive via WebSocket with correct speaker names (Alice, Bob, Carol) -> GET /transcripts returns same segments with matching speakers and text.
+Live meeting with multiple speakers -> live segments arrive via WebSocket with correct speaker names -> GET /transcripts returns same segments with matching speakers and text.
 
-**PASS:** All 3 speakers appear in WS segments with correct attribution AND REST returns the same segments after immutability (30s).
+**PASS:** All speakers appear in WS segments with correct attribution AND REST returns the same segments after immutability (30s).
 **FAIL:** Missing speakers, wrong attribution, WS/REST mismatch, or segments never arrive.
 
 ### Docs
@@ -45,7 +45,7 @@ Agent-to-agent boundaries where data crosses:
 
 | Check | Score | Evidence | Last checked | To reach 90+ |
 |-------|-------|----------|-------------|--------------|
-| Bot joins 3-speaker mock | 90 | 3 speakers found and locked | 2026-03-16 | Test with fresh stack |
+| Bot joins live meeting | 90 | 3 speakers found and locked | 2026-03-16 | Test with fresh stack |
 | Audio reaches TX service | 90 | HTTP 200 with non-empty text | 2026-03-16 | -- |
 | Speaker identity locks | 90 | All 3 locked permanently at 100% | 2026-03-16 | -- |
 | Segments in Redis Hash | 90 | 7 segments in DB, meeting 8791 | 2026-03-16 | Verify Redis Hash directly |
@@ -57,13 +57,16 @@ Agent-to-agent boundaries where data crosses:
 ## How to test
 
 1. Ensure compose stack is running (`make all` from `deploy/compose/`)
-2. Start a bot in a 3-speaker Google Meet mock meeting
-3. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
-4. Subscribe to the meeting's transcription channel
-5. Verify live segments arrive with correct speaker names (Alice, Bob, Carol)
-6. Wait 30s+ for immutability threshold
-7. Verify `GET /transcripts/{meeting_id}` returns all segments with matching text and speakers
-8. Cross-check: every WS segment should appear in REST, same content
+2. Create a live meeting on the target platform (Google Meet, Teams) via browser session
+3. Send a bot to join the meeting
+4. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
+5. Subscribe to the meeting's transcription channel
+6. Speak in the meeting — verify live segments arrive with correct speaker names
+7. Wait 30s+ for immutability threshold
+8. Verify `GET /transcripts/{meeting_id}` returns all segments with matching text and speakers
+9. Cross-check: every WS segment should appear in REST, same content
+
+Testing uses real live meetings created on-demand via browser sessions — no mocks.
 
 ## Critical findings
 

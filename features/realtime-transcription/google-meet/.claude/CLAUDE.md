@@ -4,11 +4,11 @@
 
 ## Scope
 
-You test the Google Meet per-speaker audio capture and transcription pipeline: bot joins a Google Meet mock, ScriptProcessor per element captures audio, speaker identity locks via voting, TranscriptionClient sends WAV to transcription-service, confirmed segments publish to Redis, collector persists to Postgres.
+You test the Google Meet per-speaker audio capture and transcription pipeline: bot joins a live Google Meet, ScriptProcessor per element captures audio, speaker identity locks via voting, TranscriptionClient sends WAV to transcription-service, confirmed segments publish to Redis, collector persists to Postgres.
 
 ### Gate (local)
 
-Bot joins Google Meet mock (3 speakers: Alice, Bob, Carol) -> TranscriptionClient logs show HTTP 200 with non-empty text for all 3 speakers -> segments appear in Redis with correct speaker names -> GET /transcripts returns segments with Alice/Bob/Carol attribution.
+Bot joins live Google Meet with multiple speakers -> TranscriptionClient logs show HTTP 200 with non-empty text for all speakers -> segments appear in Redis with correct speaker names -> GET /transcripts returns segments with correct speaker attribution.
 
 **PASS:** All 3 speakers locked, transcription returns non-empty text, segments in Redis and Postgres with correct names.
 **FAIL:** Speaker lock fails, transcription returns empty, segments missing, or wrong speaker attribution.
@@ -33,20 +33,21 @@ Bot joins Google Meet mock (3 speakers: Alice, Bob, Carol) -> TranscriptionClien
 ## How to test
 
 1. Ensure compose stack is running
-2. POST to bot-manager to create a bot targeting the Google Meet mock URL
-3. Watch bot logs for:
-   - `[PerSpeaker] Found N media elements with audio` (expect 3)
-   - `[SpeakerIdentity] Track N -> "Alice" LOCKED PERMANENTLY`
-   - `[SpeakerIdentity] Track N -> "Bob" LOCKED PERMANENTLY`
-   - `[SpeakerIdentity] Track N -> "Carol" LOCKED PERMANENTLY`
+2. Create a live Google Meet via browser session
+3. POST to bot-manager to create a bot targeting the meeting URL
+4. Watch bot logs for:
+   - `[PerSpeaker] Found N media elements with audio`
+   - `[SpeakerIdentity] Track N -> "{name}" LOCKED PERMANENTLY` for each speaker
    - TranscriptionClient HTTP 200 responses with non-empty text
-4. Check Redis: `XLEN transcription_segments`, `HGETALL meeting:{id}:segments`
-5. Check REST: `GET /transcripts/{meeting_id}` -- verify 3 speakers present
+5. Check Redis: `XLEN transcription_segments`, `HGETALL meeting:{id}:segments`
+6. Check REST: `GET /transcripts/{meeting_id}` — verify speakers present
+
+Testing uses real live meetings created on-demand via browser sessions — no mocks.
 
 ## Diagnostic hints
 
-- **No media elements found:** Mock meeting audio not playing, or `<audio>` elements not yet in DOM. Check mock page serves audio correctly.
-- **Speaker identity doesn't lock:** Multiple speakers talking simultaneously in mock (no single-speaker window for voting). Check mock has non-overlapping speech segments.
+- **No media elements found:** `<audio>` elements not yet in DOM. Ensure bot completed join flow and was admitted.
+- **Speaker identity doesn't lock:** Multiple speakers talking simultaneously (no single-speaker window for voting). Need non-overlapping speech for locking.
 - **Transcription returns empty:** Audio is silence (below 0.005 threshold), or transcription-service is down. Check `docker logs transcription-service`.
 - **GC kills audio:** `window.__vexaAudioStreams` not populated. Check `startPerSpeakerAudioCapture()` ran after admission.
 
