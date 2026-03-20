@@ -109,10 +109,11 @@ N independent pipelines. No diarization needed — speakers pre-separated at rec
 
 **MS Teams (single-channel):**
 ```
-All speakers ──→ 1 mixed stream ──→ 1 SpeakerStreamManager ──→ Whisper ──→ segments
+All speakers ──→ 1 mixed stream ──→ 1 SpeakerStreamManager ──→ Whisper ──→ segments with word timestamps
                                                                               |
-Live captions ──→ speaker boundaries (who spoke when) ────────────────→ label segments
+Live captions ──→ speaker boundaries (who spoke when) ────────────────→ label words by timestamp
 ```
+Whisper returns word-level timestamps (`timestamp_granularities=word`): each word has `{word, start, end}`. Caption says "Alice spoke 10.0s-15.2s" → match words by their timestamps → attribute to Alice. This gives word-level speaker attribution on the mixed stream.
 One pipeline on mixed stream. Whisper transcribes everything. Caption speaker changes split output between speakers.
 
 ### Components
@@ -120,8 +121,8 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 | Component | Role | Key file |
 |-----------|------|----------|
 | **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
-| **transcription-client** | HTTP POST WAV to transcription-service | `services/vexa-bot/core/src/services/transcription-client.ts` |
-| **transcription-service** | faster-whisper inference, returns segments | `services/transcription-service/main.py` |
+| **transcription-client** | HTTP POST WAV to transcription-service, requests word timestamps | `services/vexa-bot/core/src/services/transcription-client.ts` |
+| **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `services/transcription-service/main.py` |
 | **segment-publisher** | Redis XADD + PUBLISH | `services/vexa-bot/core/src/services/segment-publisher.ts` |
 | **speaker-identity** | Track→speaker voting/locking (Google Meet only) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
 | **transcription-collector** | Consumes Redis stream, maps speakers, persists | `services/transcription-collector/main.py` |

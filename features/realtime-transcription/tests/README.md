@@ -23,12 +23,16 @@ Real audio through real Whisper on GPU. Feeds a WAV file **chunk-by-chunk at rea
 Audio playback and transcription happen simultaneously: you hear the speech and see segments confirmed as they arrive.
 
 **Log events:**
-- `DRAFT` — Whisper returned a result (shows latency, language, text). Updates on every submission.
+- `DRAFT` — Whisper returned a result (shows latency, word count, text). Updates on every submission.
 - `CONFIRMED` — 2 consecutive Whisper results matched. Segment emitted, offset advances. This is the pipeline output.
 
 **End-of-test output:**
 - `SEGMENTS` — individual confirmed segments in order
-- `COMBINED OUTPUT` — segments joined and deduplicated into one clean transcript
+- `GROUND TRUTH` — original TTS input text
+- `PIPELINE OUTPUT` — segments joined and deduplicated into one clean transcript
+- `WORD DIFF` — LCS-based word-level comparison: `[-missing-]` `{+extra+}`
+- `ACCURACY` — percentage of ground truth words matched
+- `WORD TIMESTAMPS` — per-word timing from Whisper (`word[start_time]`)
 
 ### Test audio files (`audio/`)
 

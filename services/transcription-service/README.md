@@ -100,7 +100,40 @@ The `/v1/audio/transcriptions` endpoint returns JSON with:
 ```
 
 - `language_probability` -- confidence (0.0-1.0) of the detected language. The bot uses this to decide whether to lock language detection or keep auto-detecting.
-- `segments` -- word-level timing for the transcription.
+- `segments` -- segment-level timing for the transcription.
+
+### Word-level timestamps
+
+Request `timestamp_granularities=word` to get per-word timing in the response:
+
+```bash
+curl -X POST http://localhost:8083/v1/audio/transcriptions \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -F "file=@audio.wav" \
+  -F "model=whisper-1" \
+  -F "response_format=verbose_json" \
+  -F "timestamp_granularities=word"
+```
+
+Response segments include a `words` array:
+
+```json
+{
+  "segments": [{
+    "start": 0.0, "end": 3.76,
+    "text": " Hello everyone, this is a test.",
+    "words": [
+      {"word": " Hello", "start": 0.0, "end": 0.44, "probability": 0.91},
+      {"word": " everyone,", "start": 0.44, "end": 0.98, "probability": 0.78},
+      {"word": " this", "start": 1.52, "end": 2.06, "probability": 0.98}
+    ]
+  }]
+}
+```
+
+Used by the bot pipeline for speaker attribution on Teams' single-channel mixed audio: caption says "Alice spoke 10.0s-15.2s" → match word timestamps → attribute those words to Alice.
+
+Default (`timestamp_granularities=segment`) returns no `words` array — no performance impact.
 
 ### Scale
 
