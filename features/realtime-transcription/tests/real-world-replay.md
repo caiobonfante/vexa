@@ -2,7 +2,7 @@
 
 ## Why
 
-Synthetic tests use made-up caption timing and delay distributions. We don't know if they match reality. Real-world replay uses actual data from a live Teams meeting — the exact caption events, at their exact timestamps, against the exact audio that was spoken. This is the closest to production accuracy measurement without running a live meeting.
+Live meetings are expensive to run — browser automation, TTS credits, platform flakiness. But synthetic tests use made-up caption timing that may not match reality. Real-world replay bridges this: collect data from a live meeting once (exact caption events, exact timestamps, exact audio), then replay it offline as many times as needed. This is the cheap inner loop of our [dev-test cycle](README.md#why-this-design) — the closest to production accuracy without running a live meeting.
 
 ## What We Collected
 

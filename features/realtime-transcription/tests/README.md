@@ -1,19 +1,44 @@
 # Realtime Transcription Tests
 
-## Why
+## Why this design
 
-Tests the transcription pipeline without meetings, bots, or browsers. Audio in, segments out. The test framework validates the pipeline against real-world data collected from live Teams meetings, catching issues that synthetic tests miss.
+A live meeting (Teams, GMeet, Zoom) involves browser automation, TTS API calls, network latency, and platform-specific caption behavior. It's slow, flaky, and expensive. You can't iterate on speaker attribution by running 50 live meetings a day. But you **need** real platform behavior — caption delays, DOM quirks, overlap truncation — because synthetic data won't surface those issues.
+
+So the design is: **collect reality once, iterate against it many times.**
+
+```
+ REAL WORLD                          SANDBOX
+ ─────────                           ───────
+ Run TTS bots in live meeting        Replay collected data offline
+ Scripts = ground truth              Same audio + caption events
+ Collect everything:                 Feed through pipeline (real Whisper)
+   captions, audio, events, logs     Score against ground truth
+                                     Change code, re-score in seconds
+         │                                     │
+         │  export data                        │  hit accuracy ceiling?
+         └──────────────►──────────────────────┘  need new scenarios?
+                                     │
+                                     │  back to real world
+                                     └──────────►─── design new script
+                                                     (overlaps, 5 speakers,
+                                                      silence gaps, etc.)
+                                                     collect new dataset
+                                                     feed into sandbox
+                                                     repeat
+```
+
+The sandbox replay (`make play-replay`) gives a fast, deterministic, free inner loop. You only go back to real world when you've exhausted what the current dataset can teach you — e.g., you fixed all 2-speaker issues and now need 5-speaker overlap data.
 
 ## Testing approach
 
 ### Iteration cycle
 
-1. **Collect real data** — run TTS speaker bots in a live Teams meeting, collect all raw logs with timestamps (caption events, speaker changes, drafts, confirmed segments)
-2. **Identify failures** — compare confirmed output to ground truth, find lost utterances and misattributions
+1. **Collect real data** — run TTS speaker bots in a live meeting, collect all raw logs with timestamps (caption events, speaker changes, drafts, confirmed segments). The TTS scripts are the ground truth.
+2. **Identify failures** — compare pipeline output to ground truth, find lost utterances and misattributions
 3. **Diagnose** — trace through the pipeline to find the root cause (buffer thresholds, confirmation timing, caption delay)
-4. **Fix** — modify `SpeakerStreamManager` or related components
-5. **Replay** — rerun the same data through the updated pipeline, verify improvement
-6. **Repeat** until target accuracy is met
+4. **Fix** — modify `SpeakerStreamManager`, speaker-mapper, or related components
+5. **Replay** — rerun the same collected data through the updated pipeline, verify improvement
+6. **Repeat** — keep iterating in sandbox until you plateau or need new scenarios, then go back to step 1 with a new script
 
 ### Test types (from fast to slow)
 
