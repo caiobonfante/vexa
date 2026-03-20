@@ -2,20 +2,49 @@
 
 ## Why
 
-This is the #1 product feature. Users need live, speaker-attributed, multilingual transcripts during meetings — not after. A bot joins the meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients as they happen.
+Core feature. A bot joins a meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients via WebSocket and REST API.
 
 ## What
 
-### Two Fundamentally Different Audio Architectures
+### The Shared Pipeline: SpeakerStreamManager
 
-| Platform | Audio | Speaker ID | Approach |
-|----------|-------|-----------|----------|
-| **Google Meet** | **Multi-channel**: N separate `<audio>` elements, one per participant. Clean single-voice streams. | DOM class mutations + voting/locking | N independent SpeakerStreamManagers, one per channel. No diarization needed. |
-| **MS Teams** | **Single-channel**: ONE mixed `<audio>` element, all participants combined. | Live captions (`[data-tid="author"]`) | 1 SpeakerStreamManager on mixed stream. Caption boundaries label Whisper output with speaker names. |
+Both platforms (Google Meet and MS Teams) feed audio into the same core component: `SpeakerStreamManager` (`services/vexa-bot/core/src/services/speaker-streams.ts`). This is where buffering, Whisper submission, confirmation, and segment emission happen. Platform-specific code only handles how audio enters the manager and how speaker names are resolved.
+
+**Current implementation:**
+
+```
+feedAudio(speakerId, chunk)     ← platform calls this with audio data
+    |
+    v
+buffer accumulates chunks
+    |
+trySubmit() fires every 2s ────→ submitBuffer(): combine ALL chunks into WAV
+    |                                  |
+    |                                  v
+    |                           TranscriptionClient.transcribe()
+    |                           HTTP POST WAV → transcription-service (faster-whisper)
+    |                                  |
+    |                                  v
+    |                           result: { text, language, segments[] }
+    |                                  |
+    v                                  v
+handleTranscriptionResult()     quality gate (no_speech, logprob, hallucination filter)
+    |
+    v
+fuzzy match: does text match previous result?
+    |
+    yes (2 consecutive) ──→ CONFIRMED: emit segment, reset buffer
+    no ──→ update lastTranscript, wait for next submission
+```
+
+**The problem with current implementation:** `submitBuffer` sends the FULL buffer every time. On confirmation, `emitAndReset` clears the buffer and starts fresh. This causes:
+- Scatter: frequent resets produce many small segments (~6-8s each)
+- Growing buffer: without reset, Whisper gets 30s, 60s, 120s of audio
+- Context loss: reset clears `lastTranscript`, next Whisper call starts cold
 
 ### Target Architecture: Offset-Based Sliding Window
 
-Ported from the WhisperLive service (removed at `752e075`, algorithm preserved). This is how audio buffering should work for both platforms.
+Ported from the WhisperLive service we used to run (`services/WhisperLive/whisper_live/server.py`, removed at `752e075`). The algorithm that was working.
 
 **Two offset pointers into a continuous audio stream:**
 
@@ -39,92 +68,96 @@ frames_offset                timestamp_offset
 4. **Completed segments** (all except last): emit, advance `timestamp_offset` past their end
 5. **Last segment** (partial): send as live draft, do NOT advance — re-sent with more context next time
 6. **Same output repeated N times**: partial IS complete — emit, advance
-7. **Buffer cap**: when total audio exceeds max size, trim oldest confirmed audio
+7. **Buffer cap**: when total audio exceeds max size, trim oldest confirmed audio from front
 
-**Why this works:** Whisper decides segment boundaries, not our code. Whisper's segments align with natural sentence/phrase breaks. We just track which are confirmed and advance the pointer.
+**Why this works:** Whisper decides segment boundaries, not our code. Whisper's segments align with natural sentence/phrase breaks. We just track which are confirmed and advance the pointer. No full reset, no scatter, no context loss.
 
-### Multi-Channel (Google Meet)
+**WhisperLive's key parameters:**
+- `max_buffer_s = 45` — total audio in memory
+- `discard_buffer_s = 30` — trim this much when buffer exceeds max
+- `clip_if_no_segment_s = 25` — if no valid segment for 25s, force clip
+- `clip_retain_s = 5` — keep last 5s when clipping
+- `same_output_threshold = 3` — confirm partial after 3 identical outputs
 
+### Downstream: How Segments Reach Clients
+
+```
+SpeakerStreamManager.onSegmentConfirmed()
+  → SegmentPublisher: Redis XADD to transcription_segments stream + PUBLISH to pub/sub channel
+  → transcription-collector: XREADGROUP, speaker mapping, dedup
+  → Redis Hash (mutable for 30s — speaker names and text can update)
+  → Background task: after 30s immutability threshold → INSERT Postgres (permanent)
+  → WebSocket: live clients receive via Redis pub/sub PUBLISH
+  → REST: GET /transcripts/{meeting_id} merges Redis Hash + Postgres
+```
+
+### Two Platform Audio Architectures
+
+Both feed into the same SpeakerStreamManager, just differently:
+
+| Platform | Audio Source | Speaker Identity | SpeakerStreamManager Instances |
+|----------|------------|-----------------|-------------------------------|
+| **Google Meet** | N separate `<audio>` elements, one per participant. Clean single-voice. | DOM class mutations + voting/locking (3 votes, 70% ratio) | N (one per channel) |
+| **MS Teams** | 1 mixed `<audio>` element, all participants combined. | Live captions `[data-tid="author"]` | 1 (on mixed stream, caption boundaries label output) |
+
+**Google Meet (multi-channel):**
 ```
 Participant A ──→ ScriptProcessor A ──→ SpeakerStreamManager A ──→ Whisper ──→ segments
 Participant B ──→ ScriptProcessor B ──→ SpeakerStreamManager B ──→ Whisper ──→ segments
-Participant C ──→ ScriptProcessor C ──→ SpeakerStreamManager C ──→ Whisper ──→ segments
 ```
+N independent pipelines. No diarization needed — speakers pre-separated at recording level.
 
-N independent pipelines. Each gets clean single-voice audio. Speaker identity from DOM voting/locking. This is the equivalent of **multichannel transcription** — the industry gold standard for accuracy because speakers are pre-separated at the recording level.
-
-### Single-Channel (MS Teams)
-
+**MS Teams (single-channel):**
 ```
 All speakers ──→ 1 mixed stream ──→ 1 SpeakerStreamManager ──→ Whisper ──→ segments
                                                                               |
-Live captions ──→ speaker boundaries (who spoke when) ──────────────────→ label segments
+Live captions ──→ speaker boundaries (who spoke when) ────────────────→ label segments
 ```
-
-One pipeline on the mixed stream. Whisper transcribes everything. Caption speaker changes define where to split between speakers. This is **diarization-conditioned transcription** — same approach as DiCoW (2025 research), but using Teams captions as the diarization signal instead of a ML model.
-
-**Key insight**: we don't route audio to per-speaker buffers (that's the source of all cross-speaker contamination bugs). We transcribe the mixed stream as-is and label after.
-
-### Downstream Pipeline
-
-```
-SpeakerStreamManager
-  → SegmentPublisher: Redis XADD to transcription_segments + PUBLISH
-  → transcription-collector: consumes stream, maps speakers
-  → Redis Hash (mutable, 30s window) → Postgres (immutable)
-  → WebSocket (live, Redis pub/sub) + REST (historical, Postgres + Redis merge)
-```
+One pipeline on mixed stream. Whisper transcribes everything. Caption speaker changes split output between speakers.
 
 ### Components
 
 | Component | Role | Key file |
 |-----------|------|----------|
-| **vexa-bot** | Joins meeting, captures audio, runs pipeline | `services/vexa-bot/core/src/index.ts` |
-| **speaker-streams** | Offset-based buffering with sliding window | `services/vexa-bot/core/src/services/speaker-streams.ts` |
-| **speaker-identity** | Track-to-speaker voting/locking (Google Meet) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
+| **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
 | **transcription-client** | HTTP POST WAV to transcription-service | `services/vexa-bot/core/src/services/transcription-client.ts` |
-| **transcription-service** | faster-whisper inference, returns segments with start/end/text | `services/transcription-service/main.py` |
+| **transcription-service** | faster-whisper inference, returns segments | `services/transcription-service/main.py` |
 | **segment-publisher** | Redis XADD + PUBLISH | `services/vexa-bot/core/src/services/segment-publisher.ts` |
-| **transcription-collector** | Consumes Redis, maps speakers, persists | `services/transcription-collector/main.py` |
+| **speaker-identity** | Track→speaker voting/locking (Google Meet only) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
+| **transcription-collector** | Consumes Redis stream, maps speakers, persists | `services/transcription-collector/main.py` |
 | **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |
+| **vexa-bot** | Orchestrates everything, platform handlers | `services/vexa-bot/core/src/index.ts` |
 
 ## How
 
 ### Implementation Plan
 
-**Step 0 (current):** Document the architecture. This README.
+**Step 0 (done):** Document what exists and the target architecture.
 
 **Step 1 — Baseline: offset-based SpeakerStreamManager.**
-Port the WhisperLive algorithm into `speaker-streams.ts`:
+Port WhisperLive algorithm into `speaker-streams.ts`:
 - Add `timestampOffset`, `framesOffset` to SpeakerBuffer
-- `submitBuffer` sends `chunks[timestampOffset:]`, not the full buffer
-- Use Whisper's native segment boundaries (start/end/text/completed) from transcription-service response
+- `submitBuffer` sends `chunks[timestampOffset:]`, not full buffer
+- Use Whisper's native segments (start/end/text/completed) from transcription-service response
 - On completed segments: advance offset, emit, keep buffer
 - On partial: update live draft, don't advance
-- Sliding window: trim buffer when exceeding max (120s)
+- Sliding window: trim buffer front when exceeding max size (120s)
 
-This change is platform-agnostic — both GMeet and Teams use the same SpeakerStreamManager.
+Platform-agnostic — same SpeakerStreamManager for both GMeet and Teams.
 
 **Step 2 — Test on MS Teams.**
-Teams is the harder case (mixed audio). Validate:
-- Long monologues produce continuous, non-scattered output
-- Speaker transitions are clean (caption-driven labeling)
-- Short utterances survive (kept in buffer for next turn)
-- Multilingual detection works
+Harder case (mixed audio). Validate: long monologues, speaker transitions, short utterances, multilingual.
 
 **Step 3 — Test on Google Meet.**
-GMeet is the easier case (per-channel audio). Validate:
-- Per-channel pipelines work independently
-- Speaker identity voting/locking still functions
-- No regression from baseline change
+Easier case (per-channel). Validate: per-channel independence, voting/locking, no regression.
 
 ### Verify
 
 1. `make all` from `deploy/compose/`
-2. Create a live meeting on the target platform
-3. Send a bot, connect to WS, speak, verify live segments with correct speakers
-4. After meeting, verify `GET /transcripts/{meeting_id}` matches
-5. Test: single speaker monologue (>60s), rapid multi-speaker exchange, multilingual
+2. Create a live meeting, send a bot
+3. Connect WS, speak, verify live segments with correct speakers
+4. `GET /transcripts/{meeting_id}` — same segments
+5. Test: monologue >60s, rapid multi-speaker, multilingual
 
 ### Platform-Specific Docs
 
@@ -133,16 +166,8 @@ GMeet is the easier case (per-channel audio). Validate:
 
 ### Research References
 
+- [Collabora WhisperLive](https://github.com/collabora/WhisperLive) — our codebase ancestor, sliding window server
 - [UFAL whisper_streaming](https://github.com/ufal/whisper_streaming) — Local Agreement policy for streaming Whisper
 - [WhisperLiveKit](https://github.com/QuentinFuxa/WhisperLiveKit) — SimulStreaming + Streaming Sortformer (SOTA 2025)
-- [DiCoW](https://www.sciencedirect.com/science/article/abs/pii/S088523082500066X) — Diarization-Conditioned Whisper for multi-talker
-- [WhisperX](https://github.com/m-bain/whisperX) — Word-level timestamps + diarization
-- [Deepgram: Multichannel vs Diarization](https://deepgram.com/learn/multichannel-vs-diarization) — Industry comparison
-- [Collabora WhisperLive](https://github.com/collabora/WhisperLive) — Original sliding window implementation (our codebase ancestor)
-
-### Known Limitations
-
-- **Teams overlapping speech**: within the caption delay window (~1-2s), simultaneous speakers can't be separated. The mixed audio gets one label.
-- **Teams captions assume one language**: if speaker switches language, captions produce gibberish. Whisper detects correctly but caption text is unreliable.
-- **Google Meet class names**: obfuscated, may change with UI updates.
-- **Whisper latency**: 1-3s per submission on top of submit interval.
+- [DiCoW](https://www.sciencedirect.com/science/article/abs/pii/S088523082500066X) — Diarization-Conditioned Whisper
+- [Deepgram: Multichannel vs Diarization](https://deepgram.com/learn/multichannel-vs-diarization) — industry comparison
