@@ -1017,10 +1017,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
     speakerManager = new SpeakerStreamManager({
       sampleRate: 16000,
-      minAudioDuration: 2,    // 2s of audio before first submit
-      submitInterval: 2,      // resubmit every 2s — drafts arrive faster
-      confirmThreshold: 2,    // 2 matches for quality
-      maxBufferDuration: 120, // 2 min hard cap — only resets on speaker change or silence
+      minAudioDuration: 2,     // 2s of unconfirmed audio before submission
+      submitInterval: 2,       // submit every 2s
+      confirmThreshold: 2,     // 2 consecutive matches to confirm
+      maxBufferDuration: 120,  // trim buffer front when exceeding 120s total
+      idleTimeoutSec: 15,      // 15s idle → emit + reset (high because silence filter)
     });
 
     // onSegmentReady: transcribe the buffer (called every submitInterval)

@@ -1,15 +1,18 @@
 import { log } from '../utils';
 
 /**
- * Per-speaker audio buffer with confirmation-based segment emission.
+ * Per-speaker audio buffer with offset-based sliding window.
  *
- * Buffer accumulates audio and resubmits the full buffer every interval.
- * Segments are only EMITTED (published to Redis) when confirmed — the
- * beginning of the transcript is stable across consecutive submissions.
- * Buffer advances (trims confirmed audio) and continues with new audio.
+ * Ported from WhisperLive server algorithm (services/WhisperLive/whisper_live/server.py).
  *
- * Hard cap prevents the buffer from growing beyond maxBufferDuration —
- * at the cap, buffer is force-flushed and reset regardless of confirmation.
+ * Two pointers track progress through a continuous audio stream:
+ *   - confirmedSamples: audio before this has been confirmed and emitted
+ *   - totalSamples: end of audio buffer
+ *
+ * Each Whisper submission sends only unconfirmed audio (confirmedSamples → totalSamples).
+ * On confirmation, confirmedSamples advances — audio is trimmed from the front.
+ * Buffer never fully resets during continuous speech. Full reset only on speaker
+ * change or idle timeout.
  */
 
 interface SpeakerBuffer {
@@ -17,34 +20,34 @@ interface SpeakerBuffer {
   speakerName: string;
   chunks: Float32Array[];
   totalSamples: number;
+  /** Samples already confirmed and emitted — next submission starts here */
+  confirmedSamples: number;
   lastTranscript: string;
   confirmCount: number;
   inFlight: boolean;
-  /** Pending confirmed transcript to emit */
-  pendingEmit: string | null;
-  /** Wall-clock time (ms) when buffer started accumulating audio */
+  /** Wall-clock time (ms) when the current unconfirmed window started */
+  windowStartMs: number;
+  /** Wall-clock time (ms) when the buffer first started (for segment timing) */
   bufferStartMs: number;
-  /** Number of chunks that were included in the last submission */
-  submittedChunkCount: number;
-  /** Total samples in the submitted portion */
-  submittedSamples: number;
   /** Monotonic sequence number for segment_id generation */
   sequenceNumber: number;
-  /** Wall-clock time (ms) when audio was last fed to this buffer */
+  /** Wall-clock time (ms) when audio was last fed */
   lastAudioTimestamp: number;
   /** Whether we already submitted a final idle attempt */
   idleSubmitted: boolean;
 }
 
 export interface SpeakerStreamManagerConfig {
-  /** Minimum audio before first submission (seconds). Default: 3 */
+  /** Minimum unconfirmed audio before submission (seconds). Default: 2 */
   minAudioDuration?: number;
-  /** Interval between resubmissions (seconds). Default: 3 */
+  /** Interval between submissions (seconds). Default: 2 */
   submitInterval?: number;
-  /** Consecutive matches to confirm (fuzzy). Default: 2 */
+  /** Consecutive matches to confirm. Default: 2 */
   confirmThreshold?: number;
-  /** Hard cap — force reset at this duration (seconds). Default: 15 */
+  /** Max total buffer size before trimming (seconds). Default: 120 */
   maxBufferDuration?: number;
+  /** Idle timeout — emit and reset after this many seconds of no audio. Default: 15 */
+  idleTimeoutSec?: number;
   /** Sample rate. Default: 16000 */
   sampleRate?: number;
 }
@@ -56,48 +59,41 @@ export class SpeakerStreamManager {
   private submitInterval: number;
   private confirmThreshold: number;
   private maxBufferDuration: number;
+  private idleTimeoutSec: number;
   private sampleRate: number;
 
-  /**
-   * Called when buffer needs transcription. Receives FULL unconfirmed buffer.
-   * Caller must call handleTranscriptionResult() with the result.
-   */
+  /** Called when unconfirmed audio needs transcription. */
   onSegmentReady: ((speakerId: string, speakerName: string, audioBuffer: Float32Array) => void) | null = null;
 
-  /**
-   * Called when a segment is CONFIRMED and should be published.
-   * Only fires after consecutive identical outputs — not on every resubmission.
-   * @param bufferStartMs - wall-clock time when this buffer started accumulating
-   * @param bufferEndMs - wall-clock time when the segment was confirmed/flushed
-   * @param segmentId - stable ID: {speakerId}:{sequenceNumber}. Drafts + confirmed share the same ID.
-   */
+  /** Called when a segment is confirmed and should be published. */
   onSegmentConfirmed: ((speakerId: string, speakerName: string, transcript: string, bufferStartMs: number, bufferEndMs: number, segmentId: string) => void) | null = null;
 
   constructor(config?: SpeakerStreamManagerConfig) {
-    this.minAudioDuration = config?.minAudioDuration ?? 3;
-    this.submitInterval = config?.submitInterval ?? 3;
+    this.minAudioDuration = config?.minAudioDuration ?? 2;
+    this.submitInterval = config?.submitInterval ?? 2;
     this.confirmThreshold = config?.confirmThreshold ?? 2;
     this.maxBufferDuration = config?.maxBufferDuration ?? 120;
+    this.idleTimeoutSec = config?.idleTimeoutSec ?? 15;
     this.sampleRate = config?.sampleRate ?? 16000;
   }
 
   addSpeaker(speakerId: string, speakerName: string): void {
     if (this.buffers.has(speakerId)) return;
 
+    const now = Date.now();
     this.buffers.set(speakerId, {
       speakerId,
       speakerName,
       chunks: [],
       totalSamples: 0,
+      confirmedSamples: 0,
       lastTranscript: '',
       confirmCount: 0,
       inFlight: false,
-      pendingEmit: null,
-      bufferStartMs: Date.now(),
-      submittedChunkCount: 0,
-      submittedSamples: 0,
+      windowStartMs: now,
+      bufferStartMs: now,
       sequenceNumber: 0,
-      lastAudioTimestamp: Date.now(),
+      lastAudioTimestamp: now,
       idleSubmitted: false,
     });
 
@@ -113,7 +109,7 @@ export class SpeakerStreamManager {
     buffer.chunks.push(audioData);
     buffer.totalSamples += audioData.length;
     buffer.lastAudioTimestamp = Date.now();
-    buffer.idleSubmitted = false; // new audio arrived — reset idle state
+    buffer.idleSubmitted = false;
   }
 
   handleTranscriptionResult(speakerId: string, transcript: string): void {
@@ -123,37 +119,36 @@ export class SpeakerStreamManager {
     buffer.inFlight = false;
 
     if (!transcript || transcript.trim().length === 0) {
-      // Empty result after a flush-submit — clean up
       if (buffer.idleSubmitted) {
-        this.emitAndReset(buffer, true);
+        this.fullReset(buffer);
       }
       return;
     }
 
     const trimmed = transcript.trim();
 
-    // If this was a flush-submit (speaker changed or idle), emit immediately
-    // without waiting for confirmation — this is the last chance for this buffer.
+    // Idle/flush submit — emit immediately, this is the last chance
     if (buffer.idleSubmitted) {
-      buffer.pendingEmit = trimmed;
-      this.emitAndReset(buffer, true);
+      this.emitSegment(buffer, trimmed);
+      this.fullReset(buffer);
       return;
     }
 
-    // Track best transcript — always keep the latest stable version.
-    // DON'T emit on confirmation. Buffer keeps growing. Emission only
-    // happens on speaker change (flushSpeaker) or idle timeout —
-    // that's when we know the speaker is done and we have their full text.
+    // Fuzzy match: compare first 80% of the shorter string
     const compareLen = Math.floor(Math.min(trimmed.length, buffer.lastTranscript.length) * 0.8);
 
     if (compareLen > 20 && trimmed.substring(0, compareLen) === buffer.lastTranscript.substring(0, compareLen)) {
       buffer.confirmCount++;
     } else {
+      buffer.lastTranscript = trimmed;
       buffer.confirmCount = 1;
     }
 
-    // Always update to the latest (longest/best) transcript
-    buffer.lastTranscript = trimmed;
+    if (buffer.confirmCount >= this.confirmThreshold) {
+      // CONFIRMED — emit and advance the offset. Don't reset the buffer.
+      this.emitSegment(buffer, trimmed);
+      this.advanceOffset(buffer);
+    }
   }
 
   removeSpeaker(speakerId: string): void {
@@ -162,10 +157,8 @@ export class SpeakerStreamManager {
     this.timers.delete(speakerId);
 
     const buffer = this.buffers.get(speakerId);
-    if (buffer && buffer.totalSamples > 0 && buffer.lastTranscript) {
-      // Emit whatever we have on exit
-      buffer.pendingEmit = buffer.lastTranscript;
-      this.emitAndReset(buffer);
+    if (buffer && this.unconfirmedSamples(buffer) > 0 && buffer.lastTranscript) {
+      this.emitSegment(buffer, buffer.lastTranscript);
     }
 
     this.buffers.delete(speakerId);
@@ -187,7 +180,6 @@ export class SpeakerStreamManager {
     return this.buffers.get(speakerId)?.speakerName;
   }
 
-  /** Get current segment_id for a speaker (for draft publishing). */
   getSegmentId(speakerId: string): string {
     const buffer = this.buffers.get(speakerId);
     const seq = buffer?.sequenceNumber ?? 0;
@@ -198,9 +190,8 @@ export class SpeakerStreamManager {
     return Array.from(this.buffers.keys());
   }
 
-  /** Get the wall-clock time when the current buffer started accumulating */
   getBufferStartMs(speakerId: string): number {
-    return this.buffers.get(speakerId)?.bufferStartMs ?? Date.now();
+    return this.buffers.get(speakerId)?.windowStartMs ?? Date.now();
   }
 
   removeAll(): void {
@@ -209,68 +200,110 @@ export class SpeakerStreamManager {
     }
   }
 
+  /**
+   * Force-flush on speaker change. If enough audio, emit and full reset.
+   * If too short, keep chunks for the speaker's next turn.
+   */
+  flushSpeaker(speakerId: string): void {
+    const buffer = this.buffers.get(speakerId);
+    if (!buffer) return;
+
+    const unconfirmedSec = this.unconfirmedSamples(buffer) / this.sampleRate;
+
+    // Too short — keep for next turn
+    if (unconfirmedSec < this.minAudioDuration && !buffer.lastTranscript) {
+      log(`[SpeakerStreams] Flush skipped for "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s < ${this.minAudioDuration}s, keeping for next turn)`);
+      return;
+    }
+
+    // Have transcript — emit and reset
+    if (buffer.lastTranscript) {
+      this.emitSegment(buffer, buffer.lastTranscript);
+      this.fullReset(buffer);
+      return;
+    }
+
+    // Have audio but no transcript — final Whisper submit
+    if (this.unconfirmedSamples(buffer) > 0 && !buffer.inFlight) {
+      buffer.idleSubmitted = true;
+      log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s audio, no transcript yet)`);
+      this.submitBuffer(buffer);
+      return;
+    }
+
+    this.fullReset(buffer);
+  }
+
+  // ── Private ──────────────────────────────────────────────────
+
+  private unconfirmedSamples(buffer: SpeakerBuffer): number {
+    return buffer.totalSamples - buffer.confirmedSamples;
+  }
+
   private trySubmit(speakerId: string): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer || buffer.inFlight) return;
 
-    const audioDurationSec = buffer.totalSamples / this.sampleRate;
-    const wallClockDurationSec = (Date.now() - buffer.bufferStartMs) / 1000;
+    const unconfirmedSec = this.unconfirmedSamples(buffer) / this.sampleRate;
+    const totalSec = buffer.totalSamples / this.sampleRate;
     const idleMs = Date.now() - buffer.lastAudioTimestamp;
 
-    // Idle timeout — if no audio for 15s, speaker is truly done.
-    // Caption speaker-change handles fast transitions (~1-2s). This idle
-    // timeout is the safety net for when captions don't fire. Set high
-    // (15s) because the browser silence filter drops quiet chunks, making
-    // natural speech pauses (2-5s) look like idle gaps.
-    if (idleMs > 15000 && buffer.totalSamples > 0) {
-      if (!buffer.idleSubmitted && !buffer.inFlight) {
-        // First idle: one final Whisper submission
+    // Idle timeout
+    if (idleMs > this.idleTimeoutSec * 1000 && this.unconfirmedSamples(buffer) > 0) {
+      if (!buffer.idleSubmitted) {
         buffer.idleSubmitted = true;
         log(`[SpeakerStreams] Idle submit for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, final submission)`);
         this.submitBuffer(buffer);
         return;
       }
-      if (buffer.idleSubmitted && !buffer.inFlight) {
-        // Second idle: Whisper had its chance. Emit and clean up.
+      if (!buffer.inFlight) {
         if (buffer.lastTranscript) {
-          buffer.pendingEmit = buffer.lastTranscript;
+          this.emitSegment(buffer, buffer.lastTranscript);
         }
-        log(`[SpeakerStreams] Idle cleanup for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, discarding buffer)`);
-        this.emitAndReset(buffer, true);
+        log(`[SpeakerStreams] Idle cleanup for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle)`);
+        this.fullReset(buffer);
         return;
       }
-      // inFlight — waiting for Whisper result, do nothing
       return;
     }
 
-    // Hard cap — force emit based on WALL CLOCK time (not audio duration).
-    if (wallClockDurationSec >= this.maxBufferDuration) {
-      if (buffer.lastTranscript) {
-        buffer.pendingEmit = buffer.lastTranscript;
-      }
-      this.emitAndReset(buffer);
-      return;
+    // Buffer too large — trim confirmed audio from front
+    if (totalSec > this.maxBufferDuration) {
+      this.trimBuffer(buffer);
     }
 
-    if (audioDurationSec >= this.minAudioDuration) {
+    // Submit if enough unconfirmed audio
+    if (unconfirmedSec >= this.minAudioDuration) {
       this.submitBuffer(buffer);
     }
   }
 
+  /**
+   * Submit only the UNCONFIRMED portion of the buffer to Whisper.
+   * Audio before confirmedSamples has already been transcribed and emitted.
+   */
   private submitBuffer(buffer: SpeakerBuffer): void {
-    if (buffer.totalSamples === 0 || !this.onSegmentReady) return;
+    const unconfirmed = this.unconfirmedSamples(buffer);
+    if (unconfirmed === 0 || !this.onSegmentReady) return;
 
     buffer.inFlight = true;
-    // Record how many chunks are in this submission so emitAndReset
-    // knows which chunks to keep (ones that arrived after submission)
-    buffer.submittedChunkCount = buffer.chunks.length;
-    buffer.submittedSamples = buffer.totalSamples;
 
-    const combined = new Float32Array(buffer.totalSamples);
-    let offset = 0;
+    // Build audio from confirmedSamples onward
+    const combined = new Float32Array(unconfirmed);
+    let srcOffset = 0;
+    let dstOffset = 0;
+    let samplesToSkip = buffer.confirmedSamples;
+
     for (const chunk of buffer.chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
+      if (samplesToSkip >= chunk.length) {
+        samplesToSkip -= chunk.length;
+        continue;
+      }
+      const start = samplesToSkip;
+      samplesToSkip = 0;
+      const toCopy = chunk.length - start;
+      combined.set(chunk.subarray(start), dstOffset);
+      dstOffset += toCopy;
     }
 
     try {
@@ -281,74 +314,77 @@ export class SpeakerStreamManager {
   }
 
   /**
-   * Force-flush a speaker's buffer. Called when captions detect the speaker
-   * stopped (speaker change). If the buffer has enough audio, submits and
-   * emits. If too short (< minAudioDuration), keeps chunks in the buffer
-   * so they join the speaker's next segment.
+   * Emit a confirmed segment. Does NOT reset the buffer — just publishes.
    */
-  flushSpeaker(speakerId: string): void {
-    const buffer = this.buffers.get(speakerId);
-    if (!buffer) return;
-
-    const audioDurationSec = buffer.totalSamples / this.sampleRate;
-
-    // Too short for Whisper — keep chunks in the buffer. They'll be part
-    // of this speaker's next turn, or cleaned up by idle timeout.
-    if (audioDurationSec < this.minAudioDuration && !buffer.lastTranscript) {
-      log(`[SpeakerStreams] Flush skipped for "${buffer.speakerName}" (${audioDurationSec.toFixed(1)}s < ${this.minAudioDuration}s min, keeping for next turn)`);
-      return;
-    }
-
-    // Enough audio or we have a transcript — emit what we have.
-    if (buffer.totalSamples > 0 && !buffer.inFlight) {
-      if (!buffer.pendingEmit && buffer.lastTranscript) {
-        buffer.pendingEmit = buffer.lastTranscript;
-      }
-      // Audio but no transcript yet — do a final Whisper submit.
-      if (!buffer.pendingEmit && !buffer.lastTranscript) {
-        buffer.idleSubmitted = true;
-        log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${audioDurationSec.toFixed(1)}s audio, no transcript yet)`);
-        this.submitBuffer(buffer);
-        return;
-      }
-    }
-
-    if (buffer.pendingEmit || buffer.totalSamples > 0) {
-      this.emitAndReset(buffer, true);
-    }
+  private emitSegment(buffer: SpeakerBuffer, text: string): void {
+    if (!text || !this.onSegmentConfirmed) return;
+    const endMs = Date.now();
+    const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
+    this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, text, buffer.windowStartMs, endMs, segmentId);
+    buffer.sequenceNumber++;
   }
 
-  private emitAndReset(buffer: SpeakerBuffer, fullReset: boolean = false): void {
-    if (buffer.pendingEmit && this.onSegmentConfirmed) {
-      const endMs = Date.now();
-      const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
-      this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, buffer.pendingEmit, buffer.bufferStartMs, endMs, segmentId);
-      buffer.sequenceNumber++;
-    }
+  /**
+   * Advance the offset past confirmed audio. Trim the front of the buffer.
+   * The buffer continues — unconfirmed tail chunks stay for the next submission.
+   */
+  private advanceOffset(buffer: SpeakerBuffer): void {
+    // Mark all current audio as confirmed
+    buffer.confirmedSamples = buffer.totalSamples;
 
-    // Normal reset: keep chunks that arrived AFTER the last submission —
-    // they're the beginning of the next segment.
-    // Full reset (force-flush on speaker change): discard everything —
-    // the speaker is done, stale chunks would contaminate their next turn.
-    let newChunks: Float32Array[];
-    let newSamples = 0;
-    if (fullReset) {
-      newChunks = [];
-    } else {
-      newChunks = buffer.chunks.slice(buffer.submittedChunkCount);
-      for (const c of newChunks) newSamples += c.length;
+    // Trim confirmed chunks from the front to free memory
+    this.trimBuffer(buffer);
+
+    // Reset confirmation state for the next segment window
+    buffer.lastTranscript = '';
+    buffer.confirmCount = 0;
+    buffer.windowStartMs = Date.now();
+
+    log(`[SpeakerStreams] Offset advanced for "${buffer.speakerName}" (confirmed=${buffer.confirmedSamples}, total=${buffer.totalSamples}, trimmed to ${buffer.chunks.length} chunks)`);
+  }
+
+  /**
+   * Trim confirmed audio chunks from the front of the buffer.
+   * Keeps all unconfirmed audio intact.
+   */
+  private trimBuffer(buffer: SpeakerBuffer): void {
+    if (buffer.confirmedSamples === 0) return;
+
+    let samplesToTrim = buffer.confirmedSamples;
+    const newChunks: Float32Array[] = [];
+
+    for (const chunk of buffer.chunks) {
+      if (samplesToTrim >= chunk.length) {
+        samplesToTrim -= chunk.length;
+        continue;
+      }
+      if (samplesToTrim > 0) {
+        // Partial chunk — keep the tail
+        newChunks.push(chunk.subarray(samplesToTrim));
+        samplesToTrim = 0;
+      } else {
+        newChunks.push(chunk);
+      }
     }
 
     buffer.chunks = newChunks;
-    buffer.totalSamples = newSamples;
+    buffer.totalSamples -= buffer.confirmedSamples;
+    buffer.confirmedSamples = 0;
+  }
+
+  /**
+   * Full reset — discard everything. Used on speaker change and idle cleanup.
+   */
+  private fullReset(buffer: SpeakerBuffer): void {
+    buffer.chunks = [];
+    buffer.totalSamples = 0;
+    buffer.confirmedSamples = 0;
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
-    buffer.pendingEmit = null;
     buffer.inFlight = false;
+    buffer.windowStartMs = Date.now();
     buffer.bufferStartMs = Date.now();
     buffer.lastAudioTimestamp = Date.now();
-    buffer.submittedChunkCount = 0;
-    buffer.submittedSamples = 0;
     buffer.idleSubmitted = false;
   }
 }
