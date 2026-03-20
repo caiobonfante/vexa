@@ -1,0 +1,635 @@
+[Entrypoint] Starting PulseAudio daemon...
+[Entrypoint] Creating PulseAudio null sink for audio capture...
+19
+[Entrypoint] Creating PulseAudio TTS sink for voice agent...
+20
+[Entrypoint] Creating virtual microphone from TTS sink monitor...
+21
+[Entrypoint] Configuring ALSA to use PulseAudio...
+[BotCore] Starting bot for teams with URL: https://teams.live.com/meet/9315163062006?p=0j5u5bQfPP14iDSX4a, name: CaptionLogger, language: undefined, task: transcribe, transcribeEnabled: true, connectionId: c01cc6e3-f219-4a06-acd3-2e2e22672408
+[BotCore] Setting up Redis subscriber...
+[BotCore] [DEBUG] Redis client connecting...
+[BotCore] [DEBUG] Redis client ready.
+[BotCore] Connected to Redis at redis://redis:6379/0
+[BotCore] Subscribed to Redis channel: bot_commands:meeting:270
+[BotCore] Using MS Edge browser for Teams platform
+[BotCore] [Bot] Video block init script injected (Teams, transcription-only mode)
+[BotCore] [Bot] Skipping virtual camera init (transcription-only mode)
+[BotCore] [Chat] Initializing chat service...
+[BotCore] [Chat] Transcript injection enabled (session UID: chat-c01cc6e3-f219-4a06-acd3-2e2e22672408)
+[BotCore] [Chat] Chat service ready
+[BotCore] [TTS] Playback service initialized (available for all bots)
+[BotCore] [Mic] Microphone service initialized (available for all bots)
+[BotCore] [PerSpeaker] TranscriptionClient created
+[BotCore] [PerSpeaker] SegmentPublisher created
+[BotCore] [Chat] Redis publisher connected
+[BotCore] [SegmentPublisher] Connected to Redis at redis://redis:6379/0
+[BotCore] [SegmentPublisher] Published session_start for session c01cc6e3-f219-4a06-acd3-2e2e22672408
+[BotCore] [PerSpeaker] Session start published
+[BotCore] [PerSpeaker] VAD not available (Silero VAD model not found) — will send all audio
+[BotCore] [PerSpeaker] SpeakerStreamManager created and wired
+[BotCore] [Bot] Per-speaker transcription pipeline initialized
+[BotCore] Step 1: Navigating to Teams meeting: https://teams.live.com/meet/9315163062006?p=0j5u5bQfPP14iDSX4a
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9315163062006%3Fp%3D0j5u5bQfPP14iDSX4a%26anon%3Dtrue&type=meet&deeplinkId=2ca76604-337a-42ee-a726-77ae5f547b16&directDl=true&msLaunch=true&enableMobilePage=true
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame https://teams.live.com/v2/#/meet/9315163062006?p=0j5u5bQfPP14iDSX4a&anon=true&v=.jlw&launchType=web&deeplinkId=7a08b743-f118-47a6-b687-ee2f8594402b
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] 🔥 UNIFIED CALLBACK: JOINING - reason: none
+[BotCore] Sending unified status change callback to http://bot-manager:8080/bots/internal/callback/status_change (attempt 1/3)
+[BotCore] joining status change callback sent and processed successfully
+[BotCore] Joining callback sent successfully
+[BotCore] Step 2: Looking for 'Continue on this browser' button...
+[BotCore] [Frame] New frame attached: (empty)
+[BotCore] [Frame] Sub-frame navigated: about:blank
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame about:blank
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] [Frame] Sub-frame navigated: https://teams.live.com/v2/auth#error=login_required&error_description=Silent+authentication+was+denied.+The+user+must+first+sign+in+and+if+needed+grant+the+client+application+access+to+the+scope+'https://mtsvc.fl.teams.microsoft.com/teams.mt.readwrite+openid+profile+offline_access'.&state=eyJpZCI6IjAxOWQwYmJiLTI5YjItNzMxZC05Yjg4LWNlMWM3NjVhZjU2ZSIsIm1ldGEiOnsiaW50ZXJhY3Rpb25UeXBlIjoic2lsZW50In19
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame https://teams.live.com/v2/auth#error=login_required&error_description=Silent+authentication+was+denied.+The+user+must+first+sign+in+and+if+needed+grant+the+client+application+access+to+the+scope+'https://mtsvc.fl.teams.microsoft.com/teams.mt.readwrite+openid+profile+offline_access'.&state=eyJpZCI6IjAxOWQwYmJiLTI5YjItNzMxZC05Yjg4LWNlMWM3NjVhZjU2ZSIsIm1ldGEiOnsiaW50ZXJhY3Rpb25UeXBlIjoic2lsZW50In19
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9315163062006%3Fp%3D0j5u5bQfPP14iDSX4a%26anon%3Dtrue%26v%3D.jlw%26launchType%3Dweb%26lightExperience%3Dtrue%26correlationId%3D7a08b743-f118-47a6-b687-ee2f8594402b%26anon%3Dtrue&type=meet&deeplinkId=6d362858-79df-4996-bdab-b465786ecab6&directDl=true&msLaunch=true&enableMobilePage=true
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] [BrowserConsole] [Vexa] Init script test: running in frame https://teams.live.com/light-meetings/launch?p=0j5u5bQfPP14iDSX4a&anon=true&v=.jlw&launchType=web&lightExperience=true&correlationId=7a08b743-f118-47a6-b687-ee2f8594402b&agent=web&coords=eyJtZWV0aW5nVXJsIjoiaHR0cHM6Ly90ZWFtcy5saXZlLmNvbS9tZWV0LzkzMTUxNjMwNjIwMDY%2FcD0wajV1NWJRZlBQMTRpRFNYNGEmYW5vbj10cnVlJnY9LmpsdyZsYXVuY2hUeXBlPXdlYiZsaWdodEV4cGVyaWVuY2U9dHJ1ZSZjb3JyZWxhdGlvbklkPTdhMDhiNzQzLWYxMTgtNDdhNi1iNjg3LWVlMmY4NTk0NDAyYiZhbm9uPXRydWUiLCJtZWV0aW5nQ29kZSI6IjkzMTUxNjMwNjIwMDYiLCJwYXNzY29kZSI6IjBqNXU1YlFmUFAxNGlEU1g0YSJ9&deeplinkId=5026df42-1ef7-4618-9ab1-0daf6068c405
+[BotCore] [BrowserConsole] [Vexa] Video block init script START (transcription-only mode)
+[BotCore] [BrowserConsole] [Vexa] RTCPeerConnection patched for video blocking (transcription-only)
+[BotCore] ✅ Clicked 'Continue on this browser' button
+[BotCore] Step 2.5: Waiting for Teams pre-join controls...
+[BotCore] ✅ Teams pre-join controls are ready
+[BotCore] Step 3: Camera handling...
+[BotCore] ℹ️ Camera button not found or already off
+[BotCore] Step 4: Trying to set display name...
+[BotCore] ✅ Display name set to "CaptionLogger"
+[BotCore] Step 5: Ensuring Computer audio is selected...
+[BotCore] ℹ️ Audio radios not visible. Attempting to force-enable speaker...
+[BotCore] ℹ️ Speaker controls not visible; continuing with defaults.
+[BotCore] Step 6: Clicking 'Join now' to enter the meeting...
+[BotCore] ✅ Clicked 'Join now' button
+[BotCore] Waiting for Teams to process join request...
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=151bfa4d-27e3-4bc9-8875-b4059a2ffeaa)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=311cc2ec-8063-448f-98a7-8f2c99a934e6)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=d6e8a639-296d-4a74-abbf-c4907f61d4a3)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=33457fef-89db-4f0e-b14f-e41733dd1c37)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=d69f37f3-25ba-42b3-b1f6-83ccb22c082a)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=0fe30107-75fe-4cd5-8bfb-831a9bfcfa50)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=ffa4a083-70ce-4e35-baaa-337a52b498f2)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=f668902f-6d68-4aeb-b766-8b7e92c7b5a6)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=b0e3e588-4b06-415a-a632-6d6f758456d2)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=5d1370dc-402d-4169-bbc2-83d601532a27)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=d25b36b5-299a-455b-8d56-924b04051745)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-2304)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-2404)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-2704)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-2904)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-3204)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-3504)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-3804)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-4004)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-4504)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=mainVideo-24704)
+[BotCore] [BrowserConsole] [Vexa] Incoming video track disabled (id=applicationsharingVideo-45804)
+[BotCore] Step 6b: Muting mic...
+[BotCore] ✅ Mic muted via Ctrl+Shift+M
+[BotCore] Step 7: Checking current state...
+[BotCore] Waiting for Teams meeting admission...
+[BotCore] Checking if bot is already admitted to the Teams meeting...
+[BotCore] ✅ Found admission indicator: button[id="hangup-button"]
+[BotCore] Found Teams admission indicator: visible Leave button - Bot is already admitted to the meeting!
+[BotCore] Bot immediately admitted - skipping awaiting_admission callback to avoid race condition
+[BotCore] Successfully admitted to the Teams meeting - no waiting room required
+[BotCore] Bot admitted - ensuring AWAITING_ADMISSION state is processed before sending ACTIVE...
+[BotCore] 🔥 UNIFIED CALLBACK: ACTIVE - reason: none
+[BotCore] Sending unified status change callback to http://bot-manager:8080/bots/internal/callback/status_change (attempt 1/3)
+[BotCore] active status change callback sent and processed successfully
+[BotCore] Verifying bot is still in meeting after ACTIVE callback...
+[BotCore] ✅ Found admission indicator: button[id="hangup-button"]
+[BotCore] ✅ Bot verified to be in meeting after ACTIVE callback
+[BotCore] [Chat] Post-admission: starting chat observer...
+[BotCore] [Captions] Attempting to enable Teams live captions...
+[BotCore] Starting periodic Teams removal monitoring...
+[BotCore] Starting Teams recording
+[BotCore] [Teams Recording] Session start reset to 2026-03-20T14:52:11.081Z
+[BotCore] [Teams Recording] Audio capture disabled by config.
+[BotCore] [PerSpeaker] Teams audio callback exposed — browser-side routing via DOM/caption speaker events
+[BotCore] Starting Teams recording process with new services.
+[BotCore] [Audio] Attempt 1/10: Found 7 total media elements in DOM
+[BotCore] ✅ Found 5 active media elements with audio tracks after 1 attempt(s).
+[BotCore]   Element 1: paused=false, readyState=4, tracks=1, enabled=1
+[BotCore]   Element 2: paused=false, readyState=4, tracks=1, enabled=1
+[BotCore]   Element 3: paused=false, readyState=4, tracks=1, enabled=1
+[BotCore]   Element 4: paused=false, readyState=4, tracks=1, enabled=1
+[BotCore]   Element 5: paused=false, readyState=4, tracks=1, enabled=1
+[BotCore] Found 5 active media elements.
+[BotCore] Element 1: Found 1 audio tracks
+[BotCore]   Track 0: enabled=true, muted=false, label=mainAudio-2201
+[BotCore] Connected audio stream from element 1/5. Tracks=1
+[BotCore] Element 2: Found 1 audio tracks
+[BotCore]   Track 0: enabled=true, muted=true, label=1b04c559-adab-4b00-bbb4-bbec84b42d83
+[BotCore]   Could not unmute track 0: Cannot set property muted of #<MediaStreamTrack> which has only a getter
+[BotCore] Connected audio stream from element 2/5. Tracks=1
+[BotCore] Element 3: Found 1 audio tracks
+[BotCore]   Track 0: enabled=true, muted=true, label=1b04c559-adab-4b00-bbb4-bbec84b42d83
+[BotCore]   Could not unmute track 0: Cannot set property muted of #<MediaStreamTrack> which has only a getter
+[BotCore] Connected audio stream from element 3/5. Tracks=1
+[BotCore] Element 4: Found 1 audio tracks
+[BotCore]   Track 0: enabled=true, muted=false, label=mainAudio-2201
+[BotCore] Connected audio stream from element 4/5. Tracks=1
+[BotCore] Element 5: Found 1 audio tracks
+[BotCore]   Track 0: enabled=true, muted=false, label=mainAudio-2201
+[BotCore] Connected audio stream from element 5/5. Tracks=1
+[BotCore] Successfully combined 5 audio streams.
+[BotCore] Audio processing pipeline connected and ready.
+[BotCore] Initializing Teams speaker detection...
+[BotCore] Setting up ROBUST Teams speaker detection (NO FALLBACKS - signal-only)...
+[BotCore] 👁️ [Unified] Observing: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) - signal present
+[BotCore] 👁️ [Unified] Observing: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) - signal present
+[BotCore] 👁️ [Unified] Observing: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) - signal present
+[BotCore] 🔍 [Unified] Scanned 6 participants, observing 3 with signal
+[BotCore] 🔢 Participant count: 0 → 4
+[BotCore] Setting up Teams meeting monitoring...
+[BotCore] [PerSpeaker] Teams caption callback exposed — caption text will be stored for reconciliation
+[BotCore] [Chat] Observer started for teams
+[BotCore] [Chat] ✅ Post-admission chat observer started
+[BotCore] [Audio] Session audio start time set: 1774018331185
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🔢 Teams participant count changed: 0 → 4
+[BotCore] 🔍 [ARIA Participants] ["CaptionLogger","Alice (Guest)","Bob (Guest)","Speaker D"]
+[BotCore] 👥 Current participants: ["CaptionLogger","Alice (Guest)","Bob (Guest)","Speaker D"]
+[BotCore] Teams Speakers identified - switching to post-speaker monitoring mode
+[BotCore] [Teams PerSpeaker] Audio routing active (caption-aware with ring buffer)
+[BotCore] [Captions] Clicked More menu
+[BotCore] [Captions] Menu items: CaptionLogger | Alice (Guest) | Bob (Guest) | Speaker D | Meeting info | Devices | Video effects and settings | Captions | Don't show chat bubbles | Accessibility
+[BotCore] [Captions] Clicked: "Captions" (direct)
+[BotCore] [Captions] ⚠️ Captions menu clicked but wrapper not found yet — caption observer will detect when it appears
+[BotCore] [Teams Captions] Caption wrapper found — caption-driven routing ACTIVE
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-default-text-wrapper,closed-caption-default-text,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=4800
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-default-text-wrapper,closed-caption-default-text,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=4800
+[BotCore] [Teams Captions] MutationObserver fired (#1, 2 mutations)
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=5572
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [Teams Captions] MutationObserver fired (#2, 1 mutations)
+[BotCore] [🎙️ TEAMS SPEAKER] "Alice (Guest)" — first audio received
+[BotCore] [SpeakerStreams] Added speaker "Alice (Guest)" (teams-Alice_(Guest))
+[BotCore] [Teams Captions] Speaker change: (none) → Alice (Guest) (flushed 6 chunks, discarded 0 stale)
+[BotCore] [Teams Captions] MutationObserver fired (#3, 2 mutations)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +9 chars)
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=7868
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone I want
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone I want to start
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [HallucinationFilter] WARNING: No phrase files found
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-29.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning, everyone. I want to start."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=7884
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text -14 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning, everyone.
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by review
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-31.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from"
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=10173
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had over
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=10191
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-33.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from last month. We had over 50"
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 26.8s-33.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from last month. We had over 50"
+[BotCore] [SpeakerStreams] Offset advanced for "Alice (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Alice (Guest) → Redis
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had over 50
+[BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text -58 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active us
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 33.0s-35.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record."
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +16 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is a new record
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=10168
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is a new record for us
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users, which is a new record for us.
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 33.0s-37.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record for us."
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 33.0s-37.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record for us."
+[BotCore] [SpeakerStreams] Offset advanced for "Alice (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Alice (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=10177
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=10177
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [🎙️ TEAMS SPEAKER] "Bob (Guest)" — first audio received
+[BotCore] [SpeakerStreams] Added speaker "Bob (Guest)" (teams-Bob_(Guest))
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Alice (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Alice (Guest)" (0.0s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=12437
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +12 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impress
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive all
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice
+[BotCore] [Teams Captions] Flushed 3 chunks to Bob (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice can
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice can you
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive.
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 40.5s-42.7s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the use?"
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text -5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=14720
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the US
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth by region
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth by region I
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice, can you break down the user growth by region?
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 40.5s-44.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the user growth by region?"
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 40.5s-44.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the user growth by region?"
+[BotCore] [SpeakerStreams] Offset advanced for "Bob (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Bob (Guest) → Redis
+[BotCore] [Teams Captions] Flushed 4 chunks to Bob (Guest) (text -33 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=17008
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +11 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the
+[BotCore] [Teams Captions] MutationObserver fired (#50, 1 mutations)
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 44.6s-46.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European marketing."
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +11 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market Exp
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=17046
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market expansion
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 44.6s-48.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European market expansion."
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 44.6s-48.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European market expansion."
+[BotCore] [SpeakerStreams] Offset advanced for "Bob (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Bob (Guest) → Redis
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market expansion.
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=17053
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=17053
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=17053
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Alice (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Bob (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Bob (Guest)" (0.0s < 2s, keeping for next turn)
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=19258
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20%
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-57.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%."
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=19328
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15%
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-59.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure, Europe grew by 20%, Asia by 15%."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=19335
+[BotCore] [Teams Captions] Flushed 5 chunks to Alice (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in north
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America by
+[BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America by 10%
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=19359
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-61.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure, Europe grew by 20%, Asia by 15% in North America by 10%.
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.99)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-63.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 37.0s-63.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] [SpeakerStreams] Offset advanced for "Alice (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Alice (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=19362
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 1 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Alice (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Alice (Guest)" (0.0s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=21616
+[BotCore] [Teams Captions] Flushed 5 chunks to Bob (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense local
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense localization
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text -12 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense?
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Localization always helps
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=1.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 48.6s-66.7s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23885
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Localization always helps.
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 48.6s-68.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 48.6s-68.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] [SpeakerStreams] Offset advanced for "Bob (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Bob (Guest) → Redis
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=23886
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Speaker D (flushed 0 chunks, discarded 1 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Bob (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Bob (Guest)" (0.0s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": I.
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=26137
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=26137
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=26137
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=26137
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=26137
+[BotCore] [🎙️ TEAMS SPEAKER] "Speaker D" — first audio received
+[BotCore] [SpeakerStreams] Added speaker "Speaker D" (teams-Dmitry_Grankin)
+[BotCore] [Teams Captions] Flushed 10 chunks to Speaker D (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Paka Pak
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Paka pakam
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Paka pakam.
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=28397
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-162.2s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "Пока-пока."
+[BotCore] [Teams Captions] Flushed 4 chunks to Speaker D (text -3 chars)
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=30605
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Udaip
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Udaipur.
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-164.2s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "Пока-пока. Удачи."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=30654
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-166.2s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "Пока-пока. Удачи."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=30654
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-168.2s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "Пока-пока. Удачи."
+[BotCore] [Teams Captions] Flushed 8 chunks to Speaker D (text +4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up a
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up a call
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up a call that
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up a call that Jim
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32926
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": Pick up a call that Jim.
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-170.3s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "пока пока удачи пока пока удачи"
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=1.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-172.3s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "пока-пока удачи пока пока удачу"
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-174.3s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "пока пока удачи пока пока удачи"
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [🌐 LANGUAGE] Speaker D → ru (prob=0.00)
+[BotCore] [📝 DRAFT] Speaker D | ru | 160.1s-176.3s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "пока пока удачи пока пока удачи"
+[BotCore] [📝 CONFIRMED] Speaker D | en | 160.1s-176.3s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Dmitry_Grankin:0 | "пока пока удачи пока пока удачи"
+[BotCore] [SpeakerStreams] Offset advanced for "Speaker D" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Speaker D → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=32927
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Speaker D → Alice (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Speaker D" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Speaker D" (0.0s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +17 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=35210
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product Rd
+[BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map
+[BotCore] [Teams Captions] MutationObserver fired (#100, 1 mutations)
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map we are
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map.
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -31 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.99)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 63.1s-187.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):3 | "Let me walk through the full product roadmap we are planning to release."
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +11 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=37493
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3
+[BotCore] [Teams Captions] Flushed 5 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3 point
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 63.1s-189.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):3 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in a..."
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text -4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=37505
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a comple
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely red
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely redes
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely redesigned
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 63.1s-191.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):3 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April with a completely redesigned dashboard."
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 63.1s-191.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):3 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April with a completely redesigned dashboard."
+[BotCore] [SpeakerStreams] Offset advanced for "Alice (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Alice (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=37543
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely redesigned D
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely redesigned das...
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April with a completely redesigned das...
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 6 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Alice (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Alice (Guest)" (0.5s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I have a question about the
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +4 chars)
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=39828
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I have a question about the API
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I have a question about the API changes
+[BotCore] [Teams Captions] Flushed 4 chunks to Bob (Guest) (text +13 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I have a question about the API changes will they be
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text -12 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I have a question about the API changes.
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=39837
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text -13 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards comp
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards compatible
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards compatible with
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards compatible with version
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards compatible with version 2
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 68.6s-196.7s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):3 | "about the API changes, will they be backwards compatible with version 2?"
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=42128
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Will they be backwards compatible with version 2?
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 68.6s-198.8s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):3 | "about the API changes, will they be backwards compatible with version 2?"
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 68.6s-198.8s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):3 | "about the API changes, will they be backwards compatible with version 2?"
+[BotCore] [SpeakerStreams] Offset advanced for "Bob (Guest)" (confirmed=0, total=0, trimmed to 0 chunks)
+[BotCore] [✅ PUBLISHED] Bob (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=42129
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=42129
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=42129
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Alice (Guest) (flushed 7 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Bob (Guest)" buffer
+[BotCore] [SpeakerStreams] Flush skipped for "Bob (Guest)" (0.0s < 2s, keeping for next turn)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Back
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Backwards compatible
+[BotCore] [🌐 LANGUAGE] Alice (Guest) → en (prob=0.00)
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 191.0s-205.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):4 | "Yes, fully backwards compatible."
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=44396
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Backwards compatible.
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [PerSpeaker] Caption speaker change: flushing "Alice (Guest)" buffer
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 191.0s-206.8s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):4 | "Yes, fully backwards compatible."
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Great thanks
+[BotCore] [✅ PUBLISHED] Alice (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46652
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Great. Thanks.
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [SpeakerStreams] Idle submit for "Bob (Guest)" (15.7s idle, final submission)
+[BotCore] [🌐 LANGUAGE] Bob (Guest) → en (prob=0.98)
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 198.8s-222.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):4 | "Great, thanks."
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 198.8s-222.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):4 | "Great, thanks."
+[BotCore] [✅ PUBLISHED] Bob (Guest) → Redis
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654
+[BotCore] [Teams Captions POLL] wrapper children=2, items=0, data-tids=[closed-caption-v2-window-wrapper,closed-caption-v2-virtual-list-content,vl-top-scroll-buffer,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,author,closed-caption-text,vl-bottom-scroll-buffer,closed-captions-settings-menu-trigger-button,closed-captions-turn-off-button], innerHTML.length=46654

@@ -1,0 +1,157 @@
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [Teams Captions] Speaker change: (none) → Alice (Guest) (flushed 6 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone I want
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone I want to start
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-29.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning, everyone. I want to start."
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text -14 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning, everyone.
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by review
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-31.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from"
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had over
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 26.8s-33.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from last month. We had over 50"
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 26.8s-33.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):0 | "Good morning everyone. I want to start by reviewing our product metrics from last month. We had over 50"
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": I want to start by reviewing our product metrics from last month we had over 50
+[BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text -58 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active us
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 33.0s-35.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record."
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +16 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is a new record
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users which is a new record for us
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We had over 50,000 active users, which is a new record for us.
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 33.0s-37.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record for us."
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 33.0s-37.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):1 | "1000 active users, which is a new record for us."
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +8 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +12 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impress
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive all
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice
+[BotCore] [Teams Captions] Flushed 3 chunks to Bob (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice can
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive Alice can you
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Those numbers are impressive.
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 40.5s-42.7s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the use?"
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text -5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the US
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth
+[BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth by region
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice can you break down the user growth by region I
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Alice, can you break down the user growth by region?
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 40.5s-44.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the user growth by region?"
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 40.5s-44.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):0 | "numbers are impressive alleys. Can you break down the user growth by region?"
+[BotCore] [Teams Captions] Flushed 4 chunks to Bob (Guest) (text -33 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +11 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +9 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 44.6s-46.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European marketing."
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text +11 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market Exp
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market expansion
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 44.6s-48.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European market expansion."
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 44.6s-48.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):1 | "I am particularly interested in the European market expansion."
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": I am particularly interested in the European market expansion.
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Alice (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +5 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew
+[BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20%
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-57.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%."
+[BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by
+[BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15%
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-59.0s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure, Europe grew by 20%, Asia by 15%."
+[BotCore] [Teams Captions] Flushed 5 chunks to Alice (Guest) (text +10 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in north
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America by
+[BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text +7 chars)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure Europe grew by 20% Asia by 15% in North America by 10%
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-61.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Sure, Europe grew by 20%, Asia by 15% in North America by 10%.
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Alice (Guest) (ID: 9453bd37-80cf-437a-a753-5949e38f7a6b) [signal-based]
+[BotCore] [📝 DRAFT] Alice (Guest) | en | 37.0s-63.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] [📝 CONFIRMED] Alice (Guest) | en | 37.0s-63.1s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Alice_(Guest):2 | "Sure. Europe grew by 20%, Asia by 15%, and North America by 10%."
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 1 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense
+[BotCore] 🎤 [Unified] SPEAKER_START: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] [Teams Captions] Flushed 5 chunks to Bob (Guest) (text +6 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense local
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense localization
+[BotCore] [Teams Captions] Flushed 2 chunks to Bob (Guest) (text -12 chars)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense?
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Localization always helps
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 48.6s-66.7s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] 🔇 [Unified] SPEAKER_END: Bob (Guest) (ID: d75417c2-c167-4749-900d-9c4d639eaf86) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Localization always helps.
+[BotCore] [📝 DRAFT] Bob (Guest) | en | 48.6s-68.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] [📝 CONFIRMED] Bob (Guest) | en | 48.6s-68.6s | c01cc6e3-f219-4a06-acd3-2e2e22672408:teams-Bob_(Guest):2 | "Makes sense, localization always helps."
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Speaker D (flushed 0 chunks, discarded 1 stale)
+[BotCore] [📝 TEAMS CAPTION] "Speaker D": I.
+[BotCore] 🔇 [Unified] SPEAKER_END: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
+[BotCore] 🎤 [Unified] SPEAKER_START: Speaker D (ID: 7079b3cf-e767-4678-8354-520a83f44ff1) [signal-based]
