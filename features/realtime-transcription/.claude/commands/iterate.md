@@ -6,19 +6,31 @@ Read the generic stage protocol first: `/.claude/commands/iterate.md`
 
 ## Feature-specific context
 
-### How to replay and score
+### Inventory datasets
+
+Read all manifests in `features/realtime-transcription/tests/datasets/*/manifest.md`.
+
+List active datasets with their scenario tags:
+
+| Dataset | Status | Scenarios | Baseline | Notes |
+|---------|--------|-----------|----------|-------|
+| {id} | active | {tags} | {X}% | {what it tests} |
+
+### How to replay
 
 ```bash
 cd features/realtime-transcription/tests
 
-# Full replay of collected data (real Whisper, real caption events)
-make play-replay
+# Replay a specific dataset
+make play-replay DATASET={id}
 
-# Individual pipeline tests (single speaker, specific scenarios)
+# Replay all active datasets
+make play-replay-all
+
+# Individual pipeline tests (single speaker, not dataset-based)
 make play-short        # 3s sentence
 make play-medium       # 14s paragraph
 make play-long         # 43s monologue
-make play-noisy-office # office noise
 make play-speakers     # 3-speaker attribution
 
 # Unit tests (mocked Whisper, instant)
@@ -47,14 +59,6 @@ make test
 | Growing submission size | Offset not advancing after confirmation | `speaker-streams.ts:advanceOffset` |
 | Segments never confirm | `confirmThreshold` too strict or text keeps changing | `speaker-streams.ts:checkConfirmation` |
 
-### Current scoring baseline
-
-Read `tests/findings.md` and `tests/README.md` (section "Current stage") for the latest numbers. As of last update:
-- Normal turns: ~100% (4/4 segments)
-- Diverse scenario: 71% (12/17 utterances) — short phrases lost
-- Replay attribution: 81% caption boundary accuracy, 88% theoretical with mapper
-- Pipeline accuracy: 87-100% content accuracy depending on noise
-
 ### Pipeline params to tune
 
 These are in `.env` and/or hardcoded in `speaker-streams.ts`:
@@ -67,11 +71,26 @@ These are in `.env` and/or hardcoded in `speaker-streams.ts`:
 | `idleTimeoutSec` | 15s | Faster flush on silence, but false flushes | Delayed flush, stale buffer |
 | `maxSpeechDurationSec` | 15s | Shorter Whisper segments | Longer context per submission |
 
+### Iteration tracking
+
+When reporting each iteration, include which dataset(s) you replayed:
+
+```
+Iteration {N}:
+  teams-3sp-diverse-20260320: {X}% → {Y}% ({+/-Z}%) [target]
+  teams-2sp-normal-20260320:  {X}% → {Y}% ({+/-Z}%) [control]
+  Fix: {description}
+  Remaining: {count} errors in scenarios: {tags}
+  Status: {iterating | plateau | target met}
+```
+
 ### When you've hit a plateau
 
-If scoring is stuck and remaining errors are in:
-- **Short phrases not in collected data** → need short-phrase scenario → `/expand`
-- **Overlap behavior not in collected data** → need overlap scenario → `/expand`
-- **Different platform (GMeet)** → need GMeet collection run → `/expand`
+If scoring is stuck and remaining errors are in scenarios not covered by any active dataset:
+- **Short phrases** not in any dataset → need `short-phrase` scenario → `/expand`
+- **Overlap** not in any dataset → need `overlap` scenario → `/expand`
+- **More speakers** needed → need `5sp` dataset → `/expand`
+- **Different platform (GMeet)** → need GMeet dataset → `/expand`
+- **Longer meetings** → need `long-meeting` dataset (>5min) → `/expand`
 
-Report the plateau clearly: what scoring, what errors, what scenarios are missing.
+Report the plateau with: scoring per dataset, per scenario, which scenarios are missing, and what new datasets would help.

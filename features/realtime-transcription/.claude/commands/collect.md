@@ -6,21 +6,39 @@ Read the generic stage protocol first: `/.claude/commands/collect.md`
 
 ## Feature-specific context
 
-### What we're collecting
+### Dataset ID format for this feature
 
-This feature needs these data types from a live meeting:
+`{platform}-{N}sp-{scenario-tag}-{YYYYMMDD}`
 
-| Data | Source | How it's captured |
-|------|--------|------------------|
-| Audio (WAV) | TTS bots speak in meeting | Bot's TTS output files saved locally |
-| Caption events | Teams: DOM MutationObserver on `[data-tid="closed-caption-text"]` | Bot logs with `--timestamps` |
-| Speaker changes | Teams: `[data-tid="author"]` changes | Bot logs with `--timestamps` |
-| Pipeline output | SpeakerStreamManager drafts + confirmations | Bot logs with `--timestamps` |
-| Ground truth | Script send times (Unix timestamps from TTS API calls) | Script runner output |
+Examples:
+- `teams-3sp-diverse-20260320`
+- `teams-2sp-shortphrase-20260405`
+- `gmeet-5sp-overlap-20260410`
+
+### Dataset directory
+
+```
+features/realtime-transcription/tests/datasets/{id}/
+  manifest.md
+  ground-truth.txt
+  infra-snapshot.md
+  audio/               # Per-utterance WAVs: {speaker}-{NN}.wav + combined.wav
+  events/              # caption-events.json, speaker-changes.json
+  pipeline/            # bot-logs.txt, segments.json
+  README.md
+```
+
+### What we capture from this feature
+
+| Data | Source | How it's captured | Destination |
+|------|--------|------------------|------------|
+| Audio (WAV) | TTS bots speak in meeting | Bot's TTS output files saved locally | `audio/` |
+| Caption events | Teams: DOM MutationObserver on `[data-tid="closed-caption-text"]` | Bot logs with `--timestamps` | `events/caption-events.json` |
+| Speaker changes | Teams: `[data-tid="author"]` changes | Bot logs with `--timestamps` | `events/speaker-changes.json` |
+| Pipeline output | SpeakerStreamManager drafts + confirmations | Bot logs with `--timestamps` | `pipeline/bot-logs.txt` |
+| Ground truth | Script send times (Unix timestamps from TTS API calls) | Script runner output | `ground-truth.txt` |
 
 ### How to run bots
-
-Use the test conversation scripts or replay-meeting.js:
 
 ```bash
 # Simple: 2-3 bots from a script
@@ -30,16 +48,13 @@ API_KEY=<key> bash test_data/test-conversation.sh <meeting_url>
 API_KEY=<key> node test_data/replay-meeting.js <meeting_url> <script_file> --limit=N
 ```
 
-Bots need to be admitted through the meeting lobby. Use `/host-teams-meeting` to create a meeting with auto-admit, or admit manually.
+Bots need to be admitted through the meeting lobby. Use `/host-teams-meeting` to create a meeting with auto-admit.
 
 ### How to capture logs
 
 ```bash
 # Capture all bot logs with timestamps
-docker logs --timestamps vexa-restore-bot-manager-1 2>&1 | tee features/realtime-transcription/tests/{name}-raw-logs.txt
-
-# Extract timestamped events (caption texts, speaker changes, drafts, confirmations)
-# Parse from raw logs into structured JSON
+docker logs --timestamps vexa-restore-bot-manager-1 2>&1 | tee tests/datasets/{id}/pipeline/raw-logs.txt
 ```
 
 ### Ground truth format
@@ -49,11 +64,12 @@ docker logs --timestamps vexa-restore-bot-manager-1 2>&1 | tee features/realtime
 [GT] 1774021330.638229769 Bob "Sounds great."
 ```
 
-The TTS script runner logs the exact send time of each utterance. These are the ground truth.
+### Existing datasets
 
-### Existing collected data
-
-Check `features/realtime-transcription/tests/README.md` section "Collected data from collection runs" for what already exists. New collection runs should add to this, not replace it.
+Check `features/realtime-transcription/tests/datasets/` for existing datasets. Review their manifests to:
+- Avoid duplicating scenarios already well-covered
+- Include control scenarios from existing datasets
+- Check infra compatibility for future combining
 
 ### Platform: MS Teams specifics
 
@@ -61,12 +77,13 @@ Check `features/realtime-transcription/tests/README.md` section "Collected data 
 - Caption events have ~1.5-2.5s delay from speech — this is expected, not a bug
 - Speaker changes in captions are atomic — no overlap
 - See `features/realtime-transcription/ms-teams/teams-caption-behavior.md` for observed patterns
+- Single-word utterances may not generate separate caption events
 
-### Verify completeness
+### After collection
 
-After collection, check:
-1. Ground truth file has all utterances from the script
-2. Caption events cover the full meeting duration
-3. Bot logs contain DRAFT and CONFIRMED segments
-4. Audio WAVs exist for all TTS utterances
-5. `make play-replay` can consume the new data
+1. Tag everything in the manifest's files table with scenario tags
+2. Check against existing datasets — does this supersede any?
+3. Run `make play-replay DATASET={id}` to get baseline scoring
+4. Record baseline in manifest
+5. Set status to `active`
+6. Ready for `/iterate`

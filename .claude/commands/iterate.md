@@ -1,16 +1,18 @@
-# /iterate — Sandbox iteration: replay, score, diagnose, fix, repeat
+# /iterate — Sandbox iteration: select datasets, replay, score, diagnose, fix, repeat
 
-You are in **Stage 2: SANDBOX ITERATION** (the inner loop). Your job is to improve the pipeline by replaying collected data and measuring improvement via scoring. This is where development happens.
+You are in **Stage 2: SANDBOX ITERATION** (the inner loop). Your job is to improve the pipeline by replaying **datasets** and measuring improvement via **scoring**. This is where development happens.
 
 Read the full stage protocol: `features/README.md` (section: Stage 2: SANDBOX ITERATION)
+Read dataset structure: `features/README.md` (section: Datasets)
 Read the glossary: `features/README.md` (section: Glossary)
 
 ## Your constraints
 
-- Do NOT run live meetings — you are in the sandbox, work only with collected data
-- Do NOT modify ground truth or collected data — they are immutable records of what happened
-- Do NOT add scenarios that aren't in the collected data — if you need new scenarios, exit to `/expand`
+- Do NOT run live meetings — you are in the sandbox, work only with datasets
+- Do NOT modify datasets — they are immutable records of what happened
+- Do NOT add scenarios that aren't in any active dataset — if you need new scenarios, exit to `/expand`
 - Do NOT skip scoring after a fix — every change must be measured
+- Do NOT iterate without a control dataset — always replay at least one known-good dataset to catch regressions
 - Do NOT change infra config (.env) — if infra needs to change, exit to `/env-setup`
 - Follow diagnose → fix → verify → audit phase discipline within each iteration
 
@@ -20,45 +22,59 @@ Read the glossary: `features/README.md` (section: Glossary)
 
 Determine which feature from the working directory or conversation context.
 
-### 2. Read current state
+### 2. Inventory datasets
 
-Read these files to understand where you are:
+Read `features/{name}/tests/datasets/*/manifest.md`. For each dataset:
+
+| Dataset ID | Status | Scenarios | Baseline | Infra compatible? |
+|-----------|--------|-----------|---------- |-------------------|
+| {id} | active/superseded/retired | {tags} | {X}% | yes/no |
+
+Only `active` datasets are candidates for iteration.
+
+### 3. Select datasets for this iteration
+
+Based on what you're trying to fix:
+
+**Target datasets** — contain the scenarios with errors you want to improve:
+- Read `features/{name}/tests/findings.md` for current errors
+- Match errors to scenario tags in dataset manifests
+- Select the dataset(s) that cover those scenarios
+
+**Control datasets** — contain scenarios that should NOT regress:
+- Pick at least one dataset with known-good scoring
+- If none exists, use the oldest stable dataset as control
+
+Log: `SANDBOX: selected datasets — target: {id1} (scenarios: X, Y), control: {id2} (scenarios: Z)`
+
+### 4. Verify infra matches
+
+Compare `.env` against the **infra snapshots** in the selected datasets. All selected datasets must have compatible infra snapshots:
+- Same MODEL_SIZE, COMPUTE_TYPE, pipeline params
+- If incompatible → can't combine. Either pick one dataset or `/env-setup` to align.
+
+### 5. Read current state
 
 | File | What you learn |
 |------|---------------|
 | `features/{name}/tests/findings.md` | Last known scoring, known issues, certainty scores |
-| `features/{name}/tests/infra-snapshot.md` | What infra the collected data was captured with |
-| `features/{name}/tests/README.md` | Current stage status, test approach, datasets |
-| `features/{name}/.env` | Current infra config — must match infra snapshot |
-
-### 3. Verify infra matches snapshot
-
-Compare `.env` against the infra snapshot from the collection run. If they differ on any value that affects pipeline behavior (MODEL_SIZE, COMPUTE_TYPE, pipeline params), STOP:
-- Flag the mismatch
-- Tell user to run `/env-setup` to align infra
-- Do not iterate with mismatched infra — scoring results would be invalid
-
-### 4. Check collected data exists
-
-Verify the test directory has:
-- Ground truth file(s) — the script with timestamps
-- Collected data files — audio, caption events, pipeline output
-- A replay test that can consume them (`make play-replay` target in Makefile)
-
-If any are missing → tell user to run `/collect` first.
+| Selected dataset manifests | Scenarios, baseline scoring, hypothesis |
+| `features/{name}/.env` | Current infra config |
 
 ## Iteration loop
 
-### 5. Replay and score
+### 6. Replay and score
 
-Run `make play-replay` (or equivalent) from `features/{name}/tests/`.
+Run `make play-replay DATASET={id}` for each selected dataset.
 
-Read the output. Extract:
+Read the output. Extract per dataset:
 - Overall accuracy (scoring %)
-- Per-scenario breakdown if available
-- Specific errors: which utterances were lost, which words were misattributed, which speakers were wrong
+- Per-scenario breakdown
+- Specific errors: which utterances lost, words misattributed, speakers wrong
 
-### 6. Diagnose
+Compare to the dataset's baseline in its manifest — are you above or below baseline?
+
+### 7. Diagnose
 
 For each error in the scoring output, trace the root cause through the pipeline:
 
@@ -72,7 +88,7 @@ For each error in the scoring output, trace the root cause through the pipeline:
 
 Read the relevant source code. Find the root cause, not the symptom.
 
-### 7. Fix
+### 8. Fix
 
 Make the minimal code change to address the root cause. One fix per root cause:
 - If it's a threshold: change the threshold, document why
@@ -81,38 +97,47 @@ Make the minimal code change to address the root cause. One fix per root cause:
 
 Do NOT stack workarounds. Do NOT fix things that aren't broken.
 
-### 8. Replay and re-score
+### 9. Replay and re-score ALL selected datasets
 
-Run `make play-replay` again. Compare:
-- New scoring vs previous scoring
-- Did the fix improve the target metric?
-- Did anything regress?
+Run replay on both target and control datasets. Compare:
 
-Log the delta: `SANDBOX: iteration {N} — scoring: {X}% → {Y}% (delta: {+/-Z}%) — fix: {description}`
+| Dataset | Scenario | Before | After | Delta |
+|---------|----------|--------|-------|-------|
+| {target} | {scenario} | X% | Y% | +Z% |
+| {control} | {scenario} | X% | Y% | 0% (must not regress) |
 
-### 9. Decide next step
+**If control regresses** → the fix broke something. Revert or refine.
+**If target improves and control holds** → good, continue.
 
-**If scoring improved and more errors remain** → go to step 6 (diagnose next error)
+Log: `SANDBOX: iteration {N} — {target-id}: {X}% → {Y}% | {control-id}: {X}% → {Y}% — fix: {description}`
 
-**If scoring improved and target met** → exit to GATE:
-- Update `findings.md` with final scoring and certainty scores
+### 10. Decide next step
+
+**If scoring improved and more errors remain in current datasets** → go to step 7
+
+**If scoring improved and target met across all active datasets** → exit to GATE:
+- Update `findings.md` with final scoring per dataset
 - All certainty scores >= 80?
-- Log: `SANDBOX: target met — scoring: {X}%, all certainty scores >= 80`
+- Log: `SANDBOX: target met — {id1}: {X}%, {id2}: {Y}%, all checks >= 80`
 
-**If scoring did NOT improve for 3+ iterations** → you've hit a plateau:
-- Identify which errors remain
-- Determine which scenarios they're in
-- Are these scenarios covered in the collected data?
-  - YES → keep diagnosing, the fix isn't right yet
-  - NO → exit to EXPAND: `SANDBOX: plateau reached — scoring stuck at {X}% for {N} iterations — need scenarios: {list}`
-- Tell user to run `/expand`
+**If scoring did NOT improve for 3+ iterations** → check:
+- Are the remaining errors in scenarios covered by your datasets?
+  - YES → diagnosis is wrong, try a different root cause
+  - NO → you've hit a **plateau**. Identify which scenarios are missing.
+- Tell user to run `/expand`. Provide:
+  - Current scoring per dataset per scenario
+  - Which scenarios have residual errors
+  - What new scenarios would help
 
-### 10. Update findings
+Log: `SANDBOX: plateau — {id}: stuck at {X}% for {N} iterations — missing scenarios: {list}`
 
-After each meaningful iteration (not every micro-change), update `features/{name}/tests/findings.md`:
-- Current scoring
+### 11. Update findings
+
+After each meaningful iteration, update `features/{name}/tests/findings.md`:
+- Current scoring per dataset per scenario
 - What was fixed
 - What errors remain
+- Which datasets were used
 - Plateau status
 
 ## Output format
@@ -120,8 +145,10 @@ After each meaningful iteration (not every micro-change), update `features/{name
 After each iteration, report concisely:
 
 ```
-Iteration {N}: {X}% → {Y}% ({+/-Z}%)
-Fix: {one-line description}
-Remaining: {count} errors in {scenarios}
-Status: {iterating | plateau | target met}
+Iteration {N}:
+  {target-dataset}: {X}% → {Y}% ({+/-Z}%)
+  {control-dataset}: {X}% → {Y}% ({+/-Z}%)
+  Fix: {one-line description}
+  Remaining: {count} errors in {scenarios}
+  Status: {iterating | plateau | target met}
 ```

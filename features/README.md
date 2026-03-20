@@ -13,7 +13,8 @@ These terms are used consistently across all feature docs. Use them by name.
 | **Script** | The utterances, speakers, timing, and scenario design fed to TTS bots during a collection run. Doubles as ground truth. |
 | **Scenario** | A specific pattern designed into a script: normal turns, rapid exchanges, overlaps, silence gaps, single-word utterances. Each targets a known weakness. |
 | **Collection run** | A live meeting session where bots speak from a script and we capture everything. The expensive outer loop. |
-| **Collected data** | Everything captured during a collection run: audio, caption events, speaker changes, pipeline output — all timestamped. |
+| **Dataset** | A tagged, self-describing bundle of collected data + ground truth from one collection run. Has a manifest, an ID, scenario tags, and an infra snapshot. Datasets are the unit of reuse — you select which datasets to replay, combine datasets from different collection runs, and retire datasets that are superseded. |
+| **Collected data** | Everything captured during a collection run: audio, caption events, speaker changes, pipeline output — all timestamped. Lives inside a dataset. |
 | **Sandbox** | Offline replay environment. Feeds collected data through the pipeline without meetings, bots, or API costs. The cheap inner loop. |
 | **Replay** | A single execution of collected data through the pipeline in sandbox. `make play-replay`. |
 | **Scoring** | Comparing pipeline output to ground truth. Word-level attribution accuracy, content diff, utterance capture rate. |
@@ -176,11 +177,114 @@ Each **feature** that uses this cycle maintains in `tests/`:
 
 | Artifact | Purpose | Example |
 |----------|---------|---------|
-| **Ground truth** | What should have happened — the source of truth | TTS **scripts** with send timestamps |
-| **Collected data** | What the platform actually did — raw events with timestamps | Caption events, speaker changes, DOM mutations |
-| **Replay** test | Feeds **collected data** through pipeline offline | `make play-replay` |
+| **Dataset(s)** | Tagged bundles of **collected data** + **ground truth** from **collection runs** | `datasets/teams-3sp-diverse-20260320/` |
+| **Replay** test | Feeds **datasets** through pipeline offline | `make play-replay` |
 | **Scoring** | Compares pipeline output to **ground truth** | Word-level attribution accuracy, content diff |
 | **Findings** | What broke, why, what to collect next | `findings.md` with **certainty scores** |
+
+### Datasets
+
+A **dataset** is the unit of reuse. Each **collection run** produces one **dataset**. Datasets are tagged, self-describing, and independent — you can replay one dataset, combine several, or retire old ones.
+
+#### Directory structure
+
+```
+tests/datasets/
+  {id}/
+    manifest.md          # What, why, when, hypothesis, scenarios, infra
+    ground-truth.txt     # Script send times: [GT] timestamp speaker "text"
+    infra-snapshot.md    # Frozen .env + service state at collection time
+    audio/               # WAV files (per-utterance + combined)
+    events/              # Platform events (caption, speaker change, DOM)
+    pipeline/            # Pipeline output (drafts, confirmed segments, logs)
+    README.md            # Human summary: what's in here, how to use it
+```
+
+#### Dataset ID
+
+Format: `{platform}-{speakers}sp-{scenario-tag}-{YYYYMMDD}`
+
+Examples:
+- `teams-3sp-diverse-20260320` — 3 speakers, diverse scenarios, Teams, March 20
+- `teams-2sp-normal-20260320` — 2 speakers, normal turns, Teams, March 20
+- `gmeet-5sp-overlap-20260405` — 5 speakers, overlap focus, GMeet, April 5
+
+#### Dataset manifest (manifest.md)
+
+Every **dataset** has a manifest that describes what it contains and why it was collected. This is the dataset's self-description — without it, the data is unlabeled and can't be reused.
+
+```markdown
+# Dataset: {id}
+
+## Collection run
+- **Date:** {YYYY-MM-DD}
+- **Platform:** {ms-teams | google-meet | zoom}
+- **Speakers:** {N} ({names})
+- **Duration:** {seconds}
+- **Triggered by:** {what plateau/gap led to this collection}
+
+## Hypothesis
+{What this dataset was designed to test. What will scoring prove or disprove?}
+
+## Scenarios
+| Tag | Description | Utterances | Expected scoring |
+|-----|------------|-----------|-----------------|
+| normal-turns | >2s gaps, clean transitions | 4 | ~100% attribution |
+| rapid-exchange | <1s gaps | 6 | ~80-85% (caption delay) |
+| short-phrase | sub-1s single-word utterances | 5 | unknown — this is what we're testing |
+| control | repeat of known-good scenario | 2 | must match previous scoring |
+
+## Files
+| File | Type | Records | Scenarios covered |
+|------|------|---------|------------------|
+| ground-truth.txt | ground truth | 17 utterances | all |
+| audio/alice-01.wav | audio | 1 utterance | normal-turns |
+| events/caption-events.json | collected data | 293 events | all |
+| pipeline/bot-logs.txt | collected data | 157 lines | all |
+
+## Infra
+See infra-snapshot.md. Key values:
+- MODEL_SIZE={value}
+- COMPUTE_TYPE={value}
+- MIN_AUDIO_DURATION={value}
+
+## Baseline scoring
+{Filled after first replay — the initial score before any iteration}
+
+## Status
+{active | superseded by {id} | retired — reason}
+```
+
+#### Why tagging matters
+
+Without tags, datasets are opaque blobs:
+- You don't know which **scenarios** a dataset covers → you can't pick the right one for iteration
+- You don't know why it was collected → you can't tell if it's still relevant
+- You don't know what infra was used → you can't reproduce conditions in **sandbox**
+- You can't combine datasets → each **collection run** is isolated
+
+With tags:
+- **Scenario tags** let you select datasets by what they test: "give me all datasets with short-phrase scenario"
+- **Hypothesis** lets you know if a dataset is still useful or superseded
+- **Status** lets you retire datasets when they're no longer needed
+- **Infra snapshot** lets you verify sandbox matches collection conditions
+- Multiple datasets can be replayed together if their infra snapshots are compatible
+
+#### Dataset lifecycle
+
+1. **Created** during a **collection run** — all files saved, manifest filled
+2. **Active** — used in **sandbox iteration**, replayed, scored against
+3. **Superseded** — a newer dataset covers the same scenarios with better data. Keep for reference but don't iterate against.
+4. **Retired** — no longer useful. Keep the manifest, delete large files (audio) if needed.
+
+#### Combining datasets
+
+When iterating, you may need to **replay** multiple **datasets** together — e.g., the normal-turns dataset for control + the new short-phrase dataset for the target scenario. This works if:
+- **Infra snapshots** are compatible (same model, same pipeline params)
+- **Scenarios** don't conflict (no overlapping time ranges)
+- The **replay** test knows how to load multiple datasets
+
+If infra snapshots differ, you can't combine — the scoring would mix results from different configs.
 
 ## Stages
 
@@ -351,14 +455,17 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 
 1. **Write the collection manifest** — fill out every section above
 2. **Review the manifest** — does every **scenario** have scoring criteria? Is every data type accounted for? Will the **replay** test be able to consume this data?
-3. Set up the meeting environment (live meeting, TTS bots, platform)
-4. **Verify capture is working** before running the full **script** — send one test utterance, check that all data types are being logged with timestamps
-5. Run the bots — they speak from the **script**
-6. Capture **everything** with timestamps. Refer to the manifest's data table — every row must be captured.
-7. Save the **script** as **ground truth** (speaker, text, send timestamp)
-8. Save all captured data as **collected data**
-9. **Verify completeness against the manifest** — for each data type in the manifest, confirm the file exists, has the expected format, and covers all **scenarios**
-10. Run a smoke **replay** — feed the data through the pipeline once to verify it's consumable
+3. **Create the dataset directory** — `tests/datasets/{id}/` using the [dataset ID format](#dataset-id). Copy the collection manifest into it as `manifest.md`.
+4. Set up the meeting environment (live meeting, TTS bots, platform)
+5. **Verify capture is working** before running the full **script** — send one test utterance, check that all data types are being logged with timestamps
+6. Run the bots — they speak from the **script**
+7. Capture **everything** with timestamps. Refer to the manifest's data table — every row must be captured.
+8. Save all files into the **dataset** directory structure: `ground-truth.txt`, `audio/`, `events/`, `pipeline/`, `infra-snapshot.md`
+9. **Tag every file** — each file in the dataset must be traceable to a **scenario** in the manifest. The manifest's files table must list every file with its scenario coverage.
+10. **Verify completeness against the manifest** — for each data type, confirm the file exists in the dataset, has the expected format, and covers all **scenarios**
+11. Run a smoke **replay** — feed the dataset through the pipeline once to verify it's consumable
+12. **Record baseline scoring** in the dataset manifest under "Baseline scoring"
+13. **Write the dataset README** — human summary of what's in the dataset, why it was collected, how to replay it
 
 #### Constraints
 
@@ -367,15 +474,19 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 - Do NOT discard partial or "bad" data — it may reveal real platform behavior
 - Do NOT run multiple **scripts** in one session unless the **scenarios** are independent (different time windows)
 - Do NOT assume capture is working — verify each data source is logging before running the full **script**
+- Do NOT save data outside the **dataset** directory — all files for one collection run go in one dataset
 
 #### Exit criteria
 
-- **Collection manifest** is complete and all data types are captured
+- A **dataset** directory exists at `tests/datasets/{id}/` with the correct structure
+- **Dataset manifest** (`manifest.md`) is complete: hypothesis, scenarios, files table, infra, baseline scoring
 - **Ground truth** file exists with all utterances, speakers, timestamps
-- **Collected data** files exist: every row in the manifest's data table has a corresponding file
-- A **replay** test can load and feed this data through the pipeline offline
-- **Scoring** produces a baseline number
-- No gaps: every **scenario** in the manifest has corresponding data in the **collected data**
+- **Collected data** files exist in the dataset: every row in the manifest's files table has a corresponding file
+- Every file is tagged with which **scenarios** it covers
+- **Infra snapshot** is saved in the dataset
+- A **replay** test can load this dataset and feed it through the pipeline offline
+- **Scoring** produces a baseline number (recorded in manifest)
+- **Dataset status** is set to `active`
 
 **Log:** `STAGE: collection-run started — manifest: {name}, platform: {platform}, scenarios: {list}`
 **Log:** `STAGE: collection-run complete — {N} utterances, {M} events, {K} data files, baseline scoring: {X}%`
@@ -384,40 +495,56 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 
 ### Stage 2: SANDBOX ITERATION (inner loop)
 
-**Purpose:** Improve the pipeline by replaying **collected data** and measuring improvement via **scoring**. This is where development happens.
+**Purpose:** Improve the pipeline by replaying **datasets** and measuring improvement via **scoring**. This is where development happens.
 
 **Entry conditions:**
-- **Collected data** + **ground truth** + **replay** test exist
+- At least one **active** **dataset** exists in `tests/datasets/`
 - **Scoring** is not at **plateau**
 
+#### Select your datasets
+
+Before iterating, decide which **datasets** to replay against. Read the manifests in `tests/datasets/*/manifest.md`:
+
+- Which **datasets** are `active`? Ignore `superseded` or `retired`.
+- Which **scenarios** does each dataset cover? Match to the errors you're fixing.
+- Are the **infra snapshots** compatible with your current `.env`? If not → `/env-setup` first.
+- Do you need to combine datasets? Only if infra snapshots match.
+
+If you're targeting a specific problem (e.g., short phrase loss), you may iterate against just the dataset that covers that **scenario**. But always include a control **dataset** to catch regressions — a dataset with known-good scenarios that should keep scoring the same.
+
+Log: `SANDBOX: iterating against datasets: {id1} (scenarios: X, Y), {id2} (control: Z)`
+
 **What you do:**
-1. **Replay** — run `make play-replay` (or equivalent) to feed **collected data** through the pipeline
-2. **Score** — compare output to **ground truth**, get accuracy numbers
+1. **Replay** — run `make play-replay DATASET={id}` (or equivalent) to feed a **dataset** through the pipeline
+2. **Score** — compare output to **ground truth** in the dataset, get accuracy numbers per **scenario**
 3. **Diagnose** — find the root cause of errors (not symptoms). Trace through pipeline: buffer thresholds? **caption boundary** delay? confidence filter? speaker-mapper logic?
 4. **Fix** — make the minimal code change to address the root cause
-5. **Replay** again — re-score, verify improvement
-6. **Log** the delta — what changed, what improved, what regressed
+5. **Replay** again — re-score against the same **dataset(s)**, verify improvement
+6. **Check controls** — did scoring regress on control **scenarios** or control **datasets**? If yes, the fix broke something.
+7. **Log** the delta — what changed, what improved, what regressed, which **dataset(s)** were used
 
-Repeat steps 1-6. Each iteration should take seconds to minutes, not hours.
+Repeat steps 1-7. Each iteration should take seconds to minutes, not hours.
 
 **Constraints:**
-- Do NOT run live meetings — you are in the **sandbox**, work only with **collected data**
-- Do NOT modify **ground truth** or **collected data** — they are immutable records of what happened
-- Do NOT add **scenarios** that aren't in the **collected data** — if you need new scenarios, exit to EXPAND
+- Do NOT run live meetings — you are in the **sandbox**, work only with **datasets**
+- Do NOT modify **datasets** — they are immutable records of what happened
+- Do NOT add **scenarios** that aren't in any **dataset** — if you need new scenarios, exit to EXPAND
 - Do NOT skip **scoring** after a fix — every change must be measured
+- Do NOT iterate without a control — always replay at least one known-good **dataset** to catch regressions
 - Follow the [diagnose → fix → verify → audit](../.claude/agents.md#phases) phase discipline within each iteration
 
 **Exit criteria (to EXPAND):**
 - **Scoring** has stopped improving across 3+ iterations
-- Remaining errors are in **scenarios** not covered by current **collected data**
+- Remaining errors are in **scenarios** not covered by any active **dataset**
 - You can articulate exactly which **scenarios** you need — this becomes the input to EXPAND
 
 **Exit criteria (to GATE):**
-- **Scoring** meets target accuracy for all **scenarios** in the **collected data**
+- **Scoring** meets target accuracy for all **scenarios** across all active **datasets**
+- Control **datasets** show no regression
 - All **certainty scores** in **findings** are >= 80
 
-**Log:** `SANDBOX: iteration {N} — scoring: {X}% → {Y}% (delta: {+/-Z}%) — fix: {description}`
-**Log:** `SANDBOX: plateau reached — scoring stuck at {X}% for {N} iterations — errors in: {scenarios not covered}`
+**Log:** `SANDBOX: iteration {N} — dataset: {id} — scoring: {X}% → {Y}% (delta: {+/-Z}%) — fix: {description}`
+**Log:** `SANDBOX: plateau reached — scoring stuck at {X}% for {N} iterations — need scenarios: {list} — active datasets don't cover them`
 
 ---
 

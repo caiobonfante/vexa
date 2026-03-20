@@ -1,8 +1,9 @@
-# /collect — Run a collection run to capture real-world data
+# /collect — Run a collection run to produce a tagged dataset
 
-You are in **Stage 1: COLLECTION RUN**. Your job is to capture real-world behavior that the sandbox can replay. You are gathering data, not improving the pipeline. Collection runs are expensive — get everything in one shot.
+You are in **Stage 1: COLLECTION RUN**. Your job is to capture real-world behavior into a properly tagged **dataset** that the sandbox can replay. You are gathering data, not improving the pipeline. Collection runs are expensive — get everything in one shot.
 
 Read the full stage protocol: `features/README.md` (section: Stage 1: COLLECTION RUN)
+Read dataset structure: `features/README.md` (section: Datasets)
 Read the glossary: `features/README.md` (section: Glossary)
 
 ## Your constraints
@@ -12,6 +13,7 @@ Read the glossary: `features/README.md` (section: Glossary)
 - Do NOT run multiple scripts in one session unless scenarios are independent
 - Do NOT assume capture is working — verify before running the full script
 - Do NOT start without a collection manifest
+- Do NOT save data outside the dataset directory — one collection run = one dataset
 
 ## Pre-flight checks
 
@@ -49,9 +51,26 @@ The **script** in the manifest defines what bots will say. Check:
 - Timing makes sense (no impossible overlaps unless that's the scenario)
 - Control scenarios from previous scripts are included (if this isn't the first run)
 
+### 4. Create the dataset directory
+
+Generate the **dataset ID**: `{platform}-{N}sp-{scenario-tag}-{YYYYMMDD}`
+
+```
+tests/datasets/{id}/
+  manifest.md          # Copy from collection manifest, will be completed during collection
+  ground-truth.txt     # Will be filled during collection
+  infra-snapshot.md    # Copy from current infra snapshot
+  audio/               # WAV files
+  events/              # Platform events
+  pipeline/            # Pipeline output
+  README.md            # Human summary (written after collection)
+```
+
+Copy the collection manifest into `manifest.md`. Copy the current infra snapshot.
+
 ## Collection procedure
 
-### 4. Pre-run verification
+### 5. Pre-run verification
 
 Before running the full script:
 1. Set up the meeting environment (platform, meeting link)
@@ -63,7 +82,7 @@ Before running the full script:
    - Timestamps present and synchronized? Compare across data sources.
 4. If any data type is missing, fix the capture before proceeding
 
-### 5. Run the collection
+### 6. Run the collection
 
 1. Start all bots — they join the meeting
 2. Bots speak from the script at the specified timing
@@ -71,42 +90,68 @@ Before running the full script:
 4. When script completes, wait for pipeline to finish processing (idle timeout + buffer flush)
 5. Stop capture
 
-### 6. Save data
+### 7. Save data into the dataset
 
-For each data type in the manifest's capture checklist:
-1. Save the file to `features/{name}/tests/` with a descriptive name
-2. Verify the file is non-empty and has the expected format
-3. Verify timestamps are present and cover the full script duration
+Save all files into the dataset directory:
 
-Save the script as **ground truth**:
-- Format: `[timestamp] [speaker] "text"` per utterance
-- Use Unix timestamps from actual TTS send times (not planned times)
+| Destination | What goes here |
+|-------------|---------------|
+| `ground-truth.txt` | Script send times: `[GT] timestamp speaker "text"` |
+| `audio/` | Per-utterance WAVs + combined WAV |
+| `events/` | Caption events JSON, speaker change events, DOM events |
+| `pipeline/` | Bot logs, draft/confirmed segments, raw logs |
+| `infra-snapshot.md` | Already copied — verify it matches what was running |
 
-### 7. Verify completeness
+### 8. Tag the dataset
 
-Walk through the manifest's data table row by row:
+Complete the dataset `manifest.md`:
 
-| Data type | File exists? | Format correct? | Covers all scenarios? |
-|-----------|-------------|----------------|----------------------|
+1. **Fill the files table** — every file in the dataset must be listed with:
+   - File path (relative to dataset root)
+   - Type (ground truth / audio / collected data / pipeline output)
+   - Record count (utterances, events, segments)
+   - **Scenario tags** — which scenarios this file covers
 
-If any row fails → the collection run is incomplete. Decide: re-run or supplement.
+2. **Tag scenarios** — verify every scenario from the manifest has at least one file covering it. If a scenario has no data → the collection is incomplete.
 
-### 8. Smoke replay
+3. **Record baseline scoring** — run one replay, record the score in the manifest.
 
-Feed the collected data through the pipeline once:
-- `make play-replay` or equivalent
-- Does it run without errors?
-- Does scoring produce a number?
-- This number is the **baseline** — record it
+4. **Set status** to `active`.
 
-### 9. Report
+5. **Write the README** — human summary:
+   - What's in this dataset and why it was collected
+   - Which scenarios it covers (with tags)
+   - How to replay it: `make play-replay DATASET={id}`
+   - What the baseline scoring was
+   - Compatibility notes for combining with other datasets
+
+### 9. Verify completeness
+
+Walk through the manifest's scenario table:
+
+| Scenario | Has ground truth? | Has audio? | Has events? | Has pipeline output? |
+|----------|------------------|-----------|-------------|---------------------|
+
+If any cell is empty → the dataset is incomplete. Decide: re-run or supplement.
+
+### 10. Check against existing datasets
+
+Read manifests of existing datasets in `tests/datasets/`:
+- Does the new dataset supersede any existing one? (Same scenarios, better data)
+- If yes, mark the old dataset as `superseded by {new-id}` in its manifest
+- Does the new dataset complement existing ones? (Different scenarios)
+- Document compatibility in the README (can they be combined? infra snapshots match?)
+
+### 11. Report
 
 Tell the user:
-- What data was collected (files, sizes, event counts)
-- Baseline scoring result
-- Any issues or gaps
+- **Dataset ID** and location
+- **Scenarios** covered (with tags)
+- **Files** collected (counts, sizes)
+- **Baseline scoring** result
+- **Compatibility** with existing datasets
 - Ready for SANDBOX ITERATION (`/iterate`)
 
 Update `features/{name}/tests/findings.md` with the baseline.
 
-Log: `STAGE: collection-run complete — {N} utterances, {M} events, {K} data files, baseline scoring: {X}%`
+Log: `STAGE: collection-run complete — dataset: {id}, {N} utterances, {M} events, {K} files, baseline scoring: {X}%`
