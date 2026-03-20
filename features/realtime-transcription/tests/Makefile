@@ -36,6 +36,7 @@ audio: $(WAVS)
 
 unit:
 	@cd $(BOT) && npx ts-node core/src/services/speaker-streams.test.ts
+	@cd $(BOT) && npx ts-node core/src/services/speaker-mapper.test.ts
 
 # Internal: run pipeline + audio playback in parallel
 define run_with_audio

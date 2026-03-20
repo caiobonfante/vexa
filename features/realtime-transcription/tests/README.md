@@ -6,15 +6,25 @@ Tests the core transcription pipeline in isolation — no meetings, no bots, no 
 
 ## What
 
-### Unit tests (`speaker-streams.test.ts`)
+### Unit tests
 
-Mocked Whisper responses. Tests the `SpeakerStreamManager` algorithm:
+**`speaker-streams.test.ts`** — SpeakerStreamManager buffer algorithm (mocked Whisper):
+1. Offset advancement — after confirmation, Whisper receives only unconfirmed audio
+2. Buffer continuity — no full reset, submissions stay small
+3. Speaker change flush — emits on `flushSpeaker()`
+4. Short segment skip — <2s audio kept for next turn
+5. Buffer trim — confirmed audio trimmed at max size
 
-1. **Offset advancement** — after confirmation, Whisper receives only unconfirmed audio (4s→2s)
-2. **Buffer continuity** — no full reset on confirmation, submissions stay small (alternating 1s/2s)
-3. **Speaker change flush** — emits segment on `flushSpeaker()`
-4. **Short segment skip** — <2s audio kept for next turn on flush
-5. **Buffer trim** — confirmed audio trimmed when exceeding max size
+**`speaker-mapper.test.ts`** — Post-transcription speaker attribution:
+1. Two speakers, clean boundaries — words split correctly
+2. Three speakers, rapid turns — single-word utterances attributed correctly
+3. Word straddles boundary — goes to speaker with more time overlap
+4. Word in gap — orphaned words go to nearest speaker
+5. Caption events to boundaries — converts caption stream to intervals
+6. Realistic Teams conversation — multi-turn with (Guest) names
+7. **Caption delay 1.5s** — simulates real Teams delay, shows boundary shift and misattribution
+8. 5-speaker meeting — 201 words across 5 speakers, 7 transitions
+9. Single speaker — all words to one speaker (Google Meet equivalent)
 
 ### Pipeline tests (`speaker-streams.wav-test.ts`)
 
