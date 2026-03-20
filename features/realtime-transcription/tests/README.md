@@ -77,6 +77,29 @@ The word diff `ACCURACY` is **analytical** — raw word-level comparison between
 | noisy-monologue-cafe (42.9s) | 87.1% | **~100%** | Cafe noise @ SNR=10dB; all diffs are format conversions; 1 hallucinated word ("you") at end |
 | noisy-with-silence (43.6s) | 57.6% | **~95%** | 30s noise gap splits speech; ground truth metadata lines inflate miss count; 0 hallucinations from noise gap |
 
+### Confidence filtering (hallucination combat)
+
+The pipeline applies quality gate filters matching production (`index.ts:1044-1090`). Whisper returns per-segment signals that detect hallucinations from silence/noise:
+
+| Filter | Condition | What it catches |
+|--------|-----------|-----------------|
+| `NO_SPEECH` | `no_speech_prob > 0.5 && avg_logprob < -0.7` | Noise misidentified as speech |
+| `SHORT_GARBAGE` | `avg_logprob < -0.8 && duration < 2.0` | Hallucinated words from silence |
+| `REPETITIVE` | `compression_ratio > 2.4` | Repeated phrase loops |
+| `LOW_PROB` (flag only) | word `probability < 0.3` | Low-confidence words (logged, not filtered) |
+
+**Tested on silence hallucinations (2026-03-20):**
+
+| Test | Silence | Hallucinations | Filtered | Leaked |
+|------|---------|---------------|----------|--------|
+| 60s dead silence between speech | 60s zeros | 18 × "cards." (logprob=-1.31) | **18/18** by SHORT_GARBAGE | 0 |
+| 30s room tone between speech | 30s quiet noise | 7 × "cards." + 1 × "Hold on." | **7/8** filtered | 1 draft (not confirmed) |
+| Office noise SNR=10dB | continuous | 0 | 0 | 0 |
+| Café noise SNR=10dB | continuous | 0 | 0 | 0 |
+| Pure noise (no speech) | 5s white noise | 0 (Whisper VAD rejected) | N/A | 0 |
+
+**Key finding:** Whisper hallucinates "cards." repeatedly on dead silence with `avg_logprob ≈ -1.30`. The `SHORT_GARBAGE` filter catches all of them. At SNR=10dB, Whisper handles noise without hallucinating. The filters are a safety net for silence gaps between speakers.
+
 ### Pass/fail criteria
 
 Tests don't auto-pass/fail. The output is for **manual validation**:
@@ -84,7 +107,7 @@ Tests don't auto-pass/fail. The output is for **manual validation**:
 - **Content accuracy** — are the actual words correct? Number format diffs ("thirty" → "30") are expected, not errors.
 - **Boundary quality** — are segments split at natural sentence breaks? Mid-word splits ("AP PI") are bugs.
 - **Completeness** — is the full text captured? Missing words at segment boundaries or end-of-stream are bugs.
-- **Hallucinations** — are there invented words ("excited") at segment boundaries? These are bugs.
+- **Hallucinations** — are there invented words in the output? Check `[FILTERED]` log lines — all hallucinations should be caught.
 - **Performance** — RTF should be <1.0. Reprocess factor should be <5x. First confirm should be <15s for multi-segment speech.
 
 ### Test audio files (`audio/`)

@@ -147,6 +147,15 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 
 **Step 3 (pending):** Test on Google Meet.
 
+### Confidence Filtering
+
+Whisper returns per-segment quality signals (`no_speech_prob`, `avg_logprob`, `compression_ratio`) and per-word `probability`. The pipeline filters hallucinations before they reach the buffer:
+- `no_speech_prob > 0.5 && avg_logprob < -0.7` → noise, not speech
+- `avg_logprob < -0.8 && duration < 2.0` → hallucinated garbage from silence
+- `compression_ratio > 2.4` → repetitive loops
+
+Tested: 18/18 silence hallucinations filtered on 60s dead silence. Zero false positives on real speech.
+
 **Known issue:** Full string match never confirms mid-stream (Whisper output keeps changing slightly as buffer grows). Segments only emit on idle timeout or speaker change. Next step: process Whisper's segments array — emit completed segments directly, only use same-output match for the last partial segment (the WhisperLive approach).
 
 ### Current Config
