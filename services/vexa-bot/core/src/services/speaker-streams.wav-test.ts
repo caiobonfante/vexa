@@ -217,6 +217,66 @@ async function main() {
   }
   console.log(`  │ PIPELINE OUTPUT:`);
   wrap(fullTranscript, '  │  ');
+
+  // Word-level diff if ground truth available
+  if (groundTruth) {
+    console.log(`  │`);
+    console.log(`  │ WORD DIFF:`);
+
+    // Normalize both for comparison: lowercase, strip punctuation
+    const normalize = (s: string) => s.toLowerCase().replace(/[.,!?;:'"()-]/g, '').replace(/\s+/g, ' ').trim();
+    const gtNorm = normalize(groundTruth);
+    const outNorm = normalize(fullTranscript);
+    const gtWords = gtNorm.split(' ');
+    const outWords = outNorm.split(' ');
+
+    // Simple LCS-based diff
+    const m = gtWords.length, n = outWords.length;
+    const dp: number[][] = Array.from({length: m + 1}, () => Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = gtWords[i-1] === outWords[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+    // Backtrack to get diff
+    const diff: {type: 'match'|'missing'|'extra', word: string}[] = [];
+    let i = m, j = n;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && gtWords[i-1] === outWords[j-1]) {
+        diff.unshift({type: 'match', word: gtWords[i-1]});
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+        diff.unshift({type: 'extra', word: outWords[j-1]});
+        j--;
+      } else {
+        diff.unshift({type: 'missing', word: gtWords[i-1]});
+        i--;
+      }
+    }
+
+    // Render diff with markers
+    let line = '  │  ';
+    let matches = 0, missing = 0, extra = 0;
+    for (const d of diff) {
+      let token: string;
+      if (d.type === 'match') { token = d.word; matches++; }
+      else if (d.type === 'missing') { token = `[-${d.word}-]`; missing++; }
+      else { token = `{+${d.word}+}`; extra++; }
+
+      if (line.length + token.length + 1 > 75) {
+        console.log(line);
+        line = '  │  ' + token;
+      } else {
+        line += (line.length > 5 ? ' ' : '') + token;
+      }
+    }
+    if (line.length > 5) console.log(line);
+
+    const total = matches + missing;
+    const accuracy = total > 0 ? ((matches / total) * 100).toFixed(1) : '0';
+    console.log(`  │`);
+    console.log(`  │ ACCURACY: ${accuracy}% (${matches}/${total} words match, ${missing} missing, ${extra} extra)`);
+  }
+
   console.log(`  └─────────────────────────────────────────────────\n`);
 
   mgr.removeAll();
