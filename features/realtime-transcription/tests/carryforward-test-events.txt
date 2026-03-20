@@ -1,0 +1,193 @@
+2026-03-20T16:00:15.578039780Z [BotCore] [Teams Captions] Speaker change: (none) → Alice (Guest) (flushed 5 chunks, discarded 0 stale)
+2026-03-20T16:00:15.579823276Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me
+2026-03-20T16:00:15.607323959Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+2026-03-20T16:00:15.608173718Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk
+2026-03-20T16:00:15.942754606Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +12 chars)
+2026-03-20T16:00:15.944184511Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the
+2026-03-20T16:00:16.221010711Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +5 chars)
+2026-03-20T16:00:16.223315124Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full
+2026-03-20T16:00:16.540320481Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +11 chars)
+2026-03-20T16:00:16.542593564Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product Rd
+2026-03-20T16:00:17.266822007Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +6 chars)
+2026-03-20T16:00:17.268762528Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map
+2026-03-20T16:00:17.507859240Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map we
+2026-03-20T16:00:17.875849955Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +7 chars)
+2026-03-20T16:00:17.877485084Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map we are
+2026-03-20T16:00:18.093631759Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -6 chars)
+2026-03-20T16:00:18.095142061Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the full product road map.
+2026-03-20T16:00:18.227072628Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -28 chars)
+2026-03-20T16:00:18.229952826Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to
+2026-03-20T16:00:18.509858469Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +8 chars)
+2026-03-20T16:00:18.511118978Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release
+2026-03-20T16:00:18.670835971Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 39.9s-43.1s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap we are planning to release version"
+2026-03-20T16:00:18.762925262Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version
+2026-03-20T16:00:19.373579550Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3
+2026-03-20T16:00:20.207823137Z [BotCore] [Teams Captions] Flushed 5 chunks to Alice (Guest) (text +4 chars)
+2026-03-20T16:00:20.209458136Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0
+2026-03-20T16:00:20.419197420Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +9 chars)
+2026-03-20T16:00:20.420954797Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April
+2026-03-20T16:00:21.264943550Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April it
+2026-03-20T16:00:21.681135731Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 39.9s-46.1s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April."
+2026-03-20T16:00:22.152691741Z [BotCore] [Teams Captions] Flushed 6 chunks to Alice (Guest) (text +10 chars)
+2026-03-20T16:00:22.155162149Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April it includ
+2026-03-20T16:00:22.281398538Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April it includes
+2026-03-20T16:00:22.977832125Z [BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text +5 chars)
+2026-03-20T16:00:22.978990726Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April it includes it
+2026-03-20T16:00:23.257953143Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -14 chars)
+2026-03-20T16:00:23.260829711Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We are planning to release version 3.0 in April.
+2026-03-20T16:00:23.370874734Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text -24 chars)
+2026-03-20T16:00:23.372855875Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": It includes it we design
+2026-03-20T16:00:23.577341771Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +7 chars)
+2026-03-20T16:00:23.578719556Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": It includes it we designed dash
+2026-03-20T16:00:23.858393215Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +10 chars)
+2026-03-20T16:00:23.859742091Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": It includes it we designed dashboard with
+2026-03-20T16:00:24.500725332Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text -26 chars)
+2026-03-20T16:00:24.502091148Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": It includes it.
+2026-03-20T16:00:24.737250608Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 39.9s-49.1s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April. It includes a redesigned dashboard with real time."
+2026-03-20T16:00:25.010602615Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +27 chars)
+2026-03-20T16:00:25.012260064Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analy
+2026-03-20T16:00:25.144614210Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analyt
+2026-03-20T16:00:25.497568650Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +4 chars)
+2026-03-20T16:00:25.499225418Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analytics
+2026-03-20T16:00:25.768592445Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+2026-03-20T16:00:25.769553071Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analytics and
+2026-03-20T16:00:26.078133658Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +14 chars)
+2026-03-20T16:00:26.080417521Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analytics and a new notific
+2026-03-20T16:00:26.833522953Z [BotCore] [Teams Captions] Flushed 3 chunks to Alice (Guest) (text +12 chars)
+2026-03-20T16:00:26.835786637Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analytics and a new notification system
+2026-03-20T16:00:27.768460736Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 39.9s-52.2s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April. It includes a redesigned dashboard with real-time analytics and a new notification system."
+2026-03-20T16:00:28.250848796Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": We designed dashboard with real time analytics and a new notification system.
+2026-03-20T16:00:30.780346317Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 39.9s-55.2s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April. It includes a redesigned dashboard with real-time analytics and a new notification system."
+2026-03-20T16:00:33.211934872Z [BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:00:33.212342272Z [BotCore] [📝 CONFIRMED] Alice (Guest) | en | 39.9s-57.6s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):0 | "Let me walk through the full product roadmap. We are planning to release version 3.0 in April. It includes a redesigned dashboard with real-time analytics and a new notification system."
+2026-03-20T16:00:33.214569067Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Sounds great
+2026-03-20T16:00:34.404933624Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Sounds great.
+2026-03-20T16:00:38.176741826Z [BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 2 chunks, discarded 1 stale)
+2026-03-20T16:00:38.177005300Z [BotCore] [SpeakerStreams] Carry-forward from "Bob (Guest)" (1.0s → next speaker's context)
+2026-03-20T16:00:38.177305352Z [BotCore] [SpeakerStreams] Carry-forward: 1.0s prepended to "Charlie (Guest)"
+2026-03-20T16:00:38.178469403Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Read
+2026-03-20T16:00:39.624924339Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Read.
+2026-03-20T16:00:41.595779464Z [BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Alice (Guest) (flushed 3 chunks, discarded 0 stale)
+2026-03-20T16:00:41.595893511Z [BotCore] [SpeakerStreams] Carry-forward from "Charlie (Guest)" (1.5s → next speaker's context)
+2026-03-20T16:00:41.597613498Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Thanks
+2026-03-20T16:00:43.044844224Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Thanks.
+2026-03-20T16:00:57.476230005Z [BotCore] [SpeakerStreams] Idle submit for "Alice (Guest)" (15.9s idle, final submission)
+2026-03-20T16:00:59.249914353Z [BotCore] [SpeakerStreams] Carry-forward: 1.5s prepended to "Alice (Guest)"
+2026-03-20T16:00:59.353293692Z [BotCore] [Teams Captions] Flushed 4 chunks to Alice (Guest) (text +8 chars)
+2026-03-20T16:00:59.355181095Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Can we discuss
+2026-03-20T16:00:59.849261872Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +4 chars)
+2026-03-20T16:00:59.850606659Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Can we discuss the
+2026-03-20T16:00:59.906917683Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Can we discuss the budget
+2026-03-20T16:01:00.736628933Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Can we discuss the budget?
+2026-03-20T16:01:04.421649972Z [BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:04.421758009Z [BotCore] [SpeakerStreams] Carry-forward from "Alice (Guest)" (2.8s → next speaker's context)
+2026-03-20T16:01:04.424331695Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 2
+2026-03-20T16:01:04.711757250Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 200
+2026-03-20T16:01:05.029219176Z [BotCore] [SpeakerStreams] Carry-forward: 2.8s prepended to "Bob (Guest)"
+2026-03-20T16:01:05.085472582Z [BotCore] [Teams Captions] Flushed 3 chunks to Bob (Guest) (text +7 chars)
+2026-03-20T16:01:05.086986964Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 200,000
+2026-03-20T16:01:05.335245278Z [BotCore] [Teams Captions] Flushed 1 chunks to Bob (Guest) (text +19 chars)
+2026-03-20T16:01:05.336747540Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 200,000 for infrastructure
+2026-03-20T16:01:06.331929279Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 200,000 for infrastructure.
+2026-03-20T16:01:06.362373879Z [BotCore] [📝 DRAFT] Bob (Guest) | en | 62.6s-90.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Bob_(Guest):0 | "200,000 feet sounds great. Can we discuss the budget for infrastructure?"
+2026-03-20T16:01:09.356873724Z [BotCore] [📝 DRAFT] Bob (Guest) | en | 62.6s-93.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Bob_(Guest):0 | "200,000 feet. Sounds great. Can we discuss the budget for infrastructure?"
+2026-03-20T16:01:10.431100671Z [BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:10.431232527Z [BotCore] [📝 CONFIRMED] Bob (Guest) | en | 62.6s-94.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Bob_(Guest):0 | "200,000 feet. Sounds great. Can we discuss the budget for infrastructure?"
+2026-03-20T16:01:10.436659422Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Plus 50
+2026-03-20T16:01:10.559341779Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +4 chars)
+2026-03-20T16:01:10.560896110Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Plus 50 for
+2026-03-20T16:01:10.910327119Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Plus 50 for market
+2026-03-20T16:01:11.019927013Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Plus 50 for marketing
+2026-03-20T16:01:11.605317091Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Plus 50 for marketing.
+2026-03-20T16:01:15.133642061Z [BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Alice (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:15.133818077Z [BotCore] [SpeakerStreams] Carry-forward from "Charlie (Guest)" (1.3s → next speaker's context)
+2026-03-20T16:01:15.134629816Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": What about
+2026-03-20T16:01:16.014587192Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": What about events
+2026-03-20T16:01:16.921015577Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": What about events?
+2026-03-20T16:01:18.347070471Z [BotCore] [SpeakerStreams] Carry-forward: 1.3s prepended to "Bob (Guest)"
+2026-03-20T16:01:18.421723127Z [BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:18.421775616Z [BotCore] [SpeakerStreams] Carry-forward from "Alice (Guest)" (1.0s → next speaker's context)
+2026-03-20T16:01:18.422502758Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 50
+2026-03-20T16:01:18.912489308Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 50,000
+2026-03-20T16:01:20.239212991Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": 50,000.
+2026-03-20T16:01:21.931276576Z [BotCore] [SpeakerStreams] Carry-forward: 1.0s prepended to "Charlie (Guest)"
+2026-03-20T16:01:21.961950960Z [BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 2 chunks, discarded 0 stale)
+2026-03-20T16:01:21.962099887Z [BotCore] [SpeakerStreams] Carry-forward from "Bob (Guest)" (2.3s → next speaker's context)
+2026-03-20T16:01:21.963582590Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": The breed
+2026-03-20T16:01:22.454208903Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": The breed.
+2026-03-20T16:01:24.954606991Z [BotCore] [SpeakerStreams] Carry-forward: 2.3s prepended to "Alice (Guest)"
+2026-03-20T16:01:25.038046728Z [BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Alice (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:25.038145276Z [BotCore] [SpeakerStreams] Carry-forward from "Charlie (Guest)" (1.5s → next speaker's context)
+2026-03-20T16:01:25.038969876Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect
+2026-03-20T16:01:25.339209121Z [BotCore] [SpeakerStreams] Carry-forward: 1.5s prepended to "Alice (Guest)"
+2026-03-20T16:01:25.370717195Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +4 chars)
+2026-03-20T16:01:25.372309915Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect let
+2026-03-20T16:01:25.626925269Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect let us
+2026-03-20T16:01:25.957409740Z [BotCore] [Teams Captions] Flushed 2 chunks to Alice (Guest) (text +9 chars)
+2026-03-20T16:01:25.958911073Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect let us final
+2026-03-20T16:01:26.227428910Z [BotCore] [Teams Captions] Flushed 1 chunks to Alice (Guest) (text +13 chars)
+2026-03-20T16:01:26.229776882Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect let us finalize by Friday
+2026-03-20T16:01:27.694101851Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 102.8s-112.1s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):1 | "plus 50 for marketing 50,000 perfect let us what about events agreed finalized by Friday"
+2026-03-20T16:01:27.777125618Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Perfect. Let us finalize by Friday.
+2026-03-20T16:01:30.682713353Z [BotCore] [📝 DRAFT] Alice (Guest) | en | 102.8s-115.1s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):1 | "plus 50 for marketing 50,000 perfect let us what about events agreed finalized by Friday"
+2026-03-20T16:01:32.410427088Z [BotCore] [Teams Captions] Speaker change: Alice (Guest) → Charlie (Guest) (flushed 3 chunks, discarded 0 stale)
+2026-03-20T16:01:32.410658972Z [BotCore] [📝 CONFIRMED] Alice (Guest) | en | 102.8s-116.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Alice_(Guest):1 | "plus 50 for marketing 50,000 perfect let us what about events agreed finalized by Friday"
+2026-03-20T16:01:32.412311280Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I
+2026-03-20T16:01:32.639852191Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +6 chars)
+2026-03-20T16:01:32.640832796Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want
+2026-03-20T16:01:32.752438441Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:32.753328818Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add
+2026-03-20T16:01:33.368877313Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +14 chars)
+2026-03-20T16:01:33.370342047Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about
+2026-03-20T16:01:33.862171070Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:33.864655608Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe
+2026-03-20T16:01:34.287731028Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:34.290635315Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe German
+2026-03-20T16:01:34.298381532Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe Germany
+2026-03-20T16:01:34.976226593Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +12 chars)
+2026-03-20T16:01:34.977712696Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe Germany and France
+2026-03-20T16:01:35.269855084Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:35.271472863Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe Germany and France exceed
+2026-03-20T16:01:35.335043827Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 109.4s-119.7s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France succeeded"
+2026-03-20T16:01:35.542306523Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +9 chars)
+2026-03-20T16:01:35.543969361Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe Germany and France exceeded target
+2026-03-20T16:01:35.876364135Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text -34 chars)
+2026-03-20T16:01:35.877902706Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I want to add context about Europe.
+2026-03-20T16:01:35.943664125Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by
+2026-03-20T16:01:36.176078344Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:36.177482848Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20%
+2026-03-20T16:01:37.150347265Z [BotCore] [Teams Captions] Flushed 4 chunks to Charlie (Guest) (text +10 chars)
+2026-03-20T16:01:37.151810199Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20% the local
+2026-03-20T16:01:37.475321523Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:37.477134628Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20% the localization
+2026-03-20T16:01:37.827684088Z [BotCore] [Teams Captions] Flushed 2 chunks to Charlie (Guest) (text +5 chars)
+2026-03-20T16:01:37.830898098Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20% the localization team
+2026-03-20T16:01:38.076390250Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +4 chars)
+2026-03-20T16:01:38.078045169Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20% the localization team did
+2026-03-20T16:01:38.376712224Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text -25 chars)
+2026-03-20T16:01:38.377894764Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Germany and France exceeded targets by 20%.
+2026-03-20T16:01:38.379266840Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 109.4s-122.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France exceeded targets by 20%. The localization team did an excellent..."
+2026-03-20T16:01:38.464045844Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": The localization team did an excell
+2026-03-20T16:01:38.671941135Z [BotCore] [Teams Captions] Flushed 1 chunks to Charlie (Guest) (text +7 chars)
+2026-03-20T16:01:38.674448762Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": The localization team did an excellent job
+2026-03-20T16:01:40.125649939Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": The localization team did an excellent job.
+2026-03-20T16:01:41.379363925Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 109.4s-125.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France exceeded targets by 20%. The localization team did an excellent job."
+2026-03-20T16:01:44.385508589Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 109.4s-128.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France exceeded targets by 20%. The localization team did an excellent job."
+2026-03-20T16:01:47.385682022Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 109.4s-131.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France exceeded targets by 20%. The localization team did an excellent job."
+2026-03-20T16:01:47.386377684Z [BotCore] [📝 CONFIRMED] Charlie (Guest) | en | 109.4s-131.8s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):0 | "I want to add context about Europe. Germany and France exceeded targets by 20%. The localization team did an excellent job."
+2026-03-20T16:01:48.311559411Z [BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Alice (Guest) (flushed 2 chunks, discarded 0 stale)
+2026-03-20T16:01:48.311765036Z [BotCore] [SpeakerStreams] Carry-forward from "Charlie (Guest)" (0.2s → next speaker's context)
+2026-03-20T16:01:48.313253819Z [BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Great.
+2026-03-20T16:01:50.149834446Z [BotCore] [SpeakerStreams] Carry-forward: 0.2s prepended to "Bob (Guest)"
+2026-03-20T16:01:50.206055393Z [BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 3 chunks, discarded 0 stale)
+2026-03-20T16:01:50.206189390Z [BotCore] [SpeakerStreams] Carry-forward from "Alice (Guest)" (0.5s → next speaker's context)
+2026-03-20T16:01:50.207641564Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Well done
+2026-03-20T16:01:51.529941518Z [BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Well done.
+2026-03-20T16:01:53.453611691Z [BotCore] [SpeakerStreams] Carry-forward: 0.5s prepended to "Charlie (Guest)"
+2026-03-20T16:01:53.528205639Z [BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 4 chunks, discarded 0 stale)
+2026-03-20T16:01:53.528303477Z [BotCore] [SpeakerStreams] Carry-forward from "Bob (Guest)" (0.9s → next speaker's context)
+2026-03-20T16:01:53.529505087Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Thanks everyone
+2026-03-20T16:01:54.342454335Z [BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Thanks everyone.
+2026-03-20T16:02:11.180520512Z [BotCore] [SpeakerStreams] Idle submit for "Charlie (Guest)" (17.7s idle, final submission)
+2026-03-20T16:02:11.352634786Z [BotCore] [📝 DRAFT] Charlie (Guest) | en | 132.7s-155.7s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):1 | "Great. Thanks, everyone."
+2026-03-20T16:02:11.353469855Z [BotCore] [📝 CONFIRMED] Charlie (Guest) | en | 132.7s-155.7s | 5e74f111-3f36-431a-95f8-748290c3d591:teams-Charlie_(Guest):1 | "Great. Thanks, everyone."

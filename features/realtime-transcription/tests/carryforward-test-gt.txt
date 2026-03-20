@@ -1,0 +1,19 @@
+=== CARRY-FORWARD TEST 2026-03-20T19:00:12+03:00 ===
+[GT] 1774022412.944635532 Alice "Let me walk through the full product roadmap. We are planning to release version three point zero in April. It includes a completely redesigned dashboard with real time analytics and a new notification system."
+[GT] 1774022430.969453547 Bob "Sounds great."
+[GT] 1774022434.992842790 Charlie "Agreed."
+[GT] 1774022439.014770839 Alice "Thanks."
+[GT] 1774022443.037428570 Bob "OK."
+[GT] 1774022447.059437597 SILENCE
+[GT] 1774022457.063753541 Alice "Can we discuss the budget?"
+[GT] 1774022462.088794902 Bob "Two hundred thousand for infrastructure."
+[GT] 1774022468.113328244 Charlie "Plus fifty for marketing."
+[GT] 1774022473.137657722 Alice "What about events?"
+[GT] 1774022476.161622801 Bob "Fifty thousand."
+[GT] 1774022479.186387231 Charlie "Agreed."
+[GT] 1774022482.209102081 Alice "Perfect. Let us finalize by Friday."
+[GT] 1774022490.232121510 Charlie "I want to add context about Europe. Germany and France exceeded targets by twenty percent. The localization team did an excellent job."
+[GT] 1774022505.256378971 Alice "Great."
+[GT] 1774022508.280388739 Bob "Well done."
+[GT] 1774022511.305071951 Charlie "Thanks everyone."
+[GT] 1774022516.325954705 END
