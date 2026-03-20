@@ -180,6 +180,26 @@ async function main() {
 
   const fullTranscript = deduplicateSegments(confirmed);
 
+  // Load ground truth if .txt file exists alongside .wav
+  const gtPath = WAV_PATH.replace(/\.wav$/i, '.txt');
+  let groundTruth = '';
+  try { groundTruth = fs.readFileSync(gtPath, 'utf8').trim(); } catch {}
+
+  // Word-wrap helper
+  const wrap = (text: string, prefix: string, width: number = 75): void => {
+    const words = text.split(' ');
+    let line = prefix;
+    for (const w of words) {
+      if (line.length + w.length + 1 > width) {
+        console.log(line);
+        line = prefix + w;
+      } else {
+        line += (line.length > prefix.length ? ' ' : '') + w;
+      }
+    }
+    if (line.length > prefix.length) console.log(line);
+  };
+
   // Summary
   console.log(`  ┌─────────────────────────────────────────────────`);
   console.log(`  │ Audio:     ${totalDuration.toFixed(1)}s`);
@@ -190,19 +210,13 @@ async function main() {
   console.log(`  │ SEGMENTS:`);
   confirmed.forEach((t, i) => console.log(`  │  ${i + 1}. "${t}"`));
   console.log(`  │`);
-  console.log(`  │ COMBINED OUTPUT:`);
-  // Word-wrap at 70 chars
-  const words = fullTranscript.split(' ');
-  let line = '  │  ';
-  for (const w of words) {
-    if (line.length + w.length + 1 > 75) {
-      console.log(line);
-      line = '  │  ' + w;
-    } else {
-      line += (line.length > 5 ? ' ' : '') + w;
-    }
+  if (groundTruth) {
+    console.log(`  │ GROUND TRUTH (TTS input):`);
+    wrap(groundTruth, '  │  ');
+    console.log(`  │`);
   }
-  if (line.length > 5) console.log(line);
+  console.log(`  │ PIPELINE OUTPUT:`);
+  wrap(fullTranscript, '  │  ');
   console.log(`  └─────────────────────────────────────────────────\n`);
 
   mgr.removeAll();

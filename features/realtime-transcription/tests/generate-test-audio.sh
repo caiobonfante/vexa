@@ -1,6 +1,6 @@
 #!/bin/bash
-# Generate test WAV files using the Piper TTS service.
-# Outputs to tests/audio/ directory.
+# Generate test WAV files + ground truth text using the Piper TTS service.
+# Outputs to tests/audio/ directory: name.wav + name.txt (ground truth)
 #
 # Requires: vexa-restore-tts-service-1 container running
 
@@ -13,7 +13,8 @@ TTS_CONTAINER="vexa-restore-tts-service-1"
 
 generate() {
   local name="$1" text="$2"
-  local path="$AUDIO_DIR/$name.wav"
+  local wav_path="$AUDIO_DIR/$name.wav"
+  local txt_path="$AUDIO_DIR/$name.txt"
   echo "Generating $name..."
   docker exec "$TTS_CONTAINER" python3 -c "
 import urllib.request, json
@@ -23,8 +24,10 @@ resp = urllib.request.urlopen(req)
 with open('/tmp/$name.wav', 'wb') as f:
     f.write(resp.read())
 " 2>/dev/null
-  docker cp "$TTS_CONTAINER:/tmp/$name.wav" "$path" 2>/dev/null
-  echo "  → $path ($(du -h "$path" | cut -f1))"
+  docker cp "$TTS_CONTAINER:/tmp/$name.wav" "$wav_path" 2>/dev/null
+  # Save ground truth text
+  echo "$text" > "$txt_path"
+  echo "  → $wav_path ($(du -h "$wav_path" | cut -f1))"
 }
 
 echo "=== Generating test audio files ==="
