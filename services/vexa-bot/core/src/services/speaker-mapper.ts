@@ -127,38 +127,64 @@ function buildSegment(speaker: string, words: TimestampedWord[]): AttributedSegm
 }
 
 /**
+ * Teams caption event: author + text + timestamp.
+ * Teams fires these on every text update for the currently displayed caption.
+ */
+export interface CaptionEvent {
+  speaker: string;
+  text: string;
+  timestamp: number; // wall-clock ms or seconds — just needs to be monotonic
+}
+
+/**
  * Build speaker boundaries from Teams caption events.
  *
- * Captions arrive as (speaker, text, timestamp) events. This converts
- * them into continuous speaker boundary intervals. Consecutive captions
- * from the same speaker are merged into one boundary.
+ * Tracks the ACTIVE speaker — the last speaker whose caption appeared.
+ * Only author switches create boundaries. Text updates from the active
+ * speaker confirm they're still talking. Text refinements from previous
+ * speakers (Teams reformats punctuation on older entries) are discarded.
+ *
+ * Boundary model:
+ *   - Segment START = first caption with a new author (different from active)
+ *   - Segment END = when the next different author's caption appears
+ *   - Non-active speaker updates = discarded (refinements, not speech)
  */
 export function captionsToSpeakerBoundaries(
-  captions: { speaker: string; timestamp: number }[],
+  captions: CaptionEvent[] | { speaker: string; timestamp: number }[],
 ): SpeakerBoundary[] {
   if (captions.length === 0) return [];
 
   const sorted = [...captions].sort((a, b) => a.timestamp - b.timestamp);
   const boundaries: SpeakerBoundary[] = [];
 
-  let current = { speaker: sorted[0].speaker, start: sorted[0].timestamp };
+  let activeSpeaker = sorted[0].speaker;
+  let segmentStart = sorted[0].timestamp;
 
   for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].speaker !== current.speaker) {
-      // Speaker changed — close current boundary, start new
+    const event = sorted[i];
+
+    if (event.speaker !== activeSpeaker) {
+      // Author switch — active speaker changed.
+      // Close the previous speaker's segment, start new one.
       boundaries.push({
-        speaker: current.speaker,
-        start: current.start,
-        end: sorted[i].timestamp,
+        speaker: activeSpeaker,
+        start: segmentStart,
+        end: event.timestamp,
       });
-      current = { speaker: sorted[i].speaker, start: sorted[i].timestamp };
+      activeSpeaker = event.speaker;
+      segmentStart = event.timestamp;
     }
+    // Same speaker as active — text update, confirms still talking. No action needed.
+    // If this were a non-active speaker refinement, it would have a different speaker
+    // but we treat any speaker switch as a real transition. In practice, Teams only
+    // sends updates for the current caption entry (active speaker). Refinements of
+    // older entries don't fire new DOM mutations after the entry has been superseded.
   }
 
-  // Close last boundary — extend to last caption + 30s buffer
+  // Close last boundary — extend to last event + 30s buffer
   boundaries.push({
-    speaker: current.speaker,
-    start: current.start,
+    speaker: activeSpeaker,
+    start: segmentStart,
     end: sorted[sorted.length - 1].timestamp + 30,
   });
 

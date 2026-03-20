@@ -9,6 +9,7 @@ import {
   captionsToSpeakerBoundaries,
   TimestampedWord,
   SpeakerBoundary,
+  CaptionEvent,
 } from './speaker-mapper';
 
 let passed = 0;
@@ -128,25 +129,41 @@ console.log('\nTest 4: Word in gap between speakers — nearest wins');
   assert(segments[1].speaker === 'Bob', `"world" attributed to Bob`);
 }
 
-// ── Test 5: captionsToSpeakerBoundaries ──────────────────────
+// ── Test 5: captionsToSpeakerBoundaries with author:text events ──
 
-console.log('\nTest 5: Convert caption events to boundaries');
+console.log('\nTest 5: Caption events (author:text:timestamp) → boundaries');
 {
-  const captions = [
-    { speaker: 'Alice', timestamp: 0.0 },
-    { speaker: 'Alice', timestamp: 1.0 },
-    { speaker: 'Alice', timestamp: 2.0 },
-    { speaker: 'Bob', timestamp: 5.0 },
-    { speaker: 'Bob', timestamp: 6.0 },
-    { speaker: 'Alice', timestamp: 10.0 },
+  // Simulate real Teams caption stream:
+  // Alice speaks, text grows word by word
+  // Then Bob starts — author switches
+  // Alice's old entry may get a refinement (discarded — same author won't re-trigger)
+  // Then Alice speaks again — author switches back
+  const captions: CaptionEvent[] = [
+    // Alice active — text growing
+    { speaker: 'Alice', text: 'Hello',           timestamp: 0.0 },
+    { speaker: 'Alice', text: 'Hello everyone',   timestamp: 0.5 },
+    { speaker: 'Alice', text: 'Hello everyone.',  timestamp: 1.0 },
+    { speaker: 'Alice', text: 'I want to start',  timestamp: 2.0 },
+    // Bob starts — author switch → Alice segment ends, Bob starts
+    { speaker: 'Bob',   text: 'That',              timestamp: 5.0 },
+    { speaker: 'Bob',   text: 'That is great',     timestamp: 5.5 },
+    { speaker: 'Bob',   text: 'That is great news', timestamp: 6.0 },
+    // Alice speaks again — author switch → Bob segment ends
+    { speaker: 'Alice', text: 'Thanks',            timestamp: 10.0 },
+    { speaker: 'Alice', text: 'Thanks Bob',        timestamp: 10.5 },
   ];
 
   const boundaries = captionsToSpeakerBoundaries(captions);
 
   assert(boundaries.length === 3, `3 boundaries (got ${boundaries.length})`);
-  assert(boundaries[0].speaker === 'Alice' && boundaries[0].end === 5.0, `Alice 0-5s`);
+  assert(boundaries[0].speaker === 'Alice' && boundaries[0].start === 0.0 && boundaries[0].end === 5.0, `Alice 0-5s`);
   assert(boundaries[1].speaker === 'Bob' && boundaries[1].start === 5.0 && boundaries[1].end === 10.0, `Bob 5-10s`);
   assert(boundaries[2].speaker === 'Alice' && boundaries[2].start === 10.0, `Alice 10s+`);
+
+  console.log('  Boundaries:');
+  for (const b of boundaries) {
+    console.log(`    ${b.speaker}: ${b.start.toFixed(1)}s - ${b.end.toFixed(1)}s`);
+  }
 }
 
 // ── Test 6: Realistic Teams scenario ─────────────────────────

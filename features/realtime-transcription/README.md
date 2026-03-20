@@ -108,7 +108,9 @@ All speakers ──→ 1 mixed stream ──→ 1 SpeakerStreamManager ──→
                                                                               |
 Live captions ──→ speaker boundaries (who spoke when) ────────────────→ label words by timestamp
 ```
-Whisper returns word-level timestamps (`timestamp_granularities=word`): each word has `{word, start, end}`. Caption says "Alice spoke 10.0s-15.2s" → match words by their timestamps → attribute to Alice. This gives word-level speaker attribution on the mixed stream.
+Whisper returns word-level timestamps (`timestamp_granularities=word`): each word has `{word, start, end}`. Speaker boundaries come from caption author switches — when the active speaker changes, the previous speaker's segment ends and the new one starts. Text updates from the active speaker confirm they're still talking. Non-active speaker refinements are discarded.
+
+The `speaker-mapper` module (`speaker-mapper.ts`) maps each word to the speaker boundary with most time overlap, producing speaker-attributed segments.
 One pipeline on mixed stream. Whisper transcribes everything. Caption speaker changes split output between speakers.
 
 ### Components
@@ -119,6 +121,7 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 | **transcription-client** | HTTP POST WAV to transcription-service, requests word timestamps | `services/vexa-bot/core/src/services/transcription-client.ts` |
 | **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `services/transcription-service/main.py` |
 | **segment-publisher** | Redis XADD + PUBLISH | `services/vexa-bot/core/src/services/segment-publisher.ts` |
+| **speaker-mapper** | Post-transcription speaker attribution (Teams) — maps word timestamps to caption boundaries | `services/vexa-bot/core/src/services/speaker-mapper.ts` |
 | **speaker-identity** | Track→speaker voting/locking (Google Meet only) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
 | **transcription-collector** | Consumes Redis stream, maps speakers, persists | `services/transcription-collector/main.py` |
 | **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |

@@ -45,6 +45,19 @@ Teams live captions are enabled by the bot after joining (More → Captions). Th
 
 These are the ONLY stable selectors — Teams renders different container structures for host vs guest views, but `author` and `closed-caption-text` are always present.
 
+**Active speaker model:**
+
+Every caption event is an `(author, text, timestamp)` triple. The **active speaker** is the last author seen. Speaker boundaries are defined by author switches:
+
+- **Segment START** = first caption with a different author than the current active speaker
+- **Segment END** = when the next author switch occurs
+- **Active speaker text updates** = confirms still talking, tracked for reconciliation
+- **Non-active speaker refinements** = discarded (Teams reformats punctuation on old entries)
+
+The `speaker-mapper` module (`speaker-mapper.ts`) takes Whisper's word timestamps and maps each word to the speaker boundary with most time overlap. Words that straddle a boundary go to the speaker with more overlap time. Words in gaps go to the nearest speaker.
+
+**Caption delay impact:** Captions arrive 1-2s after speech (variable). This shifts speaker boundaries forward — the first few words of a new speaker may fall within the previous speaker's delayed boundary. Tested: at mean 1.5s delay, ~2 words per speaker transition get misattributed (80% overall attribution accuracy on 3-speaker test).
+
 **On caption speaker change:**
 1. `handleTeamsCaptionData()` detects speaker changed
 2. Calls `flushSpeaker(previousSpeakerId)` — emits the previous speaker's buffer as a segment
