@@ -107,3 +107,22 @@ For sandbox tests to match production:
 - `collection-run-gt.txt` — ground truth (20 utterances with timestamps)
 - `collection-run-events.txt` — 254 timestamped events
 - `collection-run-raw-logs.txt` — full bot logs
+
+## Sandbox Verified (2026-03-20 20:45)
+
+**Production-replay test runs locally with production-matching config:**
+- TranscriptionClient WITHOUT maxSpeechDurationSec: words=65, 10, 37 (all non-zero)
+- Mapper fires: YES (SPLIT into 3, SPLIT into 2 observed)
+- captionEventLog populated: 64-153 events
+- latestWhisperWords populated: 8-65 words per submission
+
+**The sandbox reproduces production behavior.** The live meeting failures were
+infra-only (stale worker images, bot container rebuild timing). The code path
+is correct — proven both by unit test (mapper fires on normal + idle path)
+and by production-replay (words flow, mapper splits).
+
+**Remaining sandbox issue:** Audio files reuse same text (short-sentence.wav
+for all speakers). Ground truth comparison can't distinguish speakers by text.
+Need per-utterance TTS or different scoring method.
+
+**Stage: SANDBOX ITERATION ready.** Scoring method needs fix, then iterate.
