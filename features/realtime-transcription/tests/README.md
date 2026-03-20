@@ -2,212 +2,166 @@
 
 ## Why
 
-Tests the core transcription pipeline in isolation — no meetings, no bots, no browsers. Audio in, segments out. Validates that the offset-based sliding window (`SpeakerStreamManager`) produces correct, non-scattered transcriptions with real Whisper.
+Tests the transcription pipeline without meetings, bots, or browsers. Audio in, segments out. The test framework validates the pipeline against real-world data collected from live Teams meetings, catching issues that synthetic tests miss.
 
-## What
+## Testing approach
 
-### Unit tests
+### Iteration cycle
 
-**`speaker-streams.test.ts`** — SpeakerStreamManager buffer algorithm (mocked Whisper):
-1. Offset advancement — after confirmation, Whisper receives only unconfirmed audio
+1. **Collect real data** — run TTS speaker bots in a live Teams meeting, collect all raw logs with timestamps (caption events, speaker changes, drafts, confirmed segments)
+2. **Identify failures** — compare confirmed output to ground truth, find lost utterances and misattributions
+3. **Diagnose** — trace through the pipeline to find the root cause (buffer thresholds, confirmation timing, caption delay)
+4. **Fix** — modify `SpeakerStreamManager` or related components
+5. **Replay** — rerun the same data through the updated pipeline, verify improvement
+6. **Repeat** until target accuracy is met
+
+### Test types (from fast to slow)
+
+| Test | Speed | What it validates | Needs Whisper |
+|------|-------|------------------|---------------|
+| Unit tests (mocked) | Instant | Buffer algorithm, offset logic, flush behavior | No |
+| Speaker-mapper tests | Instant | Word→speaker attribution, caption boundaries | No |
+| Pipeline WAV tests | Real-time | End-to-end: audio → Whisper → confirmed segments | Yes |
+| Real-world replay | Real-time | Pipeline against actual meeting data | Yes |
+| Live meeting | Real-time | Full system including bots, captions, speaker detection | Yes + meeting |
+
+### Reference data from live meetings
+
+All data from real Teams meetings with TTS speaker bots (2026-03-20):
+
+| File | What | Events |
+|------|------|--------|
+| `reference-timestamped-data.json` | 2-speaker normal conversation | 350 events |
+| `diverse-test-timestamped-events.txt` | 3-speaker diverse test (7 rounds) | 293 events |
+| `diverse-test-ground-truth.txt` | TTS send times for diverse test | 17 utterances |
+| `real-meeting-timestamped-events.txt` | 2-speaker with latest pipeline | 4 confirmed |
+| `real-meeting-ground-truth.txt` | TTS send times | 4 utterances |
+
+Caption behavior patterns: [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md)
+Replay test plan: [real-world-replay.md](real-world-replay.md)
+
+## Known issues (from real meeting data)
+
+### Short phrase loss (5/17 utterances lost in diverse test)
+
+Single-word utterances consistently lost: "Agreed.", "Thanks.", "OK.", "Perfect.", and short phrase "Plus fifty for events."
+
+**Root cause:** `minAudioDuration=3s` prevents submission of short audio. On speaker change, `flushSpeaker` skips segments < minAudioDuration. The audio stays in the buffer "for next turn" but either gets mixed with stale context or dies at idle timeout.
+
+**Affected:** Any utterance under ~1.5s of speech followed by a speaker change.
+
+**Potential fixes:**
+- Lower flush threshold (0.5s instead of 3s for speaker-change flush)
+- Use caption text directly for sub-1s utterances
+- Remove flush skip entirely, let confidence filters catch garbage
+
+### Caption delay misattribution (~11% of words at transitions)
+
+Words in the first ~1.5s of a new speaker's turn get attributed to the previous speaker because the caption boundary hasn't shifted yet.
+
+**Affected:** 2-3 words per speaker transition in rapid exchanges.
+
+**Tested:** 88.9% attribution accuracy on replay, 100% on real meeting (4 segments).
+
+## Test results summary
+
+### Pipeline accuracy (single speaker, WAV tests)
+
+| Test | Analytical | Interpreted | Notes |
+|------|-----------|-------------|-------|
+| short-sentence (2.8s) | 100% | 100% | Single Whisper call |
+| medium-paragraph (13.6s) | 81.4% | ~100% | Diffs are number format only |
+| long-monologue (42.9s) | 92.7% | ~100% | Diffs are number/hyphen format |
+| noisy-office (SNR=10dB) | 87.1% | ~100% | Robust to office noise |
+| noisy-cafe (SNR=10dB) | 87.1% | ~100% | Robust to café noise |
+
+### Speaker attribution (multi-speaker)
+
+| Test | Speakers | Accuracy | Lost |
+|------|----------|----------|------|
+| Replay (real caption data) | 2 | 88.9% | Boundary words |
+| Live meeting (normal turns) | 2 | 100% (4/4 segments) | None |
+| Live meeting (diverse, 7 rounds) | 3 | 71% (12/17 utterances) | 5 short phrases |
+
+### Confidence filtering (hallucination combat)
+
+| Filter | Condition | Catches |
+|--------|-----------|---------|
+| `NO_SPEECH` | `no_speech_prob > 0.5 && avg_logprob < -0.7` | Noise as speech |
+| `SHORT_GARBAGE` | `avg_logprob < -0.8 && duration < 2.0` | Silence hallucinations |
+| `REPETITIVE` | `compression_ratio > 2.4` | Repeated loops |
+
+Tested: 18/18 silence hallucinations caught ("cards." at logprob=-1.30). Zero false positives on real speech. Zero hallucinations at SNR=10dB.
+
+## Unit tests
+
+**`speaker-streams.test.ts`** — Buffer algorithm (mocked Whisper):
+1. Offset advancement — Whisper receives only unconfirmed audio after confirmation
 2. Buffer continuity — no full reset, submissions stay small
 3. Speaker change flush — emits on `flushSpeaker()`
 4. Short segment skip — <2s audio kept for next turn
 5. Buffer trim — confirmed audio trimmed at max size
 
-**`speaker-mapper.test.ts`** — Post-transcription speaker attribution:
-1. Two speakers, clean boundaries — words split correctly
-2. Three speakers, rapid turns — single-word utterances attributed correctly
-3. Word straddles boundary — goes to speaker with more time overlap
-4. Word in gap — orphaned words go to nearest speaker
-5. Caption events to boundaries — converts caption stream to intervals
-6. Realistic Teams conversation — multi-turn with (Guest) names
-7. **Caption delay 1.5s** — simulates real Teams delay, shows boundary shift and misattribution
-8. 5-speaker meeting — 201 words across 5 speakers, 7 transitions
-9. Single speaker — all words to one speaker (Google Meet equivalent)
+**`speaker-mapper.test.ts`** — Speaker attribution:
+1. Two speakers, clean boundaries
+2. Three speakers, rapid turns
+3. Word straddles boundary — overlap-based attribution
+4. Word in gap — nearest speaker
+5. Caption events (author:text:timestamp) → boundaries
+6. Realistic Teams conversation
+7. Caption delay 1.5s — shows boundary shift
+8. 5-speaker meeting (201 words, 7 transitions)
+9. Single speaker (Google Meet equivalent)
 
-### Pipeline tests (`speaker-streams.wav-test.ts`)
+**`replay-meeting.test.ts`** — Real-world data replay:
+- Part A: speaker-mapper with real caption boundaries (100% on 69 words)
+- Part B: full pipeline with Whisper + real captions (88.9% on 99 words)
 
-Real audio through real Whisper on GPU. Feeds a WAV file **chunk-by-chunk at real-time speed** (~256ms per 4096-sample chunk at 16kHz). The `SpeakerStreamManager`'s internal 2s timer drives Whisper submissions — same as in production.
-
-Audio playback and transcription happen simultaneously: you hear the speech and see segments confirmed as they arrive.
-
-**Log events:**
-- `DRAFT` — Whisper returned a result (shows latency, word count, text). Updates on every submission.
-- `CONFIRMED` — 3 consecutive identical Whisper results. Segment emitted, offset advances. This is the pipeline output.
-
-**End-of-test output:**
-- `PERFORMANCE` — RTF (real-time factor), audio reprocess factor, first confirm latency
-- `SEGMENTS` — individual confirmed segments in order
-- `GROUND TRUTH` — original TTS input text
-- `PIPELINE OUTPUT` — segments joined and deduplicated into one clean transcript
-- `WORD DIFF` — LCS-based word-level comparison: `[-missing-]` `{+extra+}`
-- `ACCURACY` — percentage of ground truth words matched
-- `WORD TIMESTAMPS` — per-word timing from Whisper (`word[start_time]`)
-
-### Performance metrics
-
-| Metric | What it measures | Good | Bad |
-|--------|-----------------|------|-----|
-| **RTF** | Whisper processing time / audio duration | <1.0 (real-time capable) | >1.0 (can't keep up) |
-| **Audio reprocess factor** | Total audio sent to Whisper / audio duration | 2-4x (efficient) | >10x (re-sending too much) |
-| **First confirm latency** | Wall time until first confirmed segment | <10s | >30s (buffer never confirms) |
-
-### Interpreting accuracy
-
-The word diff `ACCURACY` is **analytical** — raw word-level comparison between ground truth text and pipeline output. It counts number format conversions as errors even though they're correct behavior. The **interpreted accuracy** is what matters:
-
-| Diff type | Example | Analytical | Interpreted |
-|-----------|---------|-----------|-------------|
-| Number format | "fifty thousand" → "50,000" | Miss (2 words) | Correct — Whisper normalizes numbers |
-| Hyphenation | "real time" → "real-time" | Miss (2→1 word) | Correct — Whisper joins compounds |
-| Percentage | "thirty percent" → "30%" | Miss (2→1 word) | Correct — Whisper normalizes |
-| Missing word | "expressed interest" → "expressed" | Miss (1 word) | **Error** — content lost |
-| Hallucination | (nothing) → "excited" | Extra (1 word) | **Error** — invented content |
-| Mid-word split | "API" → "AP PI" | Miss + Extra | **Error** — boundary artifact |
-
-**Latest results (2026-03-20):**
-
-| Test | Analytical | Interpreted | Notes |
-|------|-----------|-------------|-------|
-| short-sentence (2.8s) | 0% | **Bug** | Audio < minAudioDuration, never submitted |
-| medium-paragraph (13.6s) | 81.4% | **~100%** | All diffs are number format conversions |
-| long-monologue (42.9s) | 92.7% | **~100%** | All diffs are number/hyphenation conversions |
-| noisy-monologue-office (42.9s) | 87.1% | **~100%** | Office noise @ SNR=10dB; all diffs are number/hyphen format conversions |
-| noisy-monologue-cafe (42.9s) | 87.1% | **~100%** | Cafe noise @ SNR=10dB; all diffs are format conversions; 1 hallucinated word ("you") at end |
-| noisy-with-silence (43.6s) | 57.6% | **~95%** | 30s noise gap splits speech; ground truth metadata lines inflate miss count; 0 hallucinations from noise gap |
-
-### Confidence filtering (hallucination combat)
-
-The pipeline applies quality gate filters matching production (`index.ts:1044-1090`). Whisper returns per-segment signals that detect hallucinations from silence/noise:
-
-| Filter | Condition | What it catches |
-|--------|-----------|-----------------|
-| `NO_SPEECH` | `no_speech_prob > 0.5 && avg_logprob < -0.7` | Noise misidentified as speech |
-| `SHORT_GARBAGE` | `avg_logprob < -0.8 && duration < 2.0` | Hallucinated words from silence |
-| `REPETITIVE` | `compression_ratio > 2.4` | Repeated phrase loops |
-| `LOW_PROB` (flag only) | word `probability < 0.3` | Low-confidence words (logged, not filtered) |
-
-**Tested on silence hallucinations (2026-03-20):**
-
-| Test | Silence | Hallucinations | Filtered | Leaked |
-|------|---------|---------------|----------|--------|
-| 60s dead silence between speech | 60s zeros | 18 × "cards." (logprob=-1.31) | **18/18** by SHORT_GARBAGE | 0 |
-| 30s room tone between speech | 30s quiet noise | 7 × "cards." + 1 × "Hold on." | **7/8** filtered | 1 draft (not confirmed) |
-| Office noise SNR=10dB | continuous | 0 | 0 | 0 |
-| Café noise SNR=10dB | continuous | 0 | 0 | 0 |
-| Pure noise (no speech) | 5s white noise | 0 (Whisper VAD rejected) | N/A | 0 |
-
-**Key finding:** Whisper hallucinates "cards." repeatedly on dead silence with `avg_logprob ≈ -1.30`. The `SHORT_GARBAGE` filter catches all of them. At SNR=10dB, Whisper handles noise without hallucinating. The filters are a safety net for silence gaps between speakers.
-
-### Pass/fail criteria
-
-Tests don't auto-pass/fail. The output is for **manual validation**:
-
-- **Content accuracy** — are the actual words correct? Number format diffs ("thirty" → "30") are expected, not errors.
-- **Boundary quality** — are segments split at natural sentence breaks? Mid-word splits ("AP PI") are bugs.
-- **Completeness** — is the full text captured? Missing words at segment boundaries or end-of-stream are bugs.
-- **Hallucinations** — are there invented words in the output? Check `[FILTERED]` log lines — all hallucinations should be caught.
-- **Performance** — RTF should be <1.0. Reprocess factor should be <5x. First confirm should be <15s for multi-segment speech.
-
-### Real-world data replay
-
-See [real-world-replay.md](real-world-replay.md) — test plan for replaying actual Teams meeting data (350 timestamped events from 2026-03-20 session) against the pipeline. Ground truth, caption timing, overlap behavior all from real meetings.
-
-Reference data:
-- `reference-timestamped-data.json` — 350 events with wall-clock timestamps
-- `reference-ground-truth-normal.txt` / `reference-ground-truth-overlap.txt` — TTS send times
-- Caption behavior patterns: [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md)
-
-### Test audio files (`audio/`)
-
-Generated by Piper TTS (`generate-test-audio.sh`):
-
-| File | Duration | Content |
-|------|----------|---------|
-| `short-sentence.wav` | ~3s | One sentence |
-| `medium-paragraph.wav` | ~14s | Three sentences |
-| `long-monologue.wav` | ~43s | Extended speech (roadmap, metrics, partnerships) |
-| `long-dialogue.wav` | ~18s | Continuous speech (quarterly results discussion) |
-| `noisy-monologue-office.wav` | ~43s | `long-monologue.wav` mixed with office noise @ SNR=10dB |
-| `noisy-monologue-cafe.wav` | ~43s | `long-monologue.wav` mixed with cafe noise @ SNR=10dB |
-| `noisy-with-silence.wav` | ~44s | `medium-paragraph.wav` split with 30s noise-only gap in the middle |
-
-## How
-
-### Quick start
+## How to run
 
 ```bash
 cd features/realtime-transcription/tests
 
-# Play medium paragraph — hear audio + see transcription live
-make play
-
-# Play long monologue (~43s)
-make play-long
-
-# Run unit tests only (no Whisper needed)
+# Unit tests (instant, no Whisper)
 make unit
 
-# Run everything
+# Pipeline tests (real-time, needs Whisper on port 8085)
+make play              # medium paragraph
+make play-short        # short sentence
+make play-long         # 43s monologue
+make play-noisy-office # office noise
+make play-noisy-cafe   # café noise
+make play-noisy-silence # 30s silence gap
+make play-speakers     # 3-speaker attribution test
+
+# Full replay of real meeting data
+make play-replay
+
+# Everything
 make test
+
+# Custom WAV file
+make play FILE=/path/to/any.wav
+
+# Against different transcription service
+make play TRANSCRIPTION_URL=http://host:port/v1/audio/transcriptions TRANSCRIPTION_TOKEN=xxx
 ```
 
-### All Makefile targets
-
-| Target | What it does |
-|--------|-------------|
-| `make audio` | Generate test WAV files (needs `tts-service` container) |
-| `make unit` | Run unit tests with mocked Whisper |
-| `make play` | Play `medium-paragraph.wav` — audio through speakers + transcription logs |
-| `make play-short` | Play `short-sentence.wav` (~3s) |
-| `make play-medium` | Play `medium-paragraph.wav` (~14s) |
-| `make play-long` | Play `long-monologue.wav` (~43s) |
-| `make play-noisy-office` | Play `noisy-monologue-office.wav` — office noise @ SNR=10dB |
-| `make play-noisy-cafe` | Play `noisy-monologue-cafe.wav` — cafe noise @ SNR=10dB |
-| `make play-noisy-silence` | Play `noisy-with-silence.wav` — speech + 30s noise gap + speech |
-| `make play FILE=/path/to.wav` | Play any WAV file |
-| `make play-all` | Play all test files sequentially |
-| `make test` | Unit tests + all pipeline tests |
-
-### Custom WAV files
-
-```bash
-# Any WAV file works — will be resampled to 16kHz mono
-make play FILE=/path/to/your/recording.wav
-```
-
-### Prerequisites
-
-- `transcription-service` running on port 8085 (`make all` from `deploy/compose/`)
-- `vexa-restore-tts-service-1` container for generating test audio
-- `paplay` for audio playback (install `pulseaudio-utils` if missing)
-- Node.js with `ts-node`
-
-## What to look for
+## What to look for in logs
 
 ### Healthy pipeline
-
 ```
   [2.2s] DRAFT  | 214ms | "Let me walk through the full product."
-  [4.3s] DRAFT  | 274ms | "Let me walk through the full product roadmap. We are planning to release versions."
+  [4.3s] DRAFT  | 274ms | "Let me walk through the full product roadmap..."
 
-  ✓ [4.3s] CONFIRMED | "Let me walk through the full product roadmap. We are planning to release versions."
-
-  [8.2s] DRAFT  | 173ms | "3.0 in April, it includes a completely redesigned dashboard."
-  [10.2s] DRAFT  | 189ms | "3.0 in April. It includes a completely redesigned dashboard with real-time analytics."
-
-  ✓ [10.2s] CONFIRMED | "3.0 in April. It includes a completely redesigned ..."
+  ✓ [4.3s] CONFIRMED | "Let me walk through the full product roadmap..."
 ```
+- Drafts every ~3s, confirmation when 3 consecutive match
+- After confirmation, next draft starts from where previous left off
 
-- Drafts arrive every ~2s as the timer submits unconfirmed audio
-- Confirmation fires when 3 consecutive drafts are identical
-- After confirmation, the next draft starts from where the previous left off (offset advanced)
-- Combined output at the end is clean, non-scattered, covering the full speech
-
-### Broken pipeline (what these tests catch)
-
-- Submissions growing: 2s→4s→6s→8s→... without resetting (not trimming confirmed audio)
-- Same text confirmed repeatedly in a loop (idle resubmit bug)
-- Ghost segments from silence ("significantly", "Thank you.") — hallucinated
-- Scattered output: many tiny 4-8s fragments instead of natural sentence boundaries
+### Problems to watch for
+- **Growing submissions** (2s→4s→6s→...) — not trimming confirmed audio
+- **Scattered fragments** (many 4-8s segments) — confirmation too eager
+- **Ghost segments** ("cards.", "Thank you.") — silence hallucinations leaking through
+- **Lost short phrases** — `[FILTERED]` or flush skip on single-word utterances
+- **Wrong speaker** — caption delay shifted boundary words
