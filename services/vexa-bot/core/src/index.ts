@@ -1112,6 +1112,12 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             });
           }
 
+          // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
+          const words = result.segments?.flatMap(s => s.words || []) || [];
+          if (words.length > 0) {
+            latestWhisperWords = words;
+          }
+
           // Pass Whisper's last segment end time for precise offset advancement
           const lastSeg = result.segments?.[result.segments.length - 1];
           const segEndSec = lastSeg?.end;
@@ -1126,6 +1132,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     };
 
     // onSegmentConfirmed: publish to Redis (only after confirmation or hard cap)
+    // For Teams: run speaker-mapper on word timestamps + caption boundaries
+    // to split carry-forward segments into per-speaker sub-segments.
     speakerManager.onSegmentConfirmed = async (speakerId: string, speakerName: string, transcript: string, bufferStartMs: number, bufferEndMs: number, segmentId: string) => {
       if (!segmentPublisher) return;
       if (isHallucination(transcript)) {
@@ -1137,6 +1145,51 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const startSec = (bufferStartMs - segmentPublisher.sessionStartMs) / 1000;
       const endSec = (bufferEndMs - segmentPublisher.sessionStartMs) / 1000;
       const fullSegmentId = `${segmentPublisher.sessionUid}:${segmentId}`;
+
+      // Teams with carry-forward: split by speaker using word timestamps + caption boundaries
+      if (currentPlatform === 'teams' && latestWhisperWords.length > 0 && captionEventLog.length > 0) {
+        const { mapWordsToSpeakers, captionsToSpeakerBoundaries } = require('./services/speaker-mapper');
+
+        // Build boundaries from accumulated caption events
+        const boundaries = captionsToSpeakerBoundaries(captionEventLog);
+
+        // Offset word timestamps to absolute session time
+        const offsetWords = latestWhisperWords.map(w => ({
+          ...w,
+          start: startSec + w.start,
+          end: startSec + w.end,
+        }));
+
+        const attributed = mapWordsToSpeakers(offsetWords, boundaries);
+
+        if (attributed.length > 1) {
+          // Multiple speakers in this segment — emit each separately
+          log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${fullSegmentId} | "${transcript.substring(0, 80)}..." → SPLIT into ${attributed.length} speakers`);
+          for (let i = 0; i < attributed.length; i++) {
+            const seg = attributed[i];
+            const subId = `${fullSegmentId}:${i}`;
+            log(`[📝 ATTRIBUTED] ${seg.speaker} | ${seg.start.toFixed(1)}s-${seg.end.toFixed(1)}s | "${seg.text}"`);
+            await segmentPublisher.publishSegment({
+              speaker: seg.speaker,
+              text: seg.text,
+              start: seg.start,
+              end: seg.end,
+              language: lang,
+              completed: true,
+              segment_id: subId,
+              absolute_start_time: new Date(bufferStartMs + seg.start * 1000).toISOString(),
+              absolute_end_time: new Date(bufferStartMs + seg.end * 1000).toISOString(),
+            });
+          }
+          log(`[✅ PUBLISHED] ${attributed.length} speaker-attributed segments → Redis`);
+          return;
+        }
+        // Single speaker — fall through to normal emit with attributed speaker name
+        if (attributed.length === 1) {
+          speakerName = attributed[0].speaker;
+        }
+      }
+
       log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${fullSegmentId} | "${transcript}"`);
       await segmentPublisher.publishSegment({
         speaker: speakerName,
@@ -1340,6 +1393,10 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
  *   3. Future: fuzzy text matching for segment reconciliation
  */
 let lastCaptionSpeakerId: string | null = null;
+/** Accumulated caption events for speaker-mapper boundaries (Teams only) */
+const captionEventLog: { speaker: string; text: string; timestamp: number }[] = [];
+/** Latest word timestamps from Whisper (replaced on each submission) */
+let latestWhisperWords: { word: string; start: number; end: number; probability: number }[] = [];
 
 async function handleTeamsCaptionData(speakerName: string, captionText: string, timestampMs: number): Promise<void> {
   if (!segmentPublisher || !page || page.isClosed()) return;
@@ -1354,6 +1411,9 @@ async function handleTeamsCaptionData(speakerName: string, captionText: string, 
     speakerManager.flushSpeaker(lastCaptionSpeakerId);
   }
   lastCaptionSpeakerId = speakerId;
+
+  // Accumulate for speaker-mapper boundaries
+  captionEventLog.push({ speaker: speakerName, text: captionText, timestamp: timestampMs / 1000 });
 
   // Publish caption as a speaker event for downstream consumers
   await segmentPublisher.publishSpeakerEvent({

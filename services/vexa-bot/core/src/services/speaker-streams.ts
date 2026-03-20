@@ -61,6 +61,8 @@ export class SpeakerStreamManager {
   private maxBufferDuration: number;
   private idleTimeoutSec: number;
   private sampleRate: number;
+  /** Audio carried forward from a flushed short segment — prepended to the next feedAudio call */
+  private carryForward: Float32Array[] = [];
 
   /** Called when unconfirmed audio needs transcription. */
   onSegmentReady: ((speakerId: string, speakerName: string, audioBuffer: Float32Array) => void) | null = null;
@@ -106,6 +108,22 @@ export class SpeakerStreamManager {
   feedAudio(speakerId: string, audioData: Float32Array): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
+
+    // Prepend carry-forward audio from a previous speaker's flushed short segment.
+    // This gives Whisper context for the short utterance — word timestamps will
+    // place it before the new speaker's words, and the speaker-mapper attributes
+    // it to the correct speaker via caption boundaries.
+    if (this.carryForward.length > 0) {
+      let carrySamples = 0;
+      for (const chunk of this.carryForward) {
+        buffer.chunks.push(chunk);
+        buffer.totalSamples += chunk.length;
+        carrySamples += chunk.length;
+      }
+      log(`[SpeakerStreams] Carry-forward: ${(carrySamples / this.sampleRate).toFixed(1)}s prepended to "${buffer.speakerName}"`);
+      this.carryForward = [];
+    }
+
     buffer.chunks.push(audioData);
     buffer.totalSamples += audioData.length;
     buffer.lastAudioTimestamp = Date.now();
@@ -221,9 +239,28 @@ export class SpeakerStreamManager {
 
     const unconfirmedSec = this.unconfirmedSamples(buffer) / this.sampleRate;
 
-    // Too short — keep for next turn (unless forced)
+    // Too short for standalone Whisper submission — carry forward to the next
+    // speaker's buffer so Whisper gets it as context. The speaker-mapper will
+    // attribute it to the correct speaker via word timestamps + caption boundaries.
     if (!force && unconfirmedSec < this.minAudioDuration && !buffer.lastTranscript) {
-      log(`[SpeakerStreams] Flush skipped for "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s < ${this.minAudioDuration}s, keeping for next turn)`);
+      // Extract unconfirmed chunks
+      const orphanedChunks: Float32Array[] = [];
+      let samplesToSkip = buffer.confirmedSamples;
+      for (const chunk of buffer.chunks) {
+        if (samplesToSkip >= chunk.length) {
+          samplesToSkip -= chunk.length;
+          continue;
+        }
+        if (samplesToSkip > 0) {
+          orphanedChunks.push(chunk.subarray(samplesToSkip));
+          samplesToSkip = 0;
+        } else {
+          orphanedChunks.push(chunk);
+        }
+      }
+      this.carryForward.push(...orphanedChunks);
+      log(`[SpeakerStreams] Carry-forward from "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s → next speaker's context)`);
+      this.fullReset(buffer);
       return;
     }
 
