@@ -118,6 +118,18 @@ Short noisy audio causes Whisper hallucinations. The bot checks per-segment sign
 3. **Captions assume one language** — if a speaker switches language, Teams captions produce gibberish. Whisper detects the correct language but the caption text can't be used for reconciliation.
 4. **Short interjections** — single words ("Agreed.", "OK.") from a different speaker may be absorbed into the adjacent speaker's segment if the caption change is too brief.
 
+### Reference: Teams Caption Behavior
+
+See [teams-caption-behavior.md](teams-caption-behavior.md) for detailed observations from real meetings:
+- Text growth patterns (word-by-word, ~400ms cadence)
+- Sentence splitting (text shrinks when Teams reformats)
+- Overlap behavior (first speaker truncated mid-word)
+- Caption delay distribution
+- Numbers and formatting rules
+- Constants for test simulation
+
+Reference data: `tests/reference-caption-data.json` (273 events from live meeting).
+
 ## How
 
 ### File Map
