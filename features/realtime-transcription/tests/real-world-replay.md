@@ -122,3 +122,15 @@ Based on observed caption delay (~1.5s mean) and the unit test results:
 ```bash
 make play-replay    # replay real meeting data (when implemented)
 ```
+## Diverse test replay analysis (2026-03-20)
+
+Replayed 16 GT utterances against 14 real caption boundaries.
+Caption boundary accuracy: 13/16 = 81%.
+
+3 misattributed by Teams captions (not pipeline):
+- 'Thanks.' (Alice at 33.1s) → Charlie boundary (29.5-44.4s)
+- 'OK.' (Bob at 37.1s) → Charlie boundary
+- 'Plus fifty for events.' (Charlie at 86.2s) → Bob boundary (82.3-90.3s)
+
+Theoretical with carry-forward + mapper: 15/17 = 88%
+
