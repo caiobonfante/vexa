@@ -10,7 +10,7 @@ export TRANSCRIPTION_TOKEN ?= 32c59b9f654f1b6e376c6f020d79897d
 AUDIO := $(TEST)/audio
 WAVS := $(AUDIO)/short-sentence.wav $(AUDIO)/medium-paragraph.wav $(AUDIO)/long-monologue.wav $(AUDIO)/long-dialogue.wav
 
-.PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-all test help
+.PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers play-all test help
 
 help:
 	@echo "Usage:"
@@ -23,6 +23,7 @@ help:
 	@echo "  make play-noisy-office — noisy office background"
 	@echo "  make play-noisy-cafe   — noisy cafe background"
 	@echo "  make play-noisy-silence — speech + 30s silence/noise gap + speech"
+	@echo "  make play-speakers     — 3-speaker attribution pipeline test"
 	@echo "  make play FILE=x — custom WAV file"
 	@echo "  make play-all    — all test files sequentially"
 	@echo "  make test        — unit + all pipeline tests"
@@ -73,6 +74,9 @@ play:
 	$(call run_with_audio,$(FILE))
 endif
 
-play-all: play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence
+play-speakers:
+	@cd $(BOT) && npx ts-node core/src/services/speaker-mapper.pipeline-test.ts $(TEST)/audio
+
+play-all: play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers
 
 test: unit play-all
