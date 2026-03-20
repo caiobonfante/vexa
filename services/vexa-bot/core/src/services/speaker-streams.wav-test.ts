@@ -90,6 +90,7 @@ async function main() {
   let whisperCalls = 0;
   let totalWhisperMs = 0;
   let totalAudioSentSec = 0; // cumulative audio duration sent to Whisper
+  let filteredCount = 0;
   const confirmed: string[] = [];
   let firstConfirmWallMs = 0; // wall time of first confirmation
   let lastDraft = '';
@@ -108,6 +109,48 @@ async function main() {
 
       if (result?.text) {
         const text = result.text.trim();
+
+        // ── Quality gate: match production filters (index.ts:1044-1090) ──
+        if (result.segments && result.segments.length > 0) {
+          const seg = result.segments[0];
+          const noSpeech = seg.no_speech_prob ?? 0;
+          const logProb = seg.avg_logprob ?? 0;
+          const compression = seg.compression_ratio ?? 1;
+          const segDuration = (seg.end || 0) - (seg.start || 0);
+
+          // High no_speech_prob + low logprob = noise, not speech
+          if (noSpeech > 0.5 && logProb < -0.7) {
+            filteredCount++;
+            console.log(`  [${ts()}s] [FILTERED] NO_SPEECH no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${text}"`);
+            mgr.handleTranscriptionResult(speakerId, '');
+            return;
+          }
+
+          // Very low logprob on short audio = garbage
+          if (logProb < -0.8 && segDuration < 2.0) {
+            filteredCount++;
+            console.log(`  [${ts()}s] [FILTERED] SHORT_GARBAGE logprob=${logProb.toFixed(2)} dur=${segDuration.toFixed(1)}s | "${text}"`);
+            mgr.handleTranscriptionResult(speakerId, '');
+            return;
+          }
+
+          // High compression ratio = repetitive output (hallucination pattern)
+          if (compression > 2.4) {
+            filteredCount++;
+            console.log(`  [${ts()}s] [FILTERED] REPETITIVE compression=${compression.toFixed(1)} | "${text}"`);
+            mgr.handleTranscriptionResult(speakerId, '');
+            return;
+          }
+
+          // Flag low-probability words (informational, not filtered)
+          const words = result.segments.flatMap(s => s.words || []);
+          const lowProbWords = words.filter(w => (w.probability ?? 1) < 0.3);
+          if (lowProbWords.length > 0) {
+            const flagged = lowProbWords.map(w => `${w.word?.trim()}(${(w.probability ?? 0).toFixed(2)})`).join(', ');
+            console.log(`  [${ts()}s] [LOW_PROB] ${lowProbWords.length} words: ${flagged}`);
+          }
+        }
+
         const words = result.segments?.flatMap(s => s.words || []) || [];
         if (text !== lastDraft) {
           const wordCount = words.length > 0 ? ` | ${words.length} words` : '';
@@ -228,6 +271,7 @@ async function main() {
   console.log(`  │ Audio:      ${totalDuration.toFixed(1)}s`);
   console.log(`  │ Wall time:  ${wallTimeSec.toFixed(1)}s`);
   console.log(`  │ Whisper:    ${whisperCalls} calls, avg ${whisperCalls > 0 ? (totalWhisperMs / whisperCalls).toFixed(0) : 0}ms`);
+  console.log(`  │ Filtered:   ${filteredCount} (quality gate rejections)`);
   console.log(`  │ Segments:   ${confirmed.length}`);
   console.log(`  │`);
   console.log(`  │ PERFORMANCE:`);

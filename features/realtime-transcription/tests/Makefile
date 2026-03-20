@@ -10,7 +10,7 @@ export TRANSCRIPTION_TOKEN ?= 32c59b9f654f1b6e376c6f020d79897d
 AUDIO := $(TEST)/audio
 WAVS := $(AUDIO)/short-sentence.wav $(AUDIO)/medium-paragraph.wav $(AUDIO)/long-monologue.wav $(AUDIO)/long-dialogue.wav
 
-.PHONY: audio unit play play-short play-medium play-long play-all test help
+.PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-all test help
 
 help:
 	@echo "Usage:"
@@ -20,6 +20,9 @@ help:
 	@echo "  make play-short  — short-sentence (~3s)"
 	@echo "  make play-medium — medium-paragraph (~14s)"
 	@echo "  make play-long   — long-monologue (~43s)"
+	@echo "  make play-noisy-office — noisy office background"
+	@echo "  make play-noisy-cafe   — noisy cafe background"
+	@echo "  make play-noisy-silence — speech + 30s silence/noise gap + speech"
 	@echo "  make play FILE=x — custom WAV file"
 	@echo "  make play-all    — all test files sequentially"
 	@echo "  make test        — unit + all pipeline tests"
@@ -54,6 +57,15 @@ play-medium: $(AUDIO)/medium-paragraph.wav
 play-long: $(AUDIO)/long-monologue.wav
 	$(call run_with_audio,$(AUDIO)/long-monologue.wav)
 
+play-noisy-office: $(AUDIO)/noisy-monologue-office.wav
+	$(call run_with_audio,$(AUDIO)/noisy-monologue-office.wav)
+
+play-noisy-cafe: $(AUDIO)/noisy-monologue-cafe.wav
+	$(call run_with_audio,$(AUDIO)/noisy-monologue-cafe.wav)
+
+play-noisy-silence: $(AUDIO)/noisy-with-silence.wav
+	$(call run_with_audio,$(AUDIO)/noisy-with-silence.wav)
+
 play: play-medium
 
 ifdef FILE
@@ -61,6 +73,6 @@ play:
 	$(call run_with_audio,$(FILE))
 endif
 
-play-all: play-short play-medium play-long
+play-all: play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence
 
 test: unit play-all
