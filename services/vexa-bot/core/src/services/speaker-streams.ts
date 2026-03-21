@@ -15,6 +15,12 @@ import { log } from '../utils';
  * change or idle timeout.
  */
 
+interface WhisperSegment {
+  text: string;
+  start: number;
+  end: number;
+}
+
 interface SpeakerBuffer {
   speakerId: string;
   speakerName: string;
@@ -24,6 +30,8 @@ interface SpeakerBuffer {
   confirmedSamples: number;
   lastTranscript: string;
   confirmCount: number;
+  /** Per-segment confirmation: texts of Whisper segments from the previous submission */
+  lastSegmentTexts: string[];
   inFlight: boolean;
   /** Wall-clock time (ms) when the current unconfirmed window started */
   windowStartMs: number;
@@ -97,6 +105,7 @@ export class SpeakerStreamManager {
       confirmedSamples: 0,
       lastTranscript: '',
       confirmCount: 0,
+      lastSegmentTexts: [],
       inFlight: false,
       windowStartMs: now,
       bufferStartMs: now,
@@ -132,14 +141,16 @@ export class SpeakerStreamManager {
   }
 
   /**
-   * Handle Whisper result. Pass segmentEndSec from the last completed segment
-   * so the offset advances to Whisper's boundary, not the full buffer size.
+   * Handle Whisper result. Accepts individual Whisper segments for incremental
+   * confirmation — stable leading segments are emitted individually rather than
+   * waiting for the entire text to stabilize.
    *
+   * @param segments - Whisper segments with text and timing. If empty/undefined,
+   *                   falls back to full-text confirmation using transcript param.
    * @param segmentEndSec - end time (seconds) of the last segment Whisper returned,
-   *                        relative to the start of the submitted audio. If undefined,
-   *                        falls back to trimming the full submitted window.
+   *                        relative to the start of the submitted audio.
    */
-  handleTranscriptionResult(speakerId: string, transcript: string, segmentEndSec?: number): void {
+  handleTranscriptionResult(speakerId: string, transcript: string, segmentEndSec?: number, segments?: WhisperSegment[]): void {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
@@ -168,6 +179,40 @@ export class SpeakerStreamManager {
       this.emitSegment(buffer, trimmed);
       this.fullReset(buffer);
       return;
+    }
+
+    // Per-segment incremental confirmation: if Whisper returned multiple
+    // segments, confirm leading segments that are stable across submissions.
+    // This allows long monologues to emit sentence-level segments without
+    // waiting for the entire text to stabilize.
+    if (segments && segments.length > 1) {
+      const currentTexts = segments.map(s => s.text.trim());
+      const prevTexts = buffer.lastSegmentTexts;
+
+      // Find how many leading segments match the previous submission
+      let stableCount = 0;
+      for (let i = 0; i < Math.min(currentTexts.length - 1, prevTexts.length); i++) {
+        if (currentTexts[i] === prevTexts[i]) {
+          stableCount++;
+        } else {
+          break;
+        }
+      }
+
+      buffer.lastSegmentTexts = currentTexts;
+
+      if (stableCount > 0) {
+        // Emit each stable leading segment individually
+        for (let i = 0; i < stableCount; i++) {
+          const seg = segments[i];
+          this.emitSegment(buffer, seg.text.trim());
+          this.advanceOffset(buffer, seg.end);
+        }
+        // Don't fall through to full-text check — we already advanced
+        return;
+      }
+
+      // No stable prefix yet — fall through to full-text confirmation
     }
 
     // Full string match — same as WhisperLive's same_output_threshold.
@@ -398,6 +443,7 @@ export class SpeakerStreamManager {
     // Reset confirmation state for the next segment window
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
+    buffer.lastSegmentTexts = [];
     buffer.windowStartMs = Date.now();
 
     log(`[SpeakerStreams] Offset advanced for "${buffer.speakerName}" (confirmed=${buffer.confirmedSamples}, total=${buffer.totalSamples}, trimmed to ${buffer.chunks.length} chunks)`);
@@ -441,6 +487,7 @@ export class SpeakerStreamManager {
     buffer.confirmedSamples = 0;
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
+    buffer.lastSegmentTexts = [];
     buffer.inFlight = false;
     buffer.windowStartMs = Date.now();
     buffer.bufferStartMs = Date.now();

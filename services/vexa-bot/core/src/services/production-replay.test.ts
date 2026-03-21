@@ -264,7 +264,10 @@ async function main() {
           whisperWordsPerSpeaker.set(speakerId, words);
         }
         const lastSeg = result.segments?.[result.segments.length - 1];
-        mgr.handleTranscriptionResult(speakerId, text, lastSeg?.end);
+        const whisperSegs = result.segments?.map(s => ({
+          text: s.text, start: s.start, end: s.end
+        }));
+        mgr.handleTranscriptionResult(speakerId, text, lastSeg?.end, whisperSegs);
       } else {
         mgr.handleTranscriptionResult(speakerId, '');
       }

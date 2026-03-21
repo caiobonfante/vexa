@@ -991,6 +991,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     transcriptionClient = new TranscriptionClient({
       serviceUrl: transcriptionServiceUrl,
       apiToken: botConfig.transcriptionServiceToken || process.env.TRANSCRIPTION_SERVICE_TOKEN,
+      maxSpeechDurationSec: 10,
     });
     log('[PerSpeaker] TranscriptionClient created');
 
@@ -1027,6 +1028,25 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     // onSegmentReady: transcribe the buffer (called every submitInterval)
     // Does NOT publish — just transcribes and feeds result back for confirmation.
     // Language is tracked per speaker — auto-detected on first chunk, locked when confident.
+    // ── Telemetry counters ──
+    const telemetry = {
+      whisperCalls: 0,
+      whisperFailures: 0,
+      totalWhisperMs: 0,
+      draftsEmitted: 0,
+      segmentsConfirmed: 0,
+      segmentsDiscarded: 0,
+      totalConfirmLatencyMs: 0,  // time from buffer start to confirmation
+      reconfirmations: 0,        // times the same text was confirmed again (wasted work)
+      whisperSegmentCounts: [] as number[],  // how many segments Whisper returns per call
+    };
+    const telemetryInterval = setInterval(() => {
+      const avgWhisper = telemetry.whisperCalls > 0 ? (telemetry.totalWhisperMs / telemetry.whisperCalls).toFixed(0) : 'n/a';
+      const avgConfirmLatency = telemetry.segmentsConfirmed > 0 ? (telemetry.totalConfirmLatencyMs / telemetry.segmentsConfirmed / 1000).toFixed(1) : 'n/a';
+      const avgWhisperSegs = telemetry.whisperSegmentCounts.length > 0 ? (telemetry.whisperSegmentCounts.reduce((a,b) => a+b, 0) / telemetry.whisperSegmentCounts.length).toFixed(1) : 'n/a';
+      log(`[📊 TELEMETRY] whisper=${telemetry.whisperCalls} (${avgWhisper}ms avg, ${telemetry.whisperFailures} failed) | drafts=${telemetry.draftsEmitted} confirmed=${telemetry.segmentsConfirmed} discarded=${telemetry.segmentsDiscarded} | confirm_latency=${avgConfirmLatency}s | whisper_segs/call=${avgWhisperSegs} | reconfirm=${telemetry.reconfirmations}`);
+    }, 30000);
+
     speakerManager.onSegmentReady = async (speakerId: string, speakerName: string, audioBuffer: Float32Array) => {
       if (!transcriptionClient) return;
 
@@ -1036,9 +1056,13 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const explicitLang = currentLanguage && currentLanguage !== 'auto' ? currentLanguage : null;
       const lang = explicitLang || speakerLanguages.get(speakerId) || null;
 
+      const whisperStartMs = Date.now();
       try {
         const result = await transcriptionClient.transcribe(audioBuffer, lang || undefined);
+        telemetry.whisperCalls++;
+        telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         if (result && result.text) {
+          telemetry.whisperSegmentCounts.push(result.segments?.length || 0);
           const prob = result.language_probability ?? 0;
           log(`[🌐 LANGUAGE] ${speakerName} → ${result.language} (prob=${prob.toFixed(2)}${lang ? ', explicit' : ''})`);
 
@@ -1048,6 +1072,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
           // 1. Language confidence (auto-detect only)
           if (!lang && prob > 0 && prob < 0.3) {
+            telemetry.segmentsDiscarded++;
             log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
             speakerManager!.handleTranscriptionResult(speakerId, '');
             return;
@@ -1063,6 +1088,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
             // High no_speech_prob + low logprob = noise, not speech
             if (noSpeech > 0.5 && logProb < -0.7) {
+              telemetry.segmentsDiscarded++;
               log(`[🚫 NO SPEECH] ${speakerName} | no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${result.text}" — discarded`);
               speakerManager!.handleTranscriptionResult(speakerId, '');
               return;
@@ -1070,6 +1096,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
             // Very low logprob on short audio = garbage
             if (logProb < -0.8 && duration < 2.0) {
+              telemetry.segmentsDiscarded++;
               log(`[🚫 LOW QUALITY] ${speakerName} | logprob=${logProb.toFixed(2)} dur=${duration.toFixed(1)}s | "${result.text}" — discarded`);
               speakerManager!.handleTranscriptionResult(speakerId, '');
               return;
@@ -1077,6 +1104,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
             // High compression ratio = repetitive output (hallucination pattern)
             if (compression > 2.4) {
+              telemetry.segmentsDiscarded++;
               log(`[🚫 REPETITIVE] ${speakerName} | compression=${compression.toFixed(1)} | "${result.text}" — discarded`);
               speakerManager!.handleTranscriptionResult(speakerId, '');
               return;
@@ -1098,6 +1126,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
             const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
             const segmentId = `${segmentPublisher.sessionUid}:${speakerManager!.getSegmentId(speakerId)}`;
+            telemetry.draftsEmitted++;
             log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${segmentId} | "${result.text}"`);
             await segmentPublisher.publishSegment({
               speaker: speakerName,
@@ -1118,14 +1147,20 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             latestWhisperWords = words;
           }
 
-          // Pass Whisper's last segment end time for precise offset advancement
+          // Pass Whisper's segments for incremental per-segment confirmation
           const lastSeg = result.segments?.[result.segments.length - 1];
           const segEndSec = lastSeg?.end;
-          speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec);
+          const whisperSegs = result.segments?.map(s => ({
+            text: s.text, start: s.start, end: s.end
+          }));
+          speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec, whisperSegs);
         } else {
           speakerManager!.handleTranscriptionResult(speakerId, '');
         }
       } catch (err: any) {
+        telemetry.whisperCalls++;
+        telemetry.whisperFailures++;
+        telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         log(`[❌ FAILED] ${speakerName}: ${err.message}`);
         speakerManager!.handleTranscriptionResult(speakerId, '');
       }
@@ -1153,7 +1188,12 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       // on caption boundary timing, which has ~1.5s jitter vs Whisper timestamps,
       // causing boundary words to be split and mis-attributed to adjacent speakers.
 
-      log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${fullSegmentId} | "${transcript}"`);
+      const confirmLatencyMs = bufferEndMs - bufferStartMs;
+      const segDurationSec = endSec - startSec;
+      const wordCount = transcript.split(/\s+/).length;
+      telemetry.segmentsConfirmed++;
+      telemetry.totalConfirmLatencyMs += confirmLatencyMs;
+      log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s (${segDurationSec.toFixed(1)}s, ${wordCount}w, latency=${(confirmLatencyMs/1000).toFixed(1)}s) | ${fullSegmentId} | "${transcript}"`);
       await segmentPublisher.publishSegment({
         speaker: speakerName,
         text: transcript,
