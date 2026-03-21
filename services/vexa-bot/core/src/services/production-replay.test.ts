@@ -77,7 +77,7 @@ function mintMeetingToken(meetingId: number, userId: number, platform: string, n
 // -- Create meeting via API (full system mode) --------------------------------
 
 async function createReplayMeeting(dataset: string): Promise<{ meetingId: number; nativeMeetingId: string }> {
-  const nativeMeetingId = process.env.NATIVE_MEETING_ID || `replay-${Date.now()}`;
+  const nativeMeetingId = process.env.NATIVE_MEETING_ID || `replay-${dataset}-${Date.now()}`;
 
   // Create meeting directly in DB (bypasses bot-manager which tries to launch a real bot)
   const http = await import('http');
@@ -459,7 +459,9 @@ async function main() {
         language: 'en', completed: true, segment_id: fullSegmentId,
         absolute_start_time: new Date(bufferStartMs).toISOString(),
         absolute_end_time: new Date(bufferEndMs).toISOString(),
-      }).catch(() => {});
+      }).catch((err: any) => {
+        console.error(`  [PUBLISH ERROR] Failed to publish confirmed segment: ${err.message}`);
+      });
     }
 
     // Per-speaker audio already provides correct attribution.
@@ -645,8 +647,8 @@ async function main() {
     console.log(`\n  [PUBLISH] Sending session_end...`);
     await publisher.publishSessionEnd();
     // Wait for transcription-collector to process remaining segments
-    console.log(`  [PUBLISH] Waiting 10s for collector to process...`);
-    await new Promise(r => setTimeout(r, 10000));
+    console.log(`  [PUBLISH] Waiting 40s for collector to persist (30s immutability + 10s buffer)...`);
+    await new Promise(r => setTimeout(r, 40000));
     await publisher.close();
     console.log(`  [PUBLISH] Done. View results:`);
     console.log(`    Dashboard: http://localhost:3011/meetings/${replayMeetingId}`);

@@ -6,32 +6,101 @@ Teams provides ONE mixed audio stream for all participants. Unlike Google Meet (
 
 ## What
 
-### Architecture: Transcribe Mixed, Label from Captions
+### Architecture: Audio + Captions -> Speaker-Attributed Segments
 
 ```
-                    AUDIO PATH                          CAPTION PATH
-                    ==========                          ============
-All speakers                                     Teams live captions
-     |                                                |
-     v                                                v
-Single <audio> element                       [data-tid="author"]
-     |                                       [data-tid="closed-caption-text"]
-     v                                                |
-AudioContext(16kHz)                                    v
-ScriptProcessor(4096)                          Speaker boundaries:
-RMS silence filter (< 0.01)                    "Alice: 0s-12s"
-     |                                         "Bob: 12s-18s"
-     v                                         "Alice: 18s-25s"
-SpeakerStreamManager (1 instance)                     |
-     |                                                |
-     v                                                v
-Whisper (transcribes mixed audio)          Label Whisper output
-     |                                     with speaker names
-     v
-Speaker-attributed segments
++------------------------- BROWSER (page.evaluate) -------------------------+
+|                                                                            |
+|  +----------------+     +----------------+     +------------------------+  |
+|  | RTCPeerConn    |---->| <audio> elem   |---->| ScriptProcessor        |  |
+|  | hook           |     | (mixed audio)  |     | (16kHz, 4096 chunks)   |  |
+|  | (join.ts)      |     |                |     | RMS silence filter     |  |
+|  +----------------+     +----------------+     +----------+-------------+  |
+|                                                           |                |
+|                                                           v                |
+|  +----------------+                           +------------------------+   |
+|  | Caption DOM    |                           | Audio Queue            |   |
+|  | Observer       |                           | (ring buffer, 3s max)  |   |
+|  | (recording.ts) |                           | chunks wait here       |   |
+|  |                |                           +----------+-------------+   |
+|  | Watches:       |                                      |                 |
+|  | [data-tid=     |    speaker change?                   |                 |
+|  |  "author"]     |------ YES --> flush queue ---------->|                 |
+|  | [data-tid=     |              to NEW speaker          |                 |
+|  |  "caption-     |                                      |                 |
+|  |   text"]       |    text grew >3 chars?               |                 |
+|  |                |------ YES --> flush queue ----------->|                 |
+|  +----------------+              to current speaker      |                 |
+|                                                          v                 |
+|                                            __vexaTeamsAudioData()          |
+|                                            (exposed function)              |
++----------------------------------+-------------------------------------+---+
+                                   | (speaker, Float32Array)
+                                   v
++------------------------- NODE.JS ------------------------------------------+
+|                                                                            |
+|  +------------------------------------------------------------------+     |
+|  | SpeakerStreamManager                    (speaker-streams.ts)      |     |
+|  |                                                                   |     |
+|  |  Per-speaker buffer:  feedAudio() -> chunks accumulate            |     |
+|  |  Submit timer:        every 2s -> submitBuffer() if enough data   |     |
+|  |  Confirmation:        2 consecutive matching transcripts          |     |
+|  |  Idle timeout:        15s no audio -> force flush                 |     |
+|  |  Max buffer:          120s -> trim                                |     |
+|  |                                                                   |     |
+|  |  Callbacks:                                                       |     |
+|  |    onSegmentReady ----------> (draft, send to Whisper)            |     |
+|  |    onSegmentConfirmed ------> (final, publish)                    |     |
+|  +-------------+------------------------------------------+----------+     |
+|                |                                          |                |
+|                v                                          v                |
+|  +------------------------+              +------------------------------+  |
+|  | TranscriptionClient    |              | SegmentPublisher             |  |
+|  | (HTTP POST WAV)        |              | (segment-publisher.ts)       |  |
+|  |                        |              |                              |  |
+|  | Sends WAV to           |              | XADD -> transcription_       |  |
+|  | Whisper service        |              |         segments stream      |  |
+|  | Returns text +         |              | PUBLISH -> meeting:{id}:     |  |
+|  | word timestamps        |              |            segments channel  |  |
+|  +------------------------+              |                              |  |
+|                                          | Drafts  (completed=false)    |  |
+|                                          | Confirmed (completed=true)   |  |
+|                                          +-------------+----------------+  |
++--------------------------------------------+-----------+-------------------+
+                                              |
+                                              v
++------------------------- DOWNSTREAM ---------------------------------------+
+|                                                                            |
+|  Redis stream --> transcription-collector --> Redis Hash (30s hold)        |
+|                                           --> Postgres (persist)           |
+|                                                                            |
+|  Redis pub/sub --> api-gateway WS --> client (live segments)               |
+|                                                                            |
+|  api-gateway REST --> GET /transcripts/{id} (Hash + Postgres merge)        |
++----------------------------------------------------------------------------+
 ```
 
-**Key insight**: we do NOT route audio to per-speaker buffers. That approach (the old architecture) caused cross-speaker contamination, silence dumps, and scattered fragments. Instead, Whisper gets the full mixed stream and captions tell us who said what.
+### The 7 Components
+
+| # | Component | Where | Shared? | Role |
+|---|-----------|-------|---------|------|
+| 1 | **ScriptProcessor + Audio Queue** | Browser | Teams only | Captures mixed audio, filters silence (`RMS < 0.01`), holds chunks in 3s ring buffer. Google Meet uses per-element ScriptProcessors instead (no queue needed -- audio is already separated) |
+| 2 | **Caption Observer** | Browser | Teams only | Watches Teams caption DOM for speaker name + text. Decides WHEN and to WHOM to flush the audio queue. Google Meet has no equivalent -- it uses DOM voting for speaker identity instead |
+| 3 | **`__vexaTeamsAudioData`** | Browser->Node bridge | Teams only | Exposed function. Carries `(speakerName, audioArray)`. Google Meet uses `__vexaPerSpeakerAudioData(elementIndex, audioArray)` -- different signature because speaker name isn't known at capture time |
+| 4 | **SpeakerStreamManager** | Node | Shared | `speaker-streams.ts` -- same code for both platforms. Per-speaker buffers, submit timer, confirmation, idle timeout. Teams uses 1 instance (mixed audio, time-sliced by captions). Google Meet uses N instances (one per audio element) |
+| 5 | **TranscriptionClient** | Node | Shared | `transcription-client.ts` -- identical for both platforms. HTTP POST WAV to Whisper, returns text + word timestamps |
+| 6 | **SegmentPublisher** | Node | Shared | `segment-publisher.ts` -- identical for both platforms. XADD to Redis stream, PUBLISH to pub/sub channel |
+| 7 | **transcription-collector + api-gateway** | Downstream services | Shared | Platform-agnostic. Collector consumes stream, holds 30s for immutability, persists to Postgres. Gateway delivers via WS and REST |
+
+### Critical Design Constraint
+
+Audio and speaker identity travel **separate paths** with different latencies:
+- **Audio** arrives in real-time via ScriptProcessor
+- **Captions** arrive ~1-2s later from Teams ASR
+
+The **audio queue** (ring buffer) bridges this gap -- chunks wait up to 3s for a caption to tell them which speaker they belong to. The caption observer is the **sole decision-maker** for flushing audio to a named speaker. Without it, audio accumulates in the queue and silently drops after 3s. The DOM "blue squares" speaker detection (`voice-level-stream-outline`) only records speaker events for persistence -- it does NOT route audio.
+
+**Key insight**: we do NOT route audio to per-speaker buffers at capture time. That approach (the old architecture) caused cross-speaker contamination, silence dumps, and scattered fragments. Instead, audio queues in a ring buffer, captions decide attribution, and Whisper transcribes per-speaker chunks after routing.
 
 ### How Captions Drive Speaker Boundaries
 

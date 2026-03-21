@@ -6,22 +6,132 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 
 ## What
 
-### Architecture: N Independent Pipelines
+### Architecture: Per-Speaker Streams -> Voting -> Transcription
 
 ```
-Participant A ──→ <audio> A ──→ AudioContext A ──→ ScriptProcessor A ──→ SpeakerStreamManager A ──→ Whisper ──→ segments A
-Participant B ──→ <audio> B ──→ AudioContext B ──→ ScriptProcessor B ──→ SpeakerStreamManager B ──→ Whisper ──→ segments B
-Participant C ──→ <audio> C ──→ AudioContext C ──→ ScriptProcessor C ──→ SpeakerStreamManager C ──→ Whisper ──→ segments C
++------------------------- BROWSER (page.evaluate) -------------------------+
+|                                                                            |
+|  Google Meet provides N separate <audio> elements (one per participant).   |
+|  Each gets its own AudioContext + ScriptProcessor.                         |
+|                                                                            |
+|  +----------------+  +----------------+  +----------------+               |
+|  | <audio> A      |  | <audio> B      |  | <audio> C      |  ... N       |
+|  | (participant)  |  | (participant)  |  | (participant)  |               |
+|  +-------+--------+  +-------+--------+  +-------+--------+               |
+|          |                    |                    |                        |
+|          v                    v                    v                        |
+|  +----------------+  +----------------+  +----------------+               |
+|  | AudioContext A  |  | AudioContext B  |  | AudioContext C  |               |
+|  | ScriptProc A   |  | ScriptProc B   |  | ScriptProc C   |               |
+|  | 16kHz, 4096    |  | 16kHz, 4096    |  | 16kHz, 4096    |               |
+|  | silence >0.005 |  | silence >0.005 |  | silence >0.005 |               |
+|  +-------+--------+  +-------+--------+  +-------+--------+               |
+|          |                    |                    |                        |
+|          +--------------------+--------------------+                       |
+|                               |                                            |
+|                               v                                            |
+|                __vexaPerSpeakerAudioData(index, data)                      |
+|                (exposed function, per-element index)                       |
+|                                                                            |
+|  IN PARALLEL:                                                              |
+|  +--------------------------------------------------------------+         |
+|  | Speaker Detection (recording.ts)                              |         |
+|  |                                                               |         |
+|  | MutationObserver on [data-participant-id] tiles               |         |
+|  | Watches speaking classes: Oaajhc, HX2H7, wEsLMd, OgVli       |         |
+|  | + 500ms polling fallback                                      |         |
+|  |                                                               |         |
+|  | Exposes: __vexaGetAllParticipantNames()                       |         |
+|  |   -> { names: {id: name}, speaking: [name] }                 |         |
+|  +--------------------------------------------------------------+         |
++----------------------------------+-------------------------------------+---+
+                                   | (elementIndex, Float32Array)
+                                   v
++------------------------- NODE.JS ------------------------------------------+
+|                                                                            |
+|  handlePerSpeakerAudioData(speakerIndex, audioData)                        |
+|       |                                                                    |
+|       v                                                                    |
+|  +--------------------------------------------------------------+         |
+|  | Speaker Identity Voting           (speaker-identity.ts)       |         |
+|  |                                                               |         |
+|  |  On each audio chunk:                                         |         |
+|  |    Query browser: who is speaking? (DOM indicators)           |         |
+|  |    If exactly 1 speaker active: vote(trackN = speakerName)    |         |
+|  |    After 3 votes at 70% ratio: LOCK permanently               |         |
+|  |    Locked tracks return instantly, no more queries             |         |
+|  |    Constraint: one-name-per-track, one-track-per-name          |         |
+|  |                                                               |         |
+|  |  Re-resolve every 2s if unmapped, 5s if named but unlocked    |         |
+|  +--------------------------------------------------------------+         |
+|       |                                                                    |
+|       v                                                                    |
+|  +------------------------------------------------------------------+     |
+|  | SpeakerStreamManager (N instances)        (speaker-streams.ts)    |     |
+|  |                                                                   |     |
+|  |  One buffer per speaker-{index}:                                  |     |
+|  |    feedAudio() -> chunks accumulate                               |     |
+|  |    Submit timer: every 2s -> submitBuffer() if enough data        |     |
+|  |    Confirmation: 2 consecutive matching transcripts               |     |
+|  |    Idle timeout: 15s no audio -> force flush                      |     |
+|  |    Max buffer: 120s -> trim                                       |     |
+|  |    VAD (Silero): filters silence before buffer (Google Meet only) |     |
+|  |                                                                   |     |
+|  |  Callbacks:                                                       |     |
+|  |    onSegmentReady ----------> (draft, send to Whisper)            |     |
+|  |    onSegmentConfirmed ------> (final, publish)                    |     |
+|  +-------------+------------------------------------------+----------+     |
+|                |                                          |                |
+|                v                                          v                |
+|  +------------------------+              +------------------------------+  |
+|  | TranscriptionClient    |              | SegmentPublisher             |  |
+|  | (HTTP POST WAV)        |              | (segment-publisher.ts)       |  |
+|  |                        |              |                              |  |
+|  | Sends WAV to           |              | XADD -> transcription_       |  |
+|  | Whisper service        |              |         segments stream      |  |
+|  | Returns text +         |              | PUBLISH -> meeting:{id}:     |  |
+|  | word timestamps        |              |            segments channel  |  |
+|  +------------------------+              |                              |  |
+|                                          | Drafts  (completed=false)    |  |
+|                                          | Confirmed (completed=true)   |  |
+|                                          +-------------+----------------+  |
++--------------------------------------------+-----------+-------------------+
+                                              |
+                                              v
++------------------------- DOWNSTREAM ---------------------------------------+
+|                                                                            |
+|  Redis stream --> transcription-collector --> Redis Hash (30s hold)        |
+|                                           --> Postgres (persist)           |
+|                                                                            |
+|  Redis pub/sub --> api-gateway WS --> client (live segments)               |
+|                                                                            |
+|  api-gateway REST --> GET /transcripts/{id} (Hash + Postgres merge)        |
++----------------------------------------------------------------------------+
 ```
 
-Each participant has its own:
-- Audio element with isolated MediaStream
-- AudioContext at 16kHz
-- ScriptProcessor (4096 buffer)
-- SpeakerStreamManager instance (offset-based sliding window)
-- Independent Whisper submissions
+### The 8 Components
 
-The callback `__vexaPerSpeakerAudioData(index, data)` routes by element index. Each index maps to one SpeakerStreamManager identified as `speaker-{index}`.
+| # | Component | Where | Shared? | Role |
+|---|-----------|-------|---------|------|
+| 1 | **Per-Element ScriptProcessors** | Browser | Google Meet only | N independent AudioContexts at 16kHz, one per `<audio>` element. Silence filter (`maxVal > 0.005`) per stream. Teams uses a single ScriptProcessor + ring buffer instead (mixed audio) |
+| 2 | **Speaker Detection** | Browser | Google Meet only | MutationObserver on participant tiles + 500ms polling. Detects who is speaking via CSS class changes. Teams uses live captions for speaker identity instead |
+| 3 | **`__vexaPerSpeakerAudioData`** | Browser->Node bridge | Google Meet only | Exposed function. Carries `(elementIndex, audioArray)` -- index identifies which stream. Teams uses `__vexaTeamsAudioData(speakerName, audioArray)` -- different signature because speaker name is known from captions |
+| 4 | **Speaker Identity Voting** | Node | Google Meet only | `speaker-identity.ts` -- correlates "which track has audio" with "which DOM tile is speaking." 3 votes at 70% -> permanent lock. Teams doesn't need this -- captions provide speaker names directly |
+| 5 | **SpeakerStreamManager (N instances)** | Node | Shared | `speaker-streams.ts` -- same code for both platforms. Google Meet uses N instances (one per audio element). Teams uses 1 instance (mixed audio, time-sliced by captions) |
+| 6 | **TranscriptionClient** | Node | Shared | `transcription-client.ts` -- identical for both platforms. HTTP POST WAV to Whisper, returns text + word timestamps |
+| 7 | **SegmentPublisher** | Node | Shared | `segment-publisher.ts` -- identical for both platforms. XADD to Redis stream, PUBLISH to pub/sub channel |
+| 8 | **transcription-collector + api-gateway** | Downstream services | Shared | Platform-agnostic. Collector consumes stream, holds 30s for immutability, persists to Postgres. Gateway delivers via WS and REST |
+
+### Critical Design Constraint
+
+Google Meet gives **clean per-speaker audio** (no mixed stream, no diarization needed) but **doesn't tell you who each stream belongs to**. The voting system bridges this gap:
+
+- Audio activity and DOM speaking indicators are **correlated over time**
+- Voting only works when **exactly 1 speaker** is active (can't disambiguate during overlap)
+- Once locked (3 votes, 70% ratio), mapping is **permanent** for the session
+- Before locking, early audio may be attributed to `""` (unmapped) -- segments still captured, speaker name may update retroactively
+
+Unlike Teams (which relies on a single caption activation button), Google Meet's per-speaker architecture has **no single choke point** for audio capture. Each stream is independent -- if one fails, others continue.
 
 ### Audio Capture
 

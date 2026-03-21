@@ -1669,19 +1669,22 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     const isVoiceAgentTeams = !!botConfig.voiceAgentEnabled;
     await context.addInitScript(`window.__vexa_voice_agent_enabled = ${isVoiceAgentTeams};`);
 
-    // Only inject virtual camera (avatar streaming) for voice agent bots.
-    // Transcription-only bots get a lightweight video blocker instead.
-    if (isVoiceAgentTeams) {
+    // Video OUT (avatar/camera): controlled by cameraEnabled (default off)
+    if (botConfig.cameraEnabled) {
       try {
         await context.addInitScript(getVirtualCameraInitScript());
-        log('[Bot] Virtual camera init script injected (Teams, voice agent mode)');
+        log('[Bot] Video OUT: virtual camera init script injected (Teams)');
       } catch (e: any) {
-        log(`[Bot] Warning: addInitScript failed (Teams): ${e.message}`);
+        log(`[Bot] Warning: virtual camera addInitScript failed (Teams): ${e.message}`);
       }
-    } else {
+    }
+
+    // Video IN (receive participant video): controlled by videoReceiveEnabled (default off)
+    // When off, disables incoming video tracks to save ~87% CPU per bot.
+    if (!botConfig.videoReceiveEnabled) {
       try {
         await context.addInitScript(getVideoBlockInitScript());
-        log('[Bot] Video block init script injected (Teams, transcription-only mode)');
+        log('[Bot] Video IN: blocked (Teams, saving CPU)');
       } catch (e: any) {
         log(`[Bot] Warning: video block addInitScript failed (Teams): ${e.message}`);
       }
@@ -1716,20 +1719,22 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     const isVoiceAgent = !!botConfig.voiceAgentEnabled;
     await context.addInitScript(`window.__vexa_voice_agent_enabled = ${isVoiceAgent};`);
 
-    // Only inject virtual camera (avatar streaming) for voice agent bots.
-    // Transcription-only bots get a lightweight video blocker that stops
-    // incoming video tracks and transceivers to save CPU/memory.
-    if (isVoiceAgent) {
+    // Video OUT (avatar/camera): controlled by cameraEnabled (default off)
+    if (botConfig.cameraEnabled) {
       try {
         await context.addInitScript(getVirtualCameraInitScript());
-        log('[Bot] Virtual camera init script injected (voice agent mode)');
+        log('[Bot] Video OUT: virtual camera init script injected');
       } catch (e: any) {
-        log(`[Bot] Warning: addInitScript failed: ${e.message}`);
+        log(`[Bot] Warning: virtual camera addInitScript failed: ${e.message}`);
       }
-    } else {
+    }
+
+    // Video IN (receive participant video): controlled by videoReceiveEnabled (default off)
+    // When off, disables incoming video tracks to save ~87% CPU per bot.
+    if (!botConfig.videoReceiveEnabled) {
       try {
         await context.addInitScript(getVideoBlockInitScript());
-        log('[Bot] Video block init script injected (transcription-only mode)');
+        log('[Bot] Video IN: blocked (saving CPU)');
       } catch (e: any) {
         log(`[Bot] Warning: video block addInitScript failed: ${e.message}`);
       }
@@ -1785,16 +1790,16 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     Object.defineProperty(window, "outerHeight", { get: () => 1080 });
   });
 
-  // Only initialize virtual camera and avatar for voice agent bots.
-  // Transcription-only bots skip this entirely to save CPU/memory.
-  if (botConfig.voiceAgentEnabled) {
+  // Virtual camera is controlled by cameraEnabled (independent of voiceAgentEnabled).
+  // TTS speaker bots can speak without streaming an avatar.
+  if (botConfig.cameraEnabled) {
     try {
       await initVirtualCamera(botConfig, page);
     } catch (err: any) {
       log(`[Bot] Virtual camera initialization failed (non-fatal): ${err.message}`);
     }
   } else {
-    log('[Bot] Skipping virtual camera init (transcription-only mode)');
+    log('[Bot] Skipping virtual camera init (camera not enabled)');
   }
 
   // Always initialize chat service so chat read/write works for every bot

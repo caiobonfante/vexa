@@ -33,7 +33,7 @@ handleTranscriptionResult()     quality gate (no_speech, logprob, hallucination 
     v
 full string match: does text exactly match previous result?
     |
-    yes (3 consecutive) ──→ CONFIRMED: emit segment, advance offset
+    yes (2 consecutive) ──→ CONFIRMED: emit segment, advance offset
     no ──→ update lastTranscript, wait for next submission
 ```
 
@@ -72,7 +72,7 @@ frames_offset                timestamp_offset
 - `discard_buffer_s = 30` — trim this much when buffer exceeds max
 - `clip_if_no_segment_s = 25` — if no valid segment for 25s, force clip
 - `clip_retain_s = 5` — keep last 5s when clipping
-- `same_output_threshold = 3` — confirm partial after 3 identical outputs
+- `same_output_threshold = 3` — confirm partial after 3 identical outputs (our implementation uses 2)
 
 ### Downstream: How Segments Reach Clients
 
@@ -115,17 +115,27 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 
 ### Components
 
+**Shared pipeline (both platforms use identical code):**
+
 | Component | Role | Key file |
 |-----------|------|----------|
 | **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
 | **transcription-client** | HTTP POST WAV to transcription-service, requests word timestamps | `services/vexa-bot/core/src/services/transcription-client.ts` |
 | **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `services/transcription-service/main.py` |
-| **segment-publisher** | Redis XADD + PUBLISH | `services/vexa-bot/core/src/services/segment-publisher.ts` |
-| **speaker-mapper** | Post-transcription speaker attribution (Teams) — maps word timestamps to caption boundaries | `services/vexa-bot/core/src/services/speaker-mapper.ts` |
-| **speaker-identity** | Track→speaker voting/locking (Google Meet only) | `services/vexa-bot/core/src/services/speaker-identity.ts` |
-| **transcription-collector** | Consumes Redis stream, maps speakers, persists | `services/transcription-collector/main.py` |
+| **segment-publisher** | Redis XADD + PUBLISH to `meeting:{id}:segments` channel | `services/vexa-bot/core/src/services/segment-publisher.ts` |
+| **transcription-collector** | Consumes Redis stream, maps speakers, persists to Postgres after 30s | `services/transcription-collector/main.py` |
 | **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |
 | **vexa-bot** | Orchestrates everything, platform handlers | `services/vexa-bot/core/src/index.ts` |
+
+**Platform-specific (different approach per platform):**
+
+| Component | Platform | Role | Key file |
+|-----------|----------|------|----------|
+| **Per-element ScriptProcessors** | Google Meet | N independent AudioContexts, one per `<audio>` element | `index.ts` (`startPerSpeakerAudioCapture`) |
+| **Caption Observer + Audio Queue** | Teams | Ring buffer holds mixed audio, captions decide speaker routing | `platforms/msteams/recording.ts` |
+| **Speaker Detection (DOM voting)** | Google Meet | MutationObserver on speaking CSS classes, 500ms polling | `platforms/googlemeet/recording.ts` |
+| **Speaker Identity Voting** | Google Meet | Correlates audio activity with DOM indicators, locks after 3 votes at 70% | `services/speaker-identity.ts` |
+| **speaker-mapper** | Teams | Maps Whisper word timestamps to caption speaker boundaries | `services/speaker-mapper.ts` |
 
 ## How
 
@@ -160,14 +170,16 @@ Whisper returns per-segment quality signals (`no_speech_prob`, `avg_logprob`, `c
 
 ### Current Config
 
-| Parameter | Value | Why |
-|-----------|-------|-----|
-| `submitInterval` | 3s | Balance between latency and Whisper efficiency |
-| `confirmThreshold` | 3 | 3 identical outputs — ensures text fully stabilized |
+Values hardcoded in `index.ts` (lines 1019-1026). Note: `.env.example` shows different values (3, 3, 3, 120, 15, 15) -- the code overrides them.
+
+| Parameter | Value (code) | Why |
+|-----------|-------------|-----|
+| `submitInterval` | 2s | Balance between latency and Whisper efficiency |
+| `confirmThreshold` | 2 | 2 identical outputs — ensures text stabilized without waiting too long |
 | `minAudioDuration` | 3s | Don't submit tiny chunks |
 | `maxBufferDuration` | 120s | Trim buffer front at 2 min |
 | `idleTimeoutSec` | 15s | High because browser silence filter makes pauses look idle |
-| `maxSpeechDurationSec` | 15s | Whisper forces segment split — shorter segments confirm faster |
+| `maxSpeechDurationSec` | 10s | Whisper forces segment split — shorter segments confirm faster |
 
 ### Verify
 

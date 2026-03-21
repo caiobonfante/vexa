@@ -42,7 +42,12 @@ export class SileroVAD {
 
     // Find model file
     const candidates = [
+      // From dist/services/ → core/node_modules (Docker: /app/vexa-bot/core/dist/services/)
+      path.resolve(__dirname, '..', '..', 'node_modules', '@jjhbw', 'silero-vad', 'weights', 'silero_vad.onnx'),
+      // From dist/services/ → project root node_modules (if hoisted)
       path.resolve(__dirname, '..', '..', '..', 'node_modules', '@jjhbw', 'silero-vad', 'weights', 'silero_vad.onnx'),
+      // Fallback: absolute Docker path
+      '/app/vexa-bot/core/node_modules/@jjhbw/silero-vad/weights/silero_vad.onnx',
       '/app/silero_vad.onnx',
     ];
 

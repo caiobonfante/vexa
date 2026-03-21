@@ -188,9 +188,20 @@ async def process_redis_to_postgres(redis_c: aioredis.Redis, local_transcription
                 
                 if batch_to_store:
                     try:
-                        db.add_all(batch_to_store)
+                        # Deduplicate batch before inserting: same (meeting_id, speaker, start_time rounded to 3dp)
+                        # prevents duplicate rows from repeated background cycles processing the same Redis Hash entry.
+                        seen_keys = set()
+                        deduped_batch = []
+                        for t in batch_to_store:
+                            key = (t.meeting_id, t.speaker or '', round(t.start_time, 3))
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                deduped_batch.append(t)
+                        if len(deduped_batch) < len(batch_to_store):
+                            logger.info(f"Deduped batch: {len(batch_to_store)} → {len(deduped_batch)} segments")
+                        db.add_all(deduped_batch)
                         await db.commit()
-                        logger.info(f"Stored {len(batch_to_store)} segments to PostgreSQL from {len(segments_to_delete_from_redis)} meetings")
+                        logger.info(f"Stored {len(deduped_batch)} segments to PostgreSQL from {len(segments_to_delete_from_redis)} meetings")
                         # Publish finalized segments per meeting via Redis Pub/Sub
                         try:
                             # Group by meeting for channel fan-out

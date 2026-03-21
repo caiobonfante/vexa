@@ -2,16 +2,17 @@
 
 ## Why
 
-The bot joins meetings and captures per-speaker audio. Unlike traditional
-approaches that mix all participants into one stream and then guess who said
-what, the bot keeps each speaker's WebRTC audio track separate. This gives:
+The bot joins meetings across platforms, captures audio, and produces
+speaker-attributed transcription segments in real-time. Each platform
+provides different signals, and the bot adapts:
 
-- **Perfect speaker attribution** -- no diarization needed, segments arrive
-  pre-labeled with the speaker's name.
-- **Better transcription quality** -- clean single-voice audio instead of a
-  mix with cross-talk.
-- **Natural speaker events** -- derived from track activity (VAD on real
-  audio), not DOM polling for CSS class changes.
+- **Google Meet** -- separate audio stream per participant. Clean single-voice
+  audio, speaker identity via DOM voting/locking.
+- **Microsoft Teams** -- single mixed audio stream. Speaker attribution via
+  live captions (Teams ASR provides speaker name with each caption event).
+- **Zoom** -- SDK raw audio callbacks with participant metadata.
+
+All platforms feed into the same shared transcription pipeline.
 
 ## What
 
@@ -19,7 +20,7 @@ what, the bot keeps each speaker's WebRTC audio track separate. This gives:
 - [Bot Overview](../../docs/bot-overview.mdx)
 - [Meeting IDs](../../docs/meeting-ids.mdx)
 
-- Joins Google Meet, Teams, and Zoom via browser automation (Playwright).
+- Joins Google Meet and Teams via browser automation (Playwright). Zoom uses native SDK (not browser).
 - Per-speaker audio capture: each participant = separate audio stream.
 - Screen share tracks (unmapped to a participant tile) labeled "Presentation".
 - Silero VAD filters silence before transcription (saves compute).
@@ -147,17 +148,43 @@ core/src/platforms/hot-debug.sh
 # Makefile loop: edit TS -> make rebuild (~10s) -> make test -> check Redis
 ```
 
+## Bot Capabilities
+
+Four independent capability flags control what the bot does in a meeting. Audio is always on; video defaults to off to save resources.
+
+```
+                     Default
+Audio IN  (capture)  always on    Per-speaker ScriptProcessors (Google Meet)
+                                  or caption-driven mixed stream routing (Teams)
+Audio OUT (speak)    off          TTS playback via virtual mic (voiceAgentEnabled)
+Video IN  (see)      off          Receive participant video (videoReceiveEnabled)
+Video OUT (show)     off          Stream avatar via virtual camera (cameraEnabled)
+```
+
+| Flag | Type field | API field | Default | What it controls |
+|------|-----------|-----------|---------|-----------------|
+| `voiceAgentEnabled` | `voice_agent_enabled` | `voice_agent_enabled` | `false` | TTS playback, microphone service, Redis event publishing. Does NOT require camera. |
+| `cameraEnabled` | `camera_enabled` | `camera_enabled` | `false` | Virtual camera init script, avatar streaming, `ScreenContentService`. Independent of voice agent. |
+| `videoReceiveEnabled` | `video_receive_enabled` | `video_receive_enabled` | `false` | When off, incoming video tracks are disabled at the WebRTC level (~87% CPU savings per bot). |
+| `transcribeEnabled` | `transcribe_enabled` | `transcribe_enabled` | `true` | Per-speaker transcription pipeline (SpeakerStreamManager, TranscriptionClient, SegmentPublisher). |
+
+Typical configurations:
+
+| Use case | `voiceAgentEnabled` | `cameraEnabled` | `videoReceiveEnabled` |
+|----------|--------------------|-----------------|-----------------------|
+| **Recorder bot** (transcription only) | off | off | off |
+| **TTS speaker bot** (collection runs) | on | off | off |
+| **Full voice agent** (avatar + TTS + screen reading) | on | on | on |
+
 ## Supported Platforms
 
-| Platform         | Browser            | Audio Capture                                   | Speaker Identity                                    |
-|------------------|--------------------|------------------------------------------------|-----------------------------------------------------|
-| Google Meet      | Chrome + Stealth   | Per-element `<audio>`/`<video>` streams (one per participant) | Speaking-indicator correlation + voting/locking: correlates DOM speaking indicators with audio tracks, votes on matches, locks permanently after threshold |
-| Microsoft Teams  | MS Edge (required) | Single mixed RTCPeerConnection stream, DOM-routed by speaker events | DOM traversal + voting/locking: identifies active speaker from DOM, routes mixed audio segments to the correct speaker via the same vote/lock system |
-| Zoom (self-hosted only) | None (native SDK)  | SDK raw audio callback or PulseAudio fallback   | SDK participant metadata. Requires own Marketplace app. Web app mode in dev. |
+| Platform | Browser | Audio Capture | Speaker Identity |
+|----------|---------|--------------|-----------------|
+| Google Meet | Chrome + Stealth | N per-element `<audio>`/`<video>` streams (one per participant) | DOM speaking-indicator correlation + voting/locking (`speaker-identity.ts`): 3 votes at 70% ratio locks permanently |
+| Microsoft Teams | MS Edge (fallback: Chrome) | 1 mixed RTCPeerConnection stream, routed by live caption speaker boundaries | Caption author `[data-tid="author"]` — name known at routing time, no voting needed |
+| Zoom (self-hosted) | None (native SDK) | SDK raw audio callback or PulseAudio fallback | SDK participant metadata. Requires own Marketplace app. |
 
-All platforms feed into the same per-speaker pipeline: tracks discovered,
-tagged with participant identity (via voting/locking in `speaker-identity.ts`),
-filtered through VAD, buffered, transcribed, and published to Redis.
+All platforms feed into the same shared pipeline: `SpeakerStreamManager` (buffering, Whisper submission, confirmation) -> `TranscriptionClient` (HTTP POST WAV) -> `SegmentPublisher` (Redis XADD + PUBLISH). Platform-specific code only handles how audio enters the manager and how speaker names are resolved.
 
 ## Redis Output
 
