@@ -38,7 +38,8 @@ help:
 	@echo "    make play-noisy-cafe   — replay with cafe noise"
 	@echo "    make play-noisy-silence — replay with 30s silence gap"
 	@echo "    make play-speakers     — 3-speaker attribution replay"
-	@echo "    make play-replay       — replay real meeting collected data"
+	@echo "    make play-replay       — replay collected data (core pipeline only)"
+	@echo "    make play-replay-full  — replay + publish to Redis/WS/DB (full system)"
 	@echo "    make play FILE=x       — replay custom WAV"
 	@echo "    make play-all          — all replays sequentially"
 	@echo "    make test              — unit + all replays"
@@ -117,6 +118,18 @@ play-speakers:
 
 play-replay:
 	@cd $(BOT) && DATASET=$(or $(DATASET),collection-run) npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+
+# Full system replay: publishes to Redis → transcription-collector → WS → DB
+# Segments visible in observe.html, dashboard, and REST API
+# Usage: make play-replay-full DATASET=collection-run
+play-replay-full:
+	@cd $(BOT) && PUBLISH=true \
+		DATASET=$(or $(DATASET),collection-run) \
+		REDIS_URL=$(or $(REDIS_URL),redis://localhost:6379) \
+		API_GATEWAY_URL=$(or $(API_GATEWAY_URL),http://localhost:8066) \
+		API_TOKEN=$(API_TOKEN) \
+		ADMIN_TOKEN=$(or $(ADMIN_TOKEN),changeme) \
+		npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
 
 play-panel:
 	@cd $(BOT) && DATASET=panel-20 npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)

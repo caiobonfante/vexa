@@ -1,10 +1,23 @@
 /**
  * Production-faithful replay test.
  *
+ * TWO MODES:
+ *
+ *   CORE (default):
+ *     Replays audio through SpeakerStreamManager + Whisper, scores against
+ *     ground truth. Fast, isolated, no infra dependencies beyond Whisper.
+ *     Use: make play-replay DATASET=collection-run
+ *
+ *   FULL SYSTEM (PUBLISH=true):
+ *     Same pipeline, but also publishes segments to Redis via SegmentPublisher.
+ *     Creates a meeting record so transcription-collector processes segments
+ *     into Redis Hash → WS → Postgres. View live in observe.html.
+ *     Use: make play-replay-full DATASET=collection-run
+ *
  * Reproduces the EXACT index.ts code path:
  *   audio -> SpeakerStreamManager -> onSegmentReady (real Whisper + word storage)
  *   -> handleTranscriptionResult -> confirm/idle -> onSegmentConfirmed
- *   -> mapper condition check -> mapWordsToSpeakers -> per-speaker segments
+ *   -> SegmentPublisher (PUBLISH mode) or in-memory array (core mode)
  *
  * Uses real collected data:
  *   - Per-utterance TTS audio files placed at caption speaker-change times
@@ -13,12 +26,23 @@
  *   - flushSpeaker on caption speaker changes (same as handleTeamsCaptionData)
  *
  * Run: npx ts-node core/src/services/production-replay.test.ts <audio-dir> <tests-dir>
+ *
+ * Env vars:
+ *   DATASET              - dataset directory name (default: collection-run)
+ *   PUBLISH              - if "true", publish to Redis/WS/DB (full system mode)
+ *   REDIS_URL            - Redis URL for full system mode (default: redis://localhost:6379)
+ *   API_GATEWAY_URL      - API gateway for meeting creation (default: http://localhost:8066)
+ *   API_TOKEN            - API token for meeting creation
+ *   ADMIN_TOKEN          - JWT signing secret (default: changeme)
+ *   NATIVE_MEETING_ID    - fake meeting ID for full system mode (default: auto-generated)
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { SpeakerStreamManager } from './speaker-streams';
 import { TranscriptionClient } from './transcription-client';
+import { SegmentPublisher } from './segment-publisher';
 import { mapWordsToSpeakers, captionsToSpeakerBoundaries, CaptionEvent, TimestampedWord } from './speaker-mapper';
 
 const SAMPLE_RATE = 16000;
@@ -26,9 +50,51 @@ const CHUNK_SIZE = 4096;
 const CHUNK_DURATION_MS = (CHUNK_SIZE / SAMPLE_RATE) * 1000;
 const TX_URL = process.env.TRANSCRIPTION_URL || 'http://localhost:8085/v1/audio/transcriptions';
 const TX_TOKEN = process.env.TRANSCRIPTION_TOKEN || '32c59b9f654f1b6e376c6f020d79897d';
+const PUBLISH = process.env.PUBLISH === 'true';
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:8066';
+const API_TOKEN = process.env.API_TOKEN || '';
+const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN || 'changeme';
 
 const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/tests/audio`;
 const TESTS_DIR = process.argv[3] || `${__dirname}/../../../../features/realtime-transcription/tests`;
+
+// -- JWT helper for minting MeetingTokens (full system mode) ------------------
+
+function mintMeetingToken(meetingId: number, userId: number, platform: string, nativeMeetingId: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({
+    meeting_id: meetingId, user_id: userId, platform, native_meeting_id: nativeMeetingId,
+    scope: 'transcribe:write', iss: 'bot-manager', aud: 'transcription-collector',
+    iat: now, exp: now + 7200, jti: crypto.randomUUID(),
+  })).toString('base64url');
+  const sig = crypto.createHmac('sha256', ADMIN_TOKEN_SECRET)
+    .update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${sig}`;
+}
+
+// -- Create meeting via API (full system mode) --------------------------------
+
+async function createReplayMeeting(dataset: string): Promise<{ meetingId: number; nativeMeetingId: string }> {
+  const nativeMeetingId = process.env.NATIVE_MEETING_ID || `replay-${Date.now()}`;
+  const body = JSON.stringify({
+    platform: 'teams',
+    native_meeting_id: nativeMeetingId,
+    meeting_url: `https://replay.local/meet/${nativeMeetingId}`,
+    bot_name: `Replay-${dataset}`,
+  });
+  const resp = await fetch(`${API_GATEWAY_URL}/bots`, {
+    method: 'POST', body,
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_TOKEN },
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Failed to create replay meeting: ${resp.status} ${err}`);
+  }
+  const data = await resp.json() as any;
+  return { meetingId: data.id, nativeMeetingId };
+}
 
 // -- WAV reader ---------------------------------------------------------------
 
@@ -173,9 +239,10 @@ function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: s
 
 async function main() {
   const dataset = process.env.DATASET || 'collection-run';
+  const mode = PUBLISH ? 'FULL SYSTEM' : 'CORE';
   console.log('\n  ====================================================');
   console.log(`  PRODUCTION-FAITHFUL REPLAY TEST (${dataset})`);
-  console.log('  Per-utterance TTS at caption speaker-change times');
+  console.log(`  Mode: ${mode}${PUBLISH ? ' → Redis → WS → DB' : ' (pipeline only)'}`);
   console.log('  ====================================================\n');
 
   const collectionDir = path.join(AUDIO_DIR, dataset);
@@ -241,6 +308,38 @@ async function main() {
   const ts = () => ((Date.now() - t0) / 1000).toFixed(1);
   const sessionStartMs = t0;
 
+  // -- Full system mode: create meeting + publisher --
+  let publisher: SegmentPublisher | null = null;
+  let replayMeetingId: number | null = null;
+  let replayNativeId: string | null = null;
+
+  if (PUBLISH) {
+    if (!API_TOKEN) {
+      console.error('  PUBLISH=true requires API_TOKEN env var');
+      process.exit(1);
+    }
+    console.log('  [PUBLISH] Creating replay meeting...');
+    const meeting = await createReplayMeeting(dataset);
+    replayMeetingId = meeting.meetingId;
+    replayNativeId = meeting.nativeMeetingId;
+    const token = mintMeetingToken(meeting.meetingId, 1, 'teams', meeting.nativeMeetingId);
+    const sessionUid = `replay-${dataset}-${Date.now()}`;
+
+    publisher = new SegmentPublisher({
+      redisUrl: REDIS_URL,
+      meetingId: String(meeting.meetingId),
+      token,
+      sessionUid,
+      platform: 'teams',
+    });
+    publisher.resetSessionStart();
+    await publisher.publishSessionStart();
+    console.log(`  [PUBLISH] Meeting ${meeting.meetingId} (native: ${meeting.nativeMeetingId})`);
+    console.log(`  [PUBLISH] Observe: http://localhost:3012/observe.html?meeting=${meeting.nativeMeetingId}&auto=1`);
+    console.log(`  [PUBLISH] Dashboard: http://localhost:3011/meetings/${meeting.meetingId}`);
+    console.log('');
+  }
+
   // === index.ts globals ===
   // Per-speaker word storage: words are set in onSegmentReady and consumed in
   // onSegmentConfirmed. A shared global would race across concurrent speakers
@@ -279,6 +378,23 @@ async function main() {
         if (words.length > 0) {
           whisperWordsPerSpeaker.set(speakerId, words);
         }
+
+        // Publish draft to Redis (full system mode)
+        if (publisher) {
+          telemetry.draftsEmitted++;
+          const bufStart = mgr.getBufferStartMs(speakerId);
+          const nowMs = Date.now();
+          const startSec = (bufStart - publisher.sessionStartMs) / 1000;
+          const endSec = (nowMs - publisher.sessionStartMs) / 1000;
+          const segmentId = `${publisher.sessionUid}:${mgr.getSegmentId(speakerId)}`;
+          await publisher.publishSegment({
+            speaker: speakerName, text, start: startSec, end: endSec,
+            language: result.language || 'en', completed: false, segment_id: segmentId,
+            absolute_start_time: new Date(bufStart).toISOString(),
+            absolute_end_time: new Date(nowMs).toISOString(),
+          });
+        }
+
         const lastSeg = result.segments?.[result.segments.length - 1];
         const whisperSegs = result.segments?.map(s => ({
           text: s.text, start: s.start, end: s.end
@@ -309,6 +425,19 @@ async function main() {
 
     const speakerWords = whisperWordsPerSpeaker.get(speakerId) || [];
     console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | ${durSec.toFixed(1)}s ${wordCount}w latency=${(confirmLatencyMs/1000).toFixed(1)}s | "${transcript.substring(0, 60)}..."`);
+
+    // Publish confirmed segment to Redis (full system mode)
+    if (publisher) {
+      const pubStartSec = (bufferStartMs - publisher.sessionStartMs) / 1000;
+      const pubEndSec = (bufferEndMs - publisher.sessionStartMs) / 1000;
+      const fullSegmentId = `${publisher.sessionUid}:${segmentId}`;
+      await publisher.publishSegment({
+        speaker: speakerName, text: transcript, start: pubStartSec, end: pubEndSec,
+        language: 'en', completed: true, segment_id: fullSegmentId,
+        absolute_start_time: new Date(bufferStartMs).toISOString(),
+        absolute_end_time: new Date(bufferEndMs).toISOString(),
+      });
+    }
 
     // Per-speaker audio already provides correct attribution.
     // The mapper was disabled in the live pipeline (index.ts) because
@@ -486,7 +615,22 @@ async function main() {
   console.log(`  CORRECT SPEAKER: ${correctSpeaker}/${GT.length} (${(correctSpeaker / GT.length * 100).toFixed(0)}%)`);
   console.log(`  MAPPER FIRED: ${outputSegments.some(s => s.speaker !== 'Mixed') ? 'YES' : 'NO'}`);
 
+  // -- Cleanup --
   mgr.removeAll();
+
+  if (publisher) {
+    console.log(`\n  [PUBLISH] Sending session_end...`);
+    await publisher.publishSessionEnd();
+    // Wait for transcription-collector to process remaining segments
+    console.log(`  [PUBLISH] Waiting 10s for collector to process...`);
+    await new Promise(r => setTimeout(r, 10000));
+    await publisher.close();
+    console.log(`  [PUBLISH] Done. View results:`);
+    console.log(`    Dashboard: http://localhost:3011/meetings/${replayMeetingId}`);
+    console.log(`    REST: curl -H "X-API-Key: $API_TOKEN" http://localhost:8066/transcripts/teams/${replayNativeId}`);
+    console.log(`    Observe: http://localhost:3012/observe.html?meeting=${replayNativeId}`);
+  }
+
   process.exit(0);
 }
 
