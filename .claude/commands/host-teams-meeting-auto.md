@@ -72,7 +72,7 @@ sshpass -p "$SESSION_TOKEN" ssh -o StrictHostKeyChecking=no root@localhost -p $S
 sshpass -p "$SESSION_TOKEN" ssh ... "pkill -f auto-admit"
 
 # Leave meeting
-cd services/vexa-bot && CDP_URL="$CDP_URL" node -e "
+cd features/realtime-transcription/scripts && CDP_URL="$CDP_URL" node -e "
   const b = await require('playwright').chromium.connectOverCDP(process.env.CDP_URL);
   await b.contexts()[0].pages()[0].locator('[aria-label=\"Leave\"]').click();"
 ```
