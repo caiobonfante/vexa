@@ -260,11 +260,30 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       (seg) => seg.absolute_start_time && seg.text?.trim()
     );
 
-    // Key by segment_id (stable, per-speaker) or absolute_start_time (legacy)
+    // Deduplicate: prefer confirmed over draft for same speaker+text.
+    // Key by segment_id but also detect duplicates by speaker+text.
     const transcriptMap = new Map<string, TranscriptSegment>();
+    const textIndex = new Map<string, string>(); // "speaker:text" → key (to detect dups)
     for (const segment of validSegments) {
       const key = segment.segment_id || segment.absolute_start_time;
+      const textKey = `${segment.speaker || ""}:${(segment.text || "").trim()}`;
+
+      // Check for duplicate text from the same speaker (draft→confirmed collision)
+      const existingKeyForText = textIndex.get(textKey);
+      if (existingKeyForText && existingKeyForText !== key) {
+        const existing = transcriptMap.get(existingKeyForText);
+        if (existing) {
+          // Prefer completed over draft
+          if (segment.completed && !existing.completed) {
+            transcriptMap.delete(existingKeyForText);
+          } else if (!segment.completed && existing.completed) {
+            continue; // Keep existing confirmed, skip this draft
+          }
+        }
+      }
+
       transcriptMap.set(key, segment);
+      textIndex.set(textKey, key);
     }
 
     // Sort by absolute_start_time
@@ -355,14 +374,35 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       hasUpdates = true;
     }
 
+    // Remove draft→confirmed duplicates (same speaker + same text, different IDs)
+    const textIndex2 = new Map<string, string>();
+    for (const [key, seg] of transcriptMap.entries()) {
+      const textKey = `${seg.speaker || ""}:${(seg.text || "").trim()}`;
+      const existingKey = textIndex2.get(textKey);
+      if (existingKey && existingKey !== key) {
+        const existing = transcriptMap.get(existingKey);
+        if (existing) {
+          if (seg.completed && !existing.completed) {
+            transcriptMap.delete(existingKey);
+            hasUpdates = true;
+          } else if (!seg.completed && existing.completed) {
+            transcriptMap.delete(key);
+            hasUpdates = true;
+            continue;
+          }
+        }
+      }
+      textIndex2.set(textKey, key);
+    }
+
     // Sort by absolute_start_time
     const dedupedTranscripts = Array.from(transcriptMap.values()).sort(
       (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
     );
-    
+
     // Get the first segment's absolute_start_time to use as meeting start time
-    const firstSegmentTime = dedupedTranscripts.length > 0 
-      ? dedupedTranscripts[0].absolute_start_time 
+    const firstSegmentTime = dedupedTranscripts.length > 0
+      ? dedupedTranscripts[0].absolute_start_time
       : null;
 
     // Update current meeting's start_time if not set and we have a first segment
