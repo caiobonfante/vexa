@@ -1,0 +1,303 @@
+[
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 0.0,
+    "end": 9.2,
+    "text": "Nice, yeah, it sits very funny on Zoom.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker D (Guest)",
+    "start": 10.8,
+    "end": 13.2,
+    "text": "Hey, everyone.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 12.8,
+    "end": 13.5,
+    "text": "Hey, Dimitri.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 13.6,
+    "end": 16.6,
+    "text": "And unfortunately, a Matt Bane is pulled away on.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 16.8,
+    "end": 18.2,
+    "text": "Um, family business.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 18.5,
+    "end": 18.7,
+    "text": "Today.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 19.1,
+    "end": 20.9,
+    "text": "And I believe Mark won't be joining.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 21.1,
+    "end": 24.1,
+    "text": "Um, but we saw I'll be, um, running the call today.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 24.4,
+    "end": 26.4,
+    "text": "Um, we have a full agenda so far.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 26.6,
+    "end": 31.5,
+    "text": "Um, and I'll give some more updates on this when we get a couple more people in ",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 31.7,
+    "end": 32.1,
+    "text": "Um,",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 32.3,
+    "end": 38.4,
+    "text": "But we are going to work on getting everyone the hackathon participants to prese",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker D (Guest)",
+    "start": 92.0,
+    "end": 98.2,
+    "text": "Good morning, everyone. Today I want to talk.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker E (Guest)",
+    "start": 97.9,
+    "end": 100.2,
+    "text": "Well, good morning to you too.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker F (Guest)",
+    "start": 100.0,
+    "end": 112.2,
+    "text": "Yeah, I was gonna say. How are we delegating to twice will the opening office ho",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker E (Guest)",
+    "start": 113.0,
+    "end": 117.1,
+    "text": "Carl Yu.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 117.1,
+    "end": 120.2,
+    "text": "Wait, where did that come from? Was that, did that co-",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker E (Guest)",
+    "start": 120.0,
+    "end": 124.0,
+    "text": "Don't call it out, it was we know it wasn't you.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 120.2,
+    "end": 124.0,
+    "text": "from me? Oh, okay.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker D (Guest)",
+    "start": 124.1,
+    "end": 132.0,
+    "text": "I apologize, I was multitasking with testing another thing here with the mic unm",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 124.1,
+    "end": 146.0,
+    "text": "No problem at all. Um, looking at our agenda, um, I don't see if we have do we h",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker B (Guest)",
+    "start": 146.1,
+    "end": 152.2,
+    "text": "Andrea's going to join, I think. She's just in another call that's running over ",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 152.0,
+    "end": 161.0,
+    "text": "Um, hey, Matt, I know you might be in transit, but do you know if the Um our tra",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker G (Guest)",
+    "start": 161.0,
+    "end": 171.0,
+    "text": "I pinged them earlier on LinkedIn. I haven't heard back from them. I believe the",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker G (Guest)",
+    "start": 171.2,
+    "end": 178.0,
+    "text": "I will remain on unjoined, but I will remain on mute. I'm driving.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 171.0,
+    "end": 172.1,
+    "text": "Okay, understood.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 172.5,
+    "end": 174.1,
+    "text": "I'm okay and someone said,",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 174.4,
+    "end": 176.1,
+    "text": "Ah, ah, Aiden or Lee?",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker B (Guest)",
+    "start": 191.2,
+    "end": 192.2,
+    "text": "Yeah, yeah.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker G (Guest)",
+    "start": 192.2,
+    "end": 193.1,
+    "text": "Yeah?",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 193.0,
+    "end": 196.2,
+    "text": "Okay. Well, let's get officially kicked off here then.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker B (Guest)",
+    "start": 192.2,
+    "end": 209.1,
+    "text": "He will.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 204.3,
+    "end": 209.7,
+    "text": "Um, so welcome to the Architecture's Code, a weekly maintainer's meeting for Mar",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 209.8,
+    "end": 213.5,
+    "text": "Sino's project leads are responsible for observing the Fino's guidelines.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 222.5,
+    "end": 227.7,
+    "text": "Maintainer's Cheat Sheet. All participants in VINO's project meetings are subjec",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker A (Guest)",
+    "start": 227.7,
+    "end": 233.5,
+    "text": "Antitrust Policy, the FINO's Community Code of Commons Conduct, and all of their",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 272.2,
+    "end": 279.4,
+    "text": "Uh, yeah, yeah. I have A can't say I've prepared for it, but this was just Jim t",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 279.7,
+    "end": 284.4,
+    "text": "Um, so, yeah? Jim? Jim Goff and I presented at QCon on Monday.",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 293.5,
+    "end": 298.9,
+    "text": "the NCP sort of work they were doing, but the other one was calm and architectur",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 308.3,
+    "end": 309.4,
+    "text": "and how we use it",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 309.4,
+    "end": 310.5,
+    "text": "and Morgan Stanley",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 310.5,
+    "end": 311.6,
+    "text": "and our team",
+    "completed": true
+  },
+  {
+    "speaker": "Speaker C (Guest)",
+    "start": 311.6,
+    "end": 313.0,
+    "text": "and we had a couple of",
+    "completed": true
+  }
+]
