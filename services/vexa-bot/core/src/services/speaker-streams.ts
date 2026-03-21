@@ -35,6 +35,10 @@ interface SpeakerBuffer {
   lastAudioTimestamp: number;
   /** Whether we already submitted a final idle attempt */
   idleSubmitted: boolean;
+  /** Samples inherited from a previous speaker via carry-forward */
+  carryForwardSamples: number;
+  /** Generation counter — incremented on full reset to detect stale responses */
+  generation: number;
 }
 
 export interface SpeakerStreamManagerConfig {
@@ -63,6 +67,8 @@ export class SpeakerStreamManager {
   private sampleRate: number;
   /** Audio carried forward from a flushed short segment — prepended to the next feedAudio call */
   private carryForward: Float32Array[] = [];
+  /** Generation at time of last submission — used to detect stale responses after fullReset */
+  private submitGeneration: Map<string, number> = new Map();
 
   /** Called when unconfirmed audio needs transcription. */
   onSegmentReady: ((speakerId: string, speakerName: string, audioBuffer: Float32Array) => void) | null = null;
@@ -97,6 +103,8 @@ export class SpeakerStreamManager {
       sequenceNumber: 0,
       lastAudioTimestamp: now,
       idleSubmitted: false,
+      carryForwardSamples: 0,
+      generation: 0,
     });
 
     const timer = setInterval(() => this.trySubmit(speakerId), this.submitInterval * 1000);
@@ -109,19 +117,12 @@ export class SpeakerStreamManager {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
-    // Prepend carry-forward audio from a previous speaker's flushed short segment.
-    // This gives Whisper context for the short utterance — word timestamps will
-    // place it before the new speaker's words, and the speaker-mapper attributes
-    // it to the correct speaker via caption boundaries.
-    if (this.carryForward.length > 0) {
-      let carrySamples = 0;
-      for (const chunk of this.carryForward) {
-        buffer.chunks.push(chunk);
-        buffer.totalSamples += chunk.length;
-        carrySamples += chunk.length;
-      }
-      log(`[SpeakerStreams] Carry-forward: ${(carrySamples / this.sampleRate).toFixed(1)}s prepended to "${buffer.speakerName}"`);
-      this.carryForward = [];
+    // Set window start on first audio after reset — this ensures the segment's
+    // start time reflects when audio actually arrived, not when the buffer was
+    // cleared. Critical for speaker-mapper: offset words use this as their base.
+    if (buffer.totalSamples === 0) {
+      buffer.windowStartMs = Date.now();
+      buffer.bufferStartMs = Date.now();
     }
 
     buffer.chunks.push(audioData);
@@ -143,6 +144,15 @@ export class SpeakerStreamManager {
     if (!buffer) return;
 
     buffer.inFlight = false;
+
+    // Discard stale responses: if the buffer was reset (generation bumped)
+    // while a Whisper request was in flight, this response is for audio that
+    // no longer exists. Accepting it would poison lastTranscript with text
+    // from a previous segment.
+    const submitGen = this.submitGeneration.get(speakerId);
+    if (submitGen !== undefined && submitGen < buffer.generation) {
+      return;
+    }
 
     if (!transcript || transcript.trim().length === 0) {
       if (buffer.idleSubmitted) {
@@ -239,30 +249,10 @@ export class SpeakerStreamManager {
 
     const unconfirmedSec = this.unconfirmedSamples(buffer) / this.sampleRate;
 
-    // Too short for standalone Whisper submission — carry forward to the next
-    // speaker's buffer so Whisper gets it as context. The speaker-mapper will
-    // attribute it to the correct speaker via word timestamps + caption boundaries.
-    if (!force && unconfirmedSec < this.minAudioDuration && !buffer.lastTranscript) {
-      // Extract unconfirmed chunks
-      const orphanedChunks: Float32Array[] = [];
-      let samplesToSkip = buffer.confirmedSamples;
-      for (const chunk of buffer.chunks) {
-        if (samplesToSkip >= chunk.length) {
-          samplesToSkip -= chunk.length;
-          continue;
-        }
-        if (samplesToSkip > 0) {
-          orphanedChunks.push(chunk.subarray(samplesToSkip));
-          samplesToSkip = 0;
-        } else {
-          orphanedChunks.push(chunk);
-        }
-      }
-      this.carryForward.push(...orphanedChunks);
-      log(`[SpeakerStreams] Carry-forward from "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s → next speaker's context)`);
-      this.fullReset(buffer);
-      return;
-    }
+    // Short audio on speaker change: submit to Whisper directly rather than
+    // carry-forward. Carry-forward shifts word timestamps relative to the next
+    // speaker's buffer start, which makes the speaker-mapper unable to attribute
+    // carried words correctly. Direct submission preserves correct timing.
 
     // Have transcript — emit and reset
     if (buffer.lastTranscript) {
@@ -335,6 +325,7 @@ export class SpeakerStreamManager {
     if (unconfirmed === 0 || !this.onSegmentReady) return;
 
     buffer.inFlight = true;
+    this.submitGeneration.set(buffer.speakerId, buffer.generation);
 
     // Build audio from confirmedSamples onward
     const combined = new Float32Array(unconfirmed);
@@ -386,6 +377,16 @@ export class SpeakerStreamManager {
       // after the boundary for the next submission
       const samplesToAdvance = Math.floor(segmentEndSec * this.sampleRate);
       buffer.confirmedSamples += Math.min(samplesToAdvance, this.unconfirmedSamples(buffer));
+
+      // If the remaining unconfirmed tail is shorter than minAudioDuration,
+      // trim it completely. This leftover is trailing audio that Whisper
+      // didn't transcribe into a segment. It can't be submitted standalone
+      // (below minAudioDuration), and keeping it pollutes the next speaker
+      // turn's submission with stale context audio.
+      const remainingSec = this.unconfirmedSamples(buffer) / this.sampleRate;
+      if (remainingSec > 0 && remainingSec < this.minAudioDuration) {
+        buffer.confirmedSamples = buffer.totalSamples;
+      }
     } else {
       // Fallback: trim everything (old behavior, loses boundary words)
       buffer.confirmedSamples = buffer.totalSamples;
@@ -445,5 +446,7 @@ export class SpeakerStreamManager {
     buffer.bufferStartMs = Date.now();
     buffer.lastAudioTimestamp = Date.now();
     buffer.idleSubmitted = false;
+    buffer.carryForwardSamples = 0;
+    buffer.generation++;
   }
 }

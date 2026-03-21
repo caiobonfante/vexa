@@ -1,0 +1,22 @@
+services:
+  transcription-worker-1:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['2']
+              capabilities: [gpu]
+
+  transcription-worker-2:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['3']
+              capabilities: [gpu]

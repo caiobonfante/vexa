@@ -112,6 +112,32 @@ export function mapWordsToSpeakers(
   // Emit last segment
   segments.push(buildSegment(currentSpeaker, currentWords));
 
+  // Merge single-word boundary segments into their neighbor.
+  // A 1-word segment at a speaker boundary is almost always a timing artifact
+  // (Whisper timestamp jitter vs caption boundary). Merge into the adjacent
+  // segment that shares a boundary with it.
+  if (segments.length > 1) {
+    const merged: AttributedSegment[] = [];
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.wordCount === 1) {
+        if (i > 0 && merged.length > 0) {
+          // Merge into previous segment
+          const prev = merged[merged.length - 1];
+          merged[merged.length - 1] = buildSegment(prev.speaker, [...prev.words, ...seg.words]);
+          continue;
+        } else if (i < segments.length - 1) {
+          // First segment with 1 word — merge into next
+          const next = segments[i + 1];
+          segments[i + 1] = buildSegment(next.speaker, [...seg.words, ...next.words]);
+          continue;
+        }
+      }
+      merged.push(seg);
+    }
+    return merged;
+  }
+
   return segments;
 }
 

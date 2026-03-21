@@ -53,7 +53,6 @@ export class TranscriptionClient {
   private retryDelayMs: number;
   private sampleRate: number;
   private maxSpeechDurationSec: number | undefined;
-
   constructor(config: TranscriptionClientConfig) {
     // Ensure serviceUrl ends with the transcriptions endpoint
     this.serviceUrl = config.serviceUrl.replace(/\/+$/, '');
@@ -80,7 +79,7 @@ export class TranscriptionClient {
         const result = await this.sendRequest(wavBuffer, language);
         return result;
       } catch (err: any) {
-        const isTransient = err.statusCode === 503 || err.statusCode === 429 || !err.statusCode;
+        const isTransient = err.statusCode === 503 || err.statusCode === 429 || err.statusCode === 500 || !err.statusCode;
         const isLastAttempt = attempt === this.maxRetries;
 
         if (isTransient && !isLastAttempt) {

@@ -1018,8 +1018,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     speakerManager = new SpeakerStreamManager({
       sampleRate: 16000,
       minAudioDuration: 3,     // 3s of unconfirmed audio before submission
-      submitInterval: 3,       // submit every 3s
-      confirmThreshold: 3,     // 3 consecutive matches — longer segments, better context
+      submitInterval: 2,       // submit every 2s — lower latency
+      confirmThreshold: 2,     // 2 consecutive matches — faster confirmation
       maxBufferDuration: 120,  // trim buffer front when exceeding 120s total
       idleTimeoutSec: 15,      // 15s idle → emit + reset (high because silence filter)
     });
@@ -1146,49 +1146,12 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const endSec = (bufferEndMs - segmentPublisher.sessionStartMs) / 1000;
       const fullSegmentId = `${segmentPublisher.sessionUid}:${segmentId}`;
 
-      // Teams with carry-forward: split by speaker using word timestamps + caption boundaries
-      if (currentPlatform === 'teams' && latestWhisperWords.length > 0 && captionEventLog.length > 0) {
-        const { mapWordsToSpeakers, captionsToSpeakerBoundaries } = require('./services/speaker-mapper');
-
-        // Build boundaries from accumulated caption events
-        const boundaries = captionsToSpeakerBoundaries(captionEventLog);
-
-        // Offset word timestamps to absolute session time
-        const offsetWords = latestWhisperWords.map(w => ({
-          ...w,
-          start: startSec + w.start,
-          end: startSec + w.end,
-        }));
-
-        const attributed = mapWordsToSpeakers(offsetWords, boundaries);
-
-        if (attributed.length > 1) {
-          // Multiple speakers in this segment — emit each separately
-          log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${fullSegmentId} | "${transcript.substring(0, 80)}..." → SPLIT into ${attributed.length} speakers`);
-          for (let i = 0; i < attributed.length; i++) {
-            const seg = attributed[i];
-            const subId = `${fullSegmentId}:${i}`;
-            log(`[📝 ATTRIBUTED] ${seg.speaker} | ${seg.start.toFixed(1)}s-${seg.end.toFixed(1)}s | "${seg.text}"`);
-            await segmentPublisher.publishSegment({
-              speaker: seg.speaker,
-              text: seg.text,
-              start: seg.start,
-              end: seg.end,
-              language: lang,
-              completed: true,
-              segment_id: subId,
-              absolute_start_time: new Date(bufferStartMs + seg.start * 1000).toISOString(),
-              absolute_end_time: new Date(bufferStartMs + seg.end * 1000).toISOString(),
-            });
-          }
-          log(`[✅ PUBLISHED] ${attributed.length} speaker-attributed segments → Redis`);
-          return;
-        }
-        // Single speaker — fall through to normal emit with attributed speaker name
-        if (attributed.length === 1) {
-          speakerName = attributed[0].speaker;
-        }
-      }
+      // Teams: per-speaker audio routing already provides correct attribution.
+      // The speaker-mapper was originally needed when carry-forward moved audio
+      // between speakers, but carry-forward was removed (see findings.md iteration 1).
+      // Running the mapper now only introduces errors — it re-attributes words based
+      // on caption boundary timing, which has ~1.5s jitter vs Whisper timestamps,
+      // causing boundary words to be split and mis-attributed to adjacent speakers.
 
       log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${fullSegmentId} | "${transcript}"`);
       await segmentPublisher.publishSegment({
@@ -1412,8 +1375,14 @@ async function handleTeamsCaptionData(speakerName: string, captionText: string, 
   }
   lastCaptionSpeakerId = speakerId;
 
-  // Accumulate for speaker-mapper boundaries
-  captionEventLog.push({ speaker: speakerName, text: captionText, timestamp: timestampMs / 1000 });
+  // Accumulate for speaker-mapper boundaries.
+  // Store timestamp as session-relative seconds to match Whisper word timestamps
+  // (which are offset by bufferStartMs - sessionStartMs). Absolute wall-clock
+  // timestamps would be in a completely different domain (~1.7B vs ~200s).
+  const sessionRelativeSec = segmentPublisher.sessionStartMs
+    ? (timestampMs - segmentPublisher.sessionStartMs) / 1000
+    : timestampMs / 1000;
+  captionEventLog.push({ speaker: speakerName, text: captionText, timestamp: sessionRelativeSec });
 
   // Publish caption as a speaker event for downstream consumers
   await segmentPublisher.publishSpeakerEvent({

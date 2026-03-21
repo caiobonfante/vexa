@@ -193,11 +193,10 @@ async function main() {
 
   console.log(`\n  Real data: ${captionEvents.length} captions, ${speakerChangeEvents.length} speaker changes`);
 
-  // -- 3. Build mixed audio from per-utterance TTS at speaker-change times ---
+  // -- 3. Load per-utterance audio (no mixing — each speaker gets own channel) -
 
-  // Find the latest utterance end to size the buffer
+  const audioEntries: { audio: Float32Array; offsetSec: number; speaker: string; endSec: number }[] = [];
   let maxEnd = 0;
-  const audioEntries: { audio: Float32Array; offsetSec: number; speaker: string }[] = [];
 
   for (const g of GT) {
     const wavPath = path.join(collectionDir, g.audioFile);
@@ -205,25 +204,14 @@ async function main() {
       const audio = readWavAsFloat32(wavPath);
       const endSec = g.offsetSec + audio.length / SAMPLE_RATE;
       if (endSec > maxEnd) maxEnd = endSec;
-      audioEntries.push({ audio, offsetSec: g.offsetSec, speaker: g.speaker });
+      audioEntries.push({ audio, offsetSec: g.offsetSec, speaker: g.speaker, endSec });
     } catch (e: any) {
       console.log(`  WARNING: Could not load ${g.audioFile}: ${e.message}`);
     }
   }
 
   const totalDurSec = Math.ceil(maxEnd) + 10; // pad 10s
-  const mixed = new Float32Array(totalDurSec * SAMPLE_RATE);
-
-  for (const ae of audioEntries) {
-    const start = Math.floor(ae.offsetSec * SAMPLE_RATE);
-    for (let i = 0; i < ae.audio.length && (start + i) < mixed.length; i++) {
-      mixed[start + i] += ae.audio[i];
-    }
-  }
-  // Clamp
-  for (let i = 0; i < mixed.length; i++) mixed[i] = Math.max(-1, Math.min(1, mixed[i]));
-
-  console.log(`  Mixed audio: ${totalDurSec}s (${audioEntries.length} utterances placed)\n`);
+  console.log(`  Per-speaker audio: ${totalDurSec}s total, ${audioEntries.length} utterances loaded\n`);
 
   // -- 4. Set up pipeline -- EXACT index.ts wiring ---------------------------
 
@@ -241,7 +229,11 @@ async function main() {
   const sessionStartMs = t0;
 
   // === index.ts globals ===
-  let latestWhisperWords: TimestampedWord[] = [];
+  // Per-speaker word storage: words are set in onSegmentReady and consumed in
+  // onSegmentConfirmed. A shared global would race across concurrent speakers
+  // (confirmation fires on the Nth match, by which time another speaker's words
+  // may have overwritten the global). Keyed by speakerId.
+  const whisperWordsPerSpeaker: Map<string, TimestampedWord[]> = new Map();
   const captionEventLog: CaptionEvent[] = [];
   let lastCaptionSpeakerId: string | null = null;
   const outputSegments: { speaker: string; text: string; start: number; end: number }[] = [];
@@ -256,7 +248,7 @@ async function main() {
         const text = result.text.trim();
         const words = result.segments?.flatMap(s => s.words || []) || [];
         if (words.length > 0) {
-          latestWhisperWords = words;
+          whisperWordsPerSpeaker.set(speakerId, words);
         }
         const lastSeg = result.segments?.[result.segments.length - 1];
         mgr.handleTranscriptionResult(speakerId, text, lastSeg?.end);
@@ -273,12 +265,13 @@ async function main() {
     const startSec = (bufferStartMs - sessionStartMs) / 1000;
     const endSec = (bufferEndMs - sessionStartMs) / 1000;
 
-    console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | words=${latestWhisperWords.length} captions=${captionEventLog.length} | "${transcript.substring(0, 60)}..."`);
+    const speakerWords = whisperWordsPerSpeaker.get(speakerId) || [];
+    console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | words=${speakerWords.length} captions=${captionEventLog.length} | "${transcript.substring(0, 60)}..."`);
 
     // Mapper condition -- exact same as index.ts
-    if (latestWhisperWords.length > 0 && captionEventLog.length > 0) {
+    if (speakerWords.length > 0 && captionEventLog.length > 0) {
       const boundaries = captionsToSpeakerBoundaries(captionEventLog);
-      const offsetWords = latestWhisperWords.map(w => ({
+      const offsetWords = speakerWords.map(w => ({
         ...w, start: startSec + w.start, end: startSec + w.end,
       }));
       const attributed = mapWordsToSpeakers(offsetWords, boundaries);
@@ -294,7 +287,7 @@ async function main() {
         outputSegments.push({ speaker: seg.speaker, text: seg.text, start: seg.start, end: seg.end });
       }
     } else {
-      console.log(`  [${ts()}s] NO MAPPER (words=${latestWhisperWords.length}, captions=${captionEventLog.length})`);
+      console.log(`  [${ts()}s] NO MAPPER (words=${speakerWords.length}, captions=${captionEventLog.length})`);
       outputSegments.push({ speaker: speakerName, text: transcript, start: startSec, end: endSec });
     }
   };
@@ -327,34 +320,40 @@ async function main() {
     }, delayMs);
   }
 
-  // -- 6. Feed audio at real-time speed ---------------------------------------
+  // -- 6. Feed per-speaker audio at real-time speed ----------------------------
+  //
+  // In the real pipeline, each speaker has their OWN audio channel (per-speaker
+  // audio from the browser). Here we replicate that: each utterance's audio
+  // is fed ONLY to that speaker's channel. No mixing.
 
   console.log(`  [0.0s] Playing ${totalDurSec}s of audio...\n`);
 
-  const totalChunks = Math.ceil(mixed.length / CHUNK_SIZE);
-  let currentActiveSpeaker: string | null = null;
-  const firstCaptionTimeRebased = firstCaptionTime;
+  const totalSamples = totalDurSec * SAMPLE_RATE;
+  const totalChunks = Math.ceil(totalSamples / CHUNK_SIZE);
 
   for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, mixed.length);
-    const audioSec = start / SAMPLE_RATE;
+    const chunkStartSample = i * CHUNK_SIZE;
+    const chunkEndSample = Math.min(chunkStartSample + CHUNK_SIZE, totalSamples);
+    const audioSec = chunkStartSample / SAMPLE_RATE;
 
-    // Determine active speaker at this audio time from caption events
-    const rebasedCaptions = captionEvents.map(c => ({ ...c, t: c.relTimeSec - firstCaptionTimeRebased }));
-    let activeSpeaker: string | null = null;
-    for (const c of rebasedCaptions) {
-      if (c.t <= audioSec) activeSpeaker = c.speaker;
-    }
+    // For each utterance that overlaps this chunk, extract and feed its audio
+    for (const ae of audioEntries) {
+      const uttStartSample = Math.floor(ae.offsetSec * SAMPLE_RATE);
+      const uttEndSample = uttStartSample + ae.audio.length;
 
-    if (activeSpeaker) {
-      const speakerId = `teams-${activeSpeaker.replace(/\s+/g, '_')}`;
-      if (mgr.hasSpeaker(speakerId)) {
-        mgr.feedAudio(speakerId, mixed.subarray(start, end));
+      // Does this utterance overlap with current chunk?
+      if (chunkEndSample <= uttStartSample || chunkStartSample >= uttEndSample) continue;
+
+      // Extract the portion of THIS utterance's audio that falls in this chunk
+      const srcStart = Math.max(0, chunkStartSample - uttStartSample);
+      const srcEnd = Math.min(ae.audio.length, chunkEndSample - uttStartSample);
+      const chunk = ae.audio.subarray(srcStart, srcEnd);
+
+      const speakerId = `teams-${ae.speaker}_(Guest)`;
+      if (!mgr.hasSpeaker(speakerId)) {
+        mgr.addSpeaker(speakerId, `${ae.speaker} (Guest)`);
       }
-      if (activeSpeaker !== currentActiveSpeaker) {
-        currentActiveSpeaker = activeSpeaker;
-      }
+      mgr.feedAudio(speakerId, chunk);
     }
 
     if (i > 0 && Math.floor(audioSec) % 10 === 0 && Math.floor(((i - 1) * CHUNK_SIZE) / SAMPLE_RATE) % 10 !== 0) {
@@ -382,7 +381,8 @@ async function main() {
   console.log(`  Whisper calls: ${whisperCalls}`);
   console.log(`  Output segments: ${outputSegments.length}`);
   console.log(`  Caption events accumulated: ${captionEventLog.length}`);
-  console.log(`  latestWhisperWords at end: ${latestWhisperWords.length}\n`);
+  const totalStoredWords = Array.from(whisperWordsPerSpeaker.values()).reduce((sum, w) => sum + w.length, 0);
+  console.log(`  Whisper words stored: ${totalStoredWords} across ${whisperWordsPerSpeaker.size} speakers\n`);
 
   console.log('  Output segments:');
   for (const seg of outputSegments) {
@@ -396,26 +396,34 @@ async function main() {
   let correctSpeaker = 0;
 
   for (const gt of GT) {
-    // Extract keywords: words with length > 3
-    const gtWords = gt.text.toLowerCase().replace(/[.,!?'"]/g, '').split(/\s+/).filter(w => w.length > 3);
+    // Extract keywords: words with length > 3 (avoids "a", "the", "is" false positives).
+    // For short utterances (< 4 words), use all words since filtering may remove everything.
+    const allWords = gt.text.toLowerCase().replace(/[.,!?'"]/g, '').split(/\s+/);
+    const gtWords = allWords.length <= 3 ? allWords : allWords.filter(w => w.length > 3);
     let found = false;
     let speakerCorrect = false;
+    let bestMatch = { seg: null as any, matchCount: 0 };
 
+    const isShortGT = allWords.length <= 3;
     for (const seg of outputSegments) {
       const segText = seg.text.toLowerCase().replace(/[.,!?'"]/g, '');
-      const segWords = segText.split(/\s+/);
-      // Count keyword matches
-      const matches = gtWords.filter(w => segWords.some(sw => sw.includes(w) || w.includes(sw)));
-      // Need at least 2 keywords matched (or all if fewer than 2)
-      const threshold = Math.min(2, gtWords.length);
-      if (matches.length >= threshold) {
-        found = true;
-        const segSpeaker = seg.speaker.replace(' (Guest)', '');
-        speakerCorrect = segSpeaker === gt.speaker;
-        const mark = speakerCorrect ? 'OK' : `WRONG (got ${segSpeaker})`;
-        console.log(`    ${mark} | ${gt.speaker} | "${gt.text.substring(0, 50)}" [${gt.audioFile}]`);
-        break;
+      const rawSegWords = segText.split(/\s+/);
+      const segWords = new Set(isShortGT ? rawSegWords : rawSegWords.filter(w => w.length > 3));
+      // Exact word matching — no substring, both sides filtered for length
+      const matches = gtWords.filter(w => segWords.has(w));
+      if (matches.length > bestMatch.matchCount) {
+        bestMatch = { seg, matchCount: matches.length };
       }
+    }
+
+    // Need at least 2 keywords matched (or all if fewer than 2)
+    const threshold = Math.min(2, gtWords.length);
+    if (bestMatch.matchCount >= threshold && bestMatch.seg) {
+      found = true;
+      const segSpeaker = bestMatch.seg.speaker.replace(' (Guest)', '');
+      speakerCorrect = segSpeaker === gt.speaker;
+      const mark = speakerCorrect ? 'OK' : `WRONG (got ${segSpeaker})`;
+      console.log(`    ${mark} | ${gt.speaker} | "${gt.text.substring(0, 50)}" [${gt.audioFile}]`);
     }
 
     if (!found) {

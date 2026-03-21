@@ -28,6 +28,7 @@ These terms are used consistently across all feature docs. Use them by name.
 | **Infra snapshot** | Frozen record of the infrastructure state used during a collection run: service versions, model config, pipeline params, network topology. Saved alongside collected data so the sandbox can reproduce the same conditions. |
 | **Collection manifest** | Pre-flight document produced during EXPAND. Specifies what to collect, why, and how — script, scenarios, data capture plan, scoring criteria, infra snapshot requirements, replay readiness. Required before a collection run. |
 | **Env setup** | Stage where infrastructure is configured and verified before a collection run. Ensures services are running, configs match the collection manifest, and capture pipelines are functional. |
+| **Feature log** | Append-only activity log for a feature. Records everything the agent does and why: observations, hypotheses, decisions, actions, results, dead ends. Lives at `tests/feature-log.md`. |
 | **Findings** | What broke, why, what to do next. Tracked in `findings.md` with certainty scores. |
 
 ## Features vs services
@@ -60,9 +61,8 @@ features/{name}/
   tests/
     README.md            # Test strategy, datasets, results
     findings.md          # Certainty table, gate verdict, action items
-    infra-snapshot.md    # Infra state from last collection run (committed)
-    ground-truth/        # Collected real-world data (if applicable)
-    audio/               # Test audio files (if applicable)
+    feature-log.md       # Append-only activity log — observations, decisions, results
+    datasets/            # Tagged dataset bundles from collection runs
     Makefile             # Stage-aware test commands (reads from ../.env)
   {platform}/            # Platform-specific implementations (if multi-platform)
 ```
@@ -285,6 +285,113 @@ When iterating, you may need to **replay** multiple **datasets** together — e.
 - The **replay** test knows how to load multiple datasets
 
 If infra snapshots differ, you can't combine — the scoring would mix results from different configs.
+
+## Feature log
+
+The **feature log** (`tests/feature-log.md`) is an append-only record of everything the agent does on a feature and why. It's a lab notebook — the agent writes as it works, not just at milestones.
+
+### Why
+
+Without a log:
+- Each session starts blind — the agent reads `findings.md` (current state) but not how it got there
+- Dead ends get retried — nothing records "tried X, it made things worse, reverted"
+- Reasoning is lost — you see code changes in git but not WHY that approach was chosen
+- Trajectory is invisible — is scoring going up? oscillating? stuck?
+
+With a log:
+- Agent reads history on startup, continues where it left off
+- Dead ends are recorded and avoided
+- Humans can review the agent's reasoning
+- Trajectory table shows at a glance whether things are improving
+
+### Structure
+
+```markdown
+# Feature Log: {name}
+
+## Trajectory
+| # | Date | Datasets | Scoring | Delta | Fix | Status |
+|---|------|----------|---------|-------|-----|--------|
+| 1 | 03-20 | teams-3sp-diverse | 71% | baseline | — | iterating |
+| 2 | 03-20 | teams-3sp-diverse | 81% | +10% | mapper boundary shift | iterating |
+| 3 | 03-21 | teams-3sp-diverse | 81% | +0% | minAudio=0.5s | dead-end, reverted |
+
+## Log
+
+### 2026-03-20 14:30 [STAGE]
+Entering sandbox iteration. Datasets: teams-3sp-diverse (target), teams-2sp-normal (control).
+Current scoring: 71% diverse, 100% normal.
+
+### 2026-03-20 14:32 [OBSERVE]
+Checked caption events for 5 lost utterances in diverse dataset.
+- "Agreed." (Alice 33.1s) — NO caption event. Teams didn't generate one.
+- "OK." (Bob 37.1s) — NO caption event.
+- "Thanks." (Alice 33.1s) — caption exists but inside Charlie boundary (29.5-44.4s).
+2/5 have no caption at all. 3/5 have caption but wrong speaker.
+
+### 2026-03-20 14:35 [DECIDE]
+Two categories of loss:
+1. Caption exists, wrong speaker (3/5) — fixable in speaker-mapper
+2. No caption at all (2/5) — unfixable with captions, needs audio-energy approach
+Focusing on category 1. Category 2 is a new scenario for /expand.
+
+### 2026-03-20 14:40 [HYPOTHESIS]
+Caption boundaries lag real speech by ~1.5s. Words in first 1.5s of new speaker
+get attributed to previous speaker. Shifting boundaries backward should recover.
+
+### 2026-03-20 14:42 [ACTION]
+speaker-mapper.ts:mapWordsToSpeakers L47 — subtract 1.5s from caption boundary
+start times before overlap matching.
+
+### 2026-03-20 14:44 [RESULT] Iteration 1
+| Dataset | Scenario | Before | After | Delta |
+|---------|----------|--------|-------|-------|
+| diverse | normal-turns | 100% | 100% | 0% |
+| diverse | short-phrase | 40% | 60% | +20% |
+| diverse | overall | 71% | 81% | +10% |
+| normal | control | 100% | 100% | 0% |
+
+### 2026-03-20 14:45 [DECIDE]
++10%, no regression on control. Keep boundary shift.
+2 phrases still lost — no caption events exist. Can't fix with mapper.
+Next: try lowering minAudioDuration to catch at audio level.
+
+### 2026-03-20 14:50 [DEAD-END]
+Tried minAudioDuration=0.5s. Diverse: 81% → 78%. Introduced 3 garbage segments
+from silence. Reverted. Short phrases without captions need a different approach.
+```
+
+### Entry types
+
+| Type | When to write | What to include |
+|------|--------------|----------------|
+| `STAGE` | Entering or exiting a stage | Which stage, which datasets, current scoring |
+| `OBSERVE` | Found something in data, code, or output | What you found, where, what it implies |
+| `HYPOTHESIS` | Theory about a root cause | The theory, what evidence supports it, how to test it |
+| `DECIDE` | Making a choice | What you chose, what alternatives existed, WHY this one |
+| `ACTION` | Changing code or config | File:line, what changed, what it's supposed to fix |
+| `RESULT` | Scoring output from a replay | Per-dataset per-scenario table, delta from previous |
+| `DEAD-END` | Tried something, didn't work | What was tried, what happened, why it failed, reverted? |
+| `QUESTION` | Something unknown | What you don't know, where to find the answer |
+
+### Rules
+
+- **Append only.** Never edit or delete previous entries. The log is a timeline.
+- **Write as you go.** Don't batch entries at the end. Write when you observe, decide, or act.
+- **Include WHY.** Every `DECIDE` and `ACTION` entry must explain reasoning. "Changed X" is not enough — "Changed X because Y, expecting Z" is.
+- **Update the trajectory table** after every `RESULT` entry. The table is the summary; the log is the detail.
+- **Mark dead ends explicitly.** A `DEAD-END` entry prevents the same approach from being retried in future sessions.
+- **Read the log on startup.** Before starting work, read the full log to understand history, current state, and dead ends.
+- **Committed, not gitignored.** The log is part of the feature's history. Commit after each session.
+
+### Feature log vs other files
+
+| File | Purpose | Mutability |
+|------|---------|-----------|
+| `feature-log.md` | Stream of what happened, why, and how — full history | Append only |
+| `findings.md` | Current state: certainty scores, gate verdict, action items | Overwritten to reflect current state |
+| Dataset `manifest.md` | What a dataset contains and why it was collected | Immutable after collection |
+| `README.md` | Feature spec and test approach | Updated when approach changes |
 
 ## Stages
 
