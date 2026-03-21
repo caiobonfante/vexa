@@ -139,7 +139,7 @@ API_KEY=<your_api_key> node test_data/replay-meeting.js \
 
 ### What it does
 
-1. Parses the transcript file (6 speakers: Speaker A, Speaker B, Speaker C, Speaker D, Speaker E, Speaker F)
+1. Parses the transcript file (6 speakers: Speaker A through F)
 2. Creates one bot per speaker (each with unique API key) + one listener bot
 3. All bots join the Teams meeting — **you must admit them from the lobby**
 4. Speaker bots replay the transcript with TTS timing, listener captures transcription
@@ -162,7 +162,7 @@ API_KEY=<your_api_key> node test_data/replay-meeting.js \
 
 ## Transcript file
 
-`test_data/meeting_saved_closed_caption.txt` — Real Teams closed-caption export from a panel discussion meeting. 6 speakers, ~18 minutes of content.
+`test_data/meeting_saved_closed_caption.txt` — Anonymized Teams closed-caption export from a panel discussion. 6 speakers, ~18 minutes of content.
 
 ## Cleanup
 

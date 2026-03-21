@@ -44,7 +44,7 @@ Based on findings from previous collection runs:
 |--------|------|----------|-----------|
 | Normal conversation | `test_data/test-conversation.sh` | 3 (Alice, Bob, Charlie) | Normal turns, rapid exchange |
 | Diverse test | `tests/diverse-test-ground-truth.txt` | 3 | 7 rounds: monologue, back-to-back, short phrases, silence, overlap |
-| Real meeting replay | `test_data/replay-meeting.js` | 6 (from the consortium transcript) | Natural conversation, many speakers |
+| Real meeting replay | `test_data/replay-meeting.js` | 6 (from panel discussion) | Natural conversation, many speakers |
 
 ### Manifest output location
 

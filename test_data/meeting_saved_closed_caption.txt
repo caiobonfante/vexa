@@ -56,7 +56,7 @@ Um, today we are here.
 to bring you, um, something quite new, something that we had the opportunity to evaluate from a technology
 
 [Speaker B] 15:06:23
-readiness standpoint, and something that we believe may be of interest to the larger FSI community within Finos.
+readiness standpoint, and something that we believe may be of interest to the larger FSI community within the consortium.
 
 [Speaker B] 15:06:30
 So, today we are talking about prompt baking and negative baking. We will explain what those are.
@@ -683,7 +683,7 @@ Yeah. That's… that's it, Francisco. Yep.
 Excellent. And the final slider, in interest of time, so…
 
 [Speaker B] 15:23:12
-why we're here today, um, call to action to everyone within the Finos AI Readiness SIG is,
+why we're here today, um, call to action to everyone within the the consortium AI Readiness SIG is,
 
 [Speaker B] 15:23:18
 We would like to start testing the technology, you know, beyond a very controlled sandbox environment with synthetic data.

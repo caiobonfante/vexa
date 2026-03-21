@@ -83,7 +83,7 @@ CUDA OOM errors (HTTP 500) were not retried. Added 500 to transient error list a
 
 Reduced `submitInterval` from 3s to 2s and `confirmThreshold` from 3 to 2. Confirmed latency dropped from 16.5s to 10.8s (35% improvement). DRAFT latency ~5s.
 
-### Iteration 4 (2026-03-21): Finos-20 dataset + WS delivery
+### Iteration 4 (2026-03-21): Panel-20 dataset + WS delivery
 
 **Fix 8: DATASET env var support (`production-replay.test.ts`)**
 
@@ -91,7 +91,7 @@ Replay test now reads `DATASET` env var to select which dataset to replay. Event
 
 **Fix 9: Full speaker name parsing (`production-replay.test.ts`)**
 
-Speaker names with org suffixes like "Speaker E" are now parsed correctly from events. The regex stops at "(Guest)" instead of the first parenthesis. Audio feeder and caption speaker IDs now match consistently.
+Speaker names with org suffixes like "Speaker E (Org, Inc.)" are now parsed correctly from events. The regex stops at "(Guest)" instead of the first parenthesis. Audio feeder and caption speaker IDs now match consistently.
 
 **Fix 10: Time-proximity tiebreaker in GT matching (`production-replay.test.ts`)**
 
@@ -119,7 +119,7 @@ When keyword match counts are equal, the segment closest in time to the GT utter
 | Dataset | Captured | Speaker | Speakers | Notes |
 |---------|----------|---------|----------|-------|
 | collection-run | 17/17 (100%) | 17/17 (100%) | 3 (TTS) | Scripted meeting, clean audio |
-| panel-20 | 20/20 (100%) | 19/20 (95%) | 7 (real) | Real the consortium meeting, 1 error on 1.5s split utterance |
+| panel-20 | 20/20 (100%) | 19/20 (95%) | 7 (real) | Real panel discussion, 1 error on 1.5s split utterance |
 
 ## Action Items
 
