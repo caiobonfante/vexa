@@ -37,8 +37,11 @@ export interface TranscriptionClientConfig {
   /** Sample rate of input audio. Default: 16000 */
   sampleRate?: number;
   /** Max speech segment duration in seconds. Whisper forces a segment split at this length.
-   *  Lower values = more frequent confirmations = faster output. Default: 15 */
+   *  Lower values = more frequent confirmations = faster output. Default: server default (15s) */
   maxSpeechDurationSec?: number;
+  /** Minimum silence duration (ms) for VAD to split segments. Lower = more splits at natural pauses.
+   *  Default: server default (160ms). Use ~100ms for more granular segments. */
+  minSilenceDurationMs?: number;
 }
 
 /**
@@ -53,6 +56,7 @@ export class TranscriptionClient {
   private retryDelayMs: number;
   private sampleRate: number;
   private maxSpeechDurationSec: number | undefined;
+  private minSilenceDurationMs: number | undefined;
   constructor(config: TranscriptionClientConfig) {
     // Ensure serviceUrl ends with the transcriptions endpoint
     this.serviceUrl = config.serviceUrl.replace(/\/+$/, '');
@@ -64,6 +68,7 @@ export class TranscriptionClient {
     this.retryDelayMs = config.retryDelayMs ?? 1000;
     this.sampleRate = config.sampleRate ?? 16000;
     this.maxSpeechDurationSec = config.maxSpeechDurationSec;
+    this.minSilenceDurationMs = config.minSilenceDurationMs;
   }
 
   /**
@@ -153,6 +158,15 @@ export class TranscriptionClient {
         `--${boundary}\r\n` +
         `Content-Disposition: form-data; name="max_speech_duration_s"\r\n\r\n` +
         `${this.maxSpeechDurationSec}\r\n`
+      ));
+    }
+
+    // Min silence duration for VAD segment splitting (lower = more splits at natural pauses)
+    if (this.minSilenceDurationMs !== undefined) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="min_silence_duration_ms"\r\n\r\n` +
+        `${this.minSilenceDurationMs}\r\n`
       ));
     }
 
