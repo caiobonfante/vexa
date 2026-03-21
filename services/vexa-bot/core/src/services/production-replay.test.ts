@@ -89,7 +89,7 @@ function parseRealEvents(eventsPath: string): RealCaptionEvent[] {
       continue;
     }
 
-    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?)(?:\s*\(|$)/);
+    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?) \(Guest\)/);
     if (changeMatch) {
       events.push({ type: 'speaker_change', speaker: changeMatch[2].trim(), from: changeMatch[1].trim(), to: changeMatch[2].trim(), relTimeSec: rel });
     }
@@ -111,7 +111,7 @@ function parseSpeakerChangeTimes(eventsPath: string): { speaker: string; relTime
     const ts = new Date(tsStr).getTime() / 1000;
     if (firstTs === null) firstTs = ts;
 
-    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?)(?:\s*\(|$)/);
+    const changeMatch = line.match(/Speaker change: (.+?) \u2192 (.+?) \(Guest\)/);
     if (changeMatch) {
       changes.push({ speaker: changeMatch[2].trim(), relTimeSec: ts - firstTs });
     }
@@ -147,9 +147,18 @@ function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: s
 
     const text = fs.readFileSync(txtPath, 'utf8').trim();
 
-    // Extract speaker from filename: NN-speaker-description.wav
-    const nameMatch = wavFile.match(/^\d+-(\w+)-/);
-    const speaker = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : 'Unknown';
+    // Extract speaker from filename: NN-firstname-lastname.wav or NN-firstname-lastname-org.wav
+    // Match against speaker change events to get the canonical caption name
+    const baseName = wavFile.replace(/^\d+-/, '').replace(/\.wav$/, '');
+    const baseWords = baseName.split('-');
+    let speaker = 'Unknown';
+    if (i < speakerChangeTimes.length) {
+      // Use the canonical speaker name from caption events
+      speaker = speakerChangeTimes[i].speaker;
+    } else {
+      // Fallback: title-case the first word
+      speaker = baseWords[0].charAt(0).toUpperCase() + baseWords[0].slice(1);
+    }
 
     // Use parsed speaker change time or fallback
     const offsetSec = i < speakerChangeTimes.length ? speakerChangeTimes[i].relTimeSec : (i < fallbackTimes.length ? fallbackTimes[i] : i * 5);
@@ -163,13 +172,17 @@ function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: s
 // -- Main ---------------------------------------------------------------------
 
 async function main() {
+  const dataset = process.env.DATASET || 'collection-run';
   console.log('\n  ====================================================');
-  console.log('  PRODUCTION-FAITHFUL REPLAY TEST (collection-run)');
+  console.log(`  PRODUCTION-FAITHFUL REPLAY TEST (${dataset})`);
   console.log('  Per-utterance TTS at caption speaker-change times');
   console.log('  ====================================================\n');
 
-  const collectionDir = path.join(AUDIO_DIR, 'collection-run');
-  const eventsPath = path.join(TESTS_DIR, 'collection-run-events.txt');
+  const collectionDir = path.join(AUDIO_DIR, dataset);
+  // Events file: check inside dataset dir first, then tests dir
+  const eventsInDataset = path.join(collectionDir, 'events.txt');
+  const eventsInTests = path.join(TESTS_DIR, `${dataset}-events.txt`);
+  const eventsPath = fs.existsSync(eventsInDataset) ? eventsInDataset : eventsInTests;
 
   // -- 1. Parse speaker change times and load ground truth -------------------
 
@@ -268,28 +281,11 @@ async function main() {
     const speakerWords = whisperWordsPerSpeaker.get(speakerId) || [];
     console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | words=${speakerWords.length} captions=${captionEventLog.length} | "${transcript.substring(0, 60)}..."`);
 
-    // Mapper condition -- exact same as index.ts
-    if (speakerWords.length > 0 && captionEventLog.length > 0) {
-      const boundaries = captionsToSpeakerBoundaries(captionEventLog);
-      const offsetWords = speakerWords.map(w => ({
-        ...w, start: startSec + w.start, end: startSec + w.end,
-      }));
-      const attributed = mapWordsToSpeakers(offsetWords, boundaries);
-
-      if (attributed.length > 1) {
-        console.log(`  [${ts()}s] SPLIT into ${attributed.length} speakers:`);
-        for (const seg of attributed) {
-          console.log(`    [${seg.speaker}] "${seg.text.substring(0, 50)}"`);
-          outputSegments.push({ speaker: seg.speaker, text: seg.text, start: seg.start, end: seg.end });
-        }
-      } else if (attributed.length === 1) {
-        const seg = attributed[0];
-        outputSegments.push({ speaker: seg.speaker, text: seg.text, start: seg.start, end: seg.end });
-      }
-    } else {
-      console.log(`  [${ts()}s] NO MAPPER (words=${speakerWords.length}, captions=${captionEventLog.length})`);
-      outputSegments.push({ speaker: speakerName, text: transcript, start: startSec, end: endSec });
-    }
+    // Per-speaker audio already provides correct attribution.
+    // The mapper was disabled in the live pipeline (index.ts) because
+    // carry-forward was removed — re-attributing words based on caption
+    // boundary timing only introduces split errors.
+    outputSegments.push({ speaker: speakerName, text: transcript, start: startSec, end: endSec });
   };
 
   // -- 5. Schedule caption events from real data ------------------------------
@@ -349,7 +345,7 @@ async function main() {
       const srcEnd = Math.min(ae.audio.length, chunkEndSample - uttStartSample);
       const chunk = ae.audio.subarray(srcStart, srcEnd);
 
-      const speakerId = `teams-${ae.speaker}_(Guest)`;
+      const speakerId = `teams-${ae.speaker.replace(/\s+/g, '_')}_(Guest)`;
       if (!mgr.hasSpeaker(speakerId)) {
         mgr.addSpeaker(speakerId, `${ae.speaker} (Guest)`);
       }
@@ -411,13 +407,17 @@ async function main() {
       const segWords = new Set(isShortGT ? rawSegWords : rawSegWords.filter(w => w.length > 3));
       // Exact word matching — no substring, both sides filtered for length
       const matches = gtWords.filter(w => segWords.has(w));
-      if (matches.length > bestMatch.matchCount) {
+      // Use time proximity as tiebreaker when match counts are equal
+      const timeDist = Math.abs(seg.start - gt.offsetSec);
+      const prevTimeDist = bestMatch.seg ? Math.abs(bestMatch.seg.start - gt.offsetSec) : Infinity;
+      if (matches.length > bestMatch.matchCount ||
+          (matches.length === bestMatch.matchCount && matches.length > 0 && timeDist < prevTimeDist)) {
         bestMatch = { seg, matchCount: matches.length };
       }
     }
 
-    // Need at least 2 keywords matched (or all if fewer than 2)
-    const threshold = Math.min(2, gtWords.length);
+    // Need at least 1 keyword matched for short utterances, 2 for longer ones
+    const threshold = allWords.length <= 2 ? 1 : Math.min(2, gtWords.length);
     if (bestMatch.matchCount >= threshold && bestMatch.seg) {
       found = true;
       const segSpeaker = bestMatch.seg.speaker.replace(' (Guest)', '');

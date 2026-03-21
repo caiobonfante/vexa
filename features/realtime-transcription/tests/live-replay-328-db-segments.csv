@@ -1,0 +1,3 @@
+ERROR:  relation "segments" does not exist
+LINE 3: FROM segments s
+             ^

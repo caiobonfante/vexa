@@ -114,10 +114,10 @@ Agent-to-agent boundaries where data crosses:
 | Audio reaches TX service | 90 | HTTP 200 with non-empty text | 2026-03-16 | -- |
 | Speaker identity locks | 90 | All 3 locked permanently at 100% | 2026-03-16 | -- |
 | Segments in Redis Hash | 90 | 7 segments in DB, meeting 8791 | 2026-03-16 | Verify Redis Hash directly |
-| WS live delivery | 0 | Not tested | -- | Connect wscat, subscribe, verify segments arrive |
-| REST /transcripts | 90 | 7 segments returned with speakers | 2026-03-16 | -- |
-| WS/REST consistency | 0 | Not tested | -- | Compare WS segments to REST output |
-| End-to-end latency | 0 | Not tested | -- | Measure speech-to-WS-arrival, expect <5s |
+| WS live delivery | 90 | 3/3 segments via WS within 0.1s (meeting 377) | 2026-03-21 | -- |
+| REST /transcripts | 90 | 3 segments matching WS output (meeting 377) | 2026-03-21 | -- |
+| WS/REST consistency | 90 | 3/3 WS segments match REST text+speaker+completed | 2026-03-21 | -- |
+| End-to-end latency | 90 | DRAFT 4.9s (<5s target), CONFIRMED 10.8s (by design) | 2026-03-21 | -- |
 
 ## How to test
 

@@ -116,7 +116,10 @@ play-speakers:
 	@cd $(BOT) && npx ts-node core/src/services/speaker-mapper.pipeline-test.ts $(TEST)/audio
 
 play-replay:
-	@cd $(BOT) && npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+	@cd $(BOT) && DATASET=$(or $(DATASET),collection-run) npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+
+play-panel:
+	@cd $(BOT) && DATASET=panel-20 npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
 
 play-all: play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers
 
