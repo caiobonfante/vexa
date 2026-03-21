@@ -428,15 +428,16 @@ async function main() {
 
     // Publish confirmed segment to Redis (full system mode)
     if (publisher) {
-      const pubStartSec = (bufferStartMs - publisher.sessionStartMs) / 1000;
-      const pubEndSec = (bufferEndMs - publisher.sessionStartMs) / 1000;
-      const fullSegmentId = `${publisher.sessionUid}:${segmentId}`;
-      await publisher.publishSegment({
+      const pub = publisher;
+      const pubStartSec = (bufferStartMs - pub.sessionStartMs) / 1000;
+      const pubEndSec = (bufferEndMs - pub.sessionStartMs) / 1000;
+      const fullSegmentId = `${pub.sessionUid}:${segmentId}`;
+      pub.publishSegment({
         speaker: speakerName, text: transcript, start: pubStartSec, end: pubEndSec,
         language: 'en', completed: true, segment_id: fullSegmentId,
         absolute_start_time: new Date(bufferStartMs).toISOString(),
         absolute_end_time: new Date(bufferEndMs).toISOString(),
-      });
+      }).catch(() => {});
     }
 
     // Per-speaker audio already provides correct attribution.
