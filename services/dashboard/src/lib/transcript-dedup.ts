@@ -49,6 +49,14 @@ export function deduplicateOverlappingSegments(
 
     const last = deduped[deduped.length - 1];
 
+    // Different speakers can legitimately have overlapping timestamps
+    // (per-speaker audio buffers with independent timing).
+    // Only dedup within the same speaker.
+    if ((seg.speaker || "") !== (last.speaker || "")) {
+      deduped.push(seg);
+      continue;
+    }
+
     // Parse absolute times to timestamps (milliseconds)
     const segStart = parseUTCTimestamp(seg.absolute_start_time).getTime();
     const segEnd = parseUTCTimestamp(seg.absolute_end_time).getTime();
