@@ -94,3 +94,5 @@ If scoring is stuck and remaining errors are in scenarios not covered by any act
 - **Longer meetings** → need `long-meeting` dataset (>5min) → `/expand`
 
 Report the plateau with: scoring per dataset, per scenario, which scenarios are missing, and what new datasets would help.
+
+**Then immediately proceed to `/expand`** — do not wait for human input. The expand stage will design new scenarios, after which you create a fresh meeting (`/host-teams-meeting-auto`) and collect again (`/collect`). Keep looping until quality is production-grade.

@@ -4,20 +4,72 @@
 > Validation cycle: [features/README.md](../../README.md#validation-cycle) -- stages, glossary, collection manifest
 > Feature .env: `features/realtime-transcription/.env` (from `.env.example`)
 
+## Mission
+
+You are autonomous. Your goal is industry-standard realtime transcription quality: correct speaker attribution, accurate text, low latency, no dropped segments. You drive the full loop — collect, iterate, expand — until the output is production-grade. Do not wait for human input unless infrastructure is broken.
+
+## Autonomous loop
+
+You run this loop continuously until quality is production-grade:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  1. COLLECT  — fresh meeting, TTS bots, fresh data           │
+│     /host-teams-meeting-auto → meeting URL + auto-admit      │
+│     /collect → design script, send TTS bots, capture output  │
+│     Result: tagged dataset with ground truth                 │
+│                                                              │
+│  2. ITERATE  — replay, score, diagnose, fix, repeat          │
+│     /iterate → improve pipeline until scoring plateaus       │
+│                                                              │
+│  3. EXPAND   — design new scenarios for uncovered gaps       │
+│     /expand → new collection manifest                        │
+│     └─→ back to COLLECT with fresh meeting                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+You create the test data yourself — design conversation scripts, send TTS bots to speak them into live meetings, capture the pipeline output. Ground truth is exact because you wrote the script. No human speaks.
+
+**When to transition:**
+- COLLECT → ITERATE: dataset is tagged and has baseline scoring
+- ITERATE → EXPAND: scoring plateaus (same score 3+ iterations) or errors come from uncovered scenarios
+- EXPAND → COLLECT: new manifest designed, need fresh data — run `/host-teams-meeting-auto` for a new meeting
+
+**When to stop:** all checks in the Certainty Table are 90+ AND the transcription output reads like a professional meeting transcript — correct speakers, clean text, no hallucinations, no missing utterances.
+
 ## On entry: determine your stage
 
-Before doing anything else, determine which stage you are in. Check in order:
+Check in order:
 
-1. **Does `.env` exist and is infra verified?** Read `features/realtime-transcription/.env` and `tests/infra-snapshot.md`. If either is missing or stale → you are in **ENV SETUP** → run `/env-setup`
-2. **Does collected data + ground truth + replay exist?** Check `tests/` for ground truth files, collected data, and `make play-replay` target. If missing → you are in **COLLECTION RUN** → run `/collect`
-3. **Is scoring improving?** Read `tests/findings.md` for latest scoring. Run `make play-replay` if needed. If scoring is improving → you are in **SANDBOX ITERATION** → run `/iterate`
-4. **Is scoring stuck?** If plateau (same score for 3+ iterations, errors in uncovered scenarios) → you are in **EXPAND** → run `/expand`
+1. **Does `.env` exist and is infra verified?** Read `.env` and `tests/infra-snapshot.md`. If missing or stale → **ENV SETUP** → `/env-setup`
+2. **No dataset or no ground truth?** Check `tests/datasets/`. If empty → **COLLECT** → `/host-teams-meeting-auto` then `/collect`
+3. **Is scoring improving?** Read `tests/findings.md`. If improving → **ITERATE** → `/iterate`
+4. **Is scoring stuck?** Plateau or errors in uncovered scenarios → **EXPAND** → `/expand`, then back to COLLECT
 
 Log: `STAGE: determined {stage} for realtime-transcription — reason: {why}`
 
+Then **execute that stage immediately**. Do not stop at stage determination.
+
+## Meeting setup (fully automated)
+
+When you need a fresh meeting (for COLLECT or re-collection after EXPAND):
+
+1. Run `/host-teams-meeting-auto` — creates browser session, Teams meeting, joins as host, starts auto-admit
+2. It outputs `MEETING_URL`, `NATIVE_MEETING_ID`, `MEETING_PASSCODE` and updates `.env`
+3. Bots sent to this meeting get auto-admitted — no human needed
+
 ## Scope
 
-You test the core realtime transcription pipeline end-to-end: bot joins meeting, captures per-speaker audio, transcribes in real-time, and delivers speaker-attributed segments live via WebSocket and historically via REST. You orchestrate service agents -- you don't write code.
+You test the core realtime transcription pipeline end-to-end: bot joins meeting, captures per-speaker audio, transcribes in real-time, and delivers speaker-attributed segments live via WebSocket and historically via REST.
+
+### Quality bar
+
+Industry-standard means:
+- **Speaker attribution:** every segment attributed to the correct speaker, no "Unknown" speakers
+- **Text accuracy:** WER (word error rate) competitive with commercial transcription services
+- **Completeness:** no dropped utterances, no phantom/hallucinated segments
+- **Latency:** speech-to-segment delivery under 5 seconds
+- **Consistency:** WS live segments match REST historical output exactly
 
 ### Gate (local)
 
@@ -70,8 +122,10 @@ Agent-to-agent boundaries where data crosses:
 ## How to test
 
 1. Ensure compose stack is running (`make all` from `deploy/compose/`)
-2. Create a live meeting on the target platform (Google Meet, Teams) via browser session
-3. Send a bot to join the meeting
+2. Create a live meeting with auto-admit: run `/host-teams-meeting-auto`
+   - This creates a browser session, creates a Teams meeting, joins as host, and starts auto-admit
+   - Outputs `MEETING_URL`, updates `.env` — no human needed
+3. Send bots to join the meeting (they get auto-admitted through the lobby)
 4. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
 5. Subscribe to the meeting's transcription channel
 6. Speak in the meeting — verify live segments arrive with correct speaker names

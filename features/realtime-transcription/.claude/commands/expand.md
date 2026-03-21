@@ -50,11 +50,13 @@ Based on findings from previous collection runs:
 
 Save to: `features/realtime-transcription/tests/collection-manifest-{YYYY-MM-DD}.md`
 
-### After expand
+### After expand — immediately collect with a fresh meeting
 
-The manifest tells you what `.env` config is needed. If it differs from current:
-1. `/env-setup` to align infra
-2. `/collect` to run the collection
+Do not wait for human input. Continue autonomously:
 
-If infra is already correct:
-1. `/collect` directly
+1. Run `/host-teams-meeting-auto` to create a fresh meeting with auto-admit
+2. If the manifest requires different `.env` config → `/env-setup` first
+3. Run `/collect` to gather data against the new scenarios
+4. Collect will flow into `/iterate` automatically
+
+The loop continues until transcription quality is production-grade.
