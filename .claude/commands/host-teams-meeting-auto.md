@@ -32,7 +32,7 @@ curl -s -o /dev/null -w "%{http_code}" "$CDP_URL/json/version"
 ### 3. Create meeting + join
 
 ```bash
-cd services/vexa-bot && CDP_URL="$CDP_URL" node teams-host-auto.js
+cd features/realtime-transcription/scripts && CDP_URL="$CDP_URL" node teams-host-auto.js
 ```
 
 Outputs `MEETING_URL=`, `NATIVE_MEETING_ID=`, `MEETING_PASSCODE=`, `JOINED=true`.
