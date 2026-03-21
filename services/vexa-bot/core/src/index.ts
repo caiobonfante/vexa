@@ -1315,13 +1315,10 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     }
   }
 
-  // No VAD for Teams — caption staleness already gates audio routing.
-  // Whisper needs inter-word silence for accurate word boundaries.
-  // VAD is still used for Google Meet (per-speaker streams, no captions).
-  if (currentPlatform !== 'teams' && vadModel) {
-    const hasSpeech = await vadModel.isSpeech(audioData);
-    if (!hasSpeech) return;
-  }
+  // VAD disabled — small audio chunks from both Teams caption flush and
+  // Google Meet per-speaker streams are too short for Silero VAD to
+  // reliably detect speech. Whisper's own no_speech_prob filter handles
+  // silence rejection downstream.
 
   speakerManager.feedAudio(speakerId, audioData);
 }
@@ -1382,12 +1379,8 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
     });
   }
 
-  // VAD check
-  if (vadModel) {
-    const hasSpeech = await vadModel.isSpeech(audioData);
-    if (!hasSpeech) return;
-  }
-
+  // No VAD for Teams — caption-driven routing already gates audio.
+  // Small ring buffer chunks are too short for Silero VAD to reliably detect speech.
   speakerManager.feedAudio(speakerId, audioData);
 }
 
