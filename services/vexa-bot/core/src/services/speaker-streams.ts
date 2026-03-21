@@ -30,8 +30,10 @@ interface SpeakerBuffer {
   confirmedSamples: number;
   lastTranscript: string;
   confirmCount: number;
-  /** Per-segment confirmation: texts of Whisper segments from the previous submission */
+  /** Per-segment confirmation: texts of Whisper segments from previous submissions */
   lastSegmentTexts: string[];
+  /** How many consecutive times each leading segment text has been stable */
+  segmentStabilityCounts: number[];
   inFlight: boolean;
   /** Wall-clock time (ms) when the current unconfirmed window started */
   windowStartMs: number;
@@ -106,6 +108,7 @@ export class SpeakerStreamManager {
       lastTranscript: '',
       confirmCount: 0,
       lastSegmentTexts: [],
+      segmentStabilityCounts: [],
       inFlight: false,
       windowStartMs: now,
       bufferStartMs: now,
@@ -188,41 +191,54 @@ export class SpeakerStreamManager {
     if (segments && segments.length > 1) {
       const currentTexts = segments.map(s => s.text.trim());
       const prevTexts = buffer.lastSegmentTexts;
+      const prevCounts = buffer.segmentStabilityCounts;
 
-      // Find how many leading segments match the previous submission
-      let stableCount = 0;
-      for (let i = 0; i < Math.min(currentTexts.length - 1, prevTexts.length); i++) {
-        if (currentTexts[i] === prevTexts[i]) {
-          stableCount++;
+      // Update per-segment stability counts: how many consecutive times
+      // each leading segment text has been identical across submissions.
+      const newCounts: number[] = [];
+      for (let i = 0; i < currentTexts.length; i++) {
+        if (i < prevTexts.length && currentTexts[i] === prevTexts[i]) {
+          newCounts.push((prevCounts[i] || 0) + 1);
+        } else {
+          newCounts.push(1); // first time seeing this text at position i
+        }
+      }
+
+      buffer.lastSegmentTexts = currentTexts;
+      buffer.segmentStabilityCounts = newCounts;
+
+      // Find how many leading segments have reached confirmThreshold
+      // (exclude the last segment — it's still growing)
+      let confirmedCount = 0;
+      for (let i = 0; i < currentTexts.length - 1; i++) {
+        if (newCounts[i] >= this.confirmThreshold) {
+          confirmedCount++;
         } else {
           break;
         }
       }
 
-      buffer.lastSegmentTexts = currentTexts;
-
-      if (stableCount > 0) {
-        // Emit each stable leading segment individually.
-        // Use Whisper's segment timestamps to compute wall-clock start/end
-        // so that segments have correct durations (not zero from rapid emit+advance).
+      if (confirmedCount > 0) {
+        // Emit each confirmed leading segment individually.
+        // Use Whisper's segment timestamps for correct wall-clock timing.
         const baseWindowMs = buffer.windowStartMs;
-        for (let i = 0; i < stableCount; i++) {
+        for (let i = 0; i < confirmedCount; i++) {
           const seg = segments[i];
-          // Set window start from Whisper's segment start time (relative to submitted audio)
           buffer.windowStartMs = baseWindowMs + Math.floor(seg.start * 1000);
           const segEndMs = baseWindowMs + Math.floor(seg.end * 1000);
-          // Emit with correct timing
           if (!seg.text.trim() || !this.onSegmentConfirmed) continue;
           const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
           this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
           buffer.sequenceNumber++;
           this.advanceOffset(buffer, seg.end);
         }
-        // Don't fall through to full-text check — we already advanced
+        // Shift stability counts past the confirmed segments
+        buffer.segmentStabilityCounts = newCounts.slice(confirmedCount);
+        buffer.lastSegmentTexts = currentTexts.slice(confirmedCount);
         return;
       }
 
-      // No stable prefix yet — fall through to full-text confirmation
+      // No segments reached confirmThreshold yet — fall through to full-text check
     }
 
     // Full string match — same as WhisperLive's same_output_threshold.
@@ -454,6 +470,7 @@ export class SpeakerStreamManager {
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
     buffer.lastSegmentTexts = [];
+    buffer.segmentStabilityCounts = [];
     buffer.windowStartMs = Date.now();
 
     log(`[SpeakerStreams] Offset advanced for "${buffer.speakerName}" (confirmed=${buffer.confirmedSamples}, total=${buffer.totalSamples}, trimmed to ${buffer.chunks.length} chunks)`);
@@ -498,6 +515,7 @@ export class SpeakerStreamManager {
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
     buffer.lastSegmentTexts = [];
+    buffer.segmentStabilityCounts = [];
     buffer.inFlight = false;
     buffer.windowStartMs = Date.now();
     buffer.bufferStartMs = Date.now();
