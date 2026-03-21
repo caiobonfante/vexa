@@ -1119,30 +1119,19 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             return;
           }
 
-          // Publish draft immediately for real-time dashboard display.
-          // Draft segment_id uses "draft:{speakerId}" — one draft per speaker,
-          // always overwritten by the next draft. This prevents ID collision
-          // with CONFIRMED segments which use "{speakerId}:{sequenceNumber}".
+          // Log draft for telemetry but don't publish to Redis/WS.
+          // Per-segment splitting means confirmed segments cover different
+          // (smaller) text ranges than drafts. Publishing drafts causes the
+          // dashboard to show full text then shrink it when confirmed splits
+          // arrive — appearing as "segments disappearing".
+          // Confirmed segments provide the real-time feed instead.
           if (segmentPublisher) {
-            const lang = explicitLang || result.language || 'en';
             const bufStart = speakerManager!.getBufferStartMs(speakerId);
             const nowMs = Date.now();
             const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
             const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
-            const draftSegmentId = `${segmentPublisher.sessionUid}:draft:${speakerId}`;
             telemetry.draftsEmitted++;
-            log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | draftId | "${result.text}"`);
-            await segmentPublisher.publishSegment({
-              speaker: speakerName,
-              text: result.text,
-              start: startSec,
-              end: endSec,
-              language: lang,
-              completed: false,
-              segment_id: draftSegmentId,
-              absolute_start_time: new Date(bufStart).toISOString(),
-              absolute_end_time: new Date(nowMs).toISOString(),
-            });
+            log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | (not published) | "${result.text}"`);
           }
 
           // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
