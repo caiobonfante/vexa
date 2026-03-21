@@ -250,14 +250,30 @@ async function main() {
   const captionEventLog: CaptionEvent[] = [];
   let lastCaptionSpeakerId: string | null = null;
   const outputSegments: { speaker: string; text: string; start: number; end: number }[] = [];
-  let whisperCalls = 0;
+
+  // === Telemetry ===
+  const telemetry = {
+    whisperCalls: 0,
+    whisperFailures: 0,
+    totalWhisperMs: 0,
+    draftsEmitted: 0,
+    segmentsConfirmed: 0,
+    segmentsDiscarded: 0,
+    totalConfirmLatencyMs: 0,
+    whisperSegmentCounts: [] as number[],
+    segmentDurations: [] as number[],
+    segmentWordCounts: [] as number[],
+  };
 
   // === onSegmentReady -- same as index.ts ===
   mgr.onSegmentReady = async (speakerId, speakerName, audioBuffer) => {
-    whisperCalls++;
+    const callStart = Date.now();
+    telemetry.whisperCalls++;
     try {
       const result = await txClient.transcribe(audioBuffer);
+      telemetry.totalWhisperMs += Date.now() - callStart;
       if (result?.text) {
+        telemetry.whisperSegmentCounts.push(result.segments?.length || 0);
         const text = result.text.trim();
         const words = result.segments?.flatMap(s => s.words || []) || [];
         if (words.length > 0) {
@@ -272,6 +288,8 @@ async function main() {
         mgr.handleTranscriptionResult(speakerId, '');
       }
     } catch (err: any) {
+      telemetry.whisperFailures++;
+      telemetry.totalWhisperMs += Date.now() - callStart;
       mgr.handleTranscriptionResult(speakerId, '');
     }
   };
@@ -280,9 +298,17 @@ async function main() {
   mgr.onSegmentConfirmed = (speakerId, speakerName, transcript, bufferStartMs, bufferEndMs, segmentId) => {
     const startSec = (bufferStartMs - sessionStartMs) / 1000;
     const endSec = (bufferEndMs - sessionStartMs) / 1000;
+    const durSec = endSec - startSec;
+    const wordCount = transcript.split(/\s+/).length;
+    const confirmLatencyMs = bufferEndMs - bufferStartMs;
+
+    telemetry.segmentsConfirmed++;
+    telemetry.totalConfirmLatencyMs += confirmLatencyMs;
+    telemetry.segmentDurations.push(durSec);
+    telemetry.segmentWordCounts.push(wordCount);
 
     const speakerWords = whisperWordsPerSpeaker.get(speakerId) || [];
-    console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | words=${speakerWords.length} captions=${captionEventLog.length} | "${transcript.substring(0, 60)}..."`);
+    console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | ${durSec.toFixed(1)}s ${wordCount}w latency=${(confirmLatencyMs/1000).toFixed(1)}s | "${transcript.substring(0, 60)}..."`);
 
     // Per-speaker audio already provides correct attribution.
     // The mapper was disabled in the live pipeline (index.ts) because
@@ -377,11 +403,30 @@ async function main() {
   console.log('  RESULTS');
   console.log('  ====================================================\n');
 
-  console.log(`  Whisper calls: ${whisperCalls}`);
+  console.log(`  Whisper calls: ${telemetry.whisperCalls} (${telemetry.whisperFailures} failed)`);
   console.log(`  Output segments: ${outputSegments.length}`);
   console.log(`  Caption events accumulated: ${captionEventLog.length}`);
   const totalStoredWords = Array.from(whisperWordsPerSpeaker.values()).reduce((sum, w) => sum + w.length, 0);
-  console.log(`  Whisper words stored: ${totalStoredWords} across ${whisperWordsPerSpeaker.size} speakers\n`);
+  console.log(`  Whisper words stored: ${totalStoredWords} across ${whisperWordsPerSpeaker.size} speakers`);
+
+  // Telemetry summary
+  const avgWhisperMs = telemetry.whisperCalls > 0 ? (telemetry.totalWhisperMs / telemetry.whisperCalls).toFixed(0) : 'n/a';
+  const avgConfirmLatency = telemetry.segmentsConfirmed > 0 ? (telemetry.totalConfirmLatencyMs / telemetry.segmentsConfirmed / 1000).toFixed(1) : 'n/a';
+  const avgWhisperSegs = telemetry.whisperSegmentCounts.length > 0 ? (telemetry.whisperSegmentCounts.reduce((a: number,b: number) => a+b, 0) / telemetry.whisperSegmentCounts.length).toFixed(1) : 'n/a';
+  const durs = telemetry.segmentDurations;
+  const sortedDurs = [...durs].sort((a,b) => a-b);
+  const medianDur = sortedDurs.length > 0 ? sortedDurs[Math.floor(sortedDurs.length/2)].toFixed(1) : 'n/a';
+  const maxDur = durs.length > 0 ? Math.max(...durs).toFixed(1) : 'n/a';
+  const meanDur = durs.length > 0 ? (durs.reduce((a,b) => a+b, 0) / durs.length).toFixed(1) : 'n/a';
+
+  console.log(`\n  ── Pipeline telemetry ──`);
+  console.log(`  Whisper avg latency: ${avgWhisperMs}ms`);
+  console.log(`  Whisper segments/call: ${avgWhisperSegs}`);
+  console.log(`  Confirm latency (speech→emit): ${avgConfirmLatency}s`);
+  console.log(`  Segment duration: median=${medianDur}s mean=${meanDur}s max=${maxDur}s`);
+  console.log(`  Segments >15s: ${durs.filter(d => d > 15).length}/${durs.length}`);
+  console.log(`  Segments >30s: ${durs.filter(d => d > 30).length}/${durs.length}`);
+  console.log('');
 
   console.log('  Output segments:');
   for (const seg of outputSegments) {

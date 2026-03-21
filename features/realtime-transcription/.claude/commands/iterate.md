@@ -4,6 +4,21 @@ You are in **Stage 2: SANDBOX ITERATION** for the realtime-transcription feature
 
 Read the generic stage protocol first: `/.claude/commands/iterate.md`
 
+## Live observability
+
+When testing with a live meeting, open the observer page to monitor WS delivery, deduplication, segment ordering, and pipeline metrics in real-time:
+
+```
+features/realtime-transcription/tests/observe.html?meeting=<NATIVE_ID>&key=<API_KEY>&auto=1
+```
+
+The observer shows:
+- Live segments as they arrive via WS (draft → confirmed transitions)
+- Deduplication tracking (duplicate updates highlighted)
+- Ordering violations (out-of-order segments flagged)
+- Pipeline metrics: segment durations, speaker count, draft→confirm latency
+- Event log of all WS activity
+
 ## Feature-specific context
 
 ### Inventory datasets
