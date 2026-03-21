@@ -301,9 +301,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
     // Key by segment_id (stable, per-speaker) or absolute_start_time (legacy)
     const transcriptMap = new Map<string, TranscriptSegment>();
+    // Also index by speaker+start_time to detect draft→confirmed transitions
+    const bySpeakerStart = new Map<string, string>(); // "speaker:start" → key
     for (const seg of transcripts) {
       const key = seg.segment_id || seg.absolute_start_time;
-      if (key) transcriptMap.set(key, seg);
+      if (key) {
+        transcriptMap.set(key, seg);
+        if (seg.speaker && seg.absolute_start_time) {
+          bySpeakerStart.set(`${seg.speaker}:${seg.absolute_start_time}`, key);
+        }
+      }
     }
 
     // Upsert new segments
@@ -313,6 +320,21 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
       const key = segment.segment_id || segment.absolute_start_time;
       const existing = transcriptMap.get(key);
+
+      // When a CONFIRMED segment arrives, remove any DRAFT from the same speaker.
+      // Draft segment_ids use "draft:{speakerId}" while confirmed use "{speakerId}:{seq}",
+      // so they have different keys. Remove drafts by checking for "draft:" in the key
+      // and matching on speaker name.
+      if (segment.completed && segment.speaker) {
+        for (const [existKey, existSeg] of transcriptMap.entries()) {
+          if (existKey === key) continue;
+          if (!existSeg.completed && existSeg.speaker === segment.speaker &&
+              existKey.includes(":draft:")) {
+            transcriptMap.delete(existKey);
+            hasUpdates = true;
+          }
+        }
+      }
 
       if (existing) {
         const existingText = (existing.text || "").trim();

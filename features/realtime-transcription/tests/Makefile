@@ -122,9 +122,12 @@ play-replay:
 # Full system replay: publishes to Redis → transcription-collector → WS → DB
 # Segments visible in observe.html, dashboard, and REST API
 # Usage: make play-replay-full DATASET=collection-run
+# Full system replay always generates a unique NATIVE_MEETING_ID to avoid
+# polluting existing meetings. Unset the .env value explicitly.
 play-replay-full:
 	@cd $(BOT) && PUBLISH=true \
 		DATASET=$(or $(DATASET),collection-run) \
+		NATIVE_MEETING_ID= \
 		REDIS_URL=$(or $(REDIS_URL),redis://localhost:6379) \
 		API_GATEWAY_URL=$(or $(API_GATEWAY_URL),http://localhost:8066) \
 		API_TOKEN=$(API_TOKEN) \
