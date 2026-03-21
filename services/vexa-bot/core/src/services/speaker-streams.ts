@@ -202,10 +202,20 @@ export class SpeakerStreamManager {
       buffer.lastSegmentTexts = currentTexts;
 
       if (stableCount > 0) {
-        // Emit each stable leading segment individually
+        // Emit each stable leading segment individually.
+        // Use Whisper's segment timestamps to compute wall-clock start/end
+        // so that segments have correct durations (not zero from rapid emit+advance).
+        const baseWindowMs = buffer.windowStartMs;
         for (let i = 0; i < stableCount; i++) {
           const seg = segments[i];
-          this.emitSegment(buffer, seg.text.trim());
+          // Set window start from Whisper's segment start time (relative to submitted audio)
+          buffer.windowStartMs = baseWindowMs + Math.floor(seg.start * 1000);
+          const segEndMs = baseWindowMs + Math.floor(seg.end * 1000);
+          // Emit with correct timing
+          if (!seg.text.trim() || !this.onSegmentConfirmed) continue;
+          const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
+          this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
+          buffer.sequenceNumber++;
           this.advanceOffset(buffer, seg.end);
         }
         // Don't fall through to full-text check — we already advanced

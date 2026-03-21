@@ -78,22 +78,42 @@ function mintMeetingToken(meetingId: number, userId: number, platform: string, n
 
 async function createReplayMeeting(dataset: string): Promise<{ meetingId: number; nativeMeetingId: string }> {
   const nativeMeetingId = process.env.NATIVE_MEETING_ID || `replay-${Date.now()}`;
-  const body = JSON.stringify({
-    platform: 'teams',
-    native_meeting_id: nativeMeetingId,
-    meeting_url: `https://replay.local/meet/${nativeMeetingId}`,
-    bot_name: `Replay-${dataset}`,
+
+  // Create meeting directly in DB (bypasses bot-manager which tries to launch a real bot)
+  const http = await import('http');
+  const adminResp = await new Promise<any>((resolve, reject) => {
+    const data = JSON.stringify({ email: 'test@vexa.ai', name: 'Test User' });
+    // Get user ID first
+    const req = http.request({
+      hostname: 'localhost', port: 8067,
+      path: '/admin/users/email/test@vexa.ai',
+      method: 'GET',
+      headers: { 'X-Admin-API-Key': ADMIN_TOKEN_SECRET },
+    }, (res: any) => {
+      let b = ''; res.on('data', (c: string) => b += c);
+      res.on('end', () => { try { resolve(JSON.parse(b)); } catch { resolve({}); } });
+    });
+    req.on('error', reject);
+    req.end();
   });
-  const resp = await fetch(`${API_GATEWAY_URL}/bots`, {
-    method: 'POST', body,
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_TOKEN },
+  const userId = adminResp?.id || 1;
+
+  // Insert meeting directly via admin SQL
+  const insertResult = await new Promise<string>((resolve, reject) => {
+    const proc = require('child_process');
+    proc.exec(
+      `docker exec vexa-restore-postgres-1 psql -U postgres -d vexa_restore -c "INSERT INTO meetings (user_id, platform, platform_specific_id, status, data, created_at, updated_at) VALUES (${userId}, 'teams', '${nativeMeetingId}', 'active', '{}'::jsonb, now(), now()) RETURNING id;"`,
+      (err: any, stdout: string) => {
+        if (err) reject(err);
+        else resolve(stdout);
+      }
+    );
   });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Failed to create replay meeting: ${resp.status} ${err}`);
-  }
-  const data = await resp.json() as any;
-  return { meetingId: data.id, nativeMeetingId };
+  const meetingIdMatch = insertResult.match(/(\d+)/);
+  if (!meetingIdMatch) throw new Error(`Failed to create replay meeting: ${insertResult}`);
+  const meetingId = parseInt(meetingIdMatch[1]);
+
+  return { meetingId, nativeMeetingId };
 }
 
 // -- WAV reader ---------------------------------------------------------------
@@ -380,16 +400,18 @@ async function main() {
         }
 
         // Publish draft to Redis (full system mode)
+        // Draft uses "draft:{speakerId}" — one per speaker, always overwritten.
+        // Prevents ID collision with CONFIRMED segments.
         if (publisher) {
           telemetry.draftsEmitted++;
           const bufStart = mgr.getBufferStartMs(speakerId);
           const nowMs = Date.now();
           const startSec = (bufStart - publisher.sessionStartMs) / 1000;
           const endSec = (nowMs - publisher.sessionStartMs) / 1000;
-          const segmentId = `${publisher.sessionUid}:${mgr.getSegmentId(speakerId)}`;
+          const draftSegmentId = `${publisher.sessionUid}:draft:${speakerId}`;
           await publisher.publishSegment({
             speaker: speakerName, text, start: startSec, end: endSec,
-            language: result.language || 'en', completed: false, segment_id: segmentId,
+            language: result.language || 'en', completed: false, segment_id: draftSegmentId,
             absolute_start_time: new Date(bufStart).toISOString(),
             absolute_end_time: new Date(nowMs).toISOString(),
           });

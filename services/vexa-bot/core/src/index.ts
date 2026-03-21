@@ -1118,16 +1118,19 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             return;
           }
 
-          // Publish draft immediately for real-time dashboard display
+          // Publish draft immediately for real-time dashboard display.
+          // Draft segment_id uses "draft:{speakerId}" — one draft per speaker,
+          // always overwritten by the next draft. This prevents ID collision
+          // with CONFIRMED segments which use "{speakerId}:{sequenceNumber}".
           if (segmentPublisher) {
             const lang = explicitLang || result.language || 'en';
             const bufStart = speakerManager!.getBufferStartMs(speakerId);
             const nowMs = Date.now();
             const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
             const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
-            const segmentId = `${segmentPublisher.sessionUid}:${speakerManager!.getSegmentId(speakerId)}`;
+            const draftSegmentId = `${segmentPublisher.sessionUid}:draft:${speakerId}`;
             telemetry.draftsEmitted++;
-            log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | ${segmentId} | "${result.text}"`);
+            log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | draftId | "${result.text}"`);
             await segmentPublisher.publishSegment({
               speaker: speakerName,
               text: result.text,
@@ -1135,7 +1138,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
               end: endSec,
               language: lang,
               completed: false,
-              segment_id: segmentId,
+              segment_id: draftSegmentId,
               absolute_start_time: new Date(bufStart).toISOString(),
               absolute_end_time: new Date(nowMs).toISOString(),
             });
