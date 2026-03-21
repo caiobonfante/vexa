@@ -1,0 +1,114 @@
+[BotCore] [Teams Captions] Speaker change: (none) → Alice (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning every
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone let me
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone let me walk
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning everyone let me walk through
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Good morning, everyone.
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarter
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results for
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results for all
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results for all 5
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results for all five regions
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Let me walk through the quarterly results for all five regions.
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good which
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good which region
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good which region should we
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good which region should we start
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good which region should we start with
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Good. Which region should we start with?
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 8 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that had
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that had the strong
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that had the strongest
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that had the strongest growth
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe since that had the strongest growth this quarter
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Begin with Europe, since that had the strongest growth this quarter.
+[BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Diana (Guest) (flushed 6 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": I agree
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": I agree the
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": I agree.
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impress
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impressive
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impressive across
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impressive across all
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impressive across all segments
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": The European numbers were really impressive across all segments.
+[BotCore] [Teams Captions] Speaker change: Diana (Guest) → Alice (Guest) (flushed 0 chunks, discarded 2 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Right.
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Charlie (Guest) (flushed 3 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Sure
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Sure.
+[BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Diana (Guest) (flushed 2 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Got it
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Got it.
+[BotCore] [Teams Captions] Speaker change: Diana (Guest) → Alice (Guest) (flushed 2 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Yes
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Yes.
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Makes sense?
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 2 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Noted
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Noted.
+[BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Diana (Guest) (flushed 3 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Done
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Done.
+[BotCore] [Teams Captions] Speaker change: Diana (Guest) → Alice (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any other
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any other thought
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any other thoughts
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any other thoughts on the budget
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": Any other thoughts on the budget?
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 7 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": We should increase it
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": We should increase it.
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 3 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Same here
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": Same here.
+[BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Diana (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": How much more
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": How much more?
+[BotCore] [Teams Captions] Speaker change: Diana (Guest) → Alice (Guest) (flushed 4 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": That works for
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": That works for me
+[BotCore] [📝 TEAMS CAPTION] "Alice (Guest)": That works for me.
+[BotCore] [Teams Captions] Speaker change: Alice (Guest) → Bob (Guest) (flushed 2 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Agreed
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Agreed let
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Agreed let us do
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Agreed let us do it
+[BotCore] [📝 TEAMS CAPTION] "Bob (Guest)": Agreed. Let us do it.
+[BotCore] [Teams Captions] Speaker change: Bob (Guest) → Charlie (Guest) (flushed 2 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I will
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I will update
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I will update the
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I will update the spreadsheet
+[BotCore] [📝 TEAMS CAPTION] "Charlie (Guest)": I will update the spreadsheet.
+[BotCore] [Teams Captions] Speaker change: Charlie (Guest) → Diana (Guest) (flushed 5 chunks, discarded 0 stale)
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a product
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion I
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion I will
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion I will send
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion I will send the
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": Thanks ever one for a productive discussion.
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": I will send the meeting notes shortly
+[BotCore] [📝 TEAMS CAPTION] "Diana (Guest)": I will send the meeting notes shortly.
