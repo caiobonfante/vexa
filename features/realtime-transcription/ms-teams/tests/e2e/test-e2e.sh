@@ -222,7 +222,7 @@ log "  DB segments: $DB_COUNT"
 # Parse bot segments
 grep "CONFIRMED" "$RESULTS/recorder-full.log" 2>/dev/null | python3 -c "
 import sys, json, re
-pat = re.compile(r'CONFIRMED\] (\S+) \| (\S+) \| [^|]+ \| ([^ ]+) \| \"(.*)\"')
+pat = re.compile(r'CONFIRMED\] (.+?) \| (\S+) \| [^|]+ \| ([^ ]+) \| \"(.*)\"')
 segments = []
 for line in sys.stdin:
     m = pat.search(line)
