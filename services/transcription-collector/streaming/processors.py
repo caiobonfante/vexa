@@ -16,8 +16,7 @@ from shared_models.database import async_session_local # For DB sessions
 from shared_models.models import User, Meeting, MeetingSession, APIToken
 from shared_models.schemas import Platform
 from config import REDIS_SEGMENT_TTL, REDIS_SPEAKER_EVENT_KEY_PREFIX, REDIS_SPEAKER_EVENT_TTL # Added new configs (NEW)
-# MODIFIED: Import the new utility function and only necessary statuses/base mapper if still needed elsewhere
-from mapping.speaker_mapper import get_speaker_mapping_for_segment, STATUS_UNKNOWN, STATUS_ERROR # Removed direct map_speaker_to_segment and other statuses if not directly used by this file
+# Speaker mapping is no longer needed in the collector — bot labels segments at source
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +175,10 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                         return True
                     return await process_session_start_event(message_id, stream_data, db, None, meeting, redis_c) 
                 elif message_type == "transcription":
-                    pass # Continue with transcription processing
+                    pass # Continue with transcription processing (legacy)
+                elif message_type == "transcript":
+                    # New format: per-speaker bundle with confirmed + pending
+                    return await process_transcript_bundle(message_id, stream_data, internal_meeting_id, redis_c)
                 elif message_type == "session_end": # NEW: Handle session_end for cleanup
                     session_uid = stream_data.get('uid')
                     if not session_uid:
@@ -214,7 +216,6 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
             segment_count = 0
             hash_key = f"meeting:{internal_meeting_id}:segments"
             segments_to_store = {}
-            changed_segments = []  # Track which segments actually changed
             session_uid_from_payload = stream_data.get('uid')
 
             if not session_uid_from_payload:
@@ -253,37 +254,11 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                      continue
                  start_time_key = segment_id
 
-                 mapping_status: str = STATUS_UNKNOWN
-                 mapped_speaker_name = None
-
-                 # Use speaker from segment payload if the producer already labeled it
-                 # (per-speaker bot pipeline sends pre-labeled segments)
-                 segment_speaker = segment.get('speaker')
-                 if segment_speaker:
-                    mapped_speaker_name = segment_speaker
-                    mapping_status = "PRODUCER_LABELED"
-                    logger.debug(f"[Msg {message_id}/Meet {internal_meeting_id}/Seg {start_time_key}] Using producer-labeled speaker: {segment_speaker}")
-                 elif session_uid_from_payload:
-                    # Fallback: map speaker from speaker events sorted set
-                    context_log = f"[LiveMap Msg:{message_id}/Meet:{internal_meeting_id}/Seg:{start_time_key}]"
-                    mapping_result = await get_speaker_mapping_for_segment(
-                        redis_c=redis_c,
-                        session_uid=session_uid_from_payload,
-                        segment_start_ms=start_time_float * 1000,
-                        segment_end_ms=end_time_float * 1000,
-                        config_speaker_event_key_prefix=REDIS_SPEAKER_EVENT_KEY_PREFIX,
-                        context_log_msg=context_log
-                    )
-                    mapped_speaker_name = mapping_result.get("speaker_name")
-                    mapping_status = mapping_result.get("status", STATUS_ERROR)
-                 else:
-                    logger.warning(f"[Msg {message_id}/Meet {internal_meeting_id}/Seg {start_time_key}] No session_uid_from_payload. Cannot map speakers.")
-                    mapping_status = STATUS_UNKNOWN
-
-                 # Absolute timestamps come from the segment payload (bot publishes UTC directly)
+                 # Speaker comes from bot (producer-labeled). No mapping needed.
+                 mapped_speaker_name = segment.get('speaker')
                  abs_start_iso = segment.get('absolute_start_time')
                  abs_end_iso = segment.get('absolute_end_time')
-                 
+
                  segment_redis_data = {
                      "text": text_content,
                      "start_time": start_time_float,
@@ -293,71 +268,17 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                      "updated_at": datetime.now(timezone.utc).isoformat(),
                      "session_uid": session_uid_from_payload,
                      "speaker": mapped_speaker_name,
-                     "speaker_mapping_status": mapping_status
+                     "speaker_mapping_status": "PRODUCER_LABELED",
+                     "segment_id": segment_id,
                  }
-                 if segment_id:
-                     segment_redis_data["segment_id"] = segment_id
                  if abs_start_iso:
                      segment_redis_data["absolute_start_time"] = abs_start_iso
                  if abs_end_iso:
                      segment_redis_data["absolute_end_time"] = abs_end_iso
-                 
-                 # Change-only publishing: compare with existing segment
-                 try:
-                     existing_json = await redis_c.hget(hash_key, start_time_key)
-                     if existing_json:
-                         existing_data = json.loads(existing_json)
-                         # Normalize fields for comparison (render-relevant only)
-                         existing_norm = {
-                             "text": existing_data.get("text"),
-                             "speaker": existing_data.get("speaker"),
-                             "language": existing_data.get("language"),
-                             "completed": bool(existing_data.get("completed", False)),
-                             "end_time": round(float(existing_data.get("end_time", 0)), 3),
-                             "absolute_start_time": existing_data.get("absolute_start_time"),
-                             "absolute_end_time": existing_data.get("absolute_end_time")
-                         }
-                         new_norm = {
-                             "text": text_content,
-                             "speaker": mapped_speaker_name,
-                             "language": language_content,
-                             "completed": completed_content,
-                             "end_time": round(end_time_float, 3),
-                             "absolute_start_time": abs_start_iso,
-                             "absolute_end_time": abs_end_iso
-                         }
-                         if existing_norm == new_norm:
-                            # No change; skip HSET and don't include in changed_segments
-                            # BUT: Always store partial segments (completed=False) even if unchanged for GET endpoint consistency
-                            if not completed_content:
-                                # Partial segment: always store even if unchanged for GET endpoint
-                                # Don't continue - fall through to store it
-                                pass
-                            else:
-                                # Completed segment unchanged: skip storing
-                                logger.debug(f"[Msg {message_id}/Meet {internal_meeting_id}/Seg {start_time_key}] Completed segment unchanged, skipping.")
-                                continue
-                 except Exception as _cmp_err:
-                     logger.debug(f"[Msg {message_id}/Meet {internal_meeting_id}] Change comparison failed: {_cmp_err}; treating as changed")
-                 
-                 # Store and mark as changed
+
+                 # Always store — no change detection needed (persistence only)
                  segments_to_store[start_time_key] = json.dumps(segment_redis_data)
                  segment_count += 1
-                 changed_seg = {
-                     "start": start_time_float,
-                     "text": text_content,
-                     "end_time": end_time_float,
-                     "language": language_content,
-                     "completed": completed_content,
-                     "speaker": mapped_speaker_name,
-                     "session_uid": session_uid_from_payload,
-                     "speaker_mapping_status": mapping_status,
-                     "absolute_start_time": abs_start_iso,
-                     "absolute_end_time": abs_end_iso
-                 }
-                 if segment_id:
-                     changed_seg["segment_id"] = segment_id
-                 changed_segments.append(changed_seg)
             
             if segment_count > 0:
                 try:
@@ -378,22 +299,9 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                      logger.error(f"Unexpected pipeline error storing segments for message {message_id}: {pipe_err}", exc_info=True)
                      return False
                 
-                # Publish mutable transcript update via Redis Pub/Sub (change-only)
-                if changed_segments:
-                    try:
-                        event_payload = {
-                            "type": "transcript.mutable",
-                            "meeting": {"id": internal_meeting_id},
-                            "payload": {"segments": changed_segments},
-                            "ts": datetime.now(timezone.utc).isoformat()
-                        }
-                        channel = f"tc:meeting:{internal_meeting_id}:mutable"
-                        await redis_c.publish(channel, json.dumps(event_payload))
-                        logger.info(f"Published {len(changed_segments)} changed segments to {channel}")
-                    except Exception as pub_err:
-                        logger.error(f"Failed to publish mutable transcript update for meeting {internal_meeting_id}: {pub_err}")
-                else:
-                    logger.debug(f"No changed segments to publish for meeting {internal_meeting_id} from message {message_id}")
+                # WS delivery is handled by the bot directly (PUBLISH in publishTranscript).
+                # Collector only persists — no WS publish here.
+                logger.debug(f"Stored {segment_count} segments for meeting {internal_meeting_id} (persistence only, no WS publish)")
             else:
                 logger.info(f"No valid segments found in message {message_id} for meeting {internal_meeting_id} to store in Redis.")
             return True
@@ -404,6 +312,60 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
     except Exception as e:
         logger.error(f"Unexpected error in process_stream_message for {message_id}: {e}", exc_info=True)
         return False 
+
+async def process_transcript_bundle(message_id: str, stream_data: Dict[str, Any], meeting_id: int, redis_c: aioredis.Redis) -> bool:
+    """Process new-format transcript bundle: confirmed + pending per speaker.
+    Stores confirmed in Redis Hash (by segment_id), publishes to WS as atomic bundle.
+    """
+    try:
+        speaker = stream_data.get('speaker', '')
+        confirmed_segs = stream_data.get('confirmed', [])
+        pending_segs = stream_data.get('pending', [])
+        session_uid = stream_data.get('uid')
+        hash_key = f"meeting:{meeting_id}:segments"
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Store confirmed segments in Redis Hash (by segment_id)
+        if confirmed_segs:
+            async with redis_c.pipeline(transaction=True) as pipe:
+                pipe.sadd("active_meetings", str(meeting_id))
+                pipe.expire(hash_key, REDIS_SEGMENT_TTL)
+                for seg in confirmed_segs:
+                    seg_id = seg.get('segment_id')
+                    if not seg_id or not seg.get('text', '').strip():
+                        continue
+                    redis_data = {
+                        "text": seg['text'], "start_time": seg.get('start', 0),
+                        "end_time": seg.get('end', 0), "language": seg.get('language'),
+                        "completed": True, "updated_at": now_iso,
+                        "session_uid": session_uid, "speaker": seg.get('speaker', speaker),
+                        "speaker_mapping_status": "PRODUCER_LABELED",
+                        "segment_id": seg_id,
+                    }
+                    if seg.get('absolute_start_time'):
+                        redis_data["absolute_start_time"] = seg['absolute_start_time']
+                    if seg.get('absolute_end_time'):
+                        redis_data["absolute_end_time"] = seg['absolute_end_time']
+                    pipe.hset(hash_key, seg_id, json.dumps(redis_data))
+                await pipe.execute()
+            logger.info(f"[Transcript] Stored {len(confirmed_segs)} confirmed for meeting {meeting_id} speaker {speaker}")
+
+        # Store pending snapshot (full replace per speaker, short TTL)
+        pending_key = f"meeting:{meeting_id}:pending:{speaker}"
+        if pending_segs:
+            await redis_c.set(pending_key, json.dumps(pending_segs), ex=60)
+        else:
+            await redis_c.delete(pending_key)
+
+        # WS delivery is handled by the bot directly (PUBLISH in publishTranscript).
+        # Collector only persists — no WS publish here.
+        logger.info(f"[Transcript] Stored {len(confirmed_segs)}C + {len(pending_segs)}P for meeting {meeting_id} speaker {speaker} (persistence only)")
+
+        return True
+    except Exception as e:
+        logger.error(f"[Transcript] Error processing bundle {message_id}: {e}", exc_info=True)
+        return False
+
 
 async def process_speaker_event_message(message_id: str, event_data: Dict[str, Any], redis_c: aioredis.Redis) -> bool:
     """Processes a single speaker event message from the Redis stream.

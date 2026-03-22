@@ -36,11 +36,11 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 
 /**
  * Hook for managing live transcript updates via WebSocket.
- * Implements the algorithm from ws_realtime_transcription.py:
- * 1. Bootstrap from REST API (seed in-memory map by absolute_start_time)
+ * 1. Bootstrap from REST API (seed in-memory map by segment_id)
  * 2. Connect to WebSocket and subscribe to meeting
- * 3. Process transcript.mutable and transcript.finalized events
- * 4. Deduplicate by absolute_start_time (keep newer updated_at)
+ * 3. Process "transcript" bundle messages (per-speaker confirmed + pending)
+ * 4. Two-map model: _confirmed (by segment_id, append-only) + _pendingBySpeaker (replaced per tick)
+ * 5. Dedup via containment, expansion, and tail-repeat detection (transcript-dedup.ts)
  */
 export function useLiveTranscripts(
   options: UseLiveTranscriptsOptions
@@ -220,28 +220,29 @@ export function useLiveTranscripts(
           const message: WebSocketIncomingMessage = JSON.parse(event.data);
 
           switch (message.type) {
-            case "transcript.mutable":
-            case "transcript.finalized":
-              // Step 4: Process transcript events (mutable and finalized)
-              // Deduplication by absolute_start_time is handled in upsertTranscriptSegments
-              if (message.payload?.segments) {
-                const segments: TranscriptSegment[] = [];
-                for (const seg of message.payload.segments) {
-                  // Skip empty segments or those missing required fields
-                  if (!seg.text?.trim() || !seg.absolute_start_time) continue;
-
-                  // Convert WebSocket segment to TranscriptSegment format
-                  segments.push(convertWebSocketSegment(seg));
-                }
-
-                if (segments.length > 0) {
-                  upsertTranscriptSegments(segments);
-                  console.log(
-                    `[LiveTranscripts] ${message.type}: ${segments.length} segments processed`
-                  );
-                }
+            case "transcript": {
+              // New format: per-speaker bundle with confirmed + pending
+              const speaker = (message as any).speaker || "";
+              const confirmedSegs = ((message as any).confirmed || [])
+                .filter((s: any) => s.text?.trim())
+                .map((s: any) => convertWebSocketSegment(s));
+              const pendingSegs = ((message as any).pending || [])
+                .filter((s: any) => s.text?.trim())
+                .map((s: any) => convertWebSocketSegment(s));
+              if (confirmedSegs.length > 0 || pendingSegs.length >= 0) {
+                upsertTranscriptSegments(confirmedSegs, pendingSegs, speaker);
+                console.log(
+                  `[LiveTranscripts] transcript: ${confirmedSegs.length}C + ${pendingSegs.length}P for ${speaker}`
+                );
               }
               break;
+            }
+            case "transcript.mutable":
+            case "transcript.finalized": {
+              // Legacy: collector no longer publishes these. Log and ignore.
+              console.warn("[LiveTranscripts] Ignoring legacy message type:", message.type);
+              break;
+            }
 
             case "chat.new_message":
               // Real-time chat message from the bot

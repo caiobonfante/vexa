@@ -76,12 +76,12 @@ export class TranscriptionClient {
    * Converts to WAV, POSTs to transcription-service, returns parsed result.
    * Retries on transient failures (503, network errors).
    */
-  async transcribe(audioData: Float32Array, language?: string): Promise<TranscriptionResult> {
+  async transcribe(audioData: Float32Array, language?: string, prompt?: string): Promise<TranscriptionResult> {
     const wavBuffer = this.float32ToWav(audioData);
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const result = await this.sendRequest(wavBuffer, language);
+        const result = await this.sendRequest(wavBuffer, language, prompt);
         return result;
       } catch (err: any) {
         const isTransient = err.statusCode === 503 || err.statusCode === 429 || err.statusCode === 500 || !err.statusCode;
@@ -107,7 +107,7 @@ export class TranscriptionClient {
   /**
    * Send the WAV buffer to the transcription-service as multipart form data.
    */
-  private async sendRequest(wavBuffer: Buffer, language?: string): Promise<TranscriptionResult> {
+  private async sendRequest(wavBuffer: Buffer, language?: string, prompt?: string): Promise<TranscriptionResult> {
     // Build multipart form data manually (no external dependency needed)
     const boundary = `----FormBoundary${Date.now().toString(36)}`;
 
@@ -167,6 +167,15 @@ export class TranscriptionClient {
         `--${boundary}\r\n` +
         `Content-Disposition: form-data; name="min_silence_duration_ms"\r\n\r\n` +
         `${this.minSilenceDurationMs}\r\n`
+      ));
+    }
+
+    // Prompt: previous confirmed text as context for streaming continuity
+    if (prompt) {
+      parts.push(Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="prompt"\r\n\r\n` +
+        `${prompt}\r\n`
       ));
     }
 

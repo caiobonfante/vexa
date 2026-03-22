@@ -49,6 +49,8 @@ interface SpeakerBuffer {
   carryForwardSamples: number;
   /** Generation counter — incremented on full reset to detect stale responses */
   generation: number;
+  /** Last confirmed text — passed as prompt to Whisper for context continuity */
+  lastConfirmedText: string;
 }
 
 export interface SpeakerStreamManagerConfig {
@@ -117,6 +119,7 @@ export class SpeakerStreamManager {
       idleSubmitted: false,
       carryForwardSamples: 0,
       generation: 0,
+      lastConfirmedText: '',
     });
 
     const timer = setInterval(() => this.trySubmit(speakerId), this.submitInterval * 1000);
@@ -230,8 +233,15 @@ export class SpeakerStreamManager {
           const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
           this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
           buffer.sequenceNumber++;
-          this.advanceOffset(buffer, seg.end);
+          buffer.lastConfirmedText = seg.text.trim();
         }
+        // Advance offset ONCE to the end of the last confirmed segment.
+        // seg.end is absolute within submitted audio — calling advanceOffset
+        // per segment would stack offsets and over-trim.
+        const lastConfirmedSeg = segments[confirmedCount - 1];
+        this.advanceOffset(buffer, lastConfirmedSeg.end);
+        buffer.windowStartMs = baseWindowMs + Math.floor(lastConfirmedSeg.end * 1000);
+
         // Shift stability counts past the confirmed segments
         buffer.segmentStabilityCounts = newCounts.slice(confirmedCount);
         buffer.lastSegmentTexts = currentTexts.slice(confirmedCount);
@@ -299,6 +309,10 @@ export class SpeakerStreamManager {
 
   getBufferStartMs(speakerId: string): number {
     return this.buffers.get(speakerId)?.windowStartMs ?? Date.now();
+  }
+
+  getLastConfirmedText(speakerId: string): string {
+    return this.buffers.get(speakerId)?.lastConfirmedText ?? '';
   }
 
   removeAll(): void {
@@ -432,6 +446,7 @@ export class SpeakerStreamManager {
     const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
     this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, text, buffer.windowStartMs, endMs, segmentId);
     buffer.sequenceNumber++;
+    buffer.lastConfirmedText = text;
   }
 
   /**
@@ -449,15 +464,9 @@ export class SpeakerStreamManager {
       const samplesToAdvance = Math.floor(segmentEndSec * this.sampleRate);
       buffer.confirmedSamples += Math.min(samplesToAdvance, this.unconfirmedSamples(buffer));
 
-      // If the remaining unconfirmed tail is shorter than minAudioDuration,
-      // trim it completely. This leftover is trailing audio that Whisper
-      // didn't transcribe into a segment. It can't be submitted standalone
-      // (below minAudioDuration), and keeping it pollutes the next speaker
-      // turn's submission with stale context audio.
-      const remainingSec = this.unconfirmedSamples(buffer) / this.sampleRate;
-      if (remainingSec > 0 && remainingSec < this.minAudioDuration) {
-        buffer.confirmedSamples = buffer.totalSamples;
-      }
+      // Keep remaining unconfirmed audio — it may contain real speech that
+      // Whisper transcribed but wasn't confirmed yet. It will accumulate with
+      // new audio until long enough for the next submission.
     } else {
       // Fallback: trim everything (old behavior, loses boundary words)
       buffer.confirmedSamples = buffer.totalSamples;

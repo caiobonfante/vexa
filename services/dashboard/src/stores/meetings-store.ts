@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import type { Meeting, TranscriptSegment, Platform, MeetingStatus, RecordingData, ChatMessage } from "@/types/vexa";
 import { VexaAPIError, vexaAPI } from "@/lib/api";
-// deduplicateSegments removed — it merges time-overlapping segments which
-// is wrong for per-speaker pipeline where concurrent speakers overlap.
 
 interface MeetingDataUpdate {
   name?: string;
@@ -26,6 +24,10 @@ interface MeetingsState {
   recordings: RecordingData[];
   chatMessages: ChatMessage[];
 
+  // Internal state for best-known-transcript model
+  _confirmed: Map<string, TranscriptSegment>;
+  _pendingBySpeaker: Map<string, TranscriptSegment[]>;
+
   // Loading states
   isLoadingMeetings: boolean;
   isLoadingMeeting: boolean;
@@ -48,7 +50,7 @@ interface MeetingsState {
 
   // Real-time updates
   bootstrapTranscripts: (segments: TranscriptSegment[]) => void;
-  upsertTranscriptSegments: (segments: TranscriptSegment[]) => void;
+  upsertTranscriptSegments: (confirmed: TranscriptSegment[], pending?: TranscriptSegment[], speaker?: string) => void;
   addTranscriptSegment: (segment: TranscriptSegment) => void;
   updateTranscriptSegment: (segment: TranscriptSegment) => void;
   updateMeetingStatus: (meetingId: string, status: MeetingStatus) => void;
@@ -64,6 +66,47 @@ interface MeetingsState {
 let isChatRouteUnavailable = false;
 let hasLoggedChatRouteUnavailable = false;
 
+/**
+ * Recompute the sorted transcripts array from confirmed + pending maps.
+ * Confirmed segments (by segment_id) + non-stale pending, sorted by absolute_start_time.
+ * Pending is skipped if confirmed already has the same text for that speaker
+ * (stale pending that hasn't been replaced by the speaker's next tick yet).
+ */
+function recomputeTranscripts(
+  confirmed: Map<string, TranscriptSegment>,
+  pendingBySpeaker: Map<string, TranscriptSegment[]>,
+): TranscriptSegment[] {
+  // Build set of confirmed texts per speaker for stale-pending filtering
+  const confirmedBySpeaker = new Map<string, Set<string>>();
+  for (const seg of confirmed.values()) {
+    const speaker = seg.speaker || "";
+    if (!confirmedBySpeaker.has(speaker)) confirmedBySpeaker.set(speaker, new Set());
+    confirmedBySpeaker.get(speaker)!.add((seg.text || "").trim());
+  }
+
+  const all: TranscriptSegment[] = [...confirmed.values()];
+  for (const [speaker, segs] of pendingBySpeaker) {
+    const confirmedTexts = confirmedBySpeaker.get(speaker);
+    for (const seg of segs) {
+      // Skip stale pending that overlaps with a confirmed segment
+      const pt = (seg.text || "").trim();
+      let isStale = false;
+      if (confirmedTexts) {
+        for (const ct of confirmedTexts) {
+          if (pt === ct || pt.startsWith(ct) || ct.startsWith(pt)) {
+            isStale = true;
+            break;
+          }
+        }
+      }
+      if (isStale) continue;
+      all.push(seg);
+    }
+  }
+  all.sort((a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time));
+  return all;
+}
+
 export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Initial state
   meetings: [],
@@ -71,6 +114,8 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   transcripts: [],
   recordings: [],
   chatMessages: [],
+  _confirmed: new Map(),
+  _pendingBySpeaker: new Map(),
   isLoadingMeetings: false,
   isLoadingMeeting: false,
   isLoadingTranscripts: false,
@@ -240,7 +285,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
     set({
       meetings: updatedMeetings,
-      ...(shouldClearCurrent ? { currentMeeting: null, transcripts: [], recordings: [], chatMessages: [] } : {}),
+      ...(shouldClearCurrent ? { currentMeeting: null, transcripts: [], recordings: [], chatMessages: [], _confirmed: new Map(), _pendingBySpeaker: new Map() } : {}),
     });
   },
 
@@ -249,192 +294,90 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   clearCurrentMeeting: () => {
-    set({ currentMeeting: null, transcripts: [], recordings: [], chatMessages: [] });
+    set({
+      currentMeeting: null, transcripts: [], recordings: [], chatMessages: [],
+      _confirmed: new Map(), _pendingBySpeaker: new Map(),
+    });
   },
 
-  // Bootstrap transcripts from REST API (Step 1 of algorithm)
-  // Seeds the in-memory map keyed by absolute_start_time
+  // Bootstrap from REST API: confirmed segments only, clears pending
   bootstrapTranscripts: (segments: TranscriptSegment[]) => {
-    // Filter out segments without absolute_start_time or empty text
-    const validSegments = segments.filter(
-      (seg) => seg.absolute_start_time && seg.text?.trim()
-    );
-
-    // Deduplicate: prefer confirmed over draft for same speaker+text.
-    // Key by segment_id but also detect duplicates by speaker+text.
-    const transcriptMap = new Map<string, TranscriptSegment>();
-    const textIndex = new Map<string, string>(); // "speaker:text" → key (to detect dups)
-    for (const segment of validSegments) {
-      const key = segment.segment_id || segment.absolute_start_time;
-      const textKey = `${segment.speaker || ""}:${(segment.text || "").trim()}`;
-
-      // Check for duplicate text from the same speaker (draft→confirmed collision)
-      const existingKeyForText = textIndex.get(textKey);
-      if (existingKeyForText && existingKeyForText !== key) {
-        const existing = transcriptMap.get(existingKeyForText);
-        if (existing) {
-          // Prefer completed over draft
-          if (segment.completed && !existing.completed) {
-            transcriptMap.delete(existingKeyForText);
-          } else if (!segment.completed && existing.completed) {
-            continue; // Keep existing confirmed, skip this draft
-          }
-        }
-      }
-
-      transcriptMap.set(key, segment);
-      textIndex.set(textKey, key);
-    }
-
-    // Sort by absolute_start_time
-    const dedupedTranscripts = Array.from(transcriptMap.values()).sort(
-      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-    );
-
-    // Get the first segment's absolute_start_time to use as meeting start time
-    const firstSegmentTime = dedupedTranscripts.length > 0 
-      ? dedupedTranscripts[0].absolute_start_time 
-      : null;
-
-    // Update current meeting's start_time if not set and we have a first segment
-    const { currentMeeting } = get();
-    const updatedMeeting = firstSegmentTime && currentMeeting && !currentMeeting.start_time
-      ? {
-          ...currentMeeting,
-          start_time: firstSegmentTime,
-        }
-      : currentMeeting;
-
-    set({ 
-      transcripts: dedupedTranscripts,
-      ...(updatedMeeting !== currentMeeting ? { currentMeeting: updatedMeeting } : {}),
-    });
-  },
-
-  // Upsert segments from WebSocket (Step 2 of algorithm)
-  // Implements deduplication by absolute_start_time with updated_at comparison
-  upsertTranscriptSegments: (segments: TranscriptSegment[]) => {
-    const { transcripts } = get();
-
-    if (!segments || segments.length === 0) return;
-
-    // Key by segment_id (stable, per-speaker) or absolute_start_time (legacy)
-    const transcriptMap = new Map<string, TranscriptSegment>();
-    // Also index by speaker+start_time to detect draft→confirmed transitions
-    const bySpeakerStart = new Map<string, string>(); // "speaker:start" → key
-    for (const seg of transcripts) {
+    const confirmed = new Map<string, TranscriptSegment>();
+    for (const seg of segments) {
+      if (!seg.absolute_start_time || !seg.text?.trim()) continue;
       const key = seg.segment_id || seg.absolute_start_time;
-      if (key) {
-        transcriptMap.set(key, seg);
-        if (seg.speaker && seg.absolute_start_time) {
-          bySpeakerStart.set(`${seg.speaker}:${seg.absolute_start_time}`, key);
-        }
-      }
+      confirmed.set(key, seg);
     }
 
-    // Upsert new segments
-    let hasUpdates = false;
-    for (const segment of segments) {
-      if (!segment.absolute_start_time || !segment.text?.trim()) continue;
+    const pendingBySpeaker = new Map<string, TranscriptSegment[]>();
+    const transcripts = recomputeTranscripts(confirmed, pendingBySpeaker);
 
-      const key = segment.segment_id || segment.absolute_start_time;
-      const existing = transcriptMap.get(key);
-
-      // When a CONFIRMED segment arrives, remove any DRAFT from the same speaker.
-      // Draft segment_ids use "draft:{speakerId}" while confirmed use "{speakerId}:{seq}",
-      // so they have different keys. Remove drafts by checking for "draft:" in the key
-      // and matching on speaker name.
-      if (segment.completed && segment.speaker) {
-        for (const [existKey, existSeg] of transcriptMap.entries()) {
-          if (existKey === key) continue;
-          if (!existSeg.completed && existSeg.speaker === segment.speaker &&
-              existKey.includes(":draft:")) {
-            transcriptMap.delete(existKey);
-            hasUpdates = true;
-          }
-        }
-      }
-
-      if (existing) {
-        const existingText = (existing.text || "").trim();
-        const newText = (segment.text || "").trim();
-        const completedChanged = Boolean(existing.completed) !== Boolean(segment.completed);
-        if (existingText !== newText || completedChanged) {
-          transcriptMap.set(key, segment);
-          hasUpdates = true;
-          continue;
-        }
-        // Same text — keep newer
-        if (existing.updated_at && segment.updated_at && existing.updated_at >= segment.updated_at) {
-          continue;
-        }
-      }
-
-      transcriptMap.set(key, segment);
-      hasUpdates = true;
-    }
-
-    // Remove draft→confirmed duplicates (same speaker + same text, different IDs)
-    const textIndex2 = new Map<string, string>();
-    for (const [key, seg] of transcriptMap.entries()) {
-      const textKey = `${seg.speaker || ""}:${(seg.text || "").trim()}`;
-      const existingKey = textIndex2.get(textKey);
-      if (existingKey && existingKey !== key) {
-        const existing = transcriptMap.get(existingKey);
-        if (existing) {
-          if (seg.completed && !existing.completed) {
-            transcriptMap.delete(existingKey);
-            hasUpdates = true;
-          } else if (!seg.completed && existing.completed) {
-            transcriptMap.delete(key);
-            hasUpdates = true;
-            continue;
-          }
-        }
-      }
-      textIndex2.set(textKey, key);
-    }
-
-    // Sort by absolute_start_time
-    const dedupedTranscripts = Array.from(transcriptMap.values()).sort(
-      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-    );
-
-    // Get the first segment's absolute_start_time to use as meeting start time
-    const firstSegmentTime = dedupedTranscripts.length > 0
-      ? dedupedTranscripts[0].absolute_start_time
-      : null;
-
-    // Update current meeting's start_time if not set and we have a first segment
+    const firstTime = transcripts.length > 0 ? transcripts[0].absolute_start_time : null;
     const { currentMeeting } = get();
-    const updatedMeeting = firstSegmentTime && currentMeeting && !currentMeeting.start_time
-      ? {
-          ...currentMeeting,
-          start_time: firstSegmentTime,
-        }
+    const updatedMeeting = firstTime && currentMeeting && !currentMeeting.start_time
+      ? { ...currentMeeting, start_time: firstTime }
       : currentMeeting;
-    
-    // Update store immediately - Zustand's set() is synchronous, ensuring immediate UI updates
-    // Always set to ensure React detects changes (new array reference)
-    set({ 
-      transcripts: dedupedTranscripts,
+
+    set({
+      _confirmed: confirmed, _pendingBySpeaker: pendingBySpeaker, transcripts,
       ...(updatedMeeting !== currentMeeting ? { currentMeeting: updatedMeeting } : {}),
     });
   },
 
-  // Real-time: Add new transcript segment (legacy method, kept for compatibility)
+  // WS update: append confirmed (by segment_id), replace pending for speaker
+  upsertTranscriptSegments: (confirmedSegs: TranscriptSegment[], pendingSegs?: TranscriptSegment[], speaker?: string) => {
+    const { _confirmed, _pendingBySpeaker } = get();
+
+    // Append confirmed segments (keyed by segment_id — no duplicates possible)
+    let changed = false;
+    for (const seg of confirmedSegs) {
+      if (!seg.absolute_start_time || !seg.text?.trim()) continue;
+      const key = seg.segment_id || seg.absolute_start_time;
+      _confirmed.set(key, seg);
+      changed = true;
+      // NOTE: do NOT clear other speakers' pending here.
+      // Confirmed for speaker A often arrives inside speaker B's tick.
+      // Clearing A's pending would make A's text vanish until A's next tick.
+      // The stale pending is cleaned up naturally when A's next tick replaces it.
+    }
+
+    // Replace pending snapshot for THIS speaker only (full replace)
+    if (speaker !== undefined && speaker !== null) {
+      const validPending = (pendingSegs || []).filter(s =>
+        s.absolute_start_time && s.text?.trim()
+      );
+      if (validPending.length > 0) {
+        _pendingBySpeaker.set(speaker, validPending);
+      } else {
+        _pendingBySpeaker.delete(speaker);
+      }
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    const transcripts = recomputeTranscripts(_confirmed, _pendingBySpeaker);
+
+    const firstTime = transcripts.length > 0 ? transcripts[0].absolute_start_time : null;
+    const { currentMeeting } = get();
+    const updatedMeeting = firstTime && currentMeeting && !currentMeeting.start_time
+      ? { ...currentMeeting, start_time: firstTime }
+      : currentMeeting;
+
+    set({
+      _confirmed, _pendingBySpeaker, transcripts,
+      ...(updatedMeeting !== currentMeeting ? { currentMeeting: updatedMeeting } : {}),
+    });
+  },
+
+  // Real-time: Add new transcript segment (legacy — treats as confirmed)
   addTranscriptSegment: (segment: TranscriptSegment) => {
     get().upsertTranscriptSegments([segment]);
   },
 
   // Real-time: Update existing transcript segment
   updateTranscriptSegment: (segment: TranscriptSegment) => {
-    const { transcripts } = get();
-    const segKey = segment.segment_id || segment.absolute_start_time;
-    const updated = transcripts.map((t) =>
-      (t.segment_id || t.absolute_start_time) === segKey ? segment : t
-    );
-    set({ transcripts: updated });
+    get().upsertTranscriptSegments([segment]);
   },
 
   // Update meeting status from WebSocket

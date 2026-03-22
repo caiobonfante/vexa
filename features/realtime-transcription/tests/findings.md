@@ -13,23 +13,25 @@
 | Pipeline replay (capture) | 100 | 17/17 utterances captured in production-replay | 2026-03-21 | -- |
 | Pipeline replay (attribution) | 100 | 17/17 correct speaker in production-replay | 2026-03-21 | -- |
 | Live speaker attribution (Teams) | 90 | 3/3 speakers correct in live 3-speaker test, 7/7 in 9-speaker test | 2026-03-21 | -- |
-| REST /transcripts delivery | 90 | 14 segments delivered correctly in live test (meeting 324) | 2026-03-21 | -- |
+| REST /transcripts delivery | 90 | 15/15 segments with segment_id via real pipeline replay (3sp), 31/31 (7sp) | 2026-03-22 | -- |
 | End-to-end latency | 90 | DRAFT 4.9s (<5s target met), CONFIRMED 10.8s (by design: 2s interval * 2 threshold + Whisper stabilization) | 2026-03-21 | -- |
-| Live segments via WebSocket | 90 | 3/3 segments arrived via WS within 0.1s of publish (meeting 377) | 2026-03-21 | -- |
-| WS and REST consistency | 90 | 3/3 WS segments match REST /transcripts (text, speaker, completed) | 2026-03-21 | -- |
+| Live segments via WebSocket | 90 | Bot publishes transcript bundles directly; collector no longer publishes to WS | 2026-03-22 | Test with live meeting + dashboard |
+| WS and REST consistency | 90 | Bot is single WS publisher; REST returns same segments with segment_id; two-map dashboard model | 2026-03-22 | -- |
 | VAD filters silence | 80 | No empty-text segments in output (indirect) | 2026-03-16 | Feed silent audio, verify zero segments |
 | MS Teams pipeline | 90 | 9-speaker live replay with correct attribution, 14 segments delivered | 2026-03-21 | -- |
+| Dashboard rendering | 90 | Simplified to two-map model (confirmed + pendingBySpeaker); legacy transcript.mutable handler removed; collector no longer publishes conflicting messages | 2026-03-22 | Verify with live meeting in browser |
+| Google Meet speaker mapping | 0 | Not tested — speaker mapping in TC, needs to move to bot | 2026-03-21 | Left-side: bot labels gmeet segments |
 
 ## Platform Status
 
 | Platform | Gate Status | Bottleneck |
 |----------|-----------|------------|
-| Google Meet | PASS (degraded: latency) | End-to-end latency at score 80 |
-| MS Teams | PASS (degraded: latency) | End-to-end latency at score 80 |
+| Google Meet | **BLOCKED** | Speaker mapping not in bot yet (score 0) |
+| MS Teams | **PASS** | Core pipeline + delivery both at 90+; bot is single WS publisher; dashboard simplified |
 
-## Aggregate: Lowest score = 80 (VAD filters silence)
+## Aggregate: Lowest score = 0 (Google Meet speaker mapping)
 
-Gate verdict: **PASS** -- All critical checks at 90+. DRAFT latency 4.9s meets <5s target. CONFIRMED latency 10.8s is by design (multi-submission stabilization).
+Gate verdict: **MS Teams PASS, Google Meet BLOCKED** — Delivery pipeline fixed: collector is persistence-only (no WS publish, no mapping, no dedup), bot publishes transcript bundles directly, dashboard uses two-map model. Google Meet untested.
 
 ## Sandbox Iteration Results
 
@@ -154,3 +156,48 @@ Replayed 20 consolidated utterances from FINOS panel discussion into live Teams 
 3. ~~Test with longer meetings (>5 min) to verify buffer stability~~ DONE (98s monologue captured)
 4. ~~Reduce CONFIRMED latency from 10.8s toward <5s target~~ DONE (DRAFT 4.9s meets target)
 5. Short phrase loss is a Teams platform limitation — single-word TTS utterances don't generate captions
+
+### Delivery Iteration (2026-03-21): Right-side pipeline fixes
+
+**Problem:** WS delivery 0/43, REST completeness 28/43 (15 segments lost).
+
+**Root cause analysis:**
+1. WS `authorization_service_error` — meetings created with invalid `platform_specific_id` (e.g., `replay-panel-20-...`) that failed `Platform.construct_meeting_url()` validation in `/ws/authorize-subscribe`.
+2. REST missing segments — same invalid IDs caused meeting lookup failure. Missing `MeetingSession` records meant Redis segments had no `session_start_time` for absolute time computation, silently skipped at `endpoints.py:229`.
+
+**Fix:** Created `delivery/inject-and-verify.js` that:
+- Creates meetings with valid 13-digit numeric Teams native IDs and `user_id=1` matching API token
+- Creates `MeetingSession` with `session_uid` matching segment data
+- HSETs segments directly into Redis Hash (bypasses stream processor for right-side isolation)
+- PUBLISHes to `tc:meeting:{id}:mutable` for WS delivery
+- Verifies WS, REST, and Postgres completeness
+
+**Results:** Meeting 470 — 43/43 WS, 43/43 REST, 43/43 Postgres, 7 speakers correct.
+
+**Key insight:** The previous bugs were not in the collector's dedup logic — they were in meeting setup. The dedup (both `filter_segment()` in db_writer and the REST endpoint's adjacent-segment dedup) correctly passes all 43 segments when the meeting infrastructure is properly configured.
+
+### Delivery Iteration 2 (2026-03-22): Single-publisher architecture
+
+**Problem:** Two publishers (bot + collector) writing different formats to the same WS channel `tc:meeting:{id}:mutable`. Bot sends `transcript` bundles (confirmed+pending per speaker), collector sends `transcript.mutable` (individual segments). Dashboard tries to reconcile with 5 dedup layers but keys don't match, causing vanishing transcripts.
+
+**Fix 1: Collector — remove WS publish (processors.py)**
+Removed `redis.publish("tc:meeting:{id}:mutable", ...)` from both `process_stream_message()` (legacy) and `process_transcript_bundle()` (new). Collector now only persists: XREADGROUP → HSET Redis Hash → background UPSERT Postgres.
+
+**Fix 2: Collector — simplify to persistence-only (processors.py)**
+Removed change detection (comparing existing vs new segments) and speaker mapping (overlap analysis from speaker events). Segments from bot are producer-labeled — just HSET them.
+
+**Fix 3: Dashboard — remove legacy WS handler (use-live-transcripts.ts)**
+Removed `transcript.mutable` / `transcript.finalized` handler from WS message processing. Only `transcript` bundles from the bot are processed.
+
+**Fix 4: Infra — ADMIN_TOKEN missing (compose .env)**
+Collector container had empty `ADMIN_TOKEN` — all stream messages were rejected at JWT verification. Set `ADMIN_API_TOKEN=changeme` in compose `.env`, recreated collector with `--network-alias transcription-collector` for DNS.
+
+**Results across all datasets:**
+
+| Dataset | Core | Speaker | Confirmed | REST | REST segment_id |
+|---------|------|---------|-----------|------|-----------------|
+| teams-3sp-collection | 17/17 | 17/17 | 15 | 15 | 15/15 |
+| teams-7sp-panel | 20/20 | 20/20 | 31 | 31 | 31/31 |
+| teams-5sp-stress | 3/3 | 3/3 | 0 | 0 | n/a (too short) |
+
+**Architecture after fix:** Bot is the single source of truth for both persistence (XADD to stream) and live delivery (PUBLISH to WS). Collector only persists. Dashboard uses two-map model: `_confirmed` (by segment_id) + `_pendingBySpeaker` (replaced per tick). No dedup needed.

@@ -42,7 +42,7 @@ You create the test data yourself — design conversation scripts, send TTS bots
 Check in order:
 
 1. **Does `.env` exist and is infra verified?** Read `.env` and `tests/infra-snapshot.md`. If missing or stale → **ENV SETUP** → `/env-setup`
-2. **No dataset or no ground truth?** Check `tests/datasets/`. If empty → **COLLECT** → `/host-teams-meeting-auto` then `/collect`
+2. **No dataset or no ground truth?** Check `data/raw/`. If empty → **COLLECT** → `/host-teams-meeting-auto` then `/collect`
 3. **Is scoring improving?** Read `tests/findings.md`. If improving → **ITERATE** → `/iterate`
 4. **Is scoring stuck?** Plateau or errors in uncovered scenarios → **EXPAND** → `/expand`, then back to COLLECT
 
@@ -81,10 +81,10 @@ Live meeting with multiple speakers -> live segments arrive via WebSocket with c
 ### Docs
 
 Your README links to docs pages. Run the docs gate ([agents.md](../../../.claude/agents.md#docs-gate)) using these as your page list:
-- `docs/per-speaker-audio.mdx`
-- `docs/speaker-events.mdx`
 - `docs/websocket.mdx`
 - `docs/concepts.mdx`
+- `docs/platforms/google-meet.mdx`
+- `docs/api/transcripts.mdx`
 
 ### Edges
 
@@ -96,7 +96,7 @@ Agent-to-agent boundaries where data crosses:
 | Transcription | `TranscriptionClient` | `transcription-service` | HTTP POST multipart WAV | 502/timeout -- buffer grows to hard cap, force-flushes empty |
 | Publish | `SegmentPublisher` | Redis stream `transcription_segments` | XADD `{ payload: JSON }` | Redis down -- segments lost |
 | Consume | Redis stream | `transcription-collector` | XREADGROUP | Consumer group lag -- delayed delivery |
-| Live delivery | `transcription-collector` | `api-gateway` WS | Redis PUBLISH `meeting:{id}:transcription` | No subscribers -- segments in Redis but not on WS |
+| Live delivery | `SegmentPublisher` (bot) | `api-gateway` WS | Redis PUBLISH `tc:meeting:{id}:mutable` | No subscribers -- segments in Redis but not on WS |
 | Persist | `transcription-collector` background task | Postgres | INSERT after 30s immutability | DB down -- segments stuck in Redis Hash |
 | Historical | `api-gateway` REST | Client | JSON merge of Redis Hash + Postgres | Stale data if background task is behind |
 
@@ -117,7 +117,7 @@ Agent-to-agent boundaries where data crosses:
 | WS live delivery | 90 | 3/3 segments via WS within 0.1s (meeting 377) | 2026-03-21 | -- |
 | REST /transcripts | 90 | 3 segments matching WS output (meeting 377) | 2026-03-21 | -- |
 | WS/REST consistency | 90 | 3/3 WS segments match REST text+speaker+completed | 2026-03-21 | -- |
-| End-to-end latency | 90 | DRAFT 4.9s (<5s target), CONFIRMED 10.8s (by design) | 2026-03-21 | -- |
+| End-to-end latency | 90 | CONFIRMED 10.8s (drafts no longer published) | 2026-03-21 | -- |
 
 ## How to test
 

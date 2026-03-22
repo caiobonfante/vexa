@@ -6,13 +6,13 @@
  *   CORE (default):
  *     Replays audio through SpeakerStreamManager + Whisper, scores against
  *     ground truth. Fast, isolated, no infra dependencies beyond Whisper.
- *     Use: make play-replay DATASET=collection-run
+ *     Use: make play-replay DATASET=teams-3sp-collection
  *
  *   FULL SYSTEM (PUBLISH=true):
  *     Same pipeline, but also publishes segments to Redis via SegmentPublisher.
  *     Creates a meeting record so transcription-collector processes segments
  *     into Redis Hash → WS → Postgres. View live in observe.html.
- *     Use: make play-replay-full DATASET=collection-run
+ *     Use: make play-replay-full DATASET=teams-3sp-collection
  *
  * Reproduces the EXACT index.ts code path:
  *   audio -> SpeakerStreamManager -> onSegmentReady (real Whisper + word storage)
@@ -35,6 +35,7 @@
  *   API_TOKEN            - API token for meeting creation
  *   ADMIN_TOKEN          - JWT signing secret (default: changeme)
  *   NATIVE_MEETING_ID    - fake meeting ID for full system mode (default: auto-generated)
+ *   MEETING_ID           - pre-created meeting ID (skips meeting creation, for delivery test)
  */
 
 import * as fs from 'fs';
@@ -56,7 +57,7 @@ const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:8066';
 const API_TOKEN = process.env.API_TOKEN || '';
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN || 'changeme';
 
-const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/tests/audio`;
+const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/data/raw`;
 const TESTS_DIR = process.argv[3] || `${__dirname}/../../../../features/realtime-transcription/tests`;
 
 // -- JWT helper for minting MeetingTokens (full system mode) ------------------
@@ -77,7 +78,8 @@ function mintMeetingToken(meetingId: number, userId: number, platform: string, n
 // -- Create meeting via API (full system mode) --------------------------------
 
 async function createReplayMeeting(dataset: string): Promise<{ meetingId: number; nativeMeetingId: string }> {
-  const nativeMeetingId = process.env.NATIVE_MEETING_ID || `replay-${dataset}-${Date.now()}`;
+  // Must be a valid 13-digit numeric Teams native ID for WS authorize-subscribe validation
+  const nativeMeetingId = process.env.NATIVE_MEETING_ID || `${Date.now()}`.slice(0, 13);
 
   // Create meeting directly in DB (bypasses bot-manager which tries to launch a real bot)
   const http = await import('http');
@@ -216,7 +218,9 @@ interface GTUtterance {
 
 function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: string; relTimeSec: number }[]): GTUtterance[] {
   // Audio files in order: 01-alice-roadmap.wav ... 17-charlie-greatmeeting.wav
-  const wavFiles = fs.readdirSync(collectionDir)
+  // Check audio/ subdirectory first, then root
+  const audioDir = fs.existsSync(path.join(collectionDir, 'audio')) ? path.join(collectionDir, 'audio') : collectionDir;
+  const wavFiles = fs.readdirSync(audioDir)
     .filter(f => f.endsWith('.wav'))
     .sort();
 
@@ -228,7 +232,7 @@ function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: s
   for (let i = 0; i < wavFiles.length; i++) {
     const wavFile = wavFiles[i];
     const txtFile = wavFile.replace('.wav', '.txt');
-    const txtPath = path.join(collectionDir, txtFile);
+    const txtPath = path.join(audioDir, txtFile);
     if (!fs.existsSync(txtPath)) continue;
 
     const text = fs.readFileSync(txtPath, 'utf8').trim();
@@ -258,7 +262,7 @@ function loadGroundTruth(collectionDir: string, speakerChangeTimes: { speaker: s
 // -- Main ---------------------------------------------------------------------
 
 async function main() {
-  const dataset = process.env.DATASET || 'collection-run';
+  const dataset = process.env.DATASET || 'teams-3sp-collection';
   const mode = PUBLISH ? 'FULL SYSTEM' : 'CORE';
   console.log('\n  ====================================================');
   console.log(`  PRODUCTION-FAITHFUL REPLAY TEST (${dataset})`);
@@ -299,7 +303,8 @@ async function main() {
   let maxEnd = 0;
 
   for (const g of GT) {
-    const wavPath = path.join(collectionDir, g.audioFile);
+    const audioSubDir = fs.existsSync(path.join(collectionDir, 'audio')) ? path.join(collectionDir, 'audio') : collectionDir;
+    const wavPath = path.join(audioSubDir, g.audioFile);
     try {
       const audio = readWavAsFloat32(wavPath);
       const endSec = g.offsetSec + audio.length / SAMPLE_RATE;
@@ -338,8 +343,20 @@ async function main() {
       console.error('  PUBLISH=true requires API_TOKEN env var');
       process.exit(1);
     }
-    console.log('  [PUBLISH] Creating replay meeting...');
-    const meeting = await createReplayMeeting(dataset);
+
+    // Support pre-created meeting (for delivery test orchestration)
+    const preCreatedMeetingId = process.env.MEETING_ID ? parseInt(process.env.MEETING_ID) : null;
+    const preCreatedNativeId = preCreatedMeetingId ? (process.env.NATIVE_MEETING_ID || null) : null;
+
+    let meeting: { meetingId: number; nativeMeetingId: string };
+    if (preCreatedMeetingId && preCreatedNativeId) {
+      console.log(`  [PUBLISH] Using pre-created meeting ${preCreatedMeetingId} (native: ${preCreatedNativeId})`);
+      meeting = { meetingId: preCreatedMeetingId, nativeMeetingId: preCreatedNativeId };
+    } else {
+      console.log('  [PUBLISH] Creating replay meeting...');
+      meeting = await createReplayMeeting(dataset);
+    }
+
     replayMeetingId = meeting.meetingId;
     replayNativeId = meeting.nativeMeetingId;
     const token = mintMeetingToken(meeting.meetingId, 1, 'teams', meeting.nativeMeetingId);
@@ -369,6 +386,12 @@ async function main() {
   const captionEventLog: CaptionEvent[] = [];
   let lastCaptionSpeakerId: string | null = null;
   const outputSegments: { speaker: string; text: string; start: number; end: number }[] = [];
+  // Core stream (legacy): every segment emission (draft + confirmed), time-ordered
+  const coreStream: { ts: string; segment_id: string; speaker: string; text: string; start: number; end: number; completed: boolean; absolute_start_time: string; absolute_end_time: string }[] = [];
+  // Core transcript: new format — per-tick (confirmed[], pending[]) bundles per speaker
+  const coreTranscript: { ts: string; speaker: string; confirmed: any[]; pending: any[] }[] = [];
+  // Per-speaker batch: onSegmentConfirmed adds to the speaker's batch
+  const confirmedBatches = new Map<string, import('./segment-publisher').TranscriptionSegment[]>();
 
   // === Telemetry ===
   const telemetry = {
@@ -399,22 +422,64 @@ async function main() {
           whisperWordsPerSpeaker.set(speakerId, words);
         }
 
-        // Publish draft to Redis (full system mode)
-        // Draft uses "draft:{speakerId}" — one per speaker, always overwritten.
-        // Prevents ID collision with CONFIRMED segments.
-        if (publisher) {
-          telemetry.draftsEmitted++;
+        // Emit draft — same segment_id as confirmed, HSET overwrites
+        {
           const bufStart = mgr.getBufferStartMs(speakerId);
           const nowMs = Date.now();
-          const startSec = (bufStart - publisher.sessionStartMs) / 1000;
-          const endSec = (nowMs - publisher.sessionStartMs) / 1000;
-          const draftSegmentId = `${publisher.sessionUid}:draft:${speakerId}`;
-          await publisher.publishSegment({
+          const startSec = (bufStart - sessionStartMs) / 1000;
+          const endSec = (nowMs - sessionStartMs) / 1000;
+          const segId = mgr.getSegmentId(speakerId);
+          const absStart = new Date(bufStart).toISOString();
+          const absEnd = new Date(nowMs).toISOString();
+
+          coreStream.push({ ts: new Date().toISOString(), segment_id: segId, speaker: speakerName, text, start: startSec, end: endSec, completed: false, absolute_start_time: absStart, absolute_end_time: absEnd });
+
+          // Build pending segment (current unconfirmed text)
+          const pendingSeg: import('./segment-publisher').TranscriptionSegment = {
             speaker: speakerName, text, start: startSec, end: endSec,
-            language: result.language || 'en', completed: false, segment_id: draftSegmentId,
-            absolute_start_time: new Date(bufStart).toISOString(),
-            absolute_end_time: new Date(nowMs).toISOString(),
+            language: result.language || 'en', completed: false,
+            absolute_start_time: absStart, absolute_end_time: absEnd,
+          };
+
+          // Drain only this speaker's confirmed batch
+          const newConfirmed = confirmedBatches.get(speakerId) || [];
+          confirmedBatches.set(speakerId, []);
+
+          // Build per-segment pending from Whisper segments
+          const whisperPendingSegs: import('./segment-publisher').TranscriptionSegment[] =
+            (result.segments || [{ text, start: 0, end: 0 }]).map((ws: any) => ({
+              speaker: speakerName,
+              text: (ws.text || '').trim(),
+              start: startSec + (ws.start || 0),
+              end: startSec + (ws.end || 0),
+              language: result.language || 'en',
+              completed: false,
+              absolute_start_time: new Date(bufStart + (ws.start || 0) * 1000).toISOString(),
+              absolute_end_time: new Date(bufStart + (ws.end || 0) * 1000).toISOString(),
+            })).filter((s: any) => s.text);
+
+          const mapSeg = (s: import('./segment-publisher').TranscriptionSegment) => ({
+            segment_id: s.segment_id, speaker: s.speaker, text: s.text,
+            start: s.start, end: s.end, completed: s.completed,
+            absolute_start_time: s.absolute_start_time, absolute_end_time: s.absolute_end_time,
           });
+
+          // Filter out pending segments that overlap with just-confirmed text
+          const confirmedTextList = newConfirmed.map(c => c.text.trim());
+          const pending = whisperPendingSegs.filter(p => {
+            const pt = (p.text || '').trim();
+            return !confirmedTextList.some(ct => pt === ct || pt.startsWith(ct) || ct.startsWith(pt));
+          });
+
+          coreTranscript.push({
+            ts: new Date().toISOString(), speaker: speakerName,
+            confirmed: newConfirmed.map(mapSeg), pending: pending.map(mapSeg),
+          });
+
+          if (publisher) {
+            telemetry.draftsEmitted++;
+            await publisher.publishTranscript(speakerName, newConfirmed, pending);
+          }
         }
 
         const lastSeg = result.segments?.[result.segments.length - 1];
@@ -445,24 +510,21 @@ async function main() {
     telemetry.segmentDurations.push(durSec);
     telemetry.segmentWordCounts.push(wordCount);
 
+    const absStart = new Date(bufferStartMs).toISOString();
+    const absEnd = new Date(bufferEndMs).toISOString();
+    coreStream.push({ ts: new Date().toISOString(), segment_id: segmentId, speaker: speakerName, text: transcript, start: startSec, end: endSec, completed: true, absolute_start_time: absStart, absolute_end_time: absEnd });
+
     const speakerWords = whisperWordsPerSpeaker.get(speakerId) || [];
     console.log(`  [${ts()}s] CONFIRMED | ${speakerName} | ${durSec.toFixed(1)}s ${wordCount}w latency=${(confirmLatencyMs/1000).toFixed(1)}s | "${transcript.substring(0, 60)}..."`);
 
-    // Publish confirmed segment to Redis (full system mode)
-    if (publisher) {
-      const pub = publisher;
-      const pubStartSec = (bufferStartMs - pub.sessionStartMs) / 1000;
-      const pubEndSec = (bufferEndMs - pub.sessionStartMs) / 1000;
-      const fullSegmentId = `${pub.sessionUid}:${segmentId}`;
-      pub.publishSegment({
-        speaker: speakerName, text: transcript, start: pubStartSec, end: pubEndSec,
-        language: 'en', completed: true, segment_id: fullSegmentId,
-        absolute_start_time: new Date(bufferStartMs).toISOString(),
-        absolute_end_time: new Date(bufferEndMs).toISOString(),
-      }).catch((err: any) => {
-        console.error(`  [PUBLISH ERROR] Failed to publish confirmed segment: ${err.message}`);
-      });
-    }
+    // Collect into this speaker's batch — published with their next tick
+    const fullSegmentId = publisher ? `${publisher.sessionUid}:${segmentId}` : segmentId;
+    if (!confirmedBatches.has(speakerId)) confirmedBatches.set(speakerId, []);
+    confirmedBatches.get(speakerId)!.push({
+      speaker: speakerName, text: transcript, start: startSec, end: endSec,
+      language: 'en', completed: true, segment_id: fullSegmentId,
+      absolute_start_time: absStart, absolute_end_time: absEnd,
+    });
 
     // Per-speaker audio already provides correct attribution.
     // The mapper was disabled in the live pipeline (index.ts) because
@@ -644,6 +706,16 @@ async function main() {
   mgr.removeAll();
 
   if (publisher) {
+    // Flush remaining confirmed batches (last segment per speaker gets stuck)
+    for (const [speakerId, batch] of confirmedBatches) {
+      if (batch.length > 0) {
+        const speakerName = batch[0].speaker;
+        console.log(`  [PUBLISH] Flushing ${batch.length} remaining confirmed for ${speakerName}`);
+        await publisher.publishTranscript(speakerName, batch, []);
+      }
+    }
+    confirmedBatches.clear();
+
     console.log(`\n  [PUBLISH] Sending session_end...`);
     await publisher.publishSessionEnd();
     // Wait for transcription-collector to process remaining segments
@@ -655,6 +727,19 @@ async function main() {
     console.log(`    REST: curl -H "X-API-Key: $API_TOKEN" http://localhost:8066/transcripts/teams/${replayNativeId}`);
     console.log(`    Observe: http://localhost:3012/observe.html?meeting=${replayNativeId}`);
   }
+
+  // Save core stream (every draft + confirmed emission, unprocessed)
+  const coreDir = path.join(AUDIO_DIR, '..', 'core', dataset);
+  fs.mkdirSync(coreDir, { recursive: true });
+  fs.writeFileSync(path.join(coreDir, 'stream.json'), JSON.stringify(coreStream, null, 2));
+  console.log(`\n  Core stream (legacy): ${coreStream.length} events → ${path.join(coreDir, 'stream.json')}`);
+
+  // Save new format: per-tick (confirmed[], pending[]) bundles — one JSON object per line
+  const transcriptPath = path.join(coreDir, 'transcript.jsonl');
+  fs.writeFileSync(transcriptPath, coreTranscript.map(t => JSON.stringify(t)).join('\n') + '\n');
+  const confirmedCount = coreTranscript.reduce((n, t) => n + t.confirmed.length, 0);
+  const pendingCount = coreTranscript.reduce((n, t) => n + t.pending.length, 0);
+  console.log(`  Core transcript: ${coreTranscript.length} ticks (${confirmedCount} confirmed, ${pendingCount} pending) → ${transcriptPath}`);
 
   process.exit(0);
 }

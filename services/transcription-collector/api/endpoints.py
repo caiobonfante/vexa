@@ -1,7 +1,6 @@
 import logging
 import os
 import json
-import string
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Tuple
 
@@ -154,278 +153,122 @@ async def _get_full_transcript_segments(
     redis_c: aioredis.Redis
 ) -> List[TranscriptionSegment]:
     """
-    Core logic to fetch and merge transcript segments from PG and Redis.
+    Fetch and merge transcript segments from Postgres and Redis by segment_id.
+    No heuristic dedup — segment_id is the identity.
+    Redis segments (live) take precedence over Postgres (persisted).
     """
-    logger.debug(f"[_get_full_transcript_segments] Fetching for meeting ID {internal_meeting_id}")
-    
-    # 1. Fetch session start times for this meeting
+    # 1. Session start times (for absolute time computation on legacy PG rows)
     stmt_sessions = select(MeetingSession).where(MeetingSession.meeting_id == internal_meeting_id)
     result_sessions = await db.execute(stmt_sessions)
     sessions = result_sessions.scalars().all()
-    session_times: Dict[str, datetime] = {session.session_uid: session.session_start_time for session in sessions}
-    if not session_times:
-        logger.warning(f"[_get_full_transcript_segments] No session start times found in DB for meeting {internal_meeting_id}.")
+    session_times: Dict[str, datetime] = {s.session_uid: s.session_start_time for s in sessions}
 
-    # 2. Fetch transcript segments from PostgreSQL (immutable segments)
-    stmt_transcripts = select(Transcription).where(Transcription.meeting_id == internal_meeting_id)
-    result_transcripts = await db.execute(stmt_transcripts)
-    db_segments = result_transcripts.scalars().all()
+    # 2. Postgres segments (immutable, persisted)
+    stmt = select(Transcription).where(Transcription.meeting_id == internal_meeting_id)
+    result = await db.execute(stmt)
+    db_segments = result.scalars().all()
 
-    # 3. Fetch segments from Redis (mutable segments)
+    # 3. Redis segments (mutable, live)
     hash_key = f"meeting:{internal_meeting_id}:segments"
-    redis_segments_raw = {}
+    redis_raw = {}
     if redis_c:
         try:
-            redis_segments_raw = await redis_c.hgetall(hash_key)
+            redis_raw = await redis_c.hgetall(hash_key)
         except Exception as e:
-            logger.error(f"[_get_full_transcript_segments] Failed to fetch from Redis hash {hash_key}: {e}", exc_info=True)
+            logger.error(f"[Segments] Redis fetch failed for {hash_key}: {e}")
 
-    # 4. Calculate absolute times and merge segments
-    merged_segments_with_abs_time: Dict[str, Tuple[datetime, TranscriptionSegment]] = {}
+    # 4. Merge by segment_id — Redis wins on conflict
+    merged: Dict[str, TranscriptionSegment] = {}
 
-    for segment in db_segments:
-        # Key must include speaker to avoid collisions when two speakers
-        # have segments with the same start_time (common with mixed audio)
-        key = f"{segment.speaker or ''}:{segment.start_time:.3f}"
-        session_uid = segment.session_uid
-        session_start = session_times.get(session_uid)
-        if session_uid and session_start:
-            try:
-                if session_start.tzinfo is None:
-                    session_start = session_start.replace(tzinfo=timezone.utc)
-                absolute_start_time = session_start + timedelta(seconds=segment.start_time)
-                absolute_end_time = session_start + timedelta(seconds=segment.end_time)
-                segment_obj = TranscriptionSegment(
-                    start_time=segment.start_time,
-                    end_time=segment.end_time,
-                    text=segment.text,
-                    language=segment.language,
-                    speaker=segment.speaker,
-                    created_at=segment.created_at,
-                    completed=True,
-                    absolute_start_time=absolute_start_time,
-                    absolute_end_time=absolute_end_time
-                )
-                merged_segments_with_abs_time[key] = (absolute_start_time, segment_obj)
-            except Exception as calc_err:
-                 logger.error(f"[API Meet {internal_meeting_id}] Error calculating absolute time for DB segment {key} (UID: {session_uid}): {calc_err}")
+    for seg in db_segments:
+        # Key: segment_id if available, else legacy fallback
+        key = seg.segment_id or f"pg:{seg.speaker or ''}:{seg.start_time:.3f}"
+        session_start = session_times.get(seg.session_uid)
+        if session_start:
+            if session_start.tzinfo is None:
+                session_start = session_start.replace(tzinfo=timezone.utc)
+            abs_start = session_start + timedelta(seconds=seg.start_time)
+            abs_end = session_start + timedelta(seconds=seg.end_time)
         else:
-            logger.warning(f"[API Meet {internal_meeting_id}] Missing session UID ({session_uid}) or start time for DB segment {key}. Cannot calculate absolute time.")
+            abs_start = abs_end = None
 
-    for start_time_str, segment_json in redis_segments_raw.items():
         try:
-            segment_data = json.loads(segment_json)
-            session_uid_from_redis = segment_data.get("session_uid")
-            potential_session_key = session_uid_from_redis
-            if session_uid_from_redis:
-                # This logic to strip prefixes is brittle. A better solution would be to store the canonical session_uid.
-                # For now, keeping it to match previous behavior.
-                prefixes_to_check = [f"{p.value}_" for p in Platform]
-                for prefix in prefixes_to_check:
-                    if session_uid_from_redis.startswith(prefix):
-                        potential_session_key = session_uid_from_redis[len(prefix):]
-                        break
-            session_start = session_times.get(potential_session_key) 
-            if 'end_time' in segment_data and 'text' in segment_data and session_uid_from_redis and session_start:
-                if session_start.tzinfo is None:
-                    session_start = session_start.replace(tzinfo=timezone.utc)
-                # Hash key is segment_id (string); get start_time from segment data
-                relative_start_time = float(segment_data.get("start_time", 0))
-                # Use absolute_start_time from segment data if available (bot publishes UTC directly)
-                abs_from_data = segment_data.get("absolute_start_time")
-                if abs_from_data:
-                    try:
-                        abs_str = abs_from_data if not abs_from_data.endswith('Z') else abs_from_data[:-1] + '+00:00'
-                        absolute_start_time = datetime.fromisoformat(abs_str)
-                        if absolute_start_time.tzinfo is None:
-                            absolute_start_time = absolute_start_time.replace(tzinfo=timezone.utc)
-                    except Exception:
-                        absolute_start_time = session_start + timedelta(seconds=relative_start_time)
-                else:
-                    absolute_start_time = session_start + timedelta(seconds=relative_start_time)
-                absolute_end_time = session_start + timedelta(seconds=segment_data['end_time'])
-                # Parse created_at from updated_at if available, otherwise use None
-                # Pydantic v2 requires Optional fields to be explicitly set, even if None
-                created_at_value = None
-                if 'updated_at' in segment_data and segment_data.get('updated_at'):
-                    try:
-                        updated_at_str = segment_data['updated_at']
-                        if updated_at_str.endswith('Z'):
-                            updated_at_str = updated_at_str[:-1] + '+00:00'
-                        created_at_value = datetime.fromisoformat(updated_at_str)
-                    except (ValueError, TypeError) as parse_err:
-                        logger.debug(f"Failed to parse updated_at '{segment_data.get('updated_at')}' as datetime: {parse_err}")
-                        created_at_value = None
-                
-                # Create segment object using model_validate with dict to ensure defaults are applied
-                try:
-                    segment_dict = {
-                        'start_time': relative_start_time,
-                        'end_time': segment_data['end_time'],
-                        'text': segment_data['text'],
-                        'language': segment_data.get('language'),
-                        'speaker': segment_data.get('speaker'),
-                        'completed': bool(segment_data.get("completed", False)),
-                        'absolute_start_time': absolute_start_time,
-                        'absolute_end_time': absolute_end_time
-                    }
-                    # Only add created_at if we have a value, let the default handle None
-                    if created_at_value is not None:
-                        segment_dict['created_at'] = created_at_value
-                    
-                    segment_obj = TranscriptionSegment.model_validate(segment_dict)
-                except Exception as validation_err:
-                    logger.error(f"[_get_full_transcript_segments] Validation error creating segment {start_time_str} for meeting {internal_meeting_id}: {validation_err}", exc_info=True)
-                    # Skip this segment if validation fails
-                    continue
-                # Merge logic: Always include partial segments from Redis (they're the current active state)
-                # If a completed segment exists in PostgreSQL with the same key, Redis partial takes precedence
-                # because it represents the current state of an active transcription
-                existing_segment_tuple = merged_segments_with_abs_time.get(start_time_str)
-                if existing_segment_tuple:
-                    existing_segment = existing_segment_tuple[1]
-                    # If existing is completed and new is partial, prefer the partial (it's the current active state)
-                    # This ensures GET endpoint always shows the latest partial segments
-                    if existing_segment.completed and not segment_obj.completed:
-                        # Replace with partial - it's the current state
-                        pass
-                    # If both are same completion status, Redis is more recent, so use it
-                # Always add Redis segments (they're the current state)
-                merged_segments_with_abs_time[start_time_str] = (absolute_start_time, segment_obj)
-        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-            logger.error(f"[_get_full_transcript_segments] Error parsing Redis segment {start_time_str} for meeting {internal_meeting_id}: {e}", exc_info=True)
+            merged[key] = TranscriptionSegment(
+                start_time=seg.start_time, end_time=seg.end_time,
+                text=seg.text, language=seg.language, speaker=seg.speaker,
+                created_at=seg.created_at, completed=True,
+                absolute_start_time=abs_start, absolute_end_time=abs_end,
+                segment_id=seg.segment_id,
+            )
         except Exception as e:
-            # Catch Pydantic ValidationError and other exceptions
-            logger.error(f"[_get_full_transcript_segments] Unexpected error parsing Redis segment {start_time_str} for meeting {internal_meeting_id}: {e}", exc_info=True)
+            logger.error(f"[Segments] PG segment error {key}: {e}")
 
-    # 5. Sort based on calculated absolute time and return
-    sorted_segment_tuples = sorted(merged_segments_with_abs_time.values(), key=lambda item: item[0])
-    segments = [segment_obj for abs_time, segment_obj in sorted_segment_tuples]
-    
-    # 6. Deduplicate overlapping segments (both identical and different text)
-    deduped: List[TranscriptionSegment] = []
-    for seg in segments:
-        if not deduped:
-            deduped.append(seg)
-            continue
+    for seg_key, segment_json in redis_raw.items():
+        try:
+            d = json.loads(segment_json)
+            if not d.get('text', '').strip():
+                continue
 
-        last = deduped[-1]
-        # Different speakers can legitimately have overlapping timestamps
-        # (mixed audio stream, per-speaker buffers with independent timing).
-        # Only dedup within the same speaker.
-        if (seg.speaker or '') != (last.speaker or ''):
-            deduped.append(seg)
-            continue
+            key = d.get('segment_id') or seg_key
 
-        same_text = (seg.text or "").strip() == (last.text or "").strip()
-        overlaps = max(seg.start_time, last.start_time) < min(seg.end_time, last.end_time)
+            # Compute absolute times from segment data or session start
+            abs_start = abs_end = None
+            abs_from_data = d.get("absolute_start_time")
+            if abs_from_data:
+                try:
+                    s = abs_from_data if not abs_from_data.endswith('Z') else abs_from_data[:-1] + '+00:00'
+                    abs_start = datetime.fromisoformat(s)
+                    if abs_start.tzinfo is None:
+                        abs_start = abs_start.replace(tzinfo=timezone.utc)
+                except Exception:
+                    pass
+            abs_end_data = d.get("absolute_end_time")
+            if abs_end_data:
+                try:
+                    s = abs_end_data if not abs_end_data.endswith('Z') else abs_end_data[:-1] + '+00:00'
+                    abs_end = datetime.fromisoformat(s)
+                    if abs_end.tzinfo is None:
+                        abs_end = abs_end.replace(tzinfo=timezone.utc)
+                except Exception:
+                    pass
 
-        if overlaps:
-            # Check if one segment is fully contained within another
-            seg_fully_inside_last = seg.start_time >= last.start_time and seg.end_time <= last.end_time
-            last_fully_inside_seg = last.start_time >= seg.start_time and last.end_time <= seg.end_time
-            
-            if same_text:
-                # Same text: prefer the outer/longer segment
-                if seg_fully_inside_last:
-                    # Current is fully inside last → drop current
-                    logger.debug(f"[Dedup Meet {internal_meeting_id}] Dropping segment '{seg.text}' ({seg.start_time}-{seg.end_time}) - fully contained in '{last.text}' ({last.start_time}-{last.end_time})")
-                    continue
-                if last_fully_inside_seg:
-                    # Last is fully inside current → replace with current
-                    logger.debug(f"[Dedup Meet {internal_meeting_id}] Replacing segment '{last.text}' ({last.start_time}-{last.end_time}) with '{seg.text}' ({seg.start_time}-{seg.end_time})")
-                    deduped[-1] = seg
-                    continue
-            else:
-                # Different text: prefer the longer/outer segment
-                if seg_fully_inside_last:
-                    # Current is fully inside last → drop current (prefer outer segment)
-                    logger.debug(f"[Dedup Meet {internal_meeting_id}] Dropping segment '{seg.text}' ({seg.start_time}-{seg.end_time}) - fully contained in '{last.text}' ({last.start_time}-{last.end_time})")
-                    continue
-                if last_fully_inside_seg:
-                    # Last is fully inside current → replace with current (prefer outer segment)
-                    logger.debug(f"[Dedup Meet {internal_meeting_id}] Replacing segment '{last.text}' ({last.start_time}-{last.end_time}) with '{seg.text}' ({seg.start_time}-{seg.end_time})")
-                    deduped[-1] = seg
-                    continue
-                
-                # Partial-overlap heuristics (no full containment):
-                # - "expansion": current is a longer revision that contains the previous text -> replace previous with current
-                # - "tail-repeat": current is a tiny suffix/echo already present in previous -> drop current
-                if not seg_fully_inside_last and not last_fully_inside_seg:
-                    seg_text_norm = (seg.text or "").strip().lower()
-                    last_text_norm = (last.text or "").strip().lower()
-                    seg_text_clean = seg_text_norm.rstrip(string.punctuation).strip()
-                    last_text_clean = last_text_norm.rstrip(string.punctuation).strip()
+            # Fallback: compute from session start
+            if not abs_start:
+                uid = d.get("session_uid")
+                if uid:
+                    # Strip platform prefix if present
+                    clean_uid = uid
+                    for p in Platform:
+                        pref = f"{p.value}_"
+                        if uid.startswith(pref):
+                            clean_uid = uid[len(pref):]
+                            break
+                    ss = session_times.get(clean_uid)
+                    if ss:
+                        if ss.tzinfo is None:
+                            ss = ss.replace(tzinfo=timezone.utc)
+                        abs_start = ss + timedelta(seconds=float(d.get("start_time", 0)))
+                        abs_end = ss + timedelta(seconds=float(d.get("end_time", 0)))
 
-                    seg_duration = seg.end_time - seg.start_time
-                    last_duration = last.end_time - last.start_time
-                    overlap_start = max(seg.start_time, last.start_time)
-                    overlap_end = min(seg.end_time, last.end_time)
-                    overlap_duration = overlap_end - overlap_start
-                    overlap_ratio_seg = overlap_duration / seg_duration if seg_duration > 0 else 0
-                    overlap_ratio_last = overlap_duration / last_duration if last_duration > 0 else 0
+            merged[key] = TranscriptionSegment(
+                start_time=float(d.get("start_time", 0)),
+                end_time=float(d.get("end_time", 0)),
+                text=d['text'], language=d.get('language'),
+                speaker=d.get('speaker'),
+                completed=bool(d.get("completed", False)),
+                absolute_start_time=abs_start, absolute_end_time=abs_end,
+                segment_id=d.get('segment_id'),
+            )
+        except Exception as e:
+            logger.error(f"[Segments] Redis segment error {seg_key}: {e}")
 
-                    # Expansion: last text appears inside seg text, and seg is "more complete" -> replace last with seg.
-                    # This fixes cases like:
-                    #   last="It was a milestone." (partial) then seg="It was a milestone to get ..." (completed)
-                    seg_expands_last = (
-                        bool(last_text_clean)
-                        and bool(seg_text_clean)
-                        and last_text_clean in seg_text_clean
-                        and len(seg_text_clean) > len(last_text_clean)
-                    )
-                    last_completed = bool(getattr(last, "completed", False))
-                    seg_completed = bool(getattr(seg, "completed", False))
-                    if seg_expands_last and overlap_ratio_last >= 0.5 and (seg_completed or not last_completed):
-                        logger.debug(
-                            f"[Dedup Meet {internal_meeting_id}] Replacing shorter/partial segment '{last.text}' "
-                            f"({last.start_time}-{last.end_time}, overlap={overlap_ratio_last:.1%}) with expansion '{seg.text}' "
-                            f"({seg.start_time}-{seg.end_time})"
-                        )
-                        deduped[-1] = seg
-                        continue
+    # 5. Sort by absolute_start_time (or start_time as fallback)
+    def sort_key(seg: TranscriptionSegment):
+        if seg.absolute_start_time:
+            return seg.absolute_start_time
+        return datetime.min.replace(tzinfo=timezone.utc)
 
-                    # Tail-repeat: seg text already appears in last text, and seg is tiny -> drop seg.
-                    seg_is_tail_repeat = bool(seg_text_clean) and (
-                        seg_text_clean in last_text_clean or seg_text_clean in last_text_norm
-                    )
-                    if seg_is_tail_repeat:
-                        seg_word_count = len(seg_text_clean.split())
-                        # Drop if: tiny segment (<=2 words, <1.5s) and overlaps at least a bit (>=25% of seg)
-                        if seg_duration < 1.5 and seg_word_count <= 2 and overlap_ratio_seg >= 0.25:
-                            logger.debug(
-                                f"[Dedup Meet {internal_meeting_id}] Dropping tail-repeat fragment '{seg.text}' "
-                                f"({seg.start_time}-{seg.end_time}, {seg_duration:.2f}s, {seg_word_count} words, overlap={overlap_ratio_seg:.1%}) "
-                                f"- already present in '{last.text}' ({last.start_time}-{last.end_time})"
-                            )
-                            continue
-
-        deduped.append(seg)
-
-    # 7. Group by speaker turns: prevent interleaving when timestamps
-    # overlap across speakers. If a segment has the same speaker as
-    # the one before the current different-speaker segment, and the
-    # gap is small (<5s), insert it next to its speaker group.
-    reordered: List[TranscriptionSegment] = list(deduped)
-    changed = True
-    while changed:
-        changed = False
-        i = 1
-        while i < len(reordered) - 1:
-            prev = reordered[i - 1]
-            curr = reordered[i]
-            nxt = reordered[i + 1]
-            # Pattern: A, B, A — where curr(B) is sandwiched between
-            # two segments from the same speaker(A), and the gap is small
-            if ((prev.speaker or '') == (nxt.speaker or '') and
-                (prev.speaker or '') != (curr.speaker or '') and
-                nxt.start_time - prev.end_time < 5.0):
-                # Move nxt before curr: [prev, nxt, curr]
-                reordered[i], reordered[i + 1] = reordered[i + 1], reordered[i]
-                changed = True
-            i += 1
-
-    return reordered
+    return sorted(merged.values(), key=sort_key)
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(request: Request, db: AsyncSession = Depends(get_db)):
@@ -468,6 +311,7 @@ async def get_meetings(
     
 @router.get("/transcripts/{platform}/{native_meeting_id}",
             response_model=TranscriptionResponse,
+            response_model_exclude_none=False,
             summary="Get transcript for a specific meeting by platform and native ID",
             dependencies=[Depends(get_current_user)])
 async def get_transcript_by_native_id(
@@ -529,9 +373,9 @@ async def get_transcript_by_native_id(
     logger.debug(f"[API] Found meeting record ID {internal_meeting_id}, fetching segments...")
 
     sorted_segments = await _get_full_transcript_segments(internal_meeting_id, db, redis_c)
-    
+
     logger.info(f"[API Meet {internal_meeting_id}] Merged and sorted into {len(sorted_segments)} total segments.")
-    
+
     meeting_details = MeetingResponse.model_validate(meeting)
     response_data = meeting_details.model_dump()
     # Surface recordings directly in transcript response to avoid an extra dashboard API call.
@@ -598,6 +442,7 @@ async def ws_authorize_subscribe(
 
 @router.get("/internal/transcripts/{meeting_id}",
             response_model=List[TranscriptionSegment],
+            response_model_exclude_none=False,
             summary="[Internal] Get all transcript segments for a meeting",
             include_in_schema=False)
 async def get_transcript_internal(

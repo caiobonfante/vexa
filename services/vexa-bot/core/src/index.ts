@@ -74,6 +74,8 @@ let vadModel: SileroVAD | null = null;
 /** Per-speaker detected language — locked after high-confidence detection */
 const speakerLanguages: Map<string, string> = new Map();
 let activeSpeakerStreamHandles: SpeakerStreamHandle[] = [];
+/** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
+let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
 // ------------------------------------------
 
 // --- ADDED: Stop signal tracking ---
@@ -1059,7 +1061,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
       const whisperStartMs = Date.now();
       try {
-        const result = await transcriptionClient.transcribe(audioBuffer, lang || undefined);
+        const contextPrompt = speakerManager!.getLastConfirmedText(speakerId);
+        const result = await transcriptionClient.transcribe(audioBuffer, lang || undefined, contextPrompt || undefined);
         telemetry.whisperCalls++;
         telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         if (result && result.text) {
@@ -1119,43 +1122,58 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             return;
           }
 
-          // Publish draft for real-time dashboard display.
-          // Draft uses "draft:{speakerId}" — one per speaker, always overwritten.
-          if (segmentPublisher) {
-            const lang = explicitLang || result.language || 'en';
-            const bufStart = speakerManager!.getBufferStartMs(speakerId);
-            const nowMs = Date.now();
-            const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
-            const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
-            const draftSegmentId = `${segmentPublisher.sessionUid}:draft:${speakerId}`;
-            telemetry.draftsEmitted++;
-            log(`[📝 DRAFT] ${speakerName} | ${result.language} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | draftId | "${result.text}"`);
-            await segmentPublisher.publishSegment({
-              speaker: speakerName,
-              text: result.text,
-              start: startSec,
-              end: endSec,
-              language: lang,
-              completed: false,
-              segment_id: draftSegmentId,
-              absolute_start_time: new Date(bufStart).toISOString(),
-              absolute_end_time: new Date(nowMs).toISOString(),
-            });
-          }
-
           // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
           const words = result.segments?.flatMap(s => s.words || []) || [];
           if (words.length > 0) {
             latestWhisperWords = words;
           }
 
-          // Pass Whisper's segments for incremental per-segment confirmation
+          // Process through SpeakerStreamManager — may trigger onSegmentConfirmed
           const lastSeg = result.segments?.[result.segments.length - 1];
           const segEndSec = lastSeg?.end;
           const whisperSegs = result.segments?.map(s => ({
             text: s.text, start: s.start, end: s.end
           }));
           speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec, whisperSegs);
+
+          // Publish batch: confirmed (collected by onSegmentConfirmed) + pending (current draft)
+          if (segmentPublisher && result.text) {
+            const lang = explicitLang || result.language || 'en';
+            const bufStart = speakerManager!.getBufferStartMs(speakerId);
+            const nowMs = Date.now();
+            const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
+            const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
+
+            // Pending: one entry per Whisper segment (preserves sentence boundaries)
+            const whisperSegments = result.segments || [{ text: result.text, start: 0, end: 0 }];
+            const pendingSegs: import('./services/segment-publisher').TranscriptionSegment[] = whisperSegments
+              .map(ws => ({
+                speaker: speakerName,
+                text: (ws.text || '').trim(),
+                start: startSec + (ws.start || 0),
+                end: startSec + (ws.end || 0),
+                language: lang, completed: false,
+                absolute_start_time: new Date(bufStart + (ws.start || 0) * 1000).toISOString(),
+                absolute_end_time: new Date(bufStart + (ws.end || 0) * 1000).toISOString(),
+              }))
+              .filter(s => s.text);
+
+            telemetry.draftsEmitted++;
+            log(`[📝 DRAFT] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | "${result.text.substring(0, 50)}"`);
+
+            // Drain only this speaker's confirmed batch
+            const speakerConfirmed = confirmedBatches.get(speakerId) || [];
+            confirmedBatches.set(speakerId, []);
+
+            // Filter out pending segments that overlap with just-confirmed text
+            const confirmedTextList = speakerConfirmed.map(c => c.text.trim());
+            const pending = pendingSegs.filter(p => {
+              const pt = p.text.trim();
+              return !confirmedTextList.some(ct => pt === ct || pt.startsWith(ct) || ct.startsWith(pt));
+            });
+            log(`[📡 PUBLISH] ${speakerName} | ${speakerConfirmed.length}C ${pending.length}P`);
+            await segmentPublisher.publishTranscript(speakerName, speakerConfirmed, pending);
+          }
         } else {
           speakerManager!.handleTranscriptionResult(speakerId, '');
         }
@@ -1168,10 +1186,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       }
     };
 
-    // onSegmentConfirmed: publish to Redis (only after confirmation or hard cap)
-    // For Teams: run speaker-mapper on word timestamps + caption boundaries
-    // to split carry-forward segments into per-speaker sub-segments.
-    speakerManager.onSegmentConfirmed = async (speakerId: string, speakerName: string, transcript: string, bufferStartMs: number, bufferEndMs: number, segmentId: string) => {
+    // Reset confirmed batches for this session
+    confirmedBatches = new Map();
+
+    // onSegmentConfirmed: collect into batch (published atomically with pending)
+    speakerManager.onSegmentConfirmed = (speakerId: string, speakerName: string, transcript: string, bufferStartMs: number, bufferEndMs: number, segmentId: string) => {
       if (!segmentPublisher) return;
       if (isHallucination(transcript)) {
         log(`[🚫 HALLUCINATION] ${speakerName} | confirmed but filtered: "${transcript}"`);
@@ -1183,31 +1202,20 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const endSec = (bufferEndMs - segmentPublisher.sessionStartMs) / 1000;
       const fullSegmentId = `${segmentPublisher.sessionUid}:${segmentId}`;
 
-      // Teams: per-speaker audio routing already provides correct attribution.
-      // The speaker-mapper was originally needed when carry-forward moved audio
-      // between speakers, but carry-forward was removed (see findings.md iteration 1).
-      // Running the mapper now only introduces errors — it re-attributes words based
-      // on caption boundary timing, which has ~1.5s jitter vs Whisper timestamps,
-      // causing boundary words to be split and mis-attributed to adjacent speakers.
-
       const confirmLatencyMs = bufferEndMs - bufferStartMs;
       const segDurationSec = endSec - startSec;
       const wordCount = transcript.split(/\s+/).length;
       telemetry.segmentsConfirmed++;
       telemetry.totalConfirmLatencyMs += confirmLatencyMs;
       log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s (${segDurationSec.toFixed(1)}s, ${wordCount}w, latency=${(confirmLatencyMs/1000).toFixed(1)}s) | ${fullSegmentId} | "${transcript}"`);
-      await segmentPublisher.publishSegment({
-        speaker: speakerName,
-        text: transcript,
-        start: startSec,
-        end: endSec,
-        language: lang,
-        completed: true,
-        segment_id: fullSegmentId,
+
+      if (!confirmedBatches.has(speakerId)) confirmedBatches.set(speakerId, []);
+      confirmedBatches.get(speakerId)!.push({
+        speaker: speakerName, text: transcript, start: startSec, end: endSec,
+        language: lang, completed: true, segment_id: fullSegmentId,
         absolute_start_time: new Date(bufferStartMs).toISOString(),
         absolute_end_time: new Date(bufferEndMs).toISOString(),
       });
-      log(`[✅ PUBLISHED] ${speakerName} → Redis`);
     };
 
     log('[PerSpeaker] SpeakerStreamManager created and wired');
@@ -1270,45 +1278,47 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     }
   } else {
     const currentName = speakerManager.getSpeakerName(speakerId) || '';
-    const locked = isTrackLocked(speakerIndex);
+    let locked = isTrackLocked(speakerIndex);
 
-    // Re-resolve if: unmapped OR has a name but not locked yet (may be wrong)
-    if (!locked) {
-      const lastResolve = lastReResolveTime.get(speakerId) || 0;
-      const reResolveInterval = currentName ? 5_000 : 2_000; // slower for named-but-unlocked
-      if (Date.now() - lastResolve > reResolveInterval) {
-        lastReResolveTime.set(speakerId, Date.now());
+    // Detect participant count change → invalidate ALL mappings (including locks)
+    // Google Meet reassigns audio tracks when participants join/leave.
+    const lastResolve = lastReResolveTime.get(speakerId) || 0;
+    const reResolveInterval = locked ? 5_000 : (currentName ? 5_000 : 2_000);
+    if (Date.now() - lastResolve > reResolveInterval) {
+      lastReResolveTime.set(speakerId, Date.now());
 
-        // Detect participant count change → invalidate all mappings
-        try {
-          const currentCount = await page.evaluate(() => {
-            // Google Meet: injected function
-            if (typeof (window as any).getGoogleMeetActiveParticipantsCount === 'function') {
-              return (window as any).getGoogleMeetActiveParticipantsCount();
-            }
-            // Teams: count visible participant tiles
-            const teamsTiles = document.querySelectorAll('[data-tid*="video-tile"], [data-tid*="participant"]');
-            if (teamsTiles.length > 0) return teamsTiles.length;
-            return 0;
-          });
-          if (lastParticipantCount > 0 && currentCount !== lastParticipantCount) {
-            log(`[SpeakerIdentity] Participant count changed: ${lastParticipantCount} → ${currentCount}. Invalidating all mappings.`);
-            clearSpeakerNameCache();
+      try {
+        const currentCount = await page.evaluate(() => {
+          if (typeof (window as any).getGoogleMeetActiveParticipantsCount === 'function') {
+            return (window as any).getGoogleMeetActiveParticipantsCount();
           }
-          lastParticipantCount = currentCount;
-        } catch {}
-
-        const newName = await resolveSpeakerName(page, speakerIndex, platformKey, currentBotConfig?.botName);
-        if (newName && newName !== currentName && !isDuplicateSpeakerName(newName, speakerId)) {
-          log(`[🔄 SPEAKER MAPPED] Track ${speakerIndex}: "${currentName}" → "${newName}"`);
-          speakerManager.updateSpeakerName(speakerId, newName);
-          await segmentPublisher.publishSpeakerEvent({
-            speaker: newName,
-            type: 'joined',
-            timestamp: Date.now(),
-          });
-          log(`[📡 SPEAKER EVENT] "${newName}" joined → Redis`);
+          const teamsTiles = document.querySelectorAll('[data-tid*="video-tile"], [data-tid*="participant"]');
+          if (teamsTiles.length > 0) return teamsTiles.length;
+          return 0;
+        });
+        if (lastParticipantCount > 0 && currentCount !== lastParticipantCount) {
+          log(`[SpeakerIdentity] Participant count changed: ${lastParticipantCount} → ${currentCount}. Invalidating all mappings (including locks).`);
+          clearSpeakerNameCache();
+          locked = false; // Force re-resolve below
         }
+        lastParticipantCount = currentCount;
+      } catch {}
+    }
+
+    // Re-resolve if: unmapped OR not locked yet OR locks were just cleared
+    if (!locked && Date.now() - lastResolve > reResolveInterval) {
+      lastReResolveTime.set(speakerId, Date.now());
+
+      const newName = await resolveSpeakerName(page, speakerIndex, platformKey, currentBotConfig?.botName);
+      if (newName && newName !== currentName && !isDuplicateSpeakerName(newName, speakerId)) {
+        log(`[🔄 SPEAKER MAPPED] Track ${speakerIndex}: "${currentName}" → "${newName}"`);
+        speakerManager.updateSpeakerName(speakerId, newName);
+        await segmentPublisher.publishSpeakerEvent({
+          speaker: newName,
+          type: 'joined',
+          timestamp: Date.now(),
+        });
+        log(`[📡 SPEAKER EVENT] "${newName}" joined → Redis`);
       }
     }
   }
@@ -1340,6 +1350,18 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
   if (speakerManager) {
     speakerManager.removeAll();
     speakerManager = null;
+  }
+
+  // Flush remaining confirmed batches before session_end
+  if (segmentPublisher && confirmedBatches.size > 0) {
+    for (const [speakerId, batch] of confirmedBatches) {
+      if (batch.length > 0) {
+        const speakerName = batch[0].speaker;
+        log(`[PerSpeaker] Flushing ${batch.length} confirmed segment(s) for ${speakerName}`);
+        await segmentPublisher.publishTranscript(speakerName, batch, []);
+      }
+    }
+    confirmedBatches = new Map();
   }
 
   // Publish session_end and close Redis connections

@@ -209,6 +209,58 @@ export class SegmentPublisher {
   }
 
   /**
+   * Publish a per-speaker transcript update: confirmed + pending in one atomic message.
+   * - XADD confirmed to stream (collector persists to Postgres)
+   * - PUBLISH bundle to WS channel (gateway forwards to dashboard)
+   */
+  async publishTranscript(speaker: string, confirmed: TranscriptionSegment[], pending: TranscriptionSegment[]): Promise<void> {
+    try {
+      const client = await this.ensureConnected();
+
+      const mapSeg = (s: TranscriptionSegment) => ({
+        start: s.start, end: s.end, text: s.text, language: s.language,
+        completed: s.completed ?? true, speaker: s.speaker, segment_id: s.segment_id,
+        ...(s.absolute_start_time && { absolute_start_time: s.absolute_start_time }),
+        ...(s.absolute_end_time && { absolute_end_time: s.absolute_end_time }),
+      });
+
+      // XADD confirmed segments for persistence (collector picks these up)
+      for (const seg of confirmed) {
+        const payload = JSON.stringify({
+          type: 'transcription',
+          token: this.token,
+          uid: this.sessionUid,
+          platform: this.platform,
+          meeting_id: this.meetingId,
+          segments: [mapSeg(seg)],
+        });
+        await client.xAdd(this.segmentStreamKey, '*', { payload });
+      }
+
+      // Store pending snapshot in Redis (full replace per speaker, short TTL)
+      const pendingKey = `meeting:${this.meetingId}:pending:${speaker}`;
+      if (pending.length > 0) {
+        await client.set(pendingKey, JSON.stringify(pending.map(mapSeg)), { EX: 60 });
+      } else {
+        await client.del(pendingKey);
+      }
+
+      // PUBLISH atomic bundle directly to WS channel (no collector middleman)
+      const wsChannel = `tc:meeting:${this.meetingId}:mutable`;
+      await client.publish(wsChannel, JSON.stringify({
+        type: 'transcript',
+        meeting: { id: parseInt(this.meetingId) },
+        speaker,
+        confirmed: confirmed.map(mapSeg),
+        pending: pending.map(mapSeg),
+        ts: new Date().toISOString(),
+      }));
+    } catch (err: any) {
+      log(`[SegmentPublisher] Failed to publish transcript: ${err.message}`);
+    }
+  }
+
+  /**
    * Publish a speaker lifecycle event to Redis.
    * Format matches what transcription-collector expects:
    *   stream: speaker_events_relative
