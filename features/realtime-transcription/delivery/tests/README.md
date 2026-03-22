@@ -1,5 +1,12 @@
 # Delivery Tests
 
+## Tests
+
+| Test | Description | Location |
+|------|-------------|----------|
+| **Single-speaker** | Tick-by-tick rendering validation with real speech | [`single-speaker/`](single-speaker/) |
+| **Replay delivery** | Automated WS/REST delivery validation | [`../replay-delivery-test.js`](../replay-delivery-test.js) |
+
 ## Why
 
 TTS-generated test audio has clean gaps between utterances. Speaker changes flush the buffer, masking all mid-stream confirmation bugs. Six bugs were found only after feeding continuous real speech (a YouTube podcast) through the pipeline and stepping through the output tick by tick:

@@ -11,9 +11,10 @@ const path = require('path');
 
 const DATASET = process.env.DATASET || 'youtube-single-speaker';
 const DATA_DIR = path.resolve(__dirname, '..', '..', 'data');
-const CORE_PATH = path.join(DATA_DIR, 'core', DATASET, 'transcript.jsonl');
-const GT_PATH = path.join(DATA_DIR, 'raw', DATASET, 'ground-truth.json');
-const OUT_PATH = path.join(__dirname, 'rendered.md');
+const CORE_PATH = process.env.CORE_PATH || path.join(DATA_DIR, 'core', DATASET, 'transcript.jsonl');
+const GT_PATH = process.env.GT_PATH || path.join(DATA_DIR, 'raw', DATASET, 'ground-truth.json');
+const OUT_DIR = process.env.OUT_DIR || __dirname;
+const OUT_PATH = path.join(OUT_DIR, 'rendered.md');
 
 const tickNum = parseInt(process.argv[2] || '1');
 const ticks = fs.readFileSync(CORE_PATH, 'utf8').trim().split('\n').map(l => JSON.parse(l));
@@ -121,10 +122,10 @@ const gtLines = gtSegments.filter(s => s.start <= maxRenderedTime + 2).map(s => 
 const curLines = currentRendered.map(rl);
 const prevLines = prevRendered.map(rl);
 
-const DIR = path.dirname(OUT_PATH);
-fs.writeFileSync(path.join(DIR, 'gt.txt'), gtLines.join('\n') + '\n');
-fs.writeFileSync(path.join(DIR, 'rendered.txt'), curLines.join('\n') + '\n');
-fs.writeFileSync(path.join(DIR, 'last-rendered.txt'), prevLines.join('\n') + '\n');
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.writeFileSync(path.join(OUT_DIR, 'gt.txt'), gtLines.join('\n') + '\n');
+fs.writeFileSync(path.join(OUT_DIR, 'rendered.txt'), curLines.join('\n') + '\n');
+fs.writeFileSync(path.join(OUT_DIR, 'last-rendered.txt'), prevLines.join('\n') + '\n');
 
 lines.push(`GT: ${gtLines.length} segments → gt.txt`);
 lines.push(`Rendered: ${curLines.length} segments → rendered.txt`);

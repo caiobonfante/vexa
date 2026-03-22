@@ -31,8 +31,8 @@ const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN || 'changeme';
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:8066';
 
 const DATA_DIR = path.resolve(__dirname, '..', '..', 'data');
-const CORE_PATH = path.join(DATA_DIR, 'core', DATASET, 'transcript.jsonl');
-const GT_PATH = path.join(DATA_DIR, 'raw', DATASET, 'ground-truth.json');
+const CORE_PATH = process.env.CORE_PATH || path.join(DATA_DIR, 'core', DATASET, 'transcript.jsonl');
+const GT_PATH = process.env.GT_PATH || path.join(DATA_DIR, 'raw', DATASET, 'ground-truth.json');
 
 if (!API_TOKEN) { console.error('ERROR: API_TOKEN required'); process.exit(1); }
 

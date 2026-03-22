@@ -1,0 +1,7 @@
+# Generated data
+dataset/audio-full.wav
+dataset/audio.wav
+dataset/core/
+
+# Output files (regenerated per tick)
+output/
