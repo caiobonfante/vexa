@@ -2,10 +2,13 @@
 
 ## Tests
 
-| Test | Description | Location |
-|------|-------------|----------|
-| **Single-speaker** | Tick-by-tick rendering validation with real speech | [`single-speaker/`](single-speaker/) |
-| **Replay delivery** | Automated WS/REST delivery validation | [`../replay-delivery-test.js`](../replay-delivery-test.js) |
+| Test | What it validates | Cost | Location |
+|------|------------------|------|----------|
+| **Single-speaker** | Streaming confirmation + rendering with continuous real speech | Right side instant, left side ~2 min | [`single-speaker/`](single-speaker/) |
+| **YouTube multi-speaker** | Speaker attribution + rendering with multi-speaker real speech | Right side instant, left side requires live meeting | [`youtube-pipeline/`](youtube-pipeline/) |
+| **Replay delivery** | WS delivery + REST persistence + WS/REST consistency (automated) | Real-time + 45s wait | [`../replay-delivery-test.js`](../replay-delivery-test.js) |
+
+Start with single-speaker — it's the cheapest and catches the most bugs. Move to multi-speaker only after single-speaker is clean.
 
 ## Why
 
