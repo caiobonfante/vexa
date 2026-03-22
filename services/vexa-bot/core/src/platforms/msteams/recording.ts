@@ -1082,7 +1082,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                     const w = document.querySelector(captionSels.rendererWrapper);
                     if (w) {
                       const items = w.querySelectorAll(captionSels.captionItem);
-                      const allTids = Array.from(w.querySelectorAll('[data-tid]')).map(el => el.getAttribute('data-tid'));
+                      const allTids = Array.from(w.querySelectorAll('[data-tid]')).map((el: any) => el.getAttribute('data-tid'));
                       const childCount = w.children.length;
                       const innerLen = w.innerHTML.length;
                       (window as any).logBot?.('[Teams Captions POLL] wrapper children=' + childCount +
