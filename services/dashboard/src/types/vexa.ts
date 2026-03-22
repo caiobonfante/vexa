@@ -90,6 +90,7 @@ export interface BotConfigUpdate {
 
 // WebSocket Types
 export type WebSocketMessageType =
+  | "transcript"
   | "transcript.mutable"
   | "transcript.finalized"
   | "meeting.status"
@@ -133,6 +134,15 @@ export interface WebSocketTranscriptMessage {
   ts: string;
 }
 
+export interface WebSocketTranscriptBundleMessage {
+  type: "transcript";
+  meeting: { id: number };
+  speaker: string;
+  confirmed: WebSocketSegment[];
+  pending: WebSocketSegment[];
+  ts: string;
+}
+
 export interface WebSocketStatusMessage {
   type: "meeting.status";
   meeting: { platform: Platform; native_id: string };
@@ -153,7 +163,8 @@ export interface WebSocketPongMessage {
 
 export interface WebSocketErrorMessage {
   type: "error";
-  message: string;
+  error: string;
+  details?: string;
 }
 
 // Chat message from the meeting chat (read by the bot)
@@ -173,6 +184,7 @@ export interface WebSocketChatMessage {
 
 export type WebSocketIncomingMessage =
   | WebSocketTranscriptMessage
+  | WebSocketTranscriptBundleMessage
   | WebSocketStatusMessage
   | WebSocketChatMessage
   | WebSocketSubscribedMessage

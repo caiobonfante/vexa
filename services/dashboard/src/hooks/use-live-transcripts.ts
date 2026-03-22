@@ -278,10 +278,12 @@ export function useLiveTranscripts(
               // Keepalive acknowledged - connection is healthy
               break;
 
-            case "error":
-              console.error("[LiveTranscripts] Server error:", message.message);
-              setConnectionError(message.message);
+            case "error": {
+              const errMsg = message.error + (message.details ? `: ${message.details}` : "");
+              console.error("[LiveTranscripts] Server error:", errMsg);
+              setConnectionError(errMsg);
               break;
+            }
           }
         } catch (error) {
           console.error("[LiveTranscripts] Failed to parse message:", error);

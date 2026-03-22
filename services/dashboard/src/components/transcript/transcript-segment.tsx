@@ -10,7 +10,7 @@ interface TranscriptSegmentProps {
   speakerColor: SpeakerColor;
   isHighlighted?: boolean;
   searchQuery?: string;
-  appendedText?: string | null;
+
   isActivePlayback?: boolean;
   onClickSegment?: () => void;
   /** When false, hide the avatar and speaker name (consecutive segments from same speaker). Defaults to true. */
@@ -70,34 +70,11 @@ function highlightText(text: string, query: string): React.ReactNode {
   );
 }
 
-function renderTextWithAppendedHighlight(
+function renderText(
   text: string,
-  appendedText: string | null,
   searchQuery?: string
 ): React.ReactNode {
-  if (!appendedText) {
-    return searchQuery ? highlightText(text, searchQuery) : text;
-  }
-
-  // Only highlight if the appended text is at the end of the text
-  // This ensures we don't highlight random occurrences in the middle
-  if (!text.endsWith(appendedText)) {
-    // If appended text is not at the end, don't highlight anything
-    return searchQuery ? highlightText(text, searchQuery) : text;
-  }
-
-  // The appended text is at the end, highlight only that portion
-  const beforeText = text.slice(0, text.length - appendedText.length);
-  const highlightedText = text.slice(text.length - appendedText.length);
-
-  return (
-    <>
-      {searchQuery ? highlightText(beforeText, searchQuery) : beforeText}
-      <mark className="bg-blue-200 dark:bg-blue-200 dark:text-black rounded px-0.5 animate-highlight-fade">
-        {searchQuery ? highlightText(highlightedText, searchQuery) : highlightedText}
-      </mark>
-    </>
-  );
+  return searchQuery ? highlightText(text, searchQuery) : text;
 }
 
 export function TranscriptSegment({
@@ -105,7 +82,6 @@ export function TranscriptSegment({
   speakerColor,
   isHighlighted,
   searchQuery,
-  appendedText,
   isActivePlayback,
   onClickSegment,
   showSpeakerHeader = true,
@@ -158,8 +134,8 @@ export function TranscriptSegment({
         )}
         {!showSpeakerHeader && (
           <div className="flex items-center gap-2">
-            <p className="text-sm leading-snug flex-1">
-              {renderTextWithAppendedHighlight(segment.text, appendedText || null, searchQuery)}
+            <p className={cn("text-sm leading-snug flex-1", !segment.completed && "text-muted-foreground/70 italic")}>
+              {renderText(segment.text, searchQuery)}
             </p>
             <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
               {displayTimestamp}
@@ -167,8 +143,8 @@ export function TranscriptSegment({
           </div>
         )}
         {showSpeakerHeader && (
-          <p className="text-sm leading-snug">
-            {renderTextWithAppendedHighlight(segment.text, appendedText || null, searchQuery)}
+          <p className={cn("text-sm leading-snug", !segment.completed && "text-muted-foreground/70 italic")}>
+            {renderText(segment.text, searchQuery)}
           </p>
         )}
       </div>

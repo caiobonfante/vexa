@@ -272,6 +272,11 @@ class Platform(str, Enum):
                         return f"{base_url}?pwd={passcode}"
                     return base_url
                 return None
+            elif platform == Platform.BROWSER_SESSION:
+                # Browser sessions use opaque IDs (UUIDs, etc.) — no meeting URL to construct
+                if native_id:
+                    return f"browser_session://{native_id}"
+                return None
             else:
                 return None
         except ValueError:

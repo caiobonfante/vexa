@@ -144,11 +144,6 @@ export function TranscriptViewer({
     return distanceFromBottom <= 50; // Allow some tolerance
   }, []);
   
-  // Track only the most recently updated segment with appended text
-  const [mostRecentUpdatedSegment, setMostRecentUpdatedSegment] = useState<{ id: string; appendedText: string } | null>(null);
-  const previousSegmentIdsRef = useRef<Set<string>>(new Set());
-  const previousSegmentTextsRef = useRef<Map<string, string>>(new Map());
-  const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keyboard shortcut for search (Cmd/Ctrl + F)
   useEffect(() => {
@@ -373,78 +368,6 @@ export function TranscriptViewer({
     }
   }, [isNearBottom]);
 
-  // Track only the most recently updated segment with appended text
-  useEffect(() => {
-    if (!isLive || segments.length === 0) {
-      previousSegmentIdsRef.current = new Set();
-      previousSegmentTextsRef.current.clear();
-      return;
-    }
-
-    // Create a set of current segment IDs and track text changes
-    const currentSegmentIds = new Set<string>();
-    const currentSegmentTexts = new Map<string, string>();
-    
-    segments.forEach((seg) => {
-      const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
-      currentSegmentIds.add(id);
-      currentSegmentTexts.set(id, seg.text || "");
-    });
-
-    // Find the most recently updated segment (check from end of array)
-    let mostRecentUpdate: { id: string; appendedText: string } | null = null;
-
-    // Check segments from the end (most recent first)
-    for (let i = segments.length - 1; i >= 0; i--) {
-      const seg = segments[i];
-      const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
-      const currentText = seg.text || "";
-      
-      // Check if this is a new segment
-      if (!previousSegmentIdsRef.current.has(id)) {
-        // For new segments, highlight the entire text initially
-        mostRecentUpdate = { id, appendedText: currentText };
-        break; // Found the most recent update, stop looking
-      } else {
-        // Check if text was appended to an existing segment
-        const previousText = previousSegmentTextsRef.current.get(id) || "";
-        if (currentText.length > previousText.length && currentText.startsWith(previousText)) {
-          const appendedText = currentText.slice(previousText.length);
-          mostRecentUpdate = { id, appendedText };
-          break; // Found the most recent update, stop looking
-        }
-      }
-    }
-
-    // Update state with only the most recent update
-    if (mostRecentUpdate) {
-      // Clear any existing timeout
-      if (highlightTimeoutRef.current) {
-        clearTimeout(highlightTimeoutRef.current);
-      }
-
-      setMostRecentUpdatedSegment(mostRecentUpdate);
-
-      // Set up timeout to remove highlight after 3 seconds
-      highlightTimeoutRef.current = setTimeout(() => {
-        setMostRecentUpdatedSegment(null);
-        highlightTimeoutRef.current = null;
-      }, 3000); // 3 seconds
-    }
-
-    // Update previous segment IDs and texts
-    previousSegmentIdsRef.current = currentSegmentIds;
-    previousSegmentTextsRef.current = currentSegmentTexts;
-  }, [segments, isLive]);
-
-  // Cleanup highlight timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (highlightTimeoutRef.current) {
-        clearTimeout(highlightTimeoutRef.current);
-      }
-    };
-  }, []);
 
 
   // Auto-scroll to bottom when new segments arrive, unless user has scrolled up
@@ -1013,41 +936,6 @@ export function TranscriptViewer({
                   created_at: group.startTime,
                 };
 
-                // Check if this group contains the most recently updated segment
-                let textToHighlight: string | null = null;
-
-                if (mostRecentUpdatedSegment) {
-                  const matchingSegment = group.segments.find((seg) => {
-                    const id = seg.id || `${seg.absolute_start_time}-${seg.start_time}`;
-                    return mostRecentUpdatedSegment.id === id;
-                  });
-
-                  if (matchingSegment) {
-                    const isLastSegmentInGroup =
-                      group.segments[group.segments.length - 1]?.id === matchingSegment.id ||
-                      (group.segments[group.segments.length - 1]?.absolute_start_time === matchingSegment.absolute_start_time &&
-                       group.segments[group.segments.length - 1]?.start_time === matchingSegment.start_time);
-
-                    if (isLastSegmentInGroup && group.combinedText.endsWith(mostRecentUpdatedSegment.appendedText)) {
-                      textToHighlight = mostRecentUpdatedSegment.appendedText;
-                    } else {
-                      const segmentIndex = group.segments.indexOf(matchingSegment);
-                      if (segmentIndex >= 0) {
-                        let textBeforeThisSegment = "";
-                        for (let i = 0; i < segmentIndex; i++) {
-                          textBeforeThisSegment += (group.segments[i].text || "").trim() + " ";
-                        }
-                        const segmentStartInCombined = textBeforeThisSegment.length;
-                        const segmentEndInCombined = segmentStartInCombined + (matchingSegment.text || "").trim().length;
-                        const segmentTextInCombined = group.combinedText.slice(segmentStartInCombined, segmentEndInCombined);
-                        if (segmentTextInCombined.endsWith(mostRecentUpdatedSegment.appendedText)) {
-                          textToHighlight = mostRecentUpdatedSegment.appendedText;
-                        }
-                      }
-                    }
-                  }
-                }
-
                 const isActivePlayback = activePlaybackIndex === index;
 
                 // Determine if this is a continuation from the same speaker
@@ -1081,7 +969,6 @@ export function TranscriptViewer({
                       speakerColor={getSpeakerColor(group.key, speakerOrder)}
                       searchQuery={searchQuery}
                       isHighlighted={searchQuery.length > 0}
-                      appendedText={textToHighlight}
                       isActivePlayback={isActivePlayback}
                       onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds, group.startTime) : undefined}
                       showSpeakerHeader={showSpeakerHeader}

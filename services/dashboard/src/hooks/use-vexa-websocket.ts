@@ -146,10 +146,12 @@ export function useVexaWebSocket(
             // Keepalive acknowledged
             break;
 
-          case "error":
-            console.error("WebSocket error:", message.message);
-            onError?.(message.message);
+          case "error": {
+            const errMsg = message.error + (message.details ? `: ${message.details}` : "");
+            console.error("WebSocket error:", errMsg);
+            onError?.(errMsg);
             break;
+          }
         }
       } catch (error) {
         console.error("Failed to parse WebSocket message:", error);
