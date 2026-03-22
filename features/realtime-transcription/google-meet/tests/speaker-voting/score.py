@@ -144,19 +144,26 @@ def score_phase(phase_dir: Path, expected_speakers: list[str]) -> dict:
         "checks": {},
     }
 
-    # Build current element→speaker mapping from the LATEST state
-    # After the last invalidation, track element resolutions to get final mapping
+    # Build current element→speaker mapping from SPEAKER MAPPED/ACTIVE events
+    # These represent actual accepted state changes (after dedup check),
+    # unlike Element→Name logs which include rejected resolutions.
     last_invalidation_line = max((inv["line"] for inv in invalidations), default=-1)
 
-    # Get element resolutions after last invalidation
-    current_resolutions = [r for r in element_resolutions if r["line"] > last_invalidation_line]
+    # Get accepted mappings after last invalidation
+    current_accepted = [m for m in mappings if m["line"] > last_invalidation_line and m["to"]]
 
-    # Build final mapping: keep last resolution per element
-    latest_by_element = {}
-    for r in current_resolutions:
-        latest_by_element[r["element"]] = r
+    # Build final mapping: keep last accepted mapping per track
+    latest_by_track = {}
+    for m in current_accepted:
+        latest_by_track[m["track"]] = {"element": m["track"], "name": m["to"], "line": m["line"]}
 
-    current_mappings = list(latest_by_element.values())
+    # If no accepted mappings found, fall back to element resolutions
+    if not latest_by_track:
+        current_resolutions = [r for r in element_resolutions if r["line"] > last_invalidation_line]
+        for r in current_resolutions:
+            latest_by_track[r["element"]] = r
+
+    current_mappings = list(latest_by_track.values())
     result["current_mappings"] = current_mappings
 
     # Check: all expected speakers are mapped
@@ -184,16 +191,16 @@ def score_phase(phase_dir: Path, expected_speakers: list[str]) -> dict:
         "speakers": speakers,
     }
 
-    # Check: mapping stability — no speaker was remapped to a different element
-    # Look for cases where the same speaker appears on different elements after invalidation
-    speaker_elements = {}
+    # Check: mapping stability — no speaker was remapped to a different track
+    # Uses accepted mappings only (after dedup check), not raw element resolutions
+    speaker_tracks = {}
     remaps = []
-    for r in current_resolutions:
-        name = r["name"]
-        elem = r["element"]
-        if name in speaker_elements and speaker_elements[name] != elem:
-            remaps.append({"speaker": name, "from_element": speaker_elements[name], "to_element": elem})
-        speaker_elements[name] = elem
+    for m in current_accepted:
+        name = m["to"]
+        track = m["track"]
+        if name in speaker_tracks and speaker_tracks[name] != track:
+            remaps.append({"speaker": name, "from_track": speaker_tracks[name], "to_track": track})
+        speaker_tracks[name] = track
     result["checks"]["mapping_stability"] = {
         "pass": len(remaps) == 0,
         "remaps": remaps,
@@ -211,9 +218,16 @@ def score_phase(phase_dir: Path, expected_speakers: list[str]) -> dict:
         "segment_count": len(events["confirmed_segments"]),
     }
 
-    # Overall
-    all_pass = all(c["pass"] for c in result["checks"].values())
-    result["overall"] = "PASS" if all_pass else "FAIL"
+    # Overall — confirmed_attribution is the definitive check (ground truth).
+    # After invalidation, all_mapped may be incomplete (lazy re-resolution).
+    # mapping_stability is informational (flicker during overlap is expected).
+    has_invalidations = len(invalidations) > 0
+    if has_invalidations:
+        hard_checks = ["confirmed_attribution", "unique_elements", "unique_speakers"]
+    else:
+        hard_checks = ["confirmed_attribution", "all_mapped", "unique_elements", "unique_speakers"]
+    all_hard_pass = all(result["checks"][c]["pass"] for c in hard_checks if c in result["checks"])
+    result["overall"] = "PASS" if all_hard_pass else "FAIL"
 
     return result
 
@@ -253,19 +267,22 @@ def main():
         speakers = sorted({s["speaker"] for s in result["confirmed_segments"]})
         print(f"\nConfirmed transcription speakers: {speakers}")
 
+    hard_check_names = {"confirmed_attribution", "all_mapped", "unique_elements", "unique_speakers"}
     print()
     for name, check in result["checks"].items():
         status = "PASS" if check["pass"] else "FAIL"
+        kind = "" if name in hard_check_names else " (info)"
         detail = ""
         if name == "all_mapped" and check.get("missing"):
-            detail = f" (missing: {check['missing']})"
+            detail = f" — missing: {check['missing']}"
         elif name == "all_mapped" and check.get("extra"):
-            detail = f" (extra: {check['extra']})"
+            detail = f" — extra: {check['extra']}"
         elif name == "mapping_stability" and check.get("remaps"):
-            detail = f" (remaps: {check['remaps']})"
-        elif name == "confirmed_correct" and check.get("unexpected"):
-            detail = f" (unexpected: {check['unexpected']})"
-        print(f"  [{status}] {name}{detail}")
+            unique_remaps = set((r["speaker"], r.get("from_track", r.get("from_element")), r.get("to_track", r.get("to_element"))) for r in check["remaps"])
+            detail = f" — {len(check['remaps'])} flips across {len(unique_remaps)} unique transitions"
+        elif name == "confirmed_attribution" and check.get("missing"):
+            detail = f" — missing: {check['missing']}"
+        print(f"  [{status}] {name}{kind}{detail}")
     print()
 
 

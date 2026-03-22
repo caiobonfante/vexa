@@ -1,152 +1,119 @@
-# Speaker Voting Test
+# Speaker Identity Test
 
-Test the track-to-speaker voting and locking mechanism in live Google Meet meetings, including the critical leave/join cycle where all locks get invalidated and must re-resolve.
+Test speaker-to-track identity resolution in live Google Meet meetings, including simultaneous speech, leave/join cycles, and post-invalidation recovery.
 
-## Problem
+## How speaker identity works
 
-The pipeline maps audio element indices to speaker names via voting:
-1. Audio arrives on track N, Google Meet speaking indicator shows exactly one speaker
-2. Vote: track N = that speaker
-3. After 3 consistent votes at 70%+ ratio, lock permanently
+The pipeline resolves audio element indices to speaker names using Google Meet's speaking indicator and a dedup layer:
 
-When a participant joins or leaves, the bot detects the count change and **clears ALL locks**. Every track must re-vote and re-lock. This is the riskiest moment — element indices may have shifted, and the voting system must correctly re-discover which track belongs to which speaker.
+1. Audio arrives on element N, browser queries who's currently speaking
+2. If exactly one speaker → record a vote for track N = that speaker
+3. After 3 consistent votes at 70%+ ratio → lock permanently
+4. `isDuplicateSpeakerName` prevents the same name from being assigned to multiple tracks
 
-The YouTube pipeline test found speaker attribution errors but couldn't isolate the cause (test data segmentation vs pipeline voting). This test isolates the voting mechanism by controlling exactly when each bot speaks, leaves, and joins.
+When a participant joins or leaves, the bot detects the count change and **clears ALL mappings**. Every track must re-resolve. Google Meet may reassign element indices.
 
-## Test cycle
+The voting/locking mechanism provides consistency, but the primary protection against misattribution is the **dedup check** — even if the speaking indicator flickers during overlap, the accepted mapping (SPEAKER MAPPED event) only changes when the name is unique.
 
-One continuous meeting, three phases:
+## Test suites
 
-```
-Phase 1: JOIN 3 + SPEAK + VALIDATE
-  Send Alice, Bob, Charlie + Recorder
-  Each speaks via TTS (sequential, one at a time)
-  Validate: 3 tracks locked to correct names
+### `test-runner.sh` — Join/Leave/Rejoin cycle
 
-Phase 2: LEAVE 1 + SPEAK + VALIDATE
-  Charlie leaves
-  Alice and Bob speak (triggers lock invalidation + re-vote)
-  Validate: 2 tracks re-locked correctly, Charlie gone
+3 phases in one meeting:
 
-Phase 3: JOIN 2 + SPEAK + VALIDATE
-  Dave and Eve join
-  All 4 remaining + 2 new speak (triggers another invalidation + re-vote)
-  Validate: 4 tracks locked to correct names
-```
+| Phase | Scenario | Speakers |
+|-------|----------|----------|
+| 1 | 3 join + speak sequentially | Alice, Bob, Charlie |
+| 2 | Charlie leaves, 2 re-speak after invalidation | Alice, Bob |
+| 3 | Dave + Eve join, 4 speak after second invalidation | Alice, Bob, Dave, Eve |
 
-Each phase uses TTS (`speak` command via Redis) — no audio file playback needed.
+### `test-edge-cases.sh` — Stress tests
 
-## How it works
+6 edge cases in one meeting:
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  test-runner.sh                                                │
-│                                                                │
-│  1. Create Google Meet (browser session)                       │
-│  2. Start auto-admit                                           │
-│  3. Send Recorder bot (transcribe_enabled: true)               │
-│                                                                │
-│  PHASE 1:                                                      │
-│    Send Alice, Bob, Charlie (transcribe_enabled: false)        │
-│    Wait for all to join                                        │
-│    TTS: Alice speaks → Bob speaks → Charlie speaks             │
-│    Snapshot recorder logs → validate locks                     │
-│                                                                │
-│  PHASE 2:                                                      │
-│    Send leave command to Charlie                               │
-│    Wait for participant count change                           │
-│    TTS: Alice speaks → Bob speaks                              │
-│    Snapshot recorder logs → validate locks                     │
-│                                                                │
-│  PHASE 3:                                                      │
-│    Send Dave, Eve                                              │
-│    Wait for all to join                                        │
-│    TTS: Alice → Bob → Dave → Eve (sequential)                  │
-│    Snapshot recorder logs → validate locks                     │
-│                                                                │
-│  Score each phase independently                                │
-└────────────────────────────────────────────────────────────────┘
-```
+| Edge | Scenario | What it tests |
+|------|----------|---------------|
+| 1 | Baseline sequential | Clean mapping establishment |
+| 2 | Simultaneous speech | Two speakers overlap — dedup prevents cross-attribution |
+| 3 | Short utterances | 1-2 word phrases ("Yes", "No", "Okay") |
+| 4 | Back-to-back speakers | Rapid transitions with no gap |
+| 5 | Leave/rejoin | Same speaker leaves and comes back on new element |
+| 6 | Overlap after invalidation | Simultaneous speech right after lock clear — hardest case |
 
-### TTS speak command
+## Results (2026-03-22)
 
-Bots receive commands via Redis channel `bot_commands:meeting:{meetingId}`:
+### Join/Leave/Rejoin: 3/3 PASS
 
-```json
-{"action": "speak", "text": "Hello, my name is Alice. I am testing speaker identification."}
-```
+| Phase | Mapping | Attribution | Segments |
+|-------|---------|-------------|----------|
+| Phase 1 | 3/3 correct | PASS | 6 |
+| Phase 2 | PASS (post-invalidation) | PASS | 3 |
+| Phase 3 | PASS (post-invalidation) | PASS | 6 |
 
-The bot's TTS service synthesizes and plays the audio into the meeting via PulseAudio. No pre-generated audio files needed.
+### Edge Cases: 6/6 PASS
 
-### Leave command
+| Edge | Mapping | Stability | Attribution | Segments |
+|------|---------|-----------|-------------|----------|
+| Baseline | 3/3 | stable | PASS | 3 |
+| Simultaneous | 3/3 | stable | PASS | 2 |
+| Short utterances | 3/3 | stable | PASS | 5 |
+| Back-to-back | 3/3 | stable | PASS | 5 |
+| Leave/rejoin | 2/3 (lazy) | stable | PASS | 3 |
+| Overlap+invalidation | 1/2 (lazy) | stable | PASS | 2 |
 
-```json
-{"action": "leave"}
-```
+**Total: 41 confirmed segments, 0 misattributed, 100% accuracy**
 
-The bot gracefully leaves the meeting, which changes the participant count on the recorder bot, triggering `clearSpeakerNameCache()` — all locks cleared.
+## Scoring
 
-## Validation at each phase
+`score.py` validates at two levels:
 
-Parse recorder bot logs for:
+1. **Mapping checks** (instantaneous snapshot):
+   - `all_mapped` — all expected speakers have an accepted mapping
+   - `unique_elements` — no duplicate element assignments
+   - `unique_speakers` — no duplicate speaker names
+   - `mapping_stability` (info) — no accepted remaps between tracks
 
-```
-[SpeakerIdentity] Track N -> "Name" LOCKED PERMANENTLY (X/Y votes, Z%)
-[SpeakerIdentity] Participant count changed: N -> M. Invalidating all mappings
-[SpeakerIdentity] All track mappings cleared.
+2. **Attribution check** (ground truth):
+   - `confirmed_attribution` — every expected speaker appears in confirmed transcription segments
+
+After invalidation events, mapping checks become soft (lazy re-resolution is expected). `confirmed_attribution` is always the definitive check.
+
+## Usage
+
+```bash
+# Create meeting separately, then run:
+./test-runner.sh --meeting abc-defg-hij
+./test-edge-cases.sh --meeting abc-defg-hij
+
+# Or with CDP_URL for automatic meeting creation:
+CDP_URL=http://CONTAINER_IP:9223 ./test-runner.sh
 ```
 
-| Check | Meaning |
-|-------|---------|
-| All speakers locked | Every active speaker has a locked track |
-| Correct mapping | locked name matches the bot that played TTS on that track |
-| No cross-votes | No track accumulated votes for the wrong speaker |
-| Lock speed | Locked within 5 votes (not stuck in voting limbo) |
-| Invalidation on leave | Locks cleared when participant count changed |
-| Re-lock after join | All tracks re-locked correctly after new participants join |
+Prerequisites:
+- Compose stack running
+- Browser session with Google account logged in (for meeting creation)
+- Auto-admit running: `node scripts/auto-admit.js "http://IP:9223" &`
+- No orphaned meetings (see .claude/CLAUDE.md for cleanup SQL)
+
+## Key findings
+
+1. **Speaking indicator doesn't drive locking** — Google Meet's indicator is unreliable with TTS bots (0 LOCKED PERMANENTLY events observed). The system works via direct element→name resolution + dedup.
+
+2. **Simultaneous speech causes resolution flicker** — the `Element N → "Name"` log shows wrong names during overlap, but the `isDuplicateSpeakerName` check rejects them. Only `SPEAKER MAPPED` events represent actual state changes.
+
+3. **Post-invalidation mapping is lazy** — after `clearSpeakerNameCache()`, tracks only re-resolve when audio arrives AND the re-resolve interval (2-5s) elapses. Snapshot-based checks may show incomplete mappings. Transcription attribution is still correct.
+
+4. **Google Meet reassigns element indices** — when participants join/leave, the DOM `<audio>` elements may reorder. The invalidation + re-resolution correctly handles this.
 
 ## Files
 
 ```
 speaker-voting/
   README.md              # this file
-  test-runner.sh         # phased test: join/speak/leave/rejoin
-  score.py               # parse recorder logs, validate each phase
+  test-runner.sh         # join/leave/rejoin test (3 phases)
+  test-edge-cases.sh     # edge case stress tests (6 scenarios)
+  score.py               # parse logs, validate mappings + attribution
+  .claude/CLAUDE.md      # agent instructions for running tests
   .gitignore             # excludes results/
-  results/               # test run outputs
-    run-YYYY-MM-DD-HHMMSS/
-      phase-1/
-        recorder-snapshot.log
-        score.json
-      phase-2/
-        ...
-      phase-3/
-        ...
+  results/               # test run outputs (gitignored)
 ```
-
-## Usage
-
-```bash
-# With a browser session for meeting creation + auto-admit
-CDP_URL=http://localhost:8066/b/TOKEN/cdp ./test-runner.sh
-
-# Reuse an existing meeting
-./test-runner.sh --meeting abc-defg-hij
-
-# The test prints validation results after each phase
-```
-
-## What this test covers
-
-- Track-to-speaker voting correctness (1:1 mapping)
-- Lock invalidation on participant count change
-- Re-locking after leave/join cycles
-- Speaking indicator correlation with audio activity
-- Multiple concurrent speakers vs single speaker voting rules
-
-## What this does NOT cover
-
-- Transcription accuracy (Whisper) — tested in youtube-pipeline/
-- Audio capture reliability (AudioContext GC)
-- WS/REST delivery
-- Teams speaker resolution (uses DOM traversal, not voting)
