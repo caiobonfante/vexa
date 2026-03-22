@@ -351,6 +351,8 @@ class MeetingBase(BaseModel):
     # Removed get_bot_platform method, use Platform.get_bot_name(self.platform.value) if needed
 
 class MeetingCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     platform: Optional[Platform] = Field(None, description="Meeting platform. Required unless agent_enabled=true with no meeting.")
     native_meeting_id: Optional[str] = Field(None, description="The platform-specific ID for the meeting (e.g., Google Meet code, Teams ID). Required unless agent_enabled=true with no meeting.")
     bot_name: Optional[str] = Field(None, description="Optional name for the bot in the meeting")
@@ -419,14 +421,14 @@ class MeetingCreate(BaseModel):
     @classmethod
     def validate_passcode(cls, v, info: ValidationInfo):
         """Validate passcode usage based on platform"""
-        if v is not None and v != "":
-            platform = info.data.get('platform') if info.data else None
-            if platform == Platform.GOOGLE_MEET:
-                raise ValueError("Passcode is not supported for Google Meet meetings")
-            elif platform == Platform.TEAMS:
-                # Teams passcode validation (alphanumeric, 4-20 chars to support short personal passcodes)
-                if not re.match(r'^[A-Za-z0-9]{4,20}$', v):
-                    raise ValueError("Teams passcode must be 4-20 alphanumeric characters")
+        platform = info.data.get('platform') if info.data else None
+        if platform == Platform.TEAMS:
+            if not v or v == "":
+                raise ValueError("Passcode is required for Teams meetings. Without it, bots cannot join (lobby rejects anonymous guests).")
+            if not re.match(r'^[A-Za-z0-9]{4,20}$', v):
+                raise ValueError("Teams passcode must be 4-20 alphanumeric characters")
+        elif platform == Platform.GOOGLE_MEET and v is not None and v != "":
+            raise ValueError("Passcode is not supported for Google Meet meetings")
         return v
 
     @field_validator('zoom_obf_token')
@@ -520,6 +522,9 @@ class MeetingCreate(BaseModel):
         has_browser_session = self.mode == "browser_session"
         if not has_meeting and not has_agent and not has_browser_session:
             raise ValueError("Either provide platform + native_meeting_id for a meeting, set agent_enabled=true, or set mode='browser_session'")
+        # Teams requires passcode — without it bots can't pass the lobby
+        if has_meeting and self.platform == Platform.TEAMS and not self.meeting_url and not self.passcode:
+            raise ValueError("Teams meetings require a passcode. Without it, bots cannot join (lobby rejects anonymous guests). Provide the 'passcode' field.")
         return self
 
 class MeetingResponse(BaseModel): # Not inheriting from MeetingBase anymore to avoid duplicate fields if DB model is used directly
@@ -639,6 +644,7 @@ class TranscriptionSegment(BaseModel):
     completed: Optional[bool] = None
     absolute_start_time: Optional[datetime] = Field(None, description="Absolute start timestamp of the segment (UTC)")
     absolute_end_time: Optional[datetime] = Field(None, description="Absolute end timestamp of the segment (UTC)")
+    segment_id: Optional[str] = Field(None, description="Stable segment identity from bot")
 
     @field_validator('language')
     @classmethod
