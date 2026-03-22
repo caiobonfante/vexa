@@ -197,7 +197,7 @@ See [teams-caption-behavior.md](teams-caption-behavior.md) for detailed observat
 - Numbers and formatting rules
 - Constants for test simulation
 
-Reference data: `tests/reference-caption-data.json` (273 events from live meeting).
+Reference data: caption event observations documented in the behavior file above (original `tests/reference-caption-data.json` has been removed).
 
 ## How
 
@@ -215,4 +215,11 @@ Reference data: `tests/reference-caption-data.json` (273 events from live meetin
 
 Real live Teams meetings with TTS-speaking bots (Alice, Bob using different user accounts). Test conversation script drives multi-speaker dialogue with normal turns, back-to-back, overlap, and short interjections. Results validated against ground truth input text.
 
-**Test results (2026-03-20):** 5 test runs with progressive fixes. Best run: 16/18 utterances captured correctly, 0 ghost segments, 0 wasted Whisper API calls.
+**Current results (2026-03-23):**
+
+| Test | Segments found | Speaker accuracy | WER |
+|------|---------------|-----------------|-----|
+| E2E (`tests/e2e/test-e2e.sh`) | 9/9 (100%) | 100% | 14% |
+| Stress (`tests/e2e/test-e2e-stress.sh`) | 18/20 (90%) | 100% | 15% |
+
+Teams meetings require a `passcode` field in the bot creation API. Without it, anonymous bots cannot pass the lobby. The API rejects unknown fields (extra fields forbidden).

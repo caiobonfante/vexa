@@ -16,7 +16,7 @@ Both platforms (Google Meet and MS Teams) feed audio into the same core componen
 feedAudio(speakerId, chunk)     ← platform calls this with audio data
     |
     v
-buffer accumulates chunks
+buffer accumulates chunks (min 3s before first submit)
     |
 trySubmit() fires every 2s ────→ submitBuffer(): combine ALL chunks into WAV
     |                                  |
@@ -31,9 +31,15 @@ trySubmit() fires every 2s ────→ submitBuffer(): combine ALL chunks in
 handleTranscriptionResult()     quality gate (no_speech, logprob, hallucination filter)
     |
     v
-full string match: does text exactly match previous result?
+per-segment stability check (primary):
+    Whisper returns segments[]. For each segment position, track text stability.
+    When leading segments match confirmThreshold (2) consecutive times:
+    ──→ CONFIRMED: emit those segments, advance offset past their end
     |
-    yes (2 consecutive) ──→ CONFIRMED: emit segment, advance offset
+    v (fallback, if no per-segment confirmation)
+full string match:
+    does entire text exactly match previous result?
+    yes (2 consecutive) ──→ CONFIRMED: emit all, advance offset
     no ──→ update lastTranscript, wait for next submission
 ```
 
@@ -55,17 +61,17 @@ frames_offset                timestamp_offset
 - **`frames_offset`** — oldest audio retained in memory
 - **`timestamp_offset`** — start of unprocessed audio (confirmed audio is before this)
 
-**The algorithm:**
+**The algorithm (per-segment stability + full-text fallback):**
 
 1. Audio chunks append continuously to the buffer
 2. Each Whisper submission sends `buffer[timestamp_offset:]` — only unprocessed audio
-3. Whisper returns **segments** (each with `start`, `end`, `text`, `completed`)
-4. **Completed segments** (all except last): emit, advance `timestamp_offset` past their end
-5. **Last segment** (partial): send as live draft, do NOT advance — re-sent with more context next time
-6. **Same output repeated N times**: partial IS complete — emit, advance
-7. **Buffer cap**: when total audio exceeds max size, trim oldest confirmed audio from front
+3. Whisper returns **segments[]** (each with `start`, `end`, `text`)
+4. **Per-segment stability** (primary path): track text at each segment position across submissions. When leading segments match `confirmThreshold` (2) consecutive times → emit confirmed, advance `timestamp_offset` past their end
+5. **Full-text fallback**: if no per-segment confirmation, check if entire output text matches previous result `confirmThreshold` times → emit all, advance
+6. **Idle timeout**: 15s no audio → force flush remaining buffer as confirmed
+7. **Buffer cap**: when total audio exceeds max size (120s), trim oldest confirmed audio from front
 
-**Why this works:** Whisper decides segment boundaries, not our code. Whisper's segments align with natural sentence/phrase breaks. We just track which are confirmed and advance the pointer. No full reset, no scatter, no context loss.
+**Why this works:** Whisper decides segment boundaries, not our code. Per-segment stability tracking lets leading segments confirm and emit while the last segment is still evolving — no need to wait for the entire buffer to stabilize.
 
 **WhisperLive's key parameters:**
 - `max_buffer_s = 45` — total audio in memory
@@ -76,15 +82,92 @@ frames_offset                timestamp_offset
 
 ### Downstream: How Segments Reach Clients
 
+**Current (see [delivery/README.md](delivery/README.md)):**
 ```
-SpeakerStreamManager.onSegmentConfirmed()
-  → SegmentPublisher: Redis XADD to transcription_segments stream + PUBLISH to pub/sub channel
-  → transcription-collector: XREADGROUP, speaker mapping, dedup
-  → Redis Hash (mutable for 30s — speaker names and text can update)
-  → Background task: after 30s immutability threshold → INSERT Postgres (permanent)
-  → WebSocket: live clients receive via Redis pub/sub PUBLISH
-  → REST: GET /transcripts/{meeting_id} merges Redis Hash + Postgres
+SpeakerStreamManager emits confirmed segment (segment_id, speaker, text, absolute_start_time)
+  → SegmentPublisher:
+      XADD transcription_segments {payload: JSON}     → collector persists
+      PUBLISH tc:meeting:{id}:mutable {JSON bundle}   → api-gateway → WS → dashboard
+  → transcription-collector (persistence only):
+      XREADGROUP → HSET meeting:{id}:segments → background UPSERT Postgres
+  → REST: merge Postgres + Redis Hash by segment_id → return all
+  → Dashboard: two-map model (_confirmed by segment_id + _pendingBySpeaker)
 ```
+
+Bot is the single publisher for both live delivery (WS) and persistence (stream).
+Collector is persistence-only — no WS publish, no speaker mapping, no dedup.
+Only confirmed segments are published (drafts disabled since per-segment splitting makes them misleading).
+
+### Data Stages and Iteration Cost
+
+This feature's data lives in `data/` organized by pipeline stage (see [features/README.md](../README.md#data--feature-data-organized-by-pipeline-stage)):
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | audio WAVs + caption events + speaker changes + ground truth | collection run (live meeting) | transcription pipeline (middle loop) |
+| **core** | confirmed segments (speaker, text, timestamps) | SpeakerStreamManager | delivery pipeline (right side), scoring |
+| **rendered** | REST responses, WS captures, DB snapshots | transcription-collector + api-gateway | dashboard, clients |
+
+```
+data/
+  raw/
+    synthetic/            # Generated test audio (not from live meetings)
+    teams-3sp-collection/ # 3 speakers, 17 utterances, diverse scenarios
+    teams-7sp-panel/      # 7 speakers, 20 segments, panel discussion
+    teams-5sp-stress/     # 5 speakers, stress test
+    teams-meeting-328/    # Live meeting 328 capture
+    ...
+  core/
+    teams-7sp-panel/      # Pipeline output for panel dataset
+    teams-3sp-collection/ # Pipeline output for collection dataset
+  rendered/
+    teams-7sp-panel/      # REST/DB output for panel dataset
+```
+
+The pipeline is a chain of data stages. Each stage transforms data and has a different iteration cost:
+
+```
+[Ground Truth]   known script (TTS bots speak exact text)
+      |
+      v
+   meeting       live platform meeting — real audio, real WebRTC, real DOM
+      |
+      v
+    [raw]        captured audio + speaker events (per-utterance WAVs, DOM/caption events)
+      |
+      v
+  transcription  Whisper + quality gates + hallucination filter
+      |
+      v
+    [core]       confirmed segments from SpeakerStreamManager (speaker, text, timestamps)
+      |
+      v
+    dedup        transcription-collector: dedup, speaker mapping, immutability threshold
+      |
+      v
+  [rendered]     Redis Hash -> Postgres -> REST API / WebSocket
+```
+
+Three iteration loops, from cheapest to most expensive:
+
+| Loop | Input | Process | What you're validating | Cost |
+|------|-------|---------|----------------------|------|
+| **Rendering** (right side) | [core] segments | collector -> dedup -> REST | Dedup logic, WS/REST delivery, speaker name mapping | Seconds, no GPU |
+| **Transcription** (middle) | [raw] audio | Whisper -> SpeakerStreamManager -> [core] | Transcription accuracy, speaker attribution, buffer management, confirmation | **Real-time** (see below), needs GPU |
+| **Collection** (left side) | [Ground Truth] script | Live meeting -> capture everything | End-to-end: does the real platform produce the expected raw data? | Minutes, real infra |
+
+**The middle loop runs at real-time speed, not fast-forward.** Audio is fed through the pipeline at the same rate it was captured — a 90s meeting takes 90s to replay. This is intentional: the pipeline's behavior depends on timing (submit intervals, idle timeouts, confirmation windows, caption delays). Fast-forwarding would remove timing-dependent bugs from the test, which are exactly the bugs we need to catch.
+
+**This means dataset design matters.** Two strategies:
+
+- **Targeted datasets** (10-30s): Cover one specific case (speaker transition, short phrase, overlap). Fast to iterate — code change -> replay -> score in under a minute. Use these for diagnosing and fixing specific issues.
+- **Validation datasets** (60-120s): Larger, unstructured, closer to real meetings. Slow to iterate but catch regressions and interactions between scenarios. Use these to confirm a fix doesn't break other cases.
+
+When a validation dataset reveals an issue, **extract the specific segment** into a targeted dataset rather than iterating on the full meeting. Fix against the small dataset, then re-run the large one to confirm.
+
+**Collection (live meeting) is inevitable** for two reasons:
+1. Fresh raw data when you need new scenarios or a platform changes behavior
+2. Human validation that metrics match subjective quality — 90% word accuracy might read terribly if the 10% errors are all speaker names, or read fine if the 10% is filler words. Only a live transcript tells you.
 
 ### Two Platform Audio Architectures
 
@@ -122,8 +205,8 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 | **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
 | **transcription-client** | HTTP POST WAV to transcription-service, requests word timestamps | `services/vexa-bot/core/src/services/transcription-client.ts` |
 | **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `services/transcription-service/main.py` |
-| **segment-publisher** | Redis XADD + PUBLISH to `meeting:{id}:segments` channel | `services/vexa-bot/core/src/services/segment-publisher.ts` |
-| **transcription-collector** | Consumes Redis stream, maps speakers, persists to Postgres after 30s | `services/transcription-collector/main.py` |
+| **segment-publisher** | Redis XADD + PUBLISH to `tc:meeting:{id}:mutable` channel | `services/vexa-bot/core/src/services/segment-publisher.ts` |
+| **transcription-collector** | Consumes Redis stream, persists to Postgres after 30s (persistence only, no mapping/dedup) | `services/transcription-collector/main.py` |
 | **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |
 | **vexa-bot** | Orchestrates everything, platform handlers | `services/vexa-bot/core/src/index.ts` |
 
@@ -146,8 +229,8 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 **Step 1 (done):** Offset-based SpeakerStreamManager.
 - `confirmedSamples` pointer tracks confirmed audio, `submitBuffer` sends only unconfirmed
 - Offset advances to Whisper's `segment.end` boundary (not full buffer)
-- Full string match for confirmation (3 consecutive identical outputs)
-- `maxSpeechDurationSec=15` — Whisper VAD forces segment splits, shorter segments
+- Per-segment stability tracking (2 consecutive matches per segment position) + full-text fallback
+- `maxSpeechDurationSec` — Whisper forces segment splits (defaults to server default if env var not set)
 - Word-level timestamps from Whisper (`timestamp_granularities=word`)
 - Tested: 92.7% content accuracy on 43s monologue, zero boundary artifacts
 
@@ -155,7 +238,10 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 - 5 **collection runs**, 18 utterances each across multiple **scenarios**
 - Validated: monologue **scenario**, speaker transition **scenario**, short utterance **scenario**, multilingual (Russian)
 
-**Step 3 (pending):** Test on Google Meet.
+**Step 3 (done):** Google Meet speaker mapping in bot + right-side refactoring.
+- [x] Bot labels Google Meet segments with speaker name locally (using DOM speaking indicators + voting)
+- [x] Validate left side: collect core output, verify segment_id + speaker on all segments
+- [x] Right side: segment_id flows end-to-end, collector is persistence-only (see [delivery/README.md](delivery/README.md))
 
 ### Confidence Filtering
 
@@ -166,20 +252,20 @@ Whisper returns per-segment quality signals (`no_speech_prob`, `avg_logprob`, `c
 
 **Scoring**: 18/18 silence hallucinations filtered on 60s dead silence. Zero false positives on real speech.
 
-**Finding:** Full string match never confirms mid-stream (Whisper output keeps changing slightly as buffer grows). Segments only emit on idle timeout or speaker change. Next step: process Whisper's segments array — emit completed segments directly, only use same-output match for the last partial segment (the WhisperLive approach).
+**Finding (resolved):** Full string match alone never confirmed mid-stream (Whisper output keeps changing slightly as buffer grows). Fixed by implementing per-segment stability tracking: each Whisper segment position is tracked independently, and leading segments that stabilize across `confirmThreshold` consecutive submissions are emitted immediately. Full-text match remains as a fallback for single-segment responses.
 
 ### Current Config
 
-Values hardcoded in `index.ts` (lines 1019-1026). Note: `.env.example` shows different values (3, 3, 3, 120, 15, 15) -- the code overrides them.
+Values hardcoded in `index.ts` (lines 1022-1028). Note: `.env.example` shows different values (3, 3, 3, 120, 15, 15) — the code overrides `submitInterval` and `confirmThreshold`.
 
 | Parameter | Value (code) | Why |
 |-----------|-------------|-----|
 | `submitInterval` | 2s | Balance between latency and Whisper efficiency |
-| `confirmThreshold` | 2 | 2 identical outputs — ensures text stabilized without waiting too long |
-| `minAudioDuration` | 3s | Don't submit tiny chunks |
+| `confirmThreshold` | 2 | 2 consecutive matches per segment position (per-segment stability) |
+| `minAudioDuration` | 3s | Don't submit tiny chunks — buffer must have ≥3s unprocessed audio before first submit |
 | `maxBufferDuration` | 120s | Trim buffer front at 2 min |
 | `idleTimeoutSec` | 15s | High because browser silence filter makes pauses look idle |
-| `maxSpeechDurationSec` | 10s | Whisper forces segment split — shorter segments confirm faster |
+| `maxSpeechDurationSec` | undefined (server default) | Only set if `MAX_SPEECH_DURATION_SEC` env var is provided; Whisper forces segment split at this length |
 
 ### Verify
 
@@ -196,6 +282,17 @@ Values hardcoded in `index.ts` (lines 1019-1026). Note: `.env.example` shows dif
 
 - [Google Meet](google-meet/README.md) — multi-channel, per-element audio, voting/locking
 - [MS Teams](ms-teams/README.md) — single-channel, mixed stream, caption-driven labeling
+
+### Testing / Validation
+
+**Speaker identity tests** (`google-meet/tests/speaker-voting/`): 9 scenarios covering dedup guard, voting/locking, and edge cases. 100% accuracy — speaker identity in Google Meet uses `isDuplicateSpeakerName` dedup as the primary guard, with voting as a secondary mechanism.
+
+**E2E pipeline tests** (`google-meet/tests/e2e/`, `ms-teams/tests/e2e/`): Full pipeline from audio capture through transcription to segment delivery, on both platforms.
+
+**Results summary:**
+- 18/20 stress test segments captured
+- 100% speaker attribution accuracy
+- ~15% WER on both platforms (competitive with commercial services on meeting audio)
 
 ### Research References
 

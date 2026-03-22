@@ -25,12 +25,10 @@ The **outer loop** is triggered by a **plateau**: when remaining errors are in *
                                           → new collected data → sandbox
 ```
 
-## Current stage: SANDBOX ITERATION
+## Current stage: E2E TESTS PASSING
 
-**Scoring**: 81% **caption boundary** accuracy (diverse **scenario**), 88% theoretical with mapper.
-**Plateau status**: approaching — short phrase loss and **caption boundary** delay are the remaining errors. Short phrases need a new **scenario** with many sub-1s utterances. **Caption boundary** delay may need audio-energy-based override (new **scenario** needed).
-
-When **scoring** stops improving, transition to **EXPAND** — design **scripts** targeting short-phrase and overlap **scenarios**.
+**Scoring**: E2E pipeline tests pass on both platforms. 18/20 stress test segments captured, 100% speaker attribution accuracy, ~15% WER.
+**Previous plateau**: 81% caption boundary accuracy (diverse scenario), 88% theoretical with mapper — resolved by E2E validation on both platforms.
 
 ## Testing approach
 
@@ -62,19 +60,24 @@ This **feature** follows the [validation cycle](../../README.md#validation-cycle
 | Real-world replay | Real-time | Pipeline against actual meeting data | Yes |
 | Live meeting | Real-time | Full system including bots, captions, speaker detection | Yes + meeting |
 
-### Collected data from collection runs
+### Datasets
 
-All **collected data** from Teams **collection runs** with TTS bots (2026-03-20):
+All datasets live in `../data/` organized by [data stage](../../README.md#data--feature-data-organized-by-pipeline-stage):
 
-| File | What | Events |
-|------|------|--------|
-| File | What | Events |
-|------|------|--------|
-| `reference-timestamped-data.json` | **Collected data**: 2-speaker normal-turns **scenario** | 350 events |
-| `diverse-test-timestamped-events.txt` | **Collected data**: 3-speaker diverse **scenario** (7 rounds) | 293 events |
-| `diverse-test-ground-truth.txt` | **Ground truth**: TTS send times for diverse **script** | 17 utterances |
-| `real-meeting-timestamped-events.txt` | **Collected data**: 2-speaker with latest pipeline | 4 confirmed |
-| `real-meeting-ground-truth.txt` | **Ground truth**: TTS send times | 4 utterances |
+| Dataset | Stage | Contents |
+|---------|-------|----------|
+| `data/raw/teams-3sp-collection/` | raw | 3 speakers, 17 utterances, diverse scenarios. Audio + events + ground truth. |
+| `data/raw/teams-7sp-panel/` | raw | 7 speakers, 20 segments, panel discussion. Audio + events. |
+| `data/raw/teams-5sp-stress/` | raw | 5 speakers, stress test. Audio + events. |
+| `data/raw/teams-3sp-diverse/` | raw | 3 speakers, diverse scenario. Events + ground truth. |
+| `data/raw/teams-meeting-328/` | raw | Live meeting 328 capture. Events + transcript. |
+| `data/raw/teams-meeting-320/` | raw | Live meeting 320 capture. Events. |
+| `data/raw/teams-realmeeting/` | raw | Real meeting. Events + ground truth. |
+| `data/raw/reference/` | raw | Early 2-speaker reference data. Events + ground truth. |
+| `data/raw/synthetic/` | raw | Generated test audio (not from live meetings). |
+| `data/core/teams-7sp-panel/` | core | Pipeline output: 43 confirmed segments. |
+| `data/core/teams-3sp-collection/` | core | Pipeline output for collection dataset. |
+| `data/rendered/teams-7sp-panel/` | rendered | REST/DB audit output. |
 
 **Caption boundary** patterns: [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md)
 **Replay** architecture: [real-world-replay.md](real-world-replay.md)
@@ -123,6 +126,13 @@ Words in the first ~1.5s of a new speaker's turn get attributed to the previous 
 | **Replay** (normal-turns **scenario**) | 2 | 88.9% | **Caption boundary** words |
 | **Collection run** (normal turns) | 2 | 100% (4/4 segments) | None |
 | **Collection run** (diverse **scenario**, 7 rounds) | 3 | 71% (12/17 utterances) | 5 short phrases |
+| **E2E stress test** (both platforms) | 5 | 18/20 segments, 100% speaker accuracy, ~15% WER | 2 segments (short phrases) |
+
+### E2E pipeline tests
+
+Full end-to-end tests under `google-meet/tests/e2e/` and `ms-teams/tests/e2e/`. These run the complete pipeline: audio capture, transcription via Whisper, speaker attribution, and segment delivery.
+
+**Speaker identity** (`google-meet/tests/speaker-voting/`): 9 scenarios, 100% accuracy. Google Meet uses `isDuplicateSpeakerName` dedup as the primary guard against misattribution, with voting/locking as a secondary mechanism.
 
 ### Confidence filtering (hallucination combat)
 
@@ -197,7 +207,7 @@ make play TRANSCRIPTION_URL=http://host:port/v1/audio/transcriptions TRANSCRIPTI
 
   ✓ [4.3s] CONFIRMED | "Let me walk through the full product roadmap..."
 ```
-- Drafts every ~3s, confirmation when 3 consecutive match
+- Drafts every ~2s, confirmation when 2 consecutive match
 - After confirmation, next draft starts from where previous left off
 
 ### Problems to watch for

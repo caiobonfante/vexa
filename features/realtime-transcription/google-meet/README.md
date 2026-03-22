@@ -75,7 +75,7 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  |    Confirmation: 2 consecutive matching transcripts               |     |
 |  |    Idle timeout: 15s no audio -> force flush                      |     |
 |  |    Max buffer: 120s -> trim                                       |     |
-|  |    VAD (Silero): filters silence before buffer (Google Meet only) |     |
+|  |    VAD (Silero): disabled — chunks too short for reliable detect  |     |
 |  |                                                                   |     |
 |  |  Callbacks:                                                       |     |
 |  |    onSegmentReady ----------> (draft, send to Whisper)            |     |
@@ -89,11 +89,11 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  |                        |              |                              |  |
 |  | Sends WAV to           |              | XADD -> transcription_       |  |
 |  | Whisper service        |              |         segments stream      |  |
-|  | Returns text +         |              | PUBLISH -> meeting:{id}:     |  |
-|  | word timestamps        |              |            segments channel  |  |
+|  | Returns text +         |              | PUBLISH -> tc:meeting:{id}:  |  |
+|  | word timestamps        |              |            mutable channel   |  |
 |  +------------------------+              |                              |  |
-|                                          | Drafts  (completed=false)    |  |
-|                                          | Confirmed (completed=true)   |  |
+|                                          | Only confirmed segments      |  |
+|                                          | (completed=true) published   |  |
 |                                          +-------------+----------------+  |
 +--------------------------------------------+-----------+-------------------+
                                               |
@@ -103,7 +103,7 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  Redis stream --> transcription-collector --> Redis Hash (30s hold)        |
 |                                           --> Postgres (persist)           |
 |                                                                            |
-|  Redis pub/sub --> api-gateway WS --> client (live segments)               |
+|  Bot PUBLISH tc:meeting:{id}:mutable --> api-gateway WS --> client (live)  |
 |                                                                            |
 |  api-gateway REST --> GET /transcripts/{id} (Hash + Postgres merge)        |
 +----------------------------------------------------------------------------+
@@ -166,6 +166,8 @@ Unlike Teams (which relies on a single caption activation button), Google Meet's
 - Silence class: `gjg47c`
 - 500ms polling fallback for cases where mutations don't fire
 
+**Practical behavior:** In TTS bot tests, the voting/locking mechanism rarely fires (0 `LOCKED PERMANENTLY` events observed). The real protection against misattribution is the `isDuplicateSpeakerName` dedup check in `index.ts`, which rejects any speaker name already assigned to another track. This means identity resolution works primarily through first-assignment dedup rather than vote accumulation. The voting system remains as designed backup for ambiguous cases with human participants.
+
 ### Buffer Management
 
 Uses the same offset-based sliding window as Teams (see [parent README](../README.md)):
@@ -173,7 +175,7 @@ Uses the same offset-based sliding window as Teams (see [parent README](../READM
 - Each speaker gets independent `SpeakerStreamManager` instance
 - `submitBuffer` sends only unprocessed audio
 - Completed Whisper segments advance the offset
-- VAD (Silero, when available) filters silence before buffer — reduces Whisper calls
+- VAD (Silero) loaded but **disabled** — 4096-sample chunks (256ms) are too short for reliable detection; Whisper's own `no_speech_prob` handles silence rejection downstream
 - Speaker leaving/muting triggers idle timeout → clean buffer flush
 
 ### GC Prevention
@@ -192,10 +194,10 @@ Without this, audio capture silently stops within seconds.
 |--------|-----------|----------|
 | Audio | N per-speaker streams | 1 mixed stream |
 | SpeakerStreamManager | N instances (one per channel) | 1 instance (mixed) |
-| Speaker identity | DOM voting/locking (inferred) | Caption author (explicit) |
+| Speaker identity | DOM voting/locking + dedup (inferred) | Caption author (explicit) |
 | Diarization | Not needed | Caption boundaries |
 | Overlapping speech | Natural separation | Both in same stream |
-| VAD | Silero per stream (when available) | Browser-side RMS filter |
+| VAD | Silero loaded but disabled (chunks too short) | Browser-side RMS filter |
 | Silence filter | `maxVal > 0.005` per element | `RMS < 0.01` on mixed stream |
 
 ### Key Selectors
@@ -217,6 +219,7 @@ These are obfuscated Google Meet class names. They change with UI updates — `s
 2. **First seconds** — speaker identity requires 3 votes to lock; first audio may be unnamed
 3. **Domain-restricted meetings** — bot joins as unauthenticated guest, may be rejected by org policy
 4. **Multiple speakers simultaneously** — voting only works when exactly 1 speaker is active; during overlap, no votes cast, existing locks used
+5. **Speaker identity with human participants** — TTS bots produce clean single-speaker windows, but human conversations have more overlap and ambiguity. See [CAPTION-SPEAKER-DESIGN.md](CAPTION-SPEAKER-DESIGN.md) for an open design exploring caption-based speaker identity as an alternative
 
 ## How
 
@@ -234,3 +237,8 @@ These are obfuscated Google Meet class names. They change with UI updates — `s
 ### Testing
 
 Real live Google Meet meetings. No mocks — real platform behavior, real audio, real speaker detection. Test with 2+ participants speaking and verify speaker attribution locks correctly within first few seconds.
+
+#### Test suites
+
+- **[`tests/speaker-voting/`](tests/speaker-voting/)** — Speaker identity unit/integration tests. 9 scenarios, 41 segments, 0 misattributed, 100% speaker accuracy.
+- **[`tests/e2e/`](tests/e2e/)** — End-to-end pipeline validation: TTS bots speak into live Google Meet, audio flows through Whisper, segments persist to Postgres. Stress test: 18/20 segments found, 100% speaker accuracy, 15% WER.
