@@ -1,6 +1,23 @@
 import { create } from "zustand";
 import type { Meeting, TranscriptSegment, Platform, MeetingStatus } from "@/types/vexa";
 
+/**
+ * Sort segments by speech time (start_time seconds), not buffer confirmation time.
+ * start_time is relative to meeting start and reflects when speech occurred.
+ * absolute_start_time reflects when the buffer was processed, which can be out of order
+ * for different speakers (independent per-speaker buffers).
+ */
+function sortSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  return segments.sort((a, b) => {
+    // Primary: sort by start_time (speech time in meeting)
+    const aStart = a.start_time ?? 0;
+    const bStart = b.start_time ?? 0;
+    if (aStart !== bStart) return aStart - bStart;
+    // Secondary: absolute_start_time for segments with same start_time
+    return a.absolute_start_time.localeCompare(b.absolute_start_time);
+  });
+}
+
 interface LiveMeetingState {
   // Current live meeting
   activeMeeting: Meeting | null;
@@ -49,21 +66,35 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
       (t) => (t.segment_id || t.absolute_start_time) === segKey
     );
 
+    let updated: TranscriptSegment[];
+
     if (existingIndex !== -1) {
       // Same segment — update in place (latest version wins)
-      const updated = [...liveTranscripts];
+      updated = [...liveTranscripts];
       updated[existingIndex] = segment;
-      const sorted = updated.sort(
-        (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-      );
-      set({ liveTranscripts: sorted });
     } else {
-      // New segment
-      const updated = [...liveTranscripts, segment].sort(
-        (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-      );
-      set({ liveTranscripts: updated });
+      updated = [...liveTranscripts, segment];
+
+      // When a confirmed segment arrives, remove drafts from the same speaker
+      // that overlap in time. This prevents the "show, disappear, come back"
+      // flash where draft and confirmed coexist briefly.
+      if (segment.completed && segment.speaker) {
+        const segStart = segment.start_time ?? 0;
+        const segEnd = segment.end_time ?? segStart;
+        updated = updated.filter((t) => {
+          if (t === segment) return true; // keep the new segment
+          if (t.completed) return true; // keep other confirmed segments
+          if (t.speaker !== segment.speaker) return true; // keep other speakers
+          // Remove same-speaker drafts that overlap with this confirmed segment
+          const tStart = t.start_time ?? 0;
+          const tEnd = t.end_time ?? tStart;
+          const overlaps = tStart < segEnd && tEnd > segStart;
+          return !overlaps;
+        });
+      }
     }
+
+    set({ liveTranscripts: sortSegments(updated) });
   },
 
   updateLiveTranscript: (segment: TranscriptSegment) => {
@@ -72,10 +103,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
     const updated = liveTranscripts.map((t) =>
       (t.segment_id || t.absolute_start_time) === segKey ? segment : t
     );
-    const sorted = updated.sort(
-      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-    );
-    set({ liveTranscripts: sorted });
+    set({ liveTranscripts: sortSegments(updated) });
   },
 
   bootstrapLiveTranscripts: (segments: TranscriptSegment[]) => {
@@ -91,11 +119,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
       transcriptMap.set(key, segment);
     }
 
-    const sorted = Array.from(transcriptMap.values()).sort(
-      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-    );
-
-    set({ liveTranscripts: sorted });
+    set({ liveTranscripts: sortSegments(Array.from(transcriptMap.values())) });
   },
 
   setBotStatus: (status: MeetingStatus) => {

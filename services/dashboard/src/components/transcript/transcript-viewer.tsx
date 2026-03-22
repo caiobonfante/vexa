@@ -237,9 +237,15 @@ export function TranscriptViewer({
         seen.set(key, seg);
       }
     }
-    const deduped = Array.from(seen.values()).sort(
-      (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
-    );
+    const deduped = Array.from(seen.values()).sort((a, b) => {
+      // Sort by start_time (speech time) for correct chronological order,
+      // not absolute_start_time (buffer confirmation time) which can be
+      // out of order for different speakers with independent audio buffers.
+      const aStart = a.start_time ?? 0;
+      const bStart = b.start_time ?? 0;
+      if (aStart !== bStart) return aStart - bStart;
+      return a.absolute_start_time.localeCompare(b.absolute_start_time);
+    });
 
     // Wrap each segment as its own group (1 segment per group)
     return deduped.map((seg): SegmentGroup<typeof seg> => ({
