@@ -172,8 +172,15 @@ export function useLiveTranscripts(
       wsUrl = "ws://localhost:18056/ws";
     }
 
-    // Use auth token from the Zustand store (available client-side)
-    const authToken = storeToken;
+    // Use auth token from the Zustand store, fall back to config endpoint token
+    let authToken = storeToken;
+    if (!authToken) {
+      try {
+        const configResp = await fetch("/api/config");
+        const configData = await configResp.json();
+        authToken = configData.authToken || null;
+      } catch {}
+    }
 
     // Append auth token as query parameter if available
     // Vexa uses X-API-Key header for REST, but browsers can't set WS headers
