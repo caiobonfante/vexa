@@ -36,7 +36,7 @@ Same voting/locking pattern:
 1. Detect which participant tile shows "speaking" indicator (Zoom-specific selectors TBD)
 2. Correlate with which audio track has non-silent data
 3. Vote: track N -> speaker name
-4. Lock after 3 votes at 70% ratio
+4. Lock after 2 votes at 70% ratio
 
 ### Key Differences from SDK Approach
 

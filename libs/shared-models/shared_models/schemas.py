@@ -614,9 +614,10 @@ class MeetingUpdate(BaseModel):
 
 # --- Bot Configuration Update Schema ---
 class MeetingConfigUpdate(BaseModel):
-    """Schema for updating bot configuration (language and task)"""
+    """Schema for updating bot configuration (language, task, and allowed languages)"""
     language: Optional[str] = Field(None, description="New language code (e.g., 'en', 'es')")
     task: Optional[str] = Field(None, description="New task ('transcribe' or 'translate')")
+    allowed_languages: Optional[list[str]] = Field(None, description="Whitelist of allowed language codes. Whisper auto-detects, result discarded if not in list. Single entry forces that language.")
 
     @field_validator('language')
     @classmethod
@@ -624,6 +625,16 @@ class MeetingConfigUpdate(BaseModel):
         """Validate that the language code is one of the accepted faster-whisper codes."""
         if v is not None and v != "" and v not in ACCEPTED_LANGUAGE_CODES:
             raise ValueError(f"Invalid language code '{v}'. Must be one of: {sorted(ACCEPTED_LANGUAGE_CODES)}")
+        return v
+
+    @field_validator('allowed_languages')
+    @classmethod
+    def validate_allowed_languages(cls, v):
+        """Validate that all language codes in the whitelist are accepted."""
+        if v is not None:
+            for code in v:
+                if code not in ACCEPTED_LANGUAGE_CODES:
+                    raise ValueError(f"Invalid language code '{code}' in allowed_languages. Must be one of: {sorted(ACCEPTED_LANGUAGE_CODES)}")
         return v
 
     @field_validator('task')

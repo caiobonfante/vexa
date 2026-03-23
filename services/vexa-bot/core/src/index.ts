@@ -71,8 +71,19 @@ let segmentPublisher: SegmentPublisher | null = null;
 export function getSegmentPublisher(): SegmentPublisher | null { return segmentPublisher; }
 let speakerManager: SpeakerStreamManager | null = null;
 let vadModel: SileroVAD | null = null;
-/** Per-speaker detected language — locked after high-confidence detection */
-const speakerLanguages: Map<string, string> = new Map();
+/** Per-speaker VAD states for streaming mode (GMeet only) */
+import type { VadSpeakerState } from './services/vad';
+const vadSpeakerStates: Map<string, VadSpeakerState> = new Map();
+/** Whitelist of allowed language codes — if set, segments in other languages are discarded */
+let allowedLanguages: string[] | null = null;
+/** Per-speaker last detected language — used in onSegmentConfirmed where Whisper result isn't available */
+const lastDetectedLanguage: Map<string, string> = new Map();
+/** Pipeline telemetry counters — module-level so entry gate VAD can update them */
+let pipelineTelemetry: {
+  vadChunksProcessed: number;
+  vadChunksRejected: number;
+  [key: string]: any;
+} | null = null;
 let activeSpeakerStreamHandles: SpeakerStreamHandle[] = [];
 /** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
 let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
@@ -393,10 +404,11 @@ const handleRedisMessage = async (message: string, channel: string, page: Page |
       }
       
       if (command.action === 'reconfigure') {
-          log(`Processing reconfigure command: Lang=${command.language}, Task=${command.task}`);
+          log(`Processing reconfigure command: Lang=${command.language}, Task=${command.task}, AllowedLangs=${command.allowed_languages || 'none'}`);
 
           // Update Node.js state
           currentLanguage = command.language;
+          allowedLanguages = command.allowed_languages?.length ? command.allowed_languages : null;
           currentTask = command.task;
 
           // Trigger browser-side reconfiguration via the exposed function
@@ -1028,14 +1040,17 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       vadModel = null;
     }
 
+    const isGoogleMeet = botConfig.platform === 'google_meet';
     speakerManager = new SpeakerStreamManager({
       sampleRate: 16000,
       minAudioDuration: 3,     // 3s of unconfirmed audio before submission
       submitInterval: 2,       // submit every 2s — lower latency
       confirmThreshold: 2,     // 2 consecutive matches — faster confirmation
       maxBufferDuration: 120,  // trim buffer front when exceeding 120s total
-      idleTimeoutSec: 15,      // 15s idle → emit + reset (high because silence filter)
+      idleTimeoutSec: 15,      // 15s idle → emit + reset
     });
+    // VAD gating moved to handlePerSpeakerAudioData entry (per-speaker streaming).
+    // SpeakerStreamManager no longer does VAD — it only receives real speech.
 
     // onSegmentReady: transcribe the buffer (called every submitInterval)
     // Does NOT publish — just transcribes and feeds result back for confirmation.
@@ -1051,12 +1066,15 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       totalConfirmLatencyMs: 0,  // time from buffer start to confirmation
       reconfirmations: 0,        // times the same text was confirmed again (wasted work)
       whisperSegmentCounts: [] as number[],  // how many segments Whisper returns per call
+      vadChunksProcessed: 0,     // total audio chunks checked by entry VAD
+      vadChunksRejected: 0,      // chunks rejected as silence by entry VAD
     };
+    pipelineTelemetry = telemetry; // expose to module-level for entry gate VAD
     const telemetryInterval = setInterval(() => {
       const avgWhisper = telemetry.whisperCalls > 0 ? (telemetry.totalWhisperMs / telemetry.whisperCalls).toFixed(0) : 'n/a';
       const avgConfirmLatency = telemetry.segmentsConfirmed > 0 ? (telemetry.totalConfirmLatencyMs / telemetry.segmentsConfirmed / 1000).toFixed(1) : 'n/a';
       const avgWhisperSegs = telemetry.whisperSegmentCounts.length > 0 ? (telemetry.whisperSegmentCounts.reduce((a,b) => a+b, 0) / telemetry.whisperSegmentCounts.length).toFixed(1) : 'n/a';
-      log(`[📊 TELEMETRY] whisper=${telemetry.whisperCalls} (${avgWhisper}ms avg, ${telemetry.whisperFailures} failed) | drafts=${telemetry.draftsEmitted} confirmed=${telemetry.segmentsConfirmed} discarded=${telemetry.segmentsDiscarded} | confirm_latency=${avgConfirmLatency}s | whisper_segs/call=${avgWhisperSegs} | reconfirm=${telemetry.reconfirmations}`);
+      log(`[📊 TELEMETRY] whisper=${telemetry.whisperCalls} (${avgWhisper}ms avg, ${telemetry.whisperFailures} failed) | drafts=${telemetry.draftsEmitted} confirmed=${telemetry.segmentsConfirmed} discarded=${telemetry.segmentsDiscarded} | confirm_latency=${avgConfirmLatency}s | whisper_segs/call=${avgWhisperSegs} | reconfirm=${telemetry.reconfirmations} | vad=${telemetry.vadChunksProcessed}/${telemetry.vadChunksRejected} (checked/rejected)`);
     }, 30000);
 
     speakerManager.onSegmentReady = async (speakerId: string, speakerName: string, audioBuffer: Float32Array) => {
@@ -1064,9 +1082,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
       // Language strategy:
       // - If user explicitly set a language → always use it (respect the choice)
-      // - Otherwise → auto-detect (null), keep multilingual support
+      // - If allowedLanguages has exactly 1 entry → force that language (more accurate than auto-detect)
+      // - Otherwise → auto-detect (null), filter by allowedLanguages whitelist post-detection
       const explicitLang = currentLanguage && currentLanguage !== 'auto' ? currentLanguage : null;
-      const lang = explicitLang || speakerLanguages.get(speakerId) || null;
+      const singleAllowed = !explicitLang && allowedLanguages?.length === 1 ? allowedLanguages[0] : null;
+      const lang = explicitLang || singleAllowed || null;
 
       const whisperStartMs = Date.now();
       try {
@@ -1087,6 +1107,14 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
           if (!lang && prob > 0 && prob < 0.3) {
             telemetry.segmentsDiscarded++;
             log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
+            speakerManager!.handleTranscriptionResult(speakerId, '');
+            return;
+          }
+
+          // 1b. Language whitelist (when allowedLanguages has 2+ entries and auto-detecting)
+          if (allowedLanguages && allowedLanguages.length > 1 && result.language && !allowedLanguages.includes(result.language)) {
+            telemetry.segmentsDiscarded++;
+            log(`[🚫 LANG BLOCKED] ${speakerName} | detected=${result.language} not in [${allowedLanguages}] | "${result.text}" — discarded`);
             speakerManager!.handleTranscriptionResult(speakerId, '');
             return;
           }
@@ -1129,6 +1157,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
             log(`[🚫 HALLUCINATION] ${speakerName} | "${result.text}"`);
             speakerManager!.handleTranscriptionResult(speakerId, '');
             return;
+          }
+
+          // Track detected language per speaker (used by onSegmentConfirmed)
+          if (result.language) {
+            lastDetectedLanguage.set(speakerId, result.language);
           }
 
           // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
@@ -1206,7 +1239,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
         return;
       }
       const explicitLang = currentLanguage && currentLanguage !== 'auto' ? currentLanguage : null;
-      const lang = explicitLang || 'en';
+      const lang = explicitLang || lastDetectedLanguage.get(speakerId) || 'en';
       const startSec = (bufferStartMs - segmentPublisher.sessionStartMs) / 1000;
       const endSec = (bufferEndMs - segmentPublisher.sessionStartMs) / 1000;
       const fullSegmentId = `${segmentPublisher.sessionUid}:${segmentId}`;
@@ -1246,6 +1279,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 const lastReResolveTime = new Map<string, number>();
 /** Track last known participant count to detect joins/leaves */
 let lastParticipantCount = 0;
+/** Per-speaker last audio received timestamp (Node.js side) — for silence monitoring */
+const speakerLastAudioMs: Map<string, number> = new Map();
 
 /** Check if a name is already assigned to a different speaker in the SpeakerStreamManager. */
 function isDuplicateSpeakerName(name: string, excludeSpeakerId: string): boolean {
@@ -1292,7 +1327,7 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     // Detect participant count change → invalidate ALL mappings (including locks)
     // Google Meet reassigns audio tracks when participants join/leave.
     const lastResolve = lastReResolveTime.get(speakerId) || 0;
-    const reResolveInterval = locked ? 5_000 : (currentName ? 5_000 : 2_000);
+    const reResolveInterval = locked ? 5_000 : (currentName ? 5_000 : 1_000);
     if (Date.now() - lastResolve > reResolveInterval) {
       lastReResolveTime.set(speakerId, Date.now());
 
@@ -1329,13 +1364,70 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
         });
         log(`[📡 SPEAKER EVENT] "${newName}" joined → Redis`);
       }
+
+      // Fallback: if unmapped for 15s+ and GMeet, assign by participant list order.
+      // This handles the case where speaking detection is completely broken (stale CSS selectors).
+      if (!currentName && platformKey === 'googlemeet') {
+        const firstAudio = speakerLastAudioMs.get(speakerId) || Date.now();
+        if (Date.now() - firstAudio > 15_000) {
+          try {
+            const state = await page.evaluate((selfName: string) => {
+              const getNames = (window as any).__vexaGetAllParticipantNames;
+              if (typeof getNames !== 'function') return null;
+              const data = getNames() as { names: Record<string, string>; speaking: string[] };
+              const selfLower = selfName.toLowerCase();
+              return Object.values(data.names).filter(n => {
+                const lower = n.toLowerCase();
+                return !(lower.includes(selfLower) || selfLower.includes(lower));
+              });
+            }, currentBotConfig?.botName || 'Vexa Bot');
+
+            if (state && speakerIndex < state.length) {
+              const fallbackName = state[speakerIndex];
+              if (fallbackName && !isDuplicateSpeakerName(fallbackName, speakerId)) {
+                log(`[🔄 SPEAKER FALLBACK] Track ${speakerIndex}: assigning "${fallbackName}" by participant order (no votes after 15s)`);
+                speakerManager.updateSpeakerName(speakerId, fallbackName);
+                await segmentPublisher.publishSpeakerEvent({
+                  speaker: fallbackName,
+                  type: 'joined',
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          } catch {}
+        }
+      }
     }
   }
 
-  // VAD disabled — small audio chunks from both Teams caption flush and
-  // Google Meet per-speaker streams are too short for Silero VAD to
-  // reliably detect speech. Whisper's own no_speech_prob filter handles
-  // silence rejection downstream.
+  // Per-speaker streaming VAD gate (GMeet only).
+  // Filters ambient noise BEFORE feedAudio() so lastAudioTimestamp only updates
+  // on real speech. This lets the 15s idle timeout fire correctly when a speaker
+  // stops talking but their mic still emits low-level room noise.
+  const isGMeet = currentPlatform === 'google_meet';
+  if (isGMeet && vadModel) {
+    // Get or create per-speaker VAD state
+    if (!vadSpeakerStates.has(speakerId)) {
+      vadSpeakerStates.set(speakerId, vadModel.createSpeakerState());
+    }
+    const vadState = vadSpeakerStates.get(speakerId)!;
+    const isSpeech = await vadModel.isSpeechStreaming(audioData, vadState);
+    if (pipelineTelemetry) pipelineTelemetry.vadChunksProcessed++;
+
+    if (!isSpeech) {
+      if (pipelineTelemetry) pipelineTelemetry.vadChunksRejected++;
+      return; // Skip feedAudio — ambient noise, don't update lastAudioTimestamp
+    }
+  }
+
+  // Track audio arrival for silence monitoring (only reached for real speech)
+  const prevMs = speakerLastAudioMs.get(speakerId);
+  const nowMs = Date.now();
+  if (prevMs && (nowMs - prevMs) > 30000) {
+    const speakerName = speakerManager.getSpeakerName(speakerId) || speakerId;
+    log(`[🔊 AUDIO RESUMED] ${speakerName} — audio arrived after ${((nowMs - prevMs) / 1000).toFixed(0)}s silence`);
+  }
+  speakerLastAudioMs.set(speakerId, nowMs);
 
   speakerManager.feedAudio(speakerId, audioData);
 }
@@ -1354,6 +1446,17 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
     }
   }
   activeSpeakerStreamHandles = [];
+
+  // Clean up browser-side monitoring intervals
+  if (page && !page.isClosed()) {
+    try {
+      await page.evaluate(() => {
+        const intervals = (window as any).__vexaPerSpeakerIntervals || [];
+        intervals.forEach((id: any) => clearInterval(id));
+        (window as any).__vexaPerSpeakerIntervals = [];
+      });
+    } catch {}
+  }
 
   // Flush remaining speaker buffers
   if (speakerManager) {
@@ -1437,7 +1540,7 @@ async function handleTeamsCaptionData(speakerName: string, captionText: string, 
   // before any of the new speaker's audio leaks into it.
   if (lastCaptionSpeakerId && lastCaptionSpeakerId !== speakerId && speakerManager) {
     log(`[PerSpeaker] Caption speaker change: flushing "${speakerManager.getSpeakerName(lastCaptionSpeakerId) || lastCaptionSpeakerId}" buffer`);
-    speakerManager.flushSpeaker(lastCaptionSpeakerId);
+    await speakerManager.flushSpeaker(lastCaptionSpeakerId);
   }
   lastCaptionSpeakerId = speakerId;
 
@@ -1535,34 +1638,100 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
 
     (window as any).logBot?.(`[PerSpeaker] Found ${mediaElements.length} media elements with audio`);
 
-    let streamCount = 0;
-    for (let i = 0; i < mediaElements.length; i++) {
-      const el = mediaElements[i] as any;
+    // Track connected streams by MediaStream ID to avoid double-binding
+    const connectedStreamIds = new Set<string>();
+    // Track per-stream audio activity for health monitoring
+    const streamCallCounts = new Map<number, number>();
+    const streamLastActive = new Map<number, number>();
+    let nextStreamIndex = 0;
+
+    function connectElement(el: HTMLMediaElement, index: number): boolean {
       try {
-        const stream: MediaStream = el.srcObject;
-        if (!stream || stream.getAudioTracks().length === 0) continue;
+        const stream: MediaStream = (el as any).srcObject;
+        if (!stream || stream.getAudioTracks().length === 0) return false;
+        const streamId = stream.id;
+        if (connectedStreamIds.has(streamId)) return false;
 
         const ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
         const source = ctx.createMediaStreamSource(stream);
         const processor = ctx.createScriptProcessor(BUFFER_SIZE, 1, 1);
 
+        streamCallCounts.set(index, 0);
+        streamLastActive.set(index, Date.now());
+
         processor.onaudioprocess = (e: AudioProcessingEvent) => {
           const data = e.inputBuffer.getChannelData(0);
+          streamCallCounts.set(index, (streamCallCounts.get(index) || 0) + 1);
           // Only send if there's actual audio (not silence)
           const maxVal = Math.max(...Array.from(data).map(Math.abs));
           if (maxVal > 0.005) {
-            (window as any).__vexaPerSpeakerAudioData(i, Array.from(data));
+            streamLastActive.set(index, Date.now());
+            (window as any).__vexaPerSpeakerAudioData(index, Array.from(data));
           }
         };
 
         source.connect(processor);
         processor.connect(ctx.destination);
-        streamCount++;
-        (window as any).logBot?.(`[PerSpeaker] Stream ${i} started (track: ${stream.getAudioTracks()[0].id.substring(0, 12)})`);
+        connectedStreamIds.add(streamId);
+
+        // Monitor track ending — log when MediaStreamTrack becomes "ended"
+        const track = stream.getAudioTracks()[0];
+        track.addEventListener('ended', () => {
+          (window as any).logBot?.(`[PerSpeaker] Track ${index} ENDED (streamId=${streamId.substring(0, 12)})`);
+          connectedStreamIds.delete(streamId);
+        });
+
+        (window as any).logBot?.(`[PerSpeaker] Stream ${index} started (track: ${track.id.substring(0, 12)}, streamId: ${streamId.substring(0, 12)})`);
+        return true;
       } catch (err: any) {
-        (window as any).logBot?.(`[PerSpeaker] Stream ${i} error: ${err.message}`);
+        (window as any).logBot?.(`[PerSpeaker] Stream ${index} error: ${err.message}`);
+        return false;
       }
     }
+
+    let streamCount = 0;
+    for (let i = 0; i < mediaElements.length; i++) {
+      if (connectElement(mediaElements[i], i)) streamCount++;
+    }
+    nextStreamIndex = mediaElements.length;
+
+    // Periodic re-scan: discover new audio elements (late joiners, element recycling)
+    const rescanInterval = setInterval(() => {
+      const currentElements = Array.from(document.querySelectorAll('audio, video')).filter((el: any) =>
+        !el.paused &&
+        el.srcObject instanceof MediaStream &&
+        el.srcObject.getAudioTracks().length > 0
+      ) as HTMLMediaElement[];
+
+      let newStreams = 0;
+      for (const el of currentElements) {
+        const stream: MediaStream = (el as any).srcObject;
+        if (stream && !connectedStreamIds.has(stream.id)) {
+          if (connectElement(el, nextStreamIndex)) {
+            newStreams++;
+            nextStreamIndex++;
+          }
+        }
+      }
+      if (newStreams > 0) {
+        (window as any).logBot?.(`[PerSpeaker] Re-scan: connected ${newStreams} new stream(s) (total tracked: ${connectedStreamIds.size})`);
+      }
+    }, 15000);
+
+    // Health monitoring: detect stale streams
+    const healthInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [idx, lastActive] of streamLastActive) {
+        const silentMs = now - lastActive;
+        if (silentMs > 30000) {
+          const calls = streamCallCounts.get(idx) || 0;
+          (window as any).logBot?.(`[PerSpeaker] Stream ${idx} silent for ${(silentMs/1000).toFixed(0)}s (onaudioprocess calls: ${calls})`);
+        }
+      }
+    }, 30000);
+
+    // Store intervals for cleanup
+    (window as any).__vexaPerSpeakerIntervals = [rescanInterval, healthInterval];
 
     return streamCount;
   });
@@ -1577,6 +1746,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
   
   // --- UPDATED: Parse and store config values ---
   currentLanguage = botConfig.language;
+  allowedLanguages = botConfig.allowedLanguages?.length ? botConfig.allowedLanguages : null;
   currentTask = botConfig.transcribeEnabled === false ? null : (botConfig.task || 'transcribe');
   currentRedisUrl = botConfig.redisUrl;
   currentConnectionId = botConfig.connectionId;
@@ -1589,6 +1759,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
 
   log(
     `Starting bot for ${platform} with URL: ${meetingUrl}, name: ${botName}, language: ${currentLanguage}, ` +
+    `allowedLanguages: ${allowedLanguages ? JSON.stringify(allowedLanguages) : 'none'}, ` +
     `task: ${currentTask}, transcribeEnabled: ${botConfig.transcribeEnabled !== false}, connectionId: ${currentConnectionId}`
   );
 

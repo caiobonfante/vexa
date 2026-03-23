@@ -125,10 +125,16 @@ Agent-to-agent boundaries where data crosses:
 
 | Check | Score | Evidence | Last checked | To reach 90+ |
 |-------|-------|----------|-------------|--------------|
-| Bot joins live meeting | 90 | 3 speakers found and locked | 2026-03-16 | Test with fresh stack |
-| Audio reaches TX service | 90 | HTTP 200 with non-empty text | 2026-03-16 | -- |
-| Speaker identity locks | 90 | All 3 locked permanently at 100% | 2026-03-16 | -- |
-| Segments in Redis Hash | 90 | 7 segments in DB, meeting 8791 | 2026-03-16 | Verify Redis Hash directly |
+| Bot joins live meeting | 90 | 3 speakers found and locked | 2026-03-23 | -- |
+| Audio reaches TX service | 90 | HTTP 200 with non-empty text | 2026-03-23 | -- |
+| Speaker identity locks (TTS) | 90 | All 3 locked permanently at 100% (TTS bots) | 2026-03-23 | -- |
+| Speaker identity locks (human) | 40 | Meeting 672: 23/215 segments unnamed, lock took 585s for speaker-0 | 2026-03-23 | Faster locking: reduce vote threshold, dedup tracks, handle overlapping speech |
+| Segment confirmation (GMeet) | 40 | Meeting 672: speaker-2 has 107s/226s/105s monolith segments, confirmation never triggers | 2026-03-23 | Debug why per-segment stability check fails on GMeet per-speaker audio |
+| Playback alignment | 50 | Normal segments OK, giant segments (confirmation failure) seek to wrong position | 2026-03-23 | Fix confirmation → fixes playback. WI-4 deployed for constant offset. |
+| Multi-track dedup | 40 | Same person on 2 tracks (speaker-0 + speaker-1) produces duplicate content | 2026-03-23 | Detect and merge tracks capturing same participant |
+| VAD filters silence | 85 | Sandbox: 7 skips on 30s silence gap. Live: VAD loads, 0 skips (no audio above threshold) | 2026-03-23 | Verify with real speech + silence gap in live meeting |
+| Language locking | 80 | Schema + API + bot wiring deployed, not tested live | 2026-03-23 | Live test with multi-language audio |
+| Segments in Redis Hash | 90 | 7 segments in DB, meeting 8791 | 2026-03-16 | -- |
 | WS live delivery | 90 | 3/3 segments via WS within 0.1s (meeting 377) | 2026-03-21 | -- |
 | REST /transcripts | 90 | 3 segments matching WS output (meeting 377) | 2026-03-21 | -- |
 | WS/REST consistency | 90 | 3/3 WS segments match REST text+speaker+completed | 2026-03-21 | -- |

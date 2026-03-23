@@ -213,7 +213,9 @@ export const googleNameSelectors: string[] = [
 
 // Google Meet speaking indicators (primary speaker detection)
 export const googleSpeakingIndicators: string[] = [
-  // Google Meet uses class-based detection primarily
+  // Semantic attribute — survives CSS class rotation across GMeet releases
+  '[data-audio-level]:not([data-audio-level="0"])',
+  // Obfuscated class names — may rotate with GMeet UI updates
   '.Oaajhc', // Speaking animation class
   '.HX2H7',  // Alternative speaking class
   '.wEsLMd', // Another speaking indicator
