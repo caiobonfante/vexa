@@ -14,7 +14,7 @@ This feature creates API tokens with specific permission scopes and enforces tho
 ### Components
 
 - **shared-models**: defines the token model, scope enum, and token prefixes
-- **admin-api**: creates scoped tokens (POST /admin/tokens)
+- **admin-api**: creates scoped tokens (POST /admin/users/{user_id}/tokens?scope=...)
 - **api-gateway**: reads token scope and enforces access control per endpoint
 
 ### Data flow
@@ -26,11 +26,20 @@ api-gateway (read token scope) → allow/deny request
 
 ### Key behaviors
 
-- Tokens have a scope field (e.g., bot, admin, read-only)
+- Tokens have a scope field (e.g., user, bot, tx, admin)
 - Token prefixes indicate scope (visible in the token string)
 - api-gateway checks scope before proxying to backend
 - Out-of-scope requests return 403
 - Unscoped (legacy) tokens have full access for backward compatibility
+
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Token creation requests + scope definitions | admin-api | Postgres |
+| **rendered** | Access control results (200/403 per endpoint per scope) | api-gateway | Test assertions |
+
+No collected datasets yet. This feature is deterministic — capture scope×endpoint matrix results for regression testing.
 
 ## How
 
@@ -39,7 +48,7 @@ This is a cross-service feature. Testing requires admin-api and api-gateway runn
 ### Verify
 
 1. Start the compose stack: `make all` (from `deploy/compose/`)
-2. Create a scoped token: `POST /admin/tokens` with `scope=bot`
+2. Create a scoped token: `POST /admin/users/{user_id}/tokens?scope=bot`
 3. Use the token for `GET /bots/status` — should succeed (200)
 4. Use the token for `GET /admin/users` — should fail (403)
 

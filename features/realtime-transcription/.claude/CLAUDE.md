@@ -33,7 +33,7 @@ You create the test data yourself — design conversation scripts, send TTS bots
 **When to transition:**
 - COLLECT → ITERATE: dataset is tagged and has baseline scoring
 - ITERATE → EXPAND: scoring plateaus (same score 3+ iterations) or errors come from uncovered scenarios
-- EXPAND → COLLECT: new manifest designed, need fresh data — run `/host-teams-meeting-auto` for a new meeting
+- EXPAND → COLLECT: new manifest designed, need fresh data — run `/host-teams-meeting-auto` (Teams) or `gmeet-host-auto.js` (GMeet) for a new meeting
 
 **When to stop:** all checks in the Certainty Table are 90+ AND the transcription output reads like a professional meeting transcript — correct speakers, clean text, no hallucinations, no missing utterances.
 
@@ -42,7 +42,7 @@ You create the test data yourself — design conversation scripts, send TTS bots
 Check in order:
 
 1. **Does `.env` exist and is infra verified?** Read `.env` and `tests/infra-snapshot.md`. If missing or stale → **ENV SETUP** → `/env-setup`
-2. **No dataset or no ground truth?** Check `data/raw/`. If empty → **COLLECT** → `/host-teams-meeting-auto` then `/collect`
+2. **No dataset or no ground truth?** Check `data/raw/`. If empty → **COLLECT** → `/host-teams-meeting-auto` (or `gmeet-host-auto.js` for GMeet) then `/collect`
 3. **Is scoring improving?** Read `tests/findings.md`. If improving → **ITERATE** → `/iterate`
 4. **Is scoring stuck?** Plateau or errors in uncovered scenarios → **EXPAND** → `/expand`, then back to COLLECT
 
@@ -54,9 +54,24 @@ Then **execute that stage immediately**. Do not stop at stage determination.
 
 When you need a fresh meeting (for COLLECT or re-collection after EXPAND):
 
+### Teams
 1. Run `/host-teams-meeting-auto` — creates browser session, Teams meeting, joins as host, starts auto-admit
 2. It outputs `MEETING_URL`, `NATIVE_MEETING_ID`, `MEETING_PASSCODE` and updates `.env`
 3. Bots sent to this meeting get auto-admitted — no human needed
+
+### Google Meet
+1. Create a browser session via bot-manager (`POST /sessions`)
+2. Run `gmeet-host-auto.js` via CDP — navigates to `meet.new`, joins as host, outputs `MEETING_URL` and `NATIVE_MEETING_ID`
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/gmeet-host-auto.js
+   ```
+3. Run `auto-admit.js` to auto-admit bots through the lobby (works for both GMeet and Teams)
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/auto-admit.js <meeting_url>
+   ```
+4. Bots sent to the GMeet URL get auto-admitted — no human needed
+
+Both platforms are fully autonomous. Use GMeet for testing per-speaker audio capture bugs (ScriptProcessorNode, silence handling). Use Teams for caption-driven pipeline testing.
 
 ## Scope
 

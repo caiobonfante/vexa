@@ -30,6 +30,15 @@ MCP client → api-gateway → mcp service → Postgres/backend → response
 - Gateway proxies MCP requests transparently to the mcp service
 - Error responses follow MCP/JSON-RPC error format
 
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | MCP tool call requests (JSON-RPC) | MCP clients | mcp service |
+| **rendered** | MCP tool responses (meeting data, transcripts) | mcp service | MCP clients |
+
+No collected datasets yet. This feature is request/response — capture request/response pairs for regression testing.
+
 ## How
 
 This is a cross-service feature. Testing requires api-gateway and mcp service running.

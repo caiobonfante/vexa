@@ -96,7 +96,7 @@ SpeakerStreamManager emits confirmed segment (segment_id, speaker, text, absolut
 
 Bot is the single publisher for both live delivery (WS) and persistence (stream).
 Collector is persistence-only — no WS publish, no speaker mapping, no dedup.
-Only confirmed segments are published (drafts disabled since per-segment splitting makes them misleading).
+Each WS tick sends a bundle: confirmed segments (completed=true) + pending draft for the active speaker (completed=false). Dashboard uses two-map model: confirmed by segment_id (append-only) + pendingBySpeaker (replaced per tick).
 
 ### Data Stages and Iteration Cost
 

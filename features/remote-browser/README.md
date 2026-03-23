@@ -21,7 +21,7 @@ Browser sessions are first-class meetings — created from the Meetings page, ma
 - **Persistent browser state** — cookies, localStorage, IndexedDB survive restarts (MinIO)
 - **Connect Agent** — one-click copy of instructions to paste into Claude or any AI agent
 
-## How it works
+## How
 
 Two persistent layers, separated:
 
@@ -39,6 +39,15 @@ On start: download both. On save: upload both. On next start: everything is ther
 **Option B: GitHub (recommended for teams)** — workspace clones from a private GitHub repo. On save: commit + push. Full git history, PRs, collaboration. Configured via dashboard (stored in localStorage).
 
 Browser data always uses MinIO (Chromium profile is binary, not git-friendly).
+
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Browser profile (cookies, localStorage, IndexedDB) + workspace files | Human interaction via VNC | MinIO/GitHub persistence |
+| **rendered** | Persisted state in MinIO/GitHub, accessible on next session start | Save operation | Next browser session |
+
+Data lives externally (MinIO: `s3://vexa-recordings/users/{id}/browser-userdata/`, GitHub: workspace repo). No local `data/` directory — persistence is the feature.
 
 ---
 

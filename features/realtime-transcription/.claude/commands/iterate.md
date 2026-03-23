@@ -23,7 +23,7 @@ The observer shows:
 
 ### Inventory datasets
 
-Read all manifests in `features/realtime-transcription/tests/datasets/*/manifest.md`.
+Read all manifests in `features/realtime-transcription/data/raw/*/manifest.md`.
 
 List active datasets with their scenario tags:
 

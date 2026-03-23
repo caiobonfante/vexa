@@ -2,6 +2,49 @@
 
 Features are **jobs to be done** — not code, not services, not infrastructure. A feature has a purpose you can explain, develop against, and validate. Features use the codebase; they don't own it.
 
+## Status (2026-03-23)
+
+| Feature | Status | Certainty | Key Gap |
+|---------|--------|-----------|---------|
+| [realtime-transcription](realtime-transcription/) | Active iteration | Teams 90, GMeet 90, Zoom 0 | Zoom not implemented; GMeet/Teams both E2E PASS |
+| [multi-platform](multi-platform/) | Partial | GMeet 75, Teams 65, Zoom 0 (weighted 50) | Zoom requires browser-based impl; Teams audio needs retest |
+| [remote-browser](remote-browser/) | PoC proven | 30 | Working PoC not integrated into feature; persistence untested |
+| [chat](chat/) | Code complete, untested | 0 | Full stack impl exists (~700 LOC); needs E2E validation |
+| [webhooks](webhooks/) | P0 complete | 85 | Envelope standardized; E2E delivery needs public URL test |
+| [speaking-bot](speaking-bot/) | Code complete, untested | 0 | TTS service + PulseAudio pipeline exist; needs E2E test |
+| [token-scoping](token-scoping/) | Validated | 90 | 14/14 tests pass; all 4 scopes enforced |
+| [mcp-integration](mcp-integration/) | Validated | 90 | 10/10 tests pass; 17 tools discoverable; P0 bugs fixed |
+| [post-meeting-transcription](post-meeting-transcription/) | Partial | 85 | Pipeline works, 100% speaker accuracy (2sp); dashboard playback untested |
+| [scheduler](scheduler/) | Core library done | 90 (unit) | 16/16 unit tests pass; executor not wired; REST API not built |
+| [calendar-integration](calendar-integration/) | Research complete | 0 | New feature — Google Calendar auto-join; calendar-service not built |
+
+**Blockers affecting all features:** 7 open bot join/leave bugs (#171, #166, #189, #190, #115, #123, #124) block live testing. Bot resource waste (#167, #168, #170) adds 81% unnecessary CPU load.
+
+### Open issues by feature (2026-03-23)
+
+| Feature | Issues | Highlights |
+|---------|--------|------------|
+| realtime-transcription | #191, #192, #193, #194, #157, #155, #156, #148 | Caption-driven speaker detection (#192), VAD segmentation (#191), fuzzy text matching (#194), Whisper alternatives (#148, #156) |
+| multi-platform | #171, #166, #189, #190, #115, #150, #128 | Teams admission bug (#171), GMeet join/leave bugs (#189, #190), Zoom SDK broken (#150, #128) |
+| remote-browser | #122 | Expose CDP WebSocket for remote debugging |
+| chat | #133 | Teams chat 'typing' but never delivers (#133) |
+| webhooks | — | Recently closed: durable delivery (#183), status tracking (#184) |
+| speaking-bot | #130, #131, #151 | Local TTS (#130), Ultravox voice assistant (#131), disable avatar (#151) |
+| token-scoping | #158, #160 | Per-meeting RBAC (#158), analytics token (#160) |
+| mcp-integration | #127, #139 | Interactive bot MCP tools (#127), LLM decision listener (#139) |
+| post-meeting-transcription | — | No open issues |
+| infrastructure | #173, #182, #142, #143, #144 | Reconciliation kills bots (#173), base migration (#182), image bloat (#142, #143) |
+| not feature-scoped | #121, #136, #137, #138, #141, #145, #146, #147, #159, #161 | Meeting metadata (#121), hybrid diarization (#136), data retention (#159), raw URL support (#161) |
+
+### Missing documentation pages
+
+| Feature | Missing page | Status |
+|---------|-------------|--------|
+| post-meeting-transcription | `docs/deferred-transcription.mdx`, `docs/per-speaker-audio.mdx` | Not created |
+| token-scoping | `docs/token-scoping.mdx` | Created |
+| remote-browser | No docs page | Not created |
+| transcript-rendering | `docs/transcript-rendering.mdx` | Not created (#174, #175) |
+
 ## Glossary
 
 These terms are used consistently across all feature docs. Use them by name.
@@ -13,8 +56,9 @@ These terms are used consistently across all feature docs. Use them by name.
 | **Script** | The utterances, speakers, timing, and scenario design fed to TTS bots during a collection run. Doubles as ground truth. |
 | **Scenario** | A specific pattern designed into a script: normal turns, rapid exchanges, overlaps, silence gaps, single-word utterances. Each targets a known weakness. |
 | **Collection run** | A live meeting session where bots speak from a script and we capture everything. The expensive outer loop. |
-| **Dataset** | A tagged, self-describing bundle of collected data + ground truth from one collection run. Has a manifest, an ID, scenario tags, and an infra snapshot. Datasets are the unit of reuse — you select which datasets to replay, combine datasets from different collection runs, and retire datasets that are superseded. |
-| **Collected data** | Everything captured during a collection run: audio, caption events, speaker changes, pipeline output — all timestamped. Lives inside a dataset. |
+| **Data stage** | A named step in the feature's data pipeline: **raw** (collected from real world), **core** (pipeline output), **rendered** (delivery output). Each stage has its own folder under `data/`. One stage's output is the next stage's input. |
+| **Dataset** | A tagged, self-describing bundle of data at a specific stage. Has a manifest, an ID, scenario tags. Lives under `data/{stage}/{dataset-id}/`. Datasets are the unit of reuse — same ID flows across stages (raw → core → rendered). |
+| **Collected data** | Everything captured during a collection run: audio, caption events, speaker changes — all timestamped. Lives in `data/raw/{dataset-id}/`. |
 | **Sandbox** | Offline replay environment. Feeds collected data through the pipeline without meetings, bots, or API costs. The cheap inner loop. |
 | **Replay** | A single execution of collected data through the pipeline in sandbox. `make play-replay`. |
 | **Scoring** | Comparing pipeline output to ground truth. Word-level attribution accuracy, content diff, utterance capture rate. |
@@ -58,11 +102,14 @@ features/{name}/
   .claude/CLAUDE.md      # Scope, gate, edges, certainty table
   .env.example           # Committed template — all vars with defaults/placeholders
   .env                   # Gitignored — actual values for this environment
+  data/                  # Feature's data, organized by pipeline stage
+    raw/                 # Collected from real world — audio, events, platform behavior
+    core/                # Pipeline output — confirmed segments, transcriptions
+    rendered/            # Delivery output — REST responses, WS captures, DB snapshots
   tests/
-    README.md            # Test strategy, datasets, results
+    README.md            # Test strategy, scoring, results
     findings.md          # Certainty table, gate verdict, action items
     feature-log.md       # Append-only activity log — observations, decisions, results
-    datasets/            # Tagged dataset bundles from collection runs
     Makefile             # Stage-aware test commands (reads from ../.env)
   {platform}/            # Platform-specific implementations (if multi-platform)
 ```
@@ -100,6 +147,81 @@ POSTGRES_URL=postgresql://postgres:postgres@localhost:5448/vexa_restore
 **`.env`** — gitignored, actual values for this machine/environment. Created during **env setup** by copying `.env.example` and filling in real values.
 
 The feature's `Makefile` and test scripts read from `.env`. The **infra snapshot** records the `.env` values at the time of a **collection run**.
+
+### data/ — Feature data organized by pipeline stage
+
+A feature knows its data. The `data/` directory organizes all datasets by the pipeline stage they represent. One stage's output is the next stage's input.
+
+#### Stages
+
+| Stage | What it contains | Example |
+|-------|-----------------|---------|
+| **raw** | Collected from the real world during a **collection run**. Audio, platform events, caption data, speaker changes. Unprocessed. | WAV files, caption-events.json, speaker-changes.txt |
+| **core** | Output of the feature's pipeline. Confirmed segments, transcriptions, scored results. | segments.json, scoring.md |
+| **rendered** | Delivery output. What clients see — REST responses, WebSocket captures, DB snapshots. | rest-output.json, ws-capture.json |
+
+Not every feature uses all three stages. A feature declares which stages it has:
+
+```markdown
+### Data stages
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| raw   | audio + caption events | collection run (live meeting) | transcription pipeline |
+| core  | confirmed segments | SpeakerStreamManager | delivery pipeline |
+```
+
+#### Directory structure
+
+```
+data/
+  raw/
+    {dataset-id}/              # One directory per collection run
+      manifest.md              # What, why, when, hypothesis, scenarios, infra
+      ground-truth.txt         # [GT] timestamp speaker "text"
+      infra-snapshot.md        # Frozen .env + service state at collection time
+      audio/                   # WAV files (per-utterance + combined)
+      events/                  # Platform events (caption, speaker change, DOM)
+  core/
+    {dataset-id}/              # Derived from a raw dataset (same ID)
+      segments.json            # Confirmed segments from pipeline
+      scoring.md               # Accuracy vs ground truth
+  rendered/
+    {dataset-id}/              # Derived from a core dataset (same ID)
+      rest-output.json         # GET /transcripts response
+      ws-capture.json          # WebSocket messages captured
+```
+
+A **dataset ID** flows across stages. `teams-3sp-diverse-20260320` appears in `data/raw/` after collection, in `data/core/` after replay, in `data/rendered/` after delivery testing. This makes lineage explicit — you can always trace rendered output back to the raw data that produced it.
+
+#### Dataset ID format
+
+`{platform}-{speakers}sp-{scenario-tag}-{YYYYMMDD}`
+
+Examples:
+- `teams-3sp-diverse-20260320` — 3 speakers, diverse scenarios, Teams, March 20
+- `gmeet-5sp-overlap-20260405` — 5 speakers, overlap focus, Google Meet, April 5
+
+#### Cross-feature data flow
+
+When one feature's output is another feature's input, the consuming feature references the producing feature's data stage:
+
+```
+realtime-transcription/data/core/     ← produced by transcription pipeline
+              |
+              v
+delivery/data/raw/                    ← delivery's "raw" IS transcription's "core"
+```
+
+A sub-feature's `data/raw/` may be a symlink or explicit reference to its parent's `data/core/`. The README documents this relationship.
+
+#### Rules
+
+- **Datasets are immutable.** Once collected/produced, never modify. If you need different processing, produce a new dataset in the next stage.
+- **Every dataset has a manifest.** No anonymous data files floating around.
+- **Stage folders that don't apply are omitted.** Don't create empty `data/rendered/` if the feature has no rendered stage.
+- **Ground truth lives in raw.** It's collected alongside the raw data, not derived.
+- **Infra snapshot lives in raw.** It records the conditions under which raw data was captured.
+- **Scoring lives in core/rendered.** It compares pipeline output to ground truth.
 
 ### tests/Makefile — Stage-aware commands
 
@@ -173,41 +295,44 @@ So: collect reality once, iterate against it many times. Only go back to real wo
 
 ### Artifacts
 
-Each **feature** that uses this cycle maintains in `tests/`:
+Each **feature** that uses this cycle maintains:
 
-| Artifact | Purpose | Example |
-|----------|---------|---------|
-| **Dataset(s)** | Tagged bundles of **collected data** + **ground truth** from **collection runs** | `datasets/teams-3sp-diverse-20260320/` |
-| **Replay** test | Feeds **datasets** through pipeline offline | `make play-replay` |
-| **Scoring** | Compares pipeline output to **ground truth** | Word-level attribution accuracy, content diff |
-| **Findings** | What broke, why, what to collect next | `findings.md` with **certainty scores** |
+| Artifact | Location | Purpose | Example |
+|----------|----------|---------|---------|
+| **Datasets** | `data/{stage}/{id}/` | Tagged bundles at each **data stage** | `data/raw/teams-3sp-diverse-20260320/` |
+| **Replay** test | `tests/Makefile` | Feeds **datasets** through pipeline offline | `make play-replay` |
+| **Scoring** | `data/core/{id}/scoring.md` | Compares pipeline output to **ground truth** | Word-level attribution accuracy, content diff |
+| **Findings** | `tests/findings.md` | What broke, why, what to collect next | **Certainty scores**, action items |
 
 ### Datasets
 
-A **dataset** is the unit of reuse. Each **collection run** produces one **dataset**. Datasets are tagged, self-describing, and independent — you can replay one dataset, combine several, or retire old ones.
+A **dataset** is the unit of reuse. Each **collection run** produces a raw **dataset**. Running the pipeline produces a core **dataset** from that raw. Same ID flows across **data stages** — lineage is always traceable.
+
+Datasets are tagged, self-describing, and independent — you can replay one dataset, combine several, or retire old ones.
 
 #### Directory structure
 
 ```
-tests/datasets/
-  {id}/
-    manifest.md          # What, why, when, hypothesis, scenarios, infra
-    ground-truth.txt     # Script send times: [GT] timestamp speaker "text"
-    infra-snapshot.md    # Frozen .env + service state at collection time
-    audio/               # WAV files (per-utterance + combined)
-    events/              # Platform events (caption, speaker change, DOM)
-    pipeline/            # Pipeline output (drafts, confirmed segments, logs)
-    README.md            # Human summary: what's in here, how to use it
+data/
+  raw/
+    {dataset-id}/
+      manifest.md          # What, why, when, hypothesis, scenarios, infra
+      ground-truth.txt     # Script send times: [GT] timestamp speaker "text"
+      infra-snapshot.md    # Frozen .env + service state at collection time
+      audio/               # WAV files (per-utterance + combined)
+      events/              # Platform events (caption, speaker change, DOM)
+  core/
+    {dataset-id}/            # Same ID as the raw dataset it was derived from
+      segments.json          # Confirmed segments from pipeline
+      scoring.md             # Accuracy vs ground truth
+      pipeline-logs/         # Drafts, confirmations, debug output
+  rendered/
+    {dataset-id}/            # Same ID as the core dataset it was derived from
+      rest-output.json       # GET /transcripts response
+      ws-capture.json        # WebSocket messages captured
 ```
 
-#### Dataset ID
-
-Format: `{platform}-{speakers}sp-{scenario-tag}-{YYYYMMDD}`
-
-Examples:
-- `teams-3sp-diverse-20260320` — 3 speakers, diverse scenarios, Teams, March 20
-- `teams-2sp-normal-20260320` — 2 speakers, normal turns, Teams, March 20
-- `gmeet-5sp-overlap-20260405` — 5 speakers, overlap focus, GMeet, April 5
+Dataset ID format and examples are defined in the [data/ section](#data--feature-data-organized-by-pipeline-stage) above.
 
 #### Dataset manifest (manifest.md)
 
@@ -562,7 +687,7 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 
 1. **Write the collection manifest** — fill out every section above
 2. **Review the manifest** — does every **scenario** have scoring criteria? Is every data type accounted for? Will the **replay** test be able to consume this data?
-3. **Create the dataset directory** — `tests/datasets/{id}/` using the [dataset ID format](#dataset-id). Copy the collection manifest into it as `manifest.md`.
+3. **Create the dataset directory** — `data/raw/{id}/` using the [dataset ID format](#data--feature-data-organized-by-pipeline-stage). Copy the collection manifest into it as `manifest.md`.
 4. Set up the meeting environment (live meeting, TTS bots, platform)
 5. **Verify capture is working** before running the full **script** — send one test utterance, check that all data types are being logged with timestamps
 6. Run the bots — they speak from the **script**
@@ -585,7 +710,7 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 
 #### Exit criteria
 
-- A **dataset** directory exists at `tests/datasets/{id}/` with the correct structure
+- A **dataset** directory exists at `data/raw/{id}/` with the correct structure
 - **Dataset manifest** (`manifest.md`) is complete: hypothesis, scenarios, files table, infra, baseline scoring
 - **Ground truth** file exists with all utterances, speakers, timestamps
 - **Collected data** files exist in the dataset: every row in the manifest's files table has a corresponding file
@@ -605,12 +730,12 @@ What .env values must the sandbox match? (Reference the infra snapshot.)
 **Purpose:** Improve the pipeline by replaying **datasets** and measuring improvement via **scoring**. This is where development happens.
 
 **Entry conditions:**
-- At least one **active** **dataset** exists in `tests/datasets/`
+- At least one **active** **dataset** exists in `data/raw/`
 - **Scoring** is not at **plateau**
 
 #### Select your datasets
 
-Before iterating, decide which **datasets** to replay against. Read the manifests in `tests/datasets/*/manifest.md`:
+Before iterating, decide which **datasets** to replay against. Read the manifests in `data/raw/*/manifest.md`:
 
 - Which **datasets** are `active`? Ignore `superseded` or `retired`.
 - Which **scenarios** does each dataset cover? Match to the errors you're fixing.
@@ -724,3 +849,149 @@ Repeat steps 1-7. Each iteration should take seconds to minutes, not hours.
 3. **Sandbox iteration** — **Replay**, **score**, diagnose, fix, repeat (**inner loop**)
 4. **Expand** — Hit **plateau**, design new **scenarios**, new **script**, new **collection run** (**outer loop**)
 5. **Gate** — All **certainty scores** >= 80, docs gate passes
+
+## Spec-driven features
+
+Not every feature interacts with the real world. Features like **webhooks**, **MCP integration**, and **token-scoping** are **deterministic, spec-driven** — the ground truth is the API contract, not a recording. These features don't need collection runs, TTS bots, or audio replay. They need specs, contract tests, and fast iteration.
+
+### Why a different cycle
+
+| | Real-world features | Spec-driven features |
+|---|---|---|
+| **Ground truth** | Script TTS bots speak from | API spec (expected request/response) |
+| **Expensive step** | Collection run (live meeting) | Nothing — iteration is always cheap |
+| **Inner loop** | Replay audio → score → fix | Run test script → check assertions → fix |
+| **Outer loop** | New scenarios → new collection | Research → new spec items → new tests |
+| **Plateau** | Errors in uncovered scenarios | Gaps found by research or competitor analysis |
+| **Data** | Audio, caption events, segments | Request/response pairs, payload captures |
+
+### Spec-driven cycle
+
+```
+1. RESEARCH                      2. SPEC                         3. BUILD & TEST
+   External                         Contract                        Inner loop
+   ──────────                        ────────                        ──────────
+   What do competitors do?           Define the contract:            Implement the spec
+   What does the protocol            - Event catalog / tool list     Run make test
+   support that we don't?            - Payload schemas               Check assertions
+   What do users need?               - Error cases                   Fix, re-run
+                                     - Edge cases                    Seconds per cycle
+   What broke in production?
+   What did users report?         Write as test assertions
+                                  BEFORE writing code               All tests pass?
+   Produce: RESEARCH.md                                             Update findings.md
+                                  Produce: SPEC.md                  Update certainty scores
+                                          test scripts
+                                                                    Done? → GATE
+                         ◄── plateau / gap found ──────────────────┘
+```
+
+### Stage 0: ENV SETUP (same as real-world features)
+
+Verify infra, create `.env`, run `make smoke`. Same process, simpler services.
+
+### Stage 1: RESEARCH
+
+**Purpose:** Understand what "great" looks like before writing code. Produce `RESEARCH.md`.
+
+**What you do:**
+1. **Audit current implementation** — read the code, map what exists
+2. **Competitive analysis** — what do Recall.ai, Fireflies, Stripe, etc. do?
+3. **Protocol/standard analysis** — what does MCP/webhook best practice say?
+4. **User/issue analysis** — what are users asking for? What broke?
+5. **Gap identification** — what's missing, what's broken, what's inconsistent?
+6. **Priority ranking** — P0 (fix now), P1 (quick wins), P2 (medium), P3 (big bets)
+
+**Exit criteria:**
+- `RESEARCH.md` exists with prioritized gaps and recommendations
+- Clear understanding of what "done" looks like for each priority level
+
+**Constraints:**
+- Do NOT write code during research — understand first
+- Do NOT skip competitive analysis — you can't know what's missing without context
+- Do NOT limit research to reading docs — test the actual running system
+
+### Stage 2: SPEC
+
+**Purpose:** Turn research into a testable contract. Write test assertions BEFORE implementation.
+
+**What you do:**
+1. **Pick a priority batch** — start with P0, then P1. Don't boil the ocean.
+2. **Write the spec** — for each item in the batch:
+   - What is the expected behavior? (request → response, event → payload)
+   - What are the edge cases? (missing fields, invalid input, auth failures)
+   - What is the payload schema? (required fields, types, format)
+3. **Write test assertions** — add test cases to the feature's test script that assert the spec. These tests SHOULD FAIL initially (the feature doesn't do this yet).
+4. **Update CLAUDE.md certainty table** — add checks for each spec item at score 0.
+
+**Artifacts:**
+- `tests/spec-{batch}.md` — the spec for this batch (what to build, expected behavior)
+- Updated test scripts with new assertions
+- Updated `findings.md` with new certainty checks
+
+**Exit criteria:**
+- Spec is written and reviewable
+- Test assertions exist that will validate the spec
+- Running `make test` shows the new tests failing (expected — not implemented yet)
+
+**Constraints:**
+- Do NOT implement during spec — define the contract first
+- Each spec item must have at least one test assertion
+- Spec items must be small enough to implement and test independently
+
+### Stage 3: BUILD & TEST (inner loop)
+
+**Purpose:** Implement the spec, one item at a time, validating with tests after each change.
+
+**What you do:**
+1. **Pick one spec item** — smallest, most foundational first
+2. **Implement** — make the minimal code change in the service(s)
+3. **Run `make test`** — check if the assertion passes
+4. **If fail** — diagnose, fix, re-run. Seconds per cycle.
+5. **If pass** — update `findings.md` certainty score, move to next item
+6. **Capture evidence** — save request/response pairs to `data/rendered/` for regression
+
+**Repeat** until all spec items in the batch pass.
+
+**Exit to RESEARCH:**
+- During implementation, you discover the spec is wrong or incomplete
+- You find a new gap not covered by research
+- A user reports a new issue
+- Back to Stage 1 with specific questions
+
+**Exit to GATE:**
+- All spec items pass
+- All certainty scores >= 80
+- Docs updated
+
+**Constraints:**
+- Do NOT skip tests — every change must be validated
+- Do NOT implement items not in the spec — if you want to add something, update the spec first
+- Do NOT batch multiple changes before testing — one item at a time
+- Capture request/response pairs for each passing test (regression data)
+
+### Makefile targets for spec-driven features
+
+| Stage | Targets | What they do |
+|-------|---------|-------------|
+| **Env setup** | `make env-check` | Verify `.env` exists, show config |
+| | `make smoke` | One request end-to-end — proves infra works |
+| **Spec validation** | `make test` | Run all test assertions against live services |
+| | `make test-{category}` | Run one category of tests |
+| **Evidence** | `make capture` | Save request/response pairs to `data/rendered/` |
+
+### Data stages for spec-driven features
+
+| Stage | Contents | Example |
+|-------|----------|---------|
+| **raw** | Not used (no collection run) | — |
+| **core** | Not used (no pipeline) | — |
+| **rendered** | Captured request/response pairs, webhook payloads | `data/rendered/webhook-payloads.jsonl`, `data/rendered/mcp-tool-responses/` |
+
+### Spec-driven feature lifecycle
+
+1. **Define** — README, CLAUDE.md (already done for webhooks, MCP, token-scoping)
+2. **Research** — Audit, competitive analysis, gap identification → `RESEARCH.md`
+3. **Spec** — Turn gaps into testable contracts → `tests/spec-{batch}.md`, test assertions
+4. **Build & Test** — Implement spec items, validate with tests → update `findings.md`
+5. **Gate** — All certainty scores >= 80, docs updated

@@ -39,6 +39,15 @@ client → api-gateway → bot-manager → vexa-bot → tts-service (text→audi
 - Meeting participants hear the bot speaking
 - Speak commands are queued (not overlapping)
 
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Text input + TTS-generated audio (WAV) | Speak API + tts-service | PulseAudio pipeline |
+| **rendered** | Audio heard by meeting participants | PulseAudio virtual mic | Meeting participants |
+
+No collected datasets yet. When testing matures, capture text→audio→playback traces for quality scoring.
+
 ## How
 
 This is a cross-service feature. Testing requires the full compose stack with tts-service and a mock meeting.

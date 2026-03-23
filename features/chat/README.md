@@ -33,6 +33,15 @@ Reading:  meeting chat DOM → vexa-bot → Redis → api-gateway → client
 - Messages are relayed via bot-manager and Redis
 - Chat works across supported meeting platforms
 
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Chat messages from meeting DOM (timestamped) | Live meeting capture | Validation, replay |
+| **rendered** | API responses (GET /bots/{id}/chat) | api-gateway | Clients |
+
+No collected datasets yet. When testing matures, capture raw chat DOM events + API responses during live meetings.
+
 ## How
 
 This is a cross-service feature. Testing requires the full compose stack with a mock meeting.

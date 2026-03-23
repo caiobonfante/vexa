@@ -2,56 +2,88 @@
 
 ## Why
 
-Live transcription prioritizes speed over accuracy. After the meeting ends, re-transcribing the full recording with the complete audio context produces higher quality output and better speaker mapping.
+Not all users want realtime transcription. Some just want recording + speaker events during the meeting, then high-quality transcription on demand afterward. Post-meeting transcription is cheaper (one Whisper pass over the full recording) and more reliable (no streaming edge cases, full audio context).
+
+This is a basic use case for meeting bots — record, then transcribe.
 
 ## What
 
-This feature triggers deferred re-transcription after a meeting ends, producing an improved transcript with better speaker attribution.
-
-### Documentation
-- [Deferred Transcription](../../docs/deferred-transcription.mdx)
-- [Per-Speaker Audio](../../docs/per-speaker-audio.mdx)
+User triggers transcription after a completed meeting. The system downloads the recording from storage, runs Whisper on the full audio, maps speakers using speaker events collected during the meeting, and writes segments to the database. The dashboard shows the result with click-to-play (segment click seeks the recording to that timestamp).
 
 ### Components
 
-- **transcription-collector**: triggers deferred processing after meeting ends, runs SPLM (speaker-language mapping)
-- **transcription-service**: re-transcribes the full recording with better quality settings
-- **bot-services**: provides the full meeting recording
+- **bot-manager**: orchestrates the full flow — downloads recording, calls transcription service, maps speakers, writes to Postgres
+- **transcription-service**: Whisper API (`/v1/audio/transcriptions`) — transcribes the full recording
+- **vexa-bot**: during meeting, records audio (uploads to MinIO) and collects speaker events (sent on exit)
+- **api-gateway**: proxies `POST /meetings/{id}/transcribe` to bot-manager, serves transcript via `GET /transcripts`
+- **dashboard**: renders transcript segments with click-to-play recording playback
 
 ### Data flow
 
 ```
-recording file → transcription-service (full re-transcription)
-                        ↓
-              transcription-collector (SPLM)
-                        ↓
-              Postgres (update transcript)
-                        ↓
-              api-gateway (serves improved version)
+[During meeting]
+  bot records audio → uploads to MinIO (recordings/{user_id}/{recording_id}/{session_uid}.{format})
+  bot accumulates speaker_events in memory (SPEAKER_START/SPEAKER_END per participant)
+  bot exits → sends speaker_events to bot-manager via /status_change callback
+  bot-manager stores speaker_events in meeting.data JSONB
+
+[After meeting — user triggers]
+  POST /meetings/{id}/transcribe
+    → bot-manager downloads recording from MinIO
+    → bot-manager sends recording to transcription-service /v1/audio/transcriptions
+    → Whisper returns segments [{start, end, text}, ...]
+    → bot-manager runs _map_speakers_to_segments(speaker_events, segments)
+       (overlap algorithm: each segment assigned to speaker with most time overlap)
+    → bot-manager writes Transcription rows to Postgres
+    → bot-manager sets meeting.data.transcribed_at
+
+[Dashboard]
+  GET /transcripts/{platform}/{native_meeting_id} → returns segments with speakers
+  Click segment → seeks recording playback to segment.start_time
 ```
 
 ### Key behaviors
 
-- Deferred transcription is triggered automatically when meeting ends
-- Uses the full recording for better context (vs real-time chunked processing)
-- Speaker-language mapping (SPLM) improves speaker attribution
-- Updated transcript replaces the real-time version in the database
-- API serves the improved version transparently
+- Transcription is user-triggered via API, not automatic
+- Uses full recording for better context vs real-time chunked processing
+- Speaker mapping via timestamp overlap between speaker events and Whisper segments
+- 409 if transcription already exists (no re-run yet — multiple versions is a nice-to-have)
+- Dashboard playback: click segment to play recording at that position (currently has ~2-5s offset bug)
+
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Recording (webm) + speaker_events in meeting.data | Bot during meeting | Deferred transcription |
+| **core** | Whisper segments mapped to speakers | bot-manager transcribe endpoint | Postgres |
+| **rendered** | Transcript via REST + dashboard playback | api-gateway + dashboard | Users |
+
+Note: no dataset directories exist yet. `data/raw/`, `data/core/`, and `data/rendered/` are populated on demand during collection runs.
+
+### Configuration
+
+| Env var | Default | Where | Purpose |
+|---------|---------|-------|---------|
+| `TRANSCRIPTION_GATEWAY_URL` | (empty) | bot-manager | Whisper endpoint (preferred, falls back to `TRANSCRIPTION_SERVICE_URL`) |
+| `TRANSCRIPTION_SERVICE_URL` | `http://vexa-transcription-gateway:8084` | bot-manager | Whisper endpoint (fallback if `TRANSCRIPTION_GATEWAY_URL` unset) |
+| `MINIO_ENDPOINT` | `minio:9000` | bot-manager | Recording storage |
+| `MINIO_BUCKET` | `vexa-recordings` | bot-manager | Recording bucket |
 
 ## How
 
-This is a cross-service feature. Testing requires a completed meeting with a recording.
+### Test procedure
 
-### Verify
-
-1. Start the compose stack: `make all` (from `deploy/compose/`)
-2. Run a meeting with known speakers until completion
-3. Wait for deferred transcription to trigger
-4. Verify `GET /transcripts/{meeting_id}` returns the improved version
-5. Compare speaker attribution accuracy: target >=70% correct
+1. Start compose stack
+2. Host a meeting with TTS bots (known speakers, scripted utterances)
+3. Let meeting complete — verify recording uploaded + speaker_events stored
+4. Call `POST /meetings/{meeting_id}/transcribe`
+5. Verify `GET /transcripts` returns segments with correct speakers
+6. Verify dashboard playback: click segment seeks to correct position
+7. Score speaker attribution accuracy against ground truth (target: >=70%)
 
 ### Known limitations
 
-- Deferred processing delay is not well-defined (could be minutes)
-- No way to manually trigger re-transcription via API
-- Speaker mapping accuracy depends on recording quality
+- No re-transcription (409 if already transcribed) — multiple versions is a nice-to-have
+- Speaker mapping accuracy depends on speaker event quality (DOM-based detection)
+- Dashboard playback has ~2-5s offset (MediaRecorder vs SegmentPublisher start time drift)
+- No retry on transcription failure

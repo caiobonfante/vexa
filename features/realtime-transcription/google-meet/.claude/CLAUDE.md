@@ -33,16 +33,25 @@ Bot joins live Google Meet with multiple speakers -> TranscriptionClient logs sh
 ## How to test
 
 1. Ensure compose stack is running
-2. Create a live Google Meet via browser session
-3. POST to bot-manager to create a bot targeting the meeting URL
-4. Watch bot logs for:
+2. Create a browser session via bot-manager (`POST /sessions`)
+3. Host a Google Meet autonomously:
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/gmeet-host-auto.js
+   ```
+   This navigates to `meet.new`, joins as host, outputs `MEETING_URL` and `NATIVE_MEETING_ID`.
+4. Start auto-admit for the meeting:
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/auto-admit.js <meeting_url>
+   ```
+5. POST to bot-manager to create a bot targeting the meeting URL
+6. Watch bot logs for:
    - `[PerSpeaker] Found N media elements with audio`
    - `[SpeakerIdentity] Track N -> "{name}" LOCKED PERMANENTLY` for each speaker
    - TranscriptionClient HTTP 200 responses with non-empty text
-5. Check Redis: `XLEN transcription_segments`, `HGETALL meeting:{id}:segments`
-6. Check REST: `GET /transcripts/{meeting_id}` — verify speakers present
+7. Check Redis: `XLEN transcription_segments`, `HGETALL meeting:{id}:segments`
+8. Check REST: `GET /transcripts/{meeting_id}` — verify speakers present
 
-Testing uses real live meetings created on-demand via browser sessions — no mocks.
+Testing uses real live meetings created on-demand via browser sessions — no mocks. The entire flow (meeting creation, hosting, auto-admit, bot join) is fully autonomous.
 
 ## Diagnostic hints
 

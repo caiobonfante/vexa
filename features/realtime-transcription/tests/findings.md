@@ -20,18 +20,18 @@
 | VAD filters silence | 80 | No empty-text segments in output (indirect) | 2026-03-16 | Feed silent audio, verify zero segments |
 | MS Teams pipeline | 90 | 9-speaker live replay with correct attribution, 14 segments delivered | 2026-03-21 | -- |
 | Dashboard rendering | 90 | Simplified to two-map model (confirmed + pendingBySpeaker); legacy transcript.mutable handler removed; collector no longer publishes conflicting messages | 2026-03-22 | Verify with live meeting in browser |
-| Google Meet speaker mapping | 0 | Not tested — speaker mapping in TC, needs to move to bot | 2026-03-21 | Left-side: bot labels gmeet segments |
+| Google Meet speaker mapping | 90 | E2E PASS: 9/9 basic (100% speaker, 7% WER), 18/20 stress (100% speaker, 15% WER) — bot labels segments at source via isDuplicateSpeakerName dedup + voting; collector is persistence-only | 2026-03-23 | Test with human participants (non-TTS) |
 
 ## Platform Status
 
 | Platform | Gate Status | Bottleneck |
 |----------|-----------|------------|
-| Google Meet | **BLOCKED** | Speaker mapping not in bot yet (score 0) |
+| Google Meet | **PASS** | E2E pipeline validated: 9/9 basic, 18/20 stress; 100% speaker accuracy; 15% WER. Untested with human (non-TTS) participants. |
 | MS Teams | **PASS** | Core pipeline + delivery both at 90+; bot is single WS publisher; dashboard simplified |
 
-## Aggregate: Lowest score = 0 (Google Meet speaker mapping)
+## Aggregate: Lowest score = 80 (VAD filters silence — indirect evidence only)
 
-Gate verdict: **MS Teams PASS, Google Meet BLOCKED** — Delivery pipeline fixed: collector is persistence-only (no WS publish, no mapping, no dedup), bot publishes transcript bundles directly, dashboard uses two-map model. Google Meet untested.
+Gate verdict: **Both platforms PASS** — Delivery pipeline fixed: collector is persistence-only (no WS publish, no mapping, no dedup), bot publishes transcript bundles directly, dashboard uses two-map model. Google Meet E2E validated with TTS bots (2026-03-22/23); untested with human participants.
 
 ## Sandbox Iteration Results
 

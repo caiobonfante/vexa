@@ -6,11 +6,28 @@ Read the generic stage protocol first: `/.claude/commands/collect.md`
 
 ## Before you start
 
-If you don't have a meeting URL with auto-admit running, create one now:
+You need a meeting URL. How depends on the platform:
+
+**MS Teams (autonomous):**
 ```
 /host-teams-meeting-auto
 ```
-This gives you `MEETING_URL` in `.env` and auto-admits all bots. No human needed.
+Creates meeting, joins as host, starts auto-admit. Updates `.env` with `MEETING_URL`. No human needed.
+
+**Google Meet (needs Google-authenticated browser session):**
+```bash
+# Use an existing browser session with Google logged in, or create one and log in via VNC
+cd /home/dima/dev/vexa-restore/services/vexa-bot && \
+  CDP_URL="http://localhost:8066/b/{SESSION_TOKEN}/cdp" \
+  node /home/dima/dev/vexa-restore/features/realtime-transcription/scripts/gmeet-host-auto.js
+```
+Outputs `MEETING_URL` and `NATIVE_MEETING_ID`. Then start auto-admit:
+```bash
+sshpass -p "$SESSION_TOKEN" ssh -o StrictHostKeyChecking=no root@localhost -p $SSH_PORT \
+  "cd /workspace && nohup node /home/dima/dev/vexa-restore/features/realtime-transcription/scripts/auto-admit.js http://localhost:9222 google_meet > /tmp/auto-admit.log 2>&1 &"
+```
+
+Read `PLATFORM` from `.env` to determine which path to take. If not set, ask the user.
 
 ## You create the test data
 
@@ -19,10 +36,10 @@ You are fully autonomous. You design the conversation script, create TTS bots th
 ### How it works
 
 1. **Design a script** — decide what each speaker says, when, and why (targeting specific scenarios)
-2. **Send 1 RECORDER bot** — joins as default "VexaBot-XXX", captures audio + captions
+2. **Send 1 RECORDER bot** — joins as default "VexaBot-XXX", captures audio and transcribes
 3. **Send N SPEAKER bots** — one per speaker, each a separate user with unique `bot_name`
-4. **Bots speak via API** — `POST /bots/teams/{native_meeting_id}/speak` with text per speaker
-5. **Pipeline captures and transcribes** — recorder bot routes audio by speaker caption, sends to Whisper
+4. **Bots speak via API** — `POST /bots/{platform}/{native_meeting_id}/speak` with text per speaker
+5. **Pipeline captures and transcribes** — platform-specific audio routing, shared Whisper pipeline
 6. **You collect the output** — ground truth (what you sent) vs pipeline output (what came back)
 
 The ground truth is exact because YOU wrote the script and know the timestamps.
@@ -99,29 +116,46 @@ If coming from `/expand`, use the collection manifest's scenarios. Otherwise, de
 
 ### How to run bots
 
+The API is the same for both platforms — only `platform` and meeting fields differ.
+
+**Platform-specific fields:**
+
+| Field | MS Teams | Google Meet |
+|-------|---------|-------------|
+| `platform` | `"teams"` | `"google_meet"` |
+| `native_meeting_id` | numeric ID from URL | meeting code (e.g. `jbo-umhn-rge`) |
+| `passcode` | from URL `?p=` param | not used |
+| `meeting_url` | `https://teams.live.com/meet/{id}?p={pass}` | `https://meet.google.com/{code}` |
+| speak endpoint | `/bots/teams/{id}/speak` | `/bots/google_meet/{code}/speak` |
+
 ```bash
+# Read platform from .env
+PLATFORM=$(grep '^PLATFORM=' .env | cut -d= -f2)
+
 # 1. RECORDER bot (user 1 — captures transcription)
 curl -s -X POST http://localhost:8066/bots \
   -H "Content-Type: application/json" -H "X-API-Key: $API_TOKEN" \
-  -d '{"platform":"teams","native_meeting_id":"'$NATIVE_MEETING_ID'","passcode":"'$MEETING_PASSCODE'","meeting_url":"'$MEETING_URL'","transcribe_enabled":true}'
+  -d '{"platform":"'$PLATFORM'","native_meeting_id":"'$NATIVE_MEETING_ID'","meeting_url":"'$MEETING_URL'","transcribe_enabled":true}'
 
 # 2. SPEAKER bots (one per speaker — each with unique token + bot_name)
 curl -s -X POST http://localhost:8066/bots \
   -H "Content-Type: application/json" -H "X-API-Key: $ALICE_TOKEN" \
-  -d '{"platform":"teams","native_meeting_id":"'$NATIVE_MEETING_ID'","passcode":"'$MEETING_PASSCODE'","bot_name":"Alice","voice_agent_enabled":true}'
+  -d '{"platform":"'$PLATFORM'","native_meeting_id":"'$NATIVE_MEETING_ID'","meeting_url":"'$MEETING_URL'","bot_name":"Alice","voice_agent_enabled":true}'
 
 curl -s -X POST http://localhost:8066/bots \
   -H "Content-Type: application/json" -H "X-API-Key: $BOB_TOKEN" \
-  -d '{"platform":"teams","native_meeting_id":"'$NATIVE_MEETING_ID'","passcode":"'$MEETING_PASSCODE'","bot_name":"Bob","voice_agent_enabled":true}'
+  -d '{"platform":"'$PLATFORM'","native_meeting_id":"'$NATIVE_MEETING_ID'","meeting_url":"'$MEETING_URL'","bot_name":"Bob","voice_agent_enabled":true}'
 
 # ... repeat for Charlie, Diana, etc.
 
-# 3. Make a specific speaker's bot speak (use THAT speaker's meeting_id)
-curl -s -X POST "http://localhost:8066/bots/teams/$NATIVE_MEETING_ID/speak" \
+# 3. Make a specific speaker's bot speak (use THAT speaker's token)
+# Platform in the URL: /bots/{platform}/{native_meeting_id}/speak
+SPEAK_PLATFORM=$(echo $PLATFORM | sed 's/ms-teams/teams/')
+curl -s -X POST "http://localhost:8066/bots/$SPEAK_PLATFORM/$NATIVE_MEETING_ID/speak" \
   -H "Content-Type: application/json" -H "X-API-Key: $ALICE_TOKEN" \
   -d '{"text":"Hello everyone, let me start with the quarterly numbers."}'
 
-curl -s -X POST "http://localhost:8066/bots/teams/$NATIVE_MEETING_ID/speak" \
+curl -s -X POST "http://localhost:8066/bots/$SPEAK_PLATFORM/$NATIVE_MEETING_ID/speak" \
   -H "Content-Type: application/json" -H "X-API-Key: $BOB_TOKEN" \
   -d '{"text":"Thanks Alice, the numbers look great this quarter."}'
 ```
@@ -136,30 +170,43 @@ and speaker attribution is incorrect.
 
 `{platform}-{N}sp-{scenario-tag}-{YYYYMMDD}`
 
-Examples: `teams-3sp-diverse-20260320`, `teams-2sp-shortphrase-20260405`
+Examples: `teams-3sp-diverse-20260320`, `gmeet-2sp-normal-20260321`
 
 ### Dataset directory
 
 ```
-features/realtime-transcription/tests/datasets/{id}/
+features/realtime-transcription/data/raw/{id}/
   manifest.md
   ground-truth.txt
   infra-snapshot.md
   audio/               # Per-utterance WAVs
   events/              # caption-events.json, speaker-changes.json
-  pipeline/            # bot-logs.txt, segments.json
-  README.md
 ```
 
 ### What we capture
+
+**Shared (both platforms):**
 
 | Data | Source | Destination |
 |------|--------|------------|
 | Ground truth | Your script (send times + text) | `ground-truth.txt` |
 | Audio (WAV) | TTS bot output | `audio/` |
+| Pipeline output | SpeakerStreamManager drafts + confirmations | `pipeline/bot-logs.txt` |
+| REST segments | `GET /transcripts/{platform}/{native_meeting_id}` | `pipeline/rest-segments.json` |
+
+**MS Teams additional:**
+
+| Data | Source | Destination |
+|------|--------|------------|
 | Caption events | DOM MutationObserver on `[data-tid="closed-caption-text"]` | `events/caption-events.json` |
 | Speaker changes | `[data-tid="author"]` changes | `events/speaker-changes.json` |
-| Pipeline output | SpeakerStreamManager drafts + confirmations | `pipeline/bot-logs.txt` |
+
+**Google Meet additional:**
+
+| Data | Source | Destination |
+|------|--------|------------|
+| Speaker events | `__vexaSpeakerEvents` (SPEAKER_START/SPEAKER_END) | `events/speaker-events.json` |
+| Identity votes | Speaker identity voting/locking log lines | `events/identity-votes.txt` |
 
 ### Ground truth format
 
@@ -171,19 +218,27 @@ features/realtime-transcription/tests/datasets/{id}/
 ### How to capture logs
 
 ```bash
-docker logs --timestamps vexa-restore-bot-manager-1 2>&1 | tee tests/datasets/{id}/pipeline/raw-logs.txt
+docker logs --timestamps vexa-restore-bot-manager-1 2>&1 | tee data/raw/{id}/events/raw-logs.txt
 ```
 
 ### Existing datasets
 
-Check `features/realtime-transcription/tests/datasets/` for existing datasets. Review manifests to avoid duplicating scenarios and include controls from previous runs.
+Check `features/realtime-transcription/data/raw/` for existing datasets. Review manifests to avoid duplicating scenarios and include controls from previous runs.
 
-### Platform: MS Teams specifics
+### Platform specifics
 
+**MS Teams:**
 - Captions must be enabled in the meeting (bot does this automatically)
 - Caption events have ~1.5-2.5s delay from speech — expected, not a bug
 - Speaker changes in captions are atomic — no overlap
 - Single-word utterances may not generate separate caption events
+
+**Google Meet:**
+- Per-speaker audio streams — each speaker gets a separate audio track
+- Speaker identity via DOM voting — needs single-speaker windows to lock (3 votes at 70%)
+- First few seconds may have unmapped speakers (before voting locks)
+- No caption dependency — audio routing doesn't depend on a button press
+- Meeting host must admit bots from lobby (use auto-admit script)
 
 ### After collection — convert to dataset and continue
 

@@ -92,8 +92,8 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  | Returns text +         |              | PUBLISH -> tc:meeting:{id}:  |  |
 |  | word timestamps        |              |            mutable channel   |  |
 |  +------------------------+              |                              |  |
-|                                          | Only confirmed segments      |  |
-|                                          | (completed=true) published   |  |
+|                                          | Bundle per tick: confirmed   |  |
+|                                          | + pending draft per speaker  |  |
 |                                          +-------------+----------------+  |
 +--------------------------------------------+-----------+-------------------+
                                               |
@@ -212,6 +212,25 @@ Without this, audio capture silently stops within seconds.
 | `[jsname="BOHaEe"]` | Meeting container |
 
 These are obfuscated Google Meet class names. They change with UI updates — `selectors.ts` must be updated.
+
+### How to Test (fully autonomous)
+
+1. Ensure compose stack is running
+2. Create a browser session: `POST /sessions` to bot-manager
+3. Host a Google Meet:
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/gmeet-host-auto.js
+   ```
+   Outputs `MEETING_URL` and `NATIVE_MEETING_ID`.
+4. Start auto-admit:
+   ```bash
+   CDP_URL=<cdp_url> node features/realtime-transcription/scripts/auto-admit.js <meeting_url>
+   ```
+5. Send bot to join: `POST /bots` with the meeting URL
+6. Send TTS bots to speak (for automated testing)
+7. Verify in bot logs, Redis, and REST API
+
+No human needed — meeting creation, hosting, and lobby admission are all automated.
 
 ### Known Limitations
 

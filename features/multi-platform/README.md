@@ -54,7 +54,7 @@ client -> api-gateway -> bot-manager (detect platform from URL)
 
 All Google Meet types: bot joins as unauthenticated guest, goes through waiting room, host must admit.
 
-**Native ID validation** (from `shared_models/schemas.py`):
+**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
 - Standard: `^[a-z]{3}-[a-z]{4}-[a-z]{3}$`
 - Custom nickname: `^[a-z0-9][a-z0-9-]{3,38}[a-z0-9]$`
 
@@ -75,7 +75,7 @@ All Google Meet types: bot joins as unauthenticated guest, goes through waiting 
 
 All Teams types: bot joins as anonymous guest, may go through lobby, host must admit.
 
-**Native ID validation** (from `shared_models/schemas.py`):
+**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
 - Numeric: `^\d{10,15}$`
 - Hex hash: `^[0-9a-f]{16}$`
 
@@ -93,12 +93,21 @@ All Teams types: bot joins as anonymous guest, may go through lobby, host must a
 
 Zoom requires OAuth + Meeting SDK (self-hosted only).
 
-**Native ID validation** (from `shared_models/schemas.py`):
+**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
 - `^\d{9,11}$`
 
 **Out of scope:**
 - Zoom Events (unique per-registrant links)
 - Authenticated-only meetings
+
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Meeting URLs + platform detection results | Test matrix execution | Validation |
+| **core** | Join flow results per platform/meeting-type | Bot join attempts | Scoring (pass/fail per type) |
+
+No collected datasets yet. When testing matures, capture join flow traces (URL → platform detection → join result) per meeting type.
 
 ## How
 
