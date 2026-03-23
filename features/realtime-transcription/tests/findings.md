@@ -159,7 +159,7 @@ Real 3-person Google Meet with human participants (Speaker A, Speaker B, Speaker
 **Issue A: Speaker not identified initially (23 unnamed segments)**
 - `speaker-0` produced 23 segments with empty speaker name before identity locked at segment 23 (585.8s)
 - Speaker-0 was eventually identified as "Speaker A" but the first 22 segments (~0-516s) remain unnamed
-- Root cause: speaker identity voting needs 3 votes to lock. With 3 participants and overlapping speech, single-speaker windows (required for voting) were rare in the first minutes
+- Root cause: speaker identity voting needed 3 votes to lock (now reduced to 2, with weighted + overlap voting added). With 3 participants and overlapping speech, single-speaker windows (required for voting) were rare in the first minutes
 - **Severity: HIGH** — user sees "Unknown" for the first 8+ minutes
 
 **Issue B: Giant segments cause wrong chronological ordering (confirmation failure)**

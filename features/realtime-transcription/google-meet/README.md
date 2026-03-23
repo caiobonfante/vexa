@@ -58,7 +58,7 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  |  On each audio chunk:                                         |         |
 |  |    Query browser: who is speaking? (DOM indicators)           |         |
 |  |    If exactly 1 speaker active: vote(trackN = speakerName)    |         |
-|  |    After 3 votes at 70% ratio: LOCK permanently               |         |
+|  |    After 2 votes at 70% ratio: LOCK permanently               |         |
 |  |    Locked tracks return instantly, no more queries             |         |
 |  |    Constraint: one-name-per-track, one-track-per-name          |         |
 |  |                                                               |         |
@@ -75,7 +75,7 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 |  |    Confirmation: 2 consecutive matching transcripts               |     |
 |  |    Idle timeout: 15s no audio -> force flush                      |     |
 |  |    Max buffer: 120s -> trim                                       |     |
-|  |    VAD (Silero): disabled — chunks too short for reliable detect  |     |
+|  |    VAD (Silero): per-speaker entry gate in handlePerSpeakerAudioData |   |
 |  |                                                                   |     |
 |  |  Callbacks:                                                       |     |
 |  |    onSegmentReady ----------> (draft, send to Whisper)            |     |
@@ -116,7 +116,7 @@ Google Meet provides the cleanest audio pipeline of any supported platform. Each
 | 1 | **Per-Element ScriptProcessors** | Browser | Google Meet only | N independent AudioContexts at 16kHz, one per `<audio>` element. Silence filter (`maxVal > 0.005`) per stream. Teams uses a single ScriptProcessor + ring buffer instead (mixed audio) |
 | 2 | **Speaker Detection** | Browser | Google Meet only | MutationObserver on participant tiles + 500ms polling. Detects who is speaking via CSS class changes. Teams uses live captions for speaker identity instead |
 | 3 | **`__vexaPerSpeakerAudioData`** | Browser->Node bridge | Google Meet only | Exposed function. Carries `(elementIndex, audioArray)` -- index identifies which stream. Teams uses `__vexaTeamsAudioData(speakerName, audioArray)` -- different signature because speaker name is known from captions |
-| 4 | **Speaker Identity Voting** | Node | Google Meet only | `speaker-identity.ts` -- correlates "which track has audio" with "which DOM tile is speaking." 3 votes at 70% -> permanent lock. Teams doesn't need this -- captions provide speaker names directly |
+| 4 | **Speaker Identity Voting** | Node | Google Meet only | `speaker-identity.ts` -- correlates "which track has audio" with "which DOM tile is speaking." 2 votes at 70% -> permanent lock. Teams doesn't need this -- captions provide speaker names directly |
 | 5 | **SpeakerStreamManager (N instances)** | Node | Shared | `speaker-streams.ts` -- same code for both platforms. Google Meet uses N instances (one per audio element). Teams uses 1 instance (mixed audio, time-sliced by captions) |
 | 6 | **TranscriptionClient** | Node | Shared | `transcription-client.ts` -- identical for both platforms. HTTP POST WAV to Whisper, returns text + word timestamps |
 | 7 | **SegmentPublisher** | Node | Shared | `segment-publisher.ts` -- identical for both platforms. XADD to Redis stream, PUBLISH to pub/sub channel |
@@ -128,7 +128,7 @@ Google Meet gives **clean per-speaker audio** (no mixed stream, no diarization n
 
 - Audio activity and DOM speaking indicators are **correlated over time**
 - Voting only works when **exactly 1 speaker** is active (can't disambiguate during overlap)
-- Once locked (3 votes, 70% ratio), mapping is **permanent** for the session
+- Once locked (2 votes, 70% ratio), mapping is **permanent** for the session
 - Before locking, early audio may be attributed to `""` (unmapped) -- segments still captured, speaker name may update retroactively
 
 Unlike Teams (which relies on a single caption activation button), Google Meet's per-speaker architecture has **no single choke point** for audio capture. Each stream is independent -- if one fails, others continue.
@@ -157,7 +157,7 @@ Unlike Teams (which relies on a single caption activation button), Google Meet's
 1. Audio arrives on track N → `handlePerSpeakerAudioData(N, data)`
 2. Query browser: `__vexaGetAllParticipantNames()` → `{ names: {id: name}, speaking: [name] }`
 3. If exactly 1 speaker active: `recordTrackVote(N, speakerName)`
-4. After `LOCK_THRESHOLD=3` votes with `LOCK_RATIO=0.7`: mapping locks permanently
+4. After `LOCK_THRESHOLD=2` votes with `LOCK_RATIO=0.7`: mapping locks permanently
 5. Constraints: one-name-per-track, one-track-per-name
 
 **Speaking detection (browser-side):**
@@ -175,7 +175,7 @@ Uses the same offset-based sliding window as Teams (see [parent README](../READM
 - Each speaker gets independent `SpeakerStreamManager` instance
 - `submitBuffer` sends only unprocessed audio
 - Completed Whisper segments advance the offset
-- VAD (Silero) loaded but **disabled** — 4096-sample chunks (256ms) are too short for reliable detection; Whisper's own `no_speech_prob` handles silence rejection downstream
+- VAD (Silero) active at **entry gate** — per-speaker streaming state (`VadSpeakerState`), 512-sample windows, threshold 0.6, minSilence 250ms. Runs in `handlePerSpeakerAudioData` before audio reaches `feedAudio()`
 - Speaker leaving/muting triggers idle timeout → clean buffer flush
 
 ### GC Prevention
@@ -197,7 +197,7 @@ Without this, audio capture silently stops within seconds.
 | Speaker identity | DOM voting/locking + dedup (inferred) | Caption author (explicit) |
 | Diarization | Not needed | Caption boundaries |
 | Overlapping speech | Natural separation | Both in same stream |
-| VAD | Silero loaded but disabled (chunks too short) | Browser-side RMS filter |
+| VAD | Silero entry gate per speaker (512-sample windows, threshold 0.6) | Browser-side RMS filter |
 | Silence filter | `maxVal > 0.005` per element | `RMS < 0.01` on mixed stream |
 
 ### Key Selectors
@@ -208,6 +208,7 @@ Without this, audio capture silently stops within seconds.
 | `span.notranslate` | Participant name |
 | `.Oaajhc` | Speaking animation class |
 | `.gjg47c` | Silence class |
+| `[data-audio-level]` | Audio level indicator (speaking when not "0") |
 | `button[aria-label="Leave call"]` | Leave button |
 | `[jsname="BOHaEe"]` | Meeting container |
 
@@ -235,7 +236,7 @@ No human needed — meeting creation, hosting, and lobby admission are all autom
 ### Known Limitations
 
 1. **Obfuscated class names** — Google Meet uses compiled class names that change with deployments
-2. **First seconds** — speaker identity requires 3 votes to lock; first audio may be unnamed
+2. **First seconds** — speaker identity requires 2 votes to lock; first audio may be unnamed
 3. **Domain-restricted meetings** — bot joins as unauthenticated guest, may be rejected by org policy
 4. **Multiple speakers simultaneously** — voting only works when exactly 1 speaker is active; during overlap, no votes cast, existing locks used
 5. **Speaker identity with human participants** — TTS bots produce clean single-speaker windows, but human conversations have more overlap and ambiguity. See [CAPTION-SPEAKER-DESIGN.md](CAPTION-SPEAKER-DESIGN.md) for an open design exploring caption-based speaker identity as an alternative

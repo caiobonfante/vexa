@@ -175,7 +175,7 @@ Both feed into the same SpeakerStreamManager, just differently:
 
 | Platform | Audio Source | Speaker Identity | SpeakerStreamManager Instances |
 |----------|------------|-----------------|-------------------------------|
-| **Google Meet** | N separate `<audio>` elements, one per participant. Clean single-voice. | DOM class mutations + voting/locking (3 votes, 70% ratio) | N (one per channel) |
+| **Google Meet** | N separate `<audio>` elements, one per participant. Clean single-voice. | DOM class mutations + voting/locking (2 votes, 70% ratio) | N (one per channel) |
 | **MS Teams** | 1 mixed `<audio>` element, all participants combined. | Live captions `[data-tid="author"]` | 1 (on mixed stream, caption boundaries label output) |
 
 **Google Meet (multi-channel):**
@@ -217,7 +217,7 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 | **Per-element ScriptProcessors** | Google Meet | N independent AudioContexts, one per `<audio>` element | `index.ts` (`startPerSpeakerAudioCapture`) |
 | **Caption Observer + Audio Queue** | Teams | Ring buffer holds mixed audio, captions decide speaker routing | `platforms/msteams/recording.ts` |
 | **Speaker Detection (DOM voting)** | Google Meet | MutationObserver on speaking CSS classes, 500ms polling | `platforms/googlemeet/recording.ts` |
-| **Speaker Identity Voting** | Google Meet | Correlates audio activity with DOM indicators, locks after 3 votes at 70% | `services/speaker-identity.ts` |
+| **Speaker Identity Voting** | Google Meet | Correlates audio activity with DOM indicators, locks after 2 votes at 70% | `services/speaker-identity.ts` |
 | **speaker-mapper** | Teams | Maps Whisper word timestamps to caption speaker boundaries | `services/speaker-mapper.ts` |
 
 ## How
