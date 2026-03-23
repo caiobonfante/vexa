@@ -13,8 +13,8 @@ This is a **spec-driven feature**.
 
 ### Current stage: MVP3+ (Dashboard Integration & Hardening)
 
-**Built:** MVP0-MVP2 (commit `6608dadb`), MVP3 meeting pipeline (commit `464568de`), dashboard agent chat, browser sessions, per-user auth, full vexa CLI.
-**Current:** Hardening — env config gaps, auth plumbing, browser session lifecycle.
+**Built:** MVP0-MVP3, dashboard, all meeting/container/schedule commands verified working.
+**Current:** Wiring post-meeting auto-trigger, BOT_API_TOKEN for container spawning, server-side chat history.
 
 ### MVP roadmap
 

@@ -399,9 +399,76 @@ Start with Claude Code subscription (free for development). Explore open-source 
 | MVP1 done | 10/10 tests pass | Agent spawns and controls browser cross-container via vexa CLI + CDP |
 | MVP2 done | 13/13 tests pass | Full scheduled meeting pipeline, agent self-orchestrates, zero idle, Telegram |
 
-## Current status: MVP3+ (Dashboard Integration)
+## Current status: MVP3+ (Hardening)
 
-MVP0 through MVP2 built (commit `6608dadb`). MVP3 wired meeting pipeline to agentic runtime (commit `464568de`). Dashboard agent chat, browser sessions, live transcripts, and full vexa CLI added in subsequent commits. Currently hardening: auth gaps, env config, browser session lifecycle.
+MVP0-MVP2 built, MVP3 wired meeting pipeline + dashboard. Currently hardening auth, env config, and meeting lifecycle.
+
+### Verified agent capabilities
+
+**Meeting control** (via `vexa` CLI inside agent container):
+
+| Capability | Command | Status |
+|-----------|---------|--------|
+| Join meeting | `vexa meeting join --platform teams --url {url}` | Works |
+| Fetch live transcript | `vexa meeting transcript {id}` | Works (Redis+Postgres merge) |
+| Bot speaks (TTS) | `vexa meeting speak --text "Hello"` | Works (async, Redis pub/sub) |
+| Bot sends chat | `vexa meeting chat --text "Notes coming"` | Works |
+| Bot shares screen | `vexa meeting screen --type url --url {url}` | Works |
+| Stop bot | `vexa meeting stop --platform {p} --id {id}` | Works |
+| Check events | `vexa meeting events --platform {p} --id {id}` | Works |
+
+**Container orchestration:**
+
+| Capability | Command | Status |
+|-----------|---------|--------|
+| Spawn browser | `vexa container spawn --profile browser` | Works (needs `BOT_API_TOKEN`) |
+| Connect via CDP | `vexa browser connect {name}` | Works |
+| Spawn sibling agent | `vexa container spawn --profile agent` | Works (needs `BOT_API_TOKEN`) |
+| Schedule future work | `vexa schedule --at {time} chat "message"` | Works |
+| Workspace persistence | `vexa workspace save` | Works (MinIO sync) |
+
+**Scheduler** (Redis sorted sets, crash-safe):
+
+| Capability | Command | Status |
+|-----------|---------|--------|
+| Schedule at time | `vexa schedule --at "2026-03-25T09:00:00Z" chat "reminder"` | Works |
+| Schedule relative | `vexa schedule --in 5m chat "check status"` | Works |
+| Schedule recurring | `vexa schedule --every 3d chat "audit workspace"` | Works |
+| Job callbacks | `on_success` / `on_failure` URLs in job spec | Works |
+| Cancel job | `vexa schedule cancel {job_id}` | Works |
+
+### Meeting lifecycle (end-to-end flow)
+
+```
+User: "Join my meeting"
+  → Agent: vexa meeting join --platform teams --url {url}
+    → Bot-manager spawns bot container → joins meeting → transcribes
+      → Segments: bot → Redis stream → TC → Postgres + Redis hash
+      → Live WS: bot PUBLISH tc:meeting:{id}:mutable → api-gateway → dashboard
+    → Meeting ends: bot exit callback → status=completed
+      → post_meeting_hooks.py fires (if POST_MEETING_HOOKS configured)
+      → aggregate_transcription.py extracts participants/languages
+      → send_webhook.py delivers to user's webhook URL
+    → Container auto-removed (AutoRemove=True)
+```
+
+### What's wired but not configured
+
+| Gap | What's needed | Impact |
+|-----|---------------|--------|
+| `BOT_API_TOKEN` empty | Create service token, set in deploy/.env | Agent can't spawn containers or call Runtime API |
+| `POST_MEETING_HOOKS` empty | Set to `http://chat-api:8100/api/webhooks/meeting-completed` | No auto-trigger of agent after meeting ends |
+| Webhook receiver endpoint | ~20 lines in chat-api: receive meeting.completed → POST /api/chat | Agent doesn't auto-wake on meeting end |
+
+### What's not built yet
+
+| Feature | Effort | Description |
+|---------|--------|-------------|
+| Server-side chat history | Small | Store messages in Redis alongside session ID |
+| Global 401 interceptor | Small | Dashboard redirects to login on any auth failure |
+| Live meeting polling loop | None (prompt pattern) | Agent schedules `vexa schedule --in 30s chat "check transcript"` in a loop |
+| Agent-to-agent delegation | Medium | Shared workspace protocol, inter-agent messaging via scheduler |
+| Idle timeout callbacks | Medium | Notify downstream when container stops |
 
 ## Setup
 
