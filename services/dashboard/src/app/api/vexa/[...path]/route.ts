@@ -6,7 +6,7 @@ async function proxyRequest(
   params: Promise<{ path: string[] }>,
   method: string
 ): Promise<NextResponse> {
-  const VEXA_API_URL = process.env.VEXA_API_URL || "http://localhost:18056";
+  const VEXA_API_URL = process.env.VEXA_API_URL || "http://localhost:8066";
 
   // Get user's token from HTTP-only cookie (set during login)
   const cookieStore = await cookies();
@@ -15,39 +15,16 @@ async function proxyRequest(
   // Fall back to env variable for backwards compatibility
   const VEXA_API_KEY = userToken || process.env.VEXA_API_KEY || "";
 
-  const TC_URL = process.env.TC_URL || "http://localhost:8000"; // transcription-collector
-
   const { path } = await params;
   let pathString = path.join("/");
 
-  // Route /transcripts/* to transcription-collector (not bot-manager)
-  if (pathString.startsWith("transcripts")) {
-    const tcTarget = `${TC_URL}/${pathString}${request.nextUrl.searchParams.toString() ? `?${request.nextUrl.searchParams.toString()}` : ""}`;
-    try {
-      const resp = await fetch(tcTarget, {
-        headers: { "X-API-Key": VEXA_API_KEY, "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-      // TC returned error — return it
-      const errText = await resp.text();
-      return NextResponse.json({ error: errText }, { status: resp.status });
-    } catch (e) {
-      return NextResponse.json({ error: "Transcription service unavailable" }, { status: 503 });
-    }
-  }
-
-  // Route /recordings/* to bot-manager (already correct)
-
-  // Rewrite /meetings — combine bot-manager active bots + TC meeting history
+  // /meetings list: api-gateway doesn't have a combined list endpoint,
+  // so we build it from /bots/status + /meetings (TC)
   if (pathString === "meetings" && method === "GET") {
     const meetings: any[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Get active bots from bot-manager
+    // 1. Active bots from api-gateway → bot-manager
     try {
       const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
         headers: { "X-API-Key": VEXA_API_KEY },
@@ -72,9 +49,9 @@ async function proxyRequest(
       }
     } catch {}
 
-    // 2. Get recent meetings from TC (includes completed + browser sessions with full data)
+    // 2. Meeting history from api-gateway → TC
     try {
-      const tcResp = await fetch(`${TC_URL}/transcripts`, {
+      const tcResp = await fetch(`${VEXA_API_URL}/meetings`, {
         headers: { "X-API-Key": VEXA_API_KEY },
         signal: AbortSignal.timeout(5000),
       });
@@ -83,12 +60,12 @@ async function proxyRequest(
         const tcMeetings = Array.isArray(tcData) ? tcData : tcData.meetings || [];
         for (const m of tcMeetings) {
           const id = (m.id || "").toString();
-          if (seenIds.has(id)) continue; // already in active list
+          if (seenIds.has(id)) continue;
           seenIds.add(id);
           meetings.push({
             id: m.id,
             platform: m.platform,
-            native_meeting_id: m.native_meeting_id,
+            native_meeting_id: m.native_meeting_id || m.platform_specific_id,
             status: m.status || "completed",
             start_time: m.start_time,
             end_time: m.end_time,
@@ -103,6 +80,7 @@ async function proxyRequest(
     return NextResponse.json({ meetings });
   }
 
+  // Everything else: proxy through api-gateway (handles /transcripts, /recordings, /bots, etc.)
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${VEXA_API_URL}/${pathString}${searchParams ? `?${searchParams}` : ""}`;
 
@@ -114,7 +92,6 @@ async function proxyRequest(
     headers["X-API-Key"] = VEXA_API_KEY;
   }
 
-  // Forward Range header for audio/video seeking support
   const rangeHeader = request.headers.get("range");
   if (rangeHeader) {
     headers["Range"] = rangeHeader;
@@ -140,71 +117,58 @@ async function proxyRequest(
     const response = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
 
-    // Handle empty responses
-    const contentType = response.headers.get("content-type");
-    if (response.status === 204) {
-      return new NextResponse(null, { status: response.status });
-    }
+    const contentType = response.headers.get("content-type") || "";
 
-    // Stream binary responses (audio, video, octet-stream) directly
-    if (contentType && !contentType.includes("application/json")) {
-      const responseHeaders = new Headers();
-      // Forward relevant headers for media streaming
-      for (const key of ["content-type", "content-length", "content-disposition",
-        "accept-ranges", "content-range"]) {
-        const value = response.headers.get(key);
-        if (value) responseHeaders.set(key, value);
-      }
-      return new NextResponse(response.body, {
+    if (contentType.includes("audio") || contentType.includes("video") || contentType.includes("octet-stream")) {
+      const blob = await response.blob();
+      return new NextResponse(blob, {
         status: response.status,
-        headers: responseHeaders,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": response.headers.get("content-length") || "",
+          ...(response.headers.get("content-range") && {
+            "Content-Range": response.headers.get("content-range")!,
+          }),
+          ...(response.headers.get("accept-ranges") && {
+            "Accept-Ranges": response.headers.get("accept-ranges")!,
+          }),
+        },
       });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    const data = await response.text();
+    try {
+      return NextResponse.json(JSON.parse(data), { status: response.status });
+    } catch {
+      return new NextResponse(data, {
+        status: response.status,
+        headers: { "Content-Type": contentType },
+      });
+    }
   } catch (error) {
-    const isTimeout = error instanceof DOMException && error.name === "AbortError";
-    console.error(`Proxy ${isTimeout ? "timeout" : "error"} for ${method} ${url}:`, error);
+    const err = error as Error;
+    if (err.name === "AbortError") {
+      return NextResponse.json({ error: "Request timeout" }, { status: 504 });
+    }
     return NextResponse.json(
-      { error: isTimeout ? "Backend request timed out" : "Failed to connect to Vexa API",
-        details: (error as Error).message },
-      { status: isTimeout ? 504 : 502 }
+      { error: `Failed to connect to API: ${err.message}` },
+      { status: 502 }
     );
   }
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  return proxyRequest(request, params, "GET");
+export async function GET(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  return proxyRequest(req, context.params, "GET");
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  return proxyRequest(request, params, "POST");
+export async function POST(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  return proxyRequest(req, context.params, "POST");
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  return proxyRequest(request, params, "PUT");
+export async function PUT(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  return proxyRequest(req, context.params, "PUT");
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  return proxyRequest(request, params, "DELETE");
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  return proxyRequest(request, params, "PATCH");
+export async function DELETE(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  return proxyRequest(req, context.params, "DELETE");
 }
