@@ -33,8 +33,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ path: s
 
 export async function POST(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  const url = new URL(req.url);
   const rawBody = await req.text();
-  const target = `${AGENT_API_URL}/api/${path.join("/")}`;
+  const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
 
   // For chat endpoint: inject user's bot token into request so agent container gets it
   if (path.join("/") === "chat") {
@@ -68,8 +69,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ path: 
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  const url = new URL(req.url);
   const body = await req.text();
-  const target = `${AGENT_API_URL}/api/${path.join("/")}`;
+  const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
   const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "PUT",
@@ -81,8 +83,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ path: s
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  const url = new URL(req.url);
   const body = await req.text();
-  const target = `${AGENT_API_URL}/api/${path.join("/")}`;
+  const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
   const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "DELETE",
