@@ -1,0 +1,223 @@
+#!/bin/bash
+# vexa CLI -- thin wrapper over Vexa APIs
+# Available inside agent containers. Uses VEXA_USER_ID and VEXA_CHAT_API env vars.
+set -euo pipefail
+
+CHAT_API="${VEXA_CHAT_API:-http://chat-api:8100}"
+USER_ID="${VEXA_USER_ID:-unknown}"
+
+_stub() {
+  echo "[vexa] '$1 $2' is not available yet (coming in $3)."
+  exit 1
+}
+
+_json_escape() {
+  python3 -c "import json,sys; print(json.dumps(sys.stdin.read().strip()))" <<< "$1"
+}
+
+case "${1:-}" in
+  workspace)
+    case "${2:-}" in
+      save)
+        result=$(curl -sf -X POST "$CHAT_API/internal/workspace/save" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\"}" 2>&1) && \
+          echo "[vexa] Workspace saved." || \
+          echo "[vexa] Workspace save failed: $result"
+        ;;
+      status)
+        curl -sf "$CHAT_API/internal/workspace/status?user_id=$USER_ID" 2>&1 || \
+          echo "[vexa] Could not check workspace status."
+        ;;
+      *)
+        echo "Usage: vexa workspace {save|status}"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  schedule)
+    case "${2:-}" in
+      --at)
+        # vexa schedule --at "2026-03-24T14:00:00Z" chat "message here"
+        AT="$3"; shift 3
+        ACTION="${1:-chat}"; shift || true
+        MSG="$*"
+        ESCAPED_MSG=$(_json_escape "$MSG")
+        curl -sf -X POST "$CHAT_API/api/schedule" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"at\":\"$AT\",\"message\":$ESCAPED_MSG}" && \
+          echo "[vexa] Job scheduled." || echo "[vexa] Schedule failed."
+        ;;
+      --in)
+        # vexa schedule --in 2h chat "message here"
+        DELAY="$3"; shift 3
+        ACTION="${1:-chat}"; shift || true
+        MSG="$*"
+        ESCAPED_MSG=$(_json_escape "$MSG")
+        curl -sf -X POST "$CHAT_API/api/schedule" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"in\":\"$DELAY\",\"message\":$ESCAPED_MSG}" && \
+          echo "[vexa] Job scheduled." || echo "[vexa] Schedule failed."
+        ;;
+      --cron)
+        # vexa schedule --cron "0 8 * * *" run-script daily-summary
+        EXPR="$3"; shift 3
+        ACTION="${1:-run-script}"; shift || true
+        TARGET="$*"
+        curl -sf -X POST "$CHAT_API/api/schedule" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"cron\":\"$EXPR\",\"script_id\":\"$TARGET\"}" && \
+          echo "[vexa] Cron job scheduled." || echo "[vexa] Schedule failed."
+        ;;
+      --every)
+        # vexa schedule --every 3d chat "Run workspace audit"
+        # Shorthand: converts "3d" to --in and lets it fire once (recurring not yet supported)
+        INTERVAL="$3"; shift 3
+        ACTION="${1:-chat}"; shift || true
+        MSG="$*"
+        ESCAPED_MSG=$(_json_escape "$MSG")
+        curl -sf -X POST "$CHAT_API/api/schedule" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"in\":\"$INTERVAL\",\"message\":$ESCAPED_MSG}" && \
+          echo "[vexa] Job scheduled (one-shot, recurring not yet supported)." || echo "[vexa] Schedule failed."
+        ;;
+      list)
+        curl -sf "$CHAT_API/api/schedule?user_id=$USER_ID" | python3 -c "
+import sys, json
+jobs = json.load(sys.stdin)
+if not jobs:
+    print('[vexa] No scheduled jobs.')
+else:
+    for j in jobs:
+        import datetime
+        t = datetime.datetime.fromtimestamp(j['execute_at'], tz=datetime.timezone.utc)
+        print(f\"  {j['job_id']}  {t.strftime('%Y-%m-%d %H:%M UTC')}  {j.get('action','')}  {j.get('message','')[:50]}\")
+" 2>/dev/null || echo "[vexa] Could not list jobs."
+        ;;
+      cancel)
+        JOB_ID="${3:-}"
+        if [ -z "$JOB_ID" ]; then
+          echo "Usage: vexa schedule cancel <job_id>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$CHAT_API/api/schedule/$JOB_ID" && \
+          echo "[vexa] Job $JOB_ID cancelled." || echo "[vexa] Cancel failed."
+        ;;
+      *)
+        echo "Usage: vexa schedule {--at|--in|--every|--cron|list|cancel} ..."
+        echo ""
+        echo "Examples:"
+        echo "  vexa schedule --at '2026-03-24T14:00:00Z' chat 'Reminder: call Brian'"
+        echo "  vexa schedule --in 2h chat 'Check deploy status'"
+        echo "  vexa schedule --every 3d chat 'Run workspace audit'"
+        echo "  vexa schedule list"
+        echo "  vexa schedule cancel job_abc123"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  container)
+    RUNTIME="${VEXA_RUNTIME_API:-http://runtime-api:8090}"
+    case "${2:-}" in
+      spawn)
+        # vexa container spawn --profile browser
+        PROFILE="agent"
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --profile) PROFILE="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        RESULT=$(curl -sf -X POST "$RUNTIME/containers" \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_id\":\"$USER_ID\",\"profile\":\"$PROFILE\",\"config\":{}}")
+        if [ $? -eq 0 ]; then
+          echo "$RESULT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(f\"[vexa] Container spawned: {d['name']}\")
+print(f\"  profile: {d.get('profile')}\")
+print(f\"  status:  {d.get('status')}\")
+if d.get('cdp_url'):
+    print(f\"  cdp_url: {d['cdp_url']}\")
+ports = d.get('ports', {})
+if ports:
+    for k, v in ports.items():
+        print(f\"  port {k}: {v}\")
+" 2>/dev/null
+        else
+          echo "[vexa] Container spawn failed."
+        fi
+        ;;
+      list)
+        curl -sf "$RUNTIME/containers?user_id=$USER_ID" | python3 -c "
+import sys, json
+containers = json.load(sys.stdin)
+if not containers:
+    print('[vexa] No containers.')
+else:
+    for c in containers:
+        cdp = f\"  cdp={c['cdp_url']}\" if c.get('cdp_url') else ''
+        print(f\"  {c['name']}  {c.get('profile','')}  {c.get('status','')}{cdp}\")
+" 2>/dev/null || echo "[vexa] Could not list containers."
+        ;;
+      stop)
+        NAME="${3:-}"
+        if [ -z "$NAME" ]; then
+          echo "Usage: vexa container stop <name>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$RUNTIME/containers/$NAME" && \
+          echo "[vexa] Container $NAME stopped." || echo "[vexa] Stop failed."
+        ;;
+      *)
+        echo "Usage: vexa container {spawn --profile <profile>|list|stop <name>}"
+        ;;
+    esac
+    ;;
+
+  browser)
+    RUNTIME="${VEXA_RUNTIME_API:-http://runtime-api:8090}"
+    case "${2:-}" in
+      connect)
+        NAME="${3:-}"
+        if [ -z "$NAME" ]; then
+          echo "Usage: vexa browser connect <container-name>"
+          exit 1
+        fi
+        curl -sf "$RUNTIME/containers/$NAME/cdp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('cdp_url', 'No CDP URL available'))
+" 2>/dev/null || echo "[vexa] Could not get CDP URL."
+        ;;
+      *)
+        echo "Usage: vexa browser {connect <name>}"
+        ;;
+    esac
+    ;;
+
+  meeting)   _stub "meeting" "${2:-}" "MVP3" ;;
+  --help|-h|"")
+    echo "vexa -- Vexa Agentic Runtime CLI"
+    echo ""
+    echo "Commands:"
+    echo "  workspace save                  Sync workspace to persistent storage"
+    echo "  workspace status                Check workspace sync state"
+    echo "  schedule --at|--in              Schedule a job for later"
+    echo "  schedule list|cancel            View or cancel scheduled jobs"
+    echo "  container spawn --profile X     Spawn a container (agent|browser)"
+    echo "  container list                  List running containers"
+    echo "  container stop <name>           Stop a container"
+    echo "  browser connect <name>          Get CDP URL for a browser container"
+    echo "  meeting                         Meeting management (MVP3)"
+    ;;
+  *)
+    echo "[vexa] Unknown command: $1"
+    echo "[vexa] Run 'vexa --help' for available commands."
+    exit 1
+    ;;
+esac

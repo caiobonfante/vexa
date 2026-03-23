@@ -1,0 +1,148 @@
+# Agentic Runtime -- Isolated infrastructure
+# Reuses transcription-service from shared stack (external URL in .env)
+name: vexa-agentic
+
+services:
+  redis:
+    image: redis:7.0-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "${REDIS_PORT:-6389}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - vexa_agentic
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=${DB_NAME:-vexa_agentic}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5458}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - vexa_agentic
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-vexa-access-key}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-vexa-secret-key}
+    ports:
+      - "${MINIO_PORT:-9010}:9000"
+      - "${MINIO_CONSOLE_PORT:-9011}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - vexa_agentic
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sleep 5
+        mc alias set vexa http://minio:9000 $${MINIO_ROOT_USER:-vexa-access-key} $${MINIO_ROOT_PASSWORD:-vexa-secret-key}
+        mc mb --ignore-existing vexa/${MINIO_BUCKET:-vexa-agentic}
+        exit 0
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-vexa-access-key}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-vexa-secret-key}
+    networks:
+      - vexa_agentic
+
+  chat-api:
+    build:
+      context: ../../..
+      dockerfile: services/chat-api/Dockerfile
+    ports:
+      - "${CHAT_API_PORT:-8100}:8100"
+    environment:
+      - DOCKER_NETWORK=vexa-agentic_vexa_agentic
+      - AGENT_IMAGE=vexa-agent:dev
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
+      - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
+      - CLAUDE_CREDENTIALS_PATH=${CLAUDE_CREDENTIALS_PATH}
+      - CLAUDE_JSON_PATH=${CLAUDE_JSON_PATH}
+      - IDLE_TIMEOUT=${IDLE_TIMEOUT:-300}
+      - REDIS_URL=redis://redis:6379
+      - RUNTIME_API_URL=http://runtime-api:8090
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - vexa_agentic
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      runtime-api:
+        condition: service_started
+    restart: unless-stopped
+
+  telegram-bot:
+    build:
+      context: ../../..
+      dockerfile: services/telegram-bot/Dockerfile
+    expose:
+      - "8200"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - CHAT_API_URL=http://chat-api:8100
+      - CHAT_DEFAULT_USER_ID=${CHAT_DEFAULT_USER_ID:-}
+      - CHAT_USER_MAP=${CHAT_USER_MAP:-{}}
+      - TELEGRAM_BOT_PORT=8200
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - vexa_agentic
+    depends_on:
+      - chat-api
+    restart: unless-stopped
+
+  runtime-api:
+    build:
+      context: ../../..
+      dockerfile: services/runtime-api/Dockerfile
+    ports:
+      - "${RUNTIME_API_PORT:-8090}:8090"
+    environment:
+      - DOCKER_NETWORK=vexa-agentic_vexa_agentic
+      - AGENT_IMAGE=vexa-agent:dev
+      - BROWSER_IMAGE=vexa-bot:dev
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
+      - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
+      - CLAUDE_CREDENTIALS_PATH=${CLAUDE_CREDENTIALS_PATH}
+      - CLAUDE_JSON_PATH=${CLAUDE_JSON_PATH}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - vexa_agentic
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:
+  minio-data:
+
+networks:
+  vexa_agentic:
+    driver: bridge
