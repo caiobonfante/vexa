@@ -402,3 +402,62 @@ Start with Claude Code subscription (free for development). Explore open-source 
 ## Current status: MVP3+ (Dashboard Integration)
 
 MVP0 through MVP2 built (commit `6608dadb`). MVP3 wired meeting pipeline to agentic runtime (commit `464568de`). Dashboard agent chat, browser sessions, live transcripts, and full vexa CLI added in subsequent commits. Currently hardening: auth gaps, env config, browser session lifecycle.
+
+## Setup
+
+### Prerequisites (external)
+
+- **Transcription service** (Whisper) running on host — not in this compose stack
+- **Claude Code CLI** credentials on host (`~/.claude/.credentials.json`, `~/.claude.json`)
+- Docker with compose v2
+
+### Quick start
+
+```bash
+# 1. Configure environment
+cp features/agentic-runtime/deploy/.env.example features/agentic-runtime/deploy/.env
+# Edit .env: set CLAUDE_CREDENTIALS_PATH, CLAUDE_JSON_PATH, TRANSCRIPTION_SERVICE_URL
+
+# 2. Build container images (agent + bot)
+docker build -t vexa-agent:dev -f containers/agent/Dockerfile .
+docker build -t vexa-bot:dev -f services/vexa-bot/Dockerfile services/vexa-bot/
+
+# 3. Start the stack
+cd features/agentic-runtime/deploy
+docker compose up -d
+
+# 4. Run DB migrations
+docker compose run --rm db-migrate
+
+# 5. Start dashboard (outside compose)
+cd services/dashboard
+cp .env.example .env  # Edit: verify VEXA_ADMIN_API_URL=http://localhost:8067
+npm install && npm run dev
+# Open http://localhost:3002
+```
+
+### Required environment variables
+
+| Variable | Where | Example | Purpose |
+|----------|-------|---------|---------|
+| `CLAUDE_CREDENTIALS_PATH` | deploy/.env | `/home/user/.claude/.credentials.json` | Claude CLI auth for agent containers |
+| `CLAUDE_JSON_PATH` | deploy/.env | `/home/user/.claude.json` | Claude CLI config for agent containers |
+| `TRANSCRIPTION_SERVICE_URL` | deploy/.env | `http://172.17.0.1:8083` | Whisper service (external) |
+| `VEXA_ADMIN_API_URL` | dashboard/.env | `http://localhost:8067` | Admin API (NOT api-gateway) |
+| `VEXA_API_URL` | dashboard/.env | `http://localhost:8066` | API gateway |
+| `AGENT_API_URL` | dashboard/.env | `http://localhost:8100` | Chat API for agent sessions |
+
+### Port map
+
+| Service | Container port | Host port |
+|---------|---------------|-----------|
+| API Gateway | 8000 | 8066 |
+| Admin API | 8001 | 8067 |
+| Bot Manager | 8080 | 8070 |
+| Runtime API | 8090 | 8090 |
+| Chat API | 8100 | 8100 |
+| Transcription Collector | 8000 | 8060 |
+| PostgreSQL | 5432 | 5458 |
+| Redis | 6379 | 6389 |
+| MinIO | 9000/9001 | 9010/9011 |
+| Dashboard | 3000 | 3002 |

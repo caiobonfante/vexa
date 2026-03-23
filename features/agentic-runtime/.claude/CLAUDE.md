@@ -110,10 +110,11 @@ The `vexa` CLI is a thin shell script wrapping curl calls to Runtime/Meeting API
 
 **Depends on:**
 - Redis (state, pubsub, scheduler)
-- PostgreSQL (meetings, users)
+- PostgreSQL (meetings, users — requires alembic migrations)
 - MinIO (persistent storage)
-- Docker (container runtime)
-- Transcription service (shared, external)
+- Docker (container runtime — `vexa-agent:dev` and `vexa-bot:dev` images must be pre-built)
+- Transcription service (shared, external — `TRANSCRIPTION_SERVICE_URL` in deploy/.env)
+- Claude CLI credentials (host files mounted into agent containers — `CLAUDE_CREDENTIALS_PATH` in deploy/.env)
 
 ## Key code locations
 
