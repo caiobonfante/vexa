@@ -31,6 +31,15 @@ transcription-collector → HTTP POST → external URL (transcript ready events)
 - Webhooks are fire-and-forget (no retry on failure by default)
 - Webhook payloads include event type, timestamp, and event-specific data
 
+### Data stages
+
+| Stage | Contents | Produced by | Consumed by |
+|-------|----------|-------------|-------------|
+| **raw** | Trigger events (bot status change, transcript ready) | bot-manager, collector | Webhook dispatcher |
+| **rendered** | HTTP POST payloads delivered to external URLs | Webhook dispatcher | External endpoints |
+
+No collected datasets yet. Capture trigger event + delivered payload pairs for regression testing.
+
 ## How
 
 This is a cross-service feature. Testing requires the full compose stack plus a webhook receiver.
