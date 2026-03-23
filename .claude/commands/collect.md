@@ -56,7 +56,7 @@ The **script** in the manifest defines what bots will say. Check:
 Generate the **dataset ID**: `{platform}-{N}sp-{scenario-tag}-{YYYYMMDD}`
 
 ```
-tests/datasets/{id}/
+data/raw/{id}/
   manifest.md          # Copy from collection manifest, will be completed during collection
   ground-truth.txt     # Will be filled during collection
   infra-snapshot.md    # Copy from current infra snapshot
@@ -136,7 +136,7 @@ If any cell is empty → the dataset is incomplete. Decide: re-run or supplement
 
 ### 10. Check against existing datasets
 
-Read manifests of existing datasets in `tests/datasets/`:
+Read manifests of existing datasets in `data/raw/`:
 - Does the new dataset supersede any existing one? (Same scenarios, better data)
 - If yes, mark the old dataset as `superseded by {new-id}` in its manifest
 - Does the new dataset complement existing ones? (Different scenarios)

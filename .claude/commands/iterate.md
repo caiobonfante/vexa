@@ -24,7 +24,7 @@ Determine which feature from the working directory or conversation context.
 
 ### 2. Inventory datasets
 
-Read `features/{name}/tests/datasets/*/manifest.md`. For each dataset:
+Read `features/{name}/data/raw/*/manifest.md`. For each dataset:
 
 | Dataset ID | Status | Scenarios | Baseline | Infra compatible? |
 |-----------|--------|-----------|---------- |-------------------|

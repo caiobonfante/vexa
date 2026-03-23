@@ -28,7 +28,7 @@ Extract:
 
 ### 2. Inventory existing datasets
 
-Read all dataset manifests in `features/{name}/tests/datasets/*/manifest.md`.
+Read all dataset manifests in `features/{name}/data/raw/*/manifest.md`.
 
 Build a coverage map:
 
