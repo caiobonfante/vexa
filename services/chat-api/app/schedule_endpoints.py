@@ -6,6 +6,7 @@ The executor (running in-process) polls Redis and fires jobs when due.
 
 import json
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -99,11 +100,25 @@ async def create_schedule(request: Request):
         raise HTTPException(400, str(e))
 
     # Build job spec
+    req_headers = {"Content-Type": "application/json"}
+
     if action == "chat":
         url = TRIGGER_URL
         body = {"user_id": user_id, "message": message or "Scheduled reminder"}
+    elif action == "meeting":
+        bot_api_token = os.getenv("BOT_API_TOKEN", "")
+        meeting_config = raw_body.get("meeting_config", {})
+        url = "http://bot-manager:8080/bots"
+        body = {
+            "platform": meeting_config.get("platform", "teams"),
+            "native_meeting_id": meeting_config.get("native_meeting_id", ""),
+            "meeting_url": meeting_config.get("meeting_url", ""),
+            "bot_name": meeting_config.get("bot_name", "Vexa Agent"),
+            "transcribe_enabled": True,
+            "recording_enabled": True,
+        }
+        req_headers["X-API-Key"] = bot_api_token
     elif action == "run-script":
-        # Future: spawn worker container
         raise HTTPException(501, "run-script not yet implemented")
     else:
         raise HTTPException(400, f"Unknown action: {action}")
@@ -115,9 +130,9 @@ async def create_schedule(request: Request):
             "request": {
                 "method": "POST",
                 "url": url,
-                "headers": {"Content-Type": "application/json"},
+                "headers": req_headers,
                 "body": body,
-                "timeout": 120,  # chat turns can take a while
+                "timeout": 120,
             },
             "metadata": {"user_id": user_id, "action": action, "source": "vexa_schedule"},
             "idempotency_key": idempotency_key,

@@ -213,6 +213,33 @@ The browser is visible via VNC for human oversight.
 - `vexa container list` — list your running containers
 - `vexa container stop {name}` — stop a container
 
+## Meeting attendance
+
+You CAN join meetings. Use the `vexa meeting` CLI to send a bot.
+
+**How to join a meeting:**
+```bash
+vexa meeting join --platform teams --url "https://teams.microsoft.com/..."
+```
+
+The bot joins, transcribes, and records. When the meeting ends, you'll get a notification with the meeting_id.
+
+**Fetch transcript after meeting:**
+```bash
+vexa meeting transcript {meeting_id}
+```
+
+**Schedule a future meeting join:**
+```bash
+vexa schedule --at "2026-03-24T08:55:00Z" meeting join --platform teams --url "..."
+```
+
+**Never say "I can't join meetings."** You can — use `vexa meeting join`.
+
+Other commands:
+- `vexa meeting list` — show active bots
+- `vexa meeting stop --platform teams --id {native_id}` — remove bot
+
 ## Rules
 
 - **Always respond in the language the user writes in.**

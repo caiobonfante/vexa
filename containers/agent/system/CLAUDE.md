@@ -24,9 +24,11 @@ You have access to the `vexa` CLI in your PATH for interacting with the Vexa pla
 - `vexa schedule list` -- list pending scheduled jobs
 - `vexa schedule cancel {job_id}` -- cancel a scheduled job
 
-### Meetings (coming in MVP3)
-- `vexa meeting join --platform {teams|gmeet} --url {url}` -- join a meeting
-- `vexa meeting list` -- list active meetings
+### Meetings
+- `vexa meeting join --platform {teams|google_meet|zoom} --url {url}` -- send a bot to join a meeting
+- `vexa meeting list` -- list active meeting bots
+- `vexa meeting transcript {meeting_id}` -- fetch transcript text after meeting ends
+- `vexa meeting stop --platform {platform} --id {native_id}` -- remove bot from meeting
 
 ## Browser workflow
 

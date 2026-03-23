@@ -28,3 +28,6 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET", "vexa-recordings")
 # Claude credentials (host paths for bind mount into agent containers)
 CLAUDE_CREDENTIALS_PATH = os.getenv("CLAUDE_CREDENTIALS_PATH", "")
 CLAUDE_JSON_PATH = os.getenv("CLAUDE_JSON_PATH", "")
+
+# Bot API token (for agent containers to call bot-manager)
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
