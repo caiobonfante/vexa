@@ -124,6 +124,7 @@ export const vexaAPI = {
       absolute_start_time: string;
       absolute_end_time: string;
       created_at: string;
+      segment_id?: string | null;
     }
     interface RawTranscriptResponse {
       id: number;
@@ -162,7 +163,7 @@ export const vexaAPI = {
 
     // Map segments
     const segments: TranscriptSegment[] = (data.segments || []).map((seg, index) => ({
-      id: `${index}`,
+      id: seg.segment_id || `${index}`,
       meeting_id: nativeId,
       start_time: seg.start,
       end_time: seg.end,
@@ -171,8 +172,10 @@ export const vexaAPI = {
       text: seg.text,
       speaker: seg.speaker || "",
       language: seg.language,
+      completed: true,
       session_uid: "",
       created_at: seg.created_at,
+      segment_id: seg.segment_id || undefined,
     }));
 
     // Extract recordings from response (populated from meeting.data.recordings by backend)

@@ -68,10 +68,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No webhook URL provided" }, { status: 400 });
     }
 
-    // Build a test payload
+    // Build a test payload using the standard envelope format
+    const eventId = `evt_${crypto.randomUUID().replace(/-/g, "")}`;
     const testPayload = {
-      event: "test",
-      timestamp: new Date().toISOString(),
+      event_id: eventId,
+      event_type: "test",
+      api_version: "2026-03-01",
+      created_at: new Date().toISOString(),
       data: {
         message: "This is a test webhook from Vexa",
         meeting_id: "test-meeting-123",
@@ -81,8 +84,10 @@ export async function POST(request: NextRequest) {
 
     const payloadStr = JSON.stringify(testPayload);
 
-    // Sign the payload if we have a secret for this user
+    // Sign the payload using the same scheme as production:
+    // HMAC-SHA256 of "{timestamp}.{payload}" with webhook_secret
     let signature = "";
+    let timestamp = "";
     if (VEXA_ADMIN_API_KEY && userId) {
       try {
         const userRes = await fetch(`${VEXA_ADMIN_API_URL}/admin/users/${userId}`, {
@@ -93,9 +98,11 @@ export async function POST(request: NextRequest) {
           const userData = await userRes.json();
           const secret = userData.data?.webhook_secret;
           if (secret) {
+            timestamp = Math.floor(Date.now() / 1000).toString();
+            const signedContent = `${timestamp}.${payloadStr}`;
             signature = crypto
               .createHmac("sha256", secret)
-              .update(payloadStr)
+              .update(signedContent)
               .digest("hex");
           }
         }
@@ -107,10 +114,10 @@ export async function POST(request: NextRequest) {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "User-Agent": "Vexa-Webhook/1.0",
-      "X-Vexa-Event": "test",
     };
     if (signature) {
-      headers["X-Vexa-Signature"] = `sha256=${signature}`;
+      headers["X-Webhook-Signature"] = `sha256=${signature}`;
+      headers["X-Webhook-Timestamp"] = timestamp;
     }
 
     let webhookRes: Response;
