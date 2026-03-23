@@ -168,6 +168,10 @@ export function AgentChat() {
                 timestamp: Date.now(),
               });
             } else if (event.type === "text_delta") {
+              // Add paragraph break if text arrives after a tool use (separate thought blocks)
+              if (tools.length > 0 && accumulated.length > 0 && !accumulated.endsWith("\n")) {
+                accumulated += "\n\n";
+              }
               accumulated += event.text || "";
               updateLastAssistant(accumulated, tools);
             } else if (event.type === "tool_use") {

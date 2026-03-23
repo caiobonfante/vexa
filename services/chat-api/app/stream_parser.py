@@ -11,9 +11,13 @@ def parse_event(data: dict) -> list[dict]:
 
     if msg_type == "assistant":
         content = data.get("message", {}).get("content", [])
+        text_block_count = 0
         for block in content:
             if block.get("type") == "text":
-                events.append({"type": "text_delta", "text": block["text"]})
+                # Separate multiple text blocks (text between tool calls) with paragraph breaks
+                prefix = "\n\n" if text_block_count > 0 else ""
+                events.append({"type": "text_delta", "text": prefix + block["text"]})
+                text_block_count += 1
             elif block.get("type") == "tool_use":
                 events.append({
                     "type": "tool_use",
