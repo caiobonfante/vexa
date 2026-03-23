@@ -23,6 +23,7 @@ from app.container_manager import ContainerManager
 from app.stream_parser import parse_event
 from app.workspace_context import build_workspace_context
 from app.schedule_endpoints import router as schedule_router
+from app.workspace_endpoints import router as workspace_router, set_container_manager
 from app import config
 
 logging.basicConfig(
@@ -41,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(schedule_router)
+app.include_router(workspace_router)
 
 cm = ContainerManager()
 
@@ -79,6 +81,7 @@ async def startup():
     logger.info("Scheduler executor started")
 
     await cm.startup()
+    set_container_manager(cm)
     logger.info(f"Agent API ready on port {config.CHAT_API_PORT}")
 
 
