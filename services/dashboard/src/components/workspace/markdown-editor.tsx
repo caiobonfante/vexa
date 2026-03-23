@@ -122,6 +122,7 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
   const isInternalUpdate = useRef(false);
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
