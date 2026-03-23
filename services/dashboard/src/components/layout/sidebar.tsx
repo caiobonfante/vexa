@@ -21,6 +21,10 @@ import {
   Webhook,
   User,
   Bug,
+  MessageSquare,
+  FolderOpen,
+  Clock,
+  Container,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,7 +39,10 @@ interface SidebarProps {
 }
 
 const navigation = [
+  { name: "Agent", href: "/agent", icon: MessageSquare },
   { name: "Meetings", href: "/meetings", icon: Video },
+  { name: "Workspace", href: "/workspace", icon: FolderOpen },
+  { name: "Schedule", href: "/schedule", icon: Clock },
   ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
     ? [{ name: "Tracker", href: "/tracker", icon: Zap }]
     : []),

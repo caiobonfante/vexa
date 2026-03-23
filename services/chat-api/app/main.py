@@ -99,6 +99,7 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
     model: Optional[str] = None
+    bot_token: Optional[str] = None  # User's API token for bot-manager calls
 
 
 class UserIdRequest(BaseModel):
@@ -107,12 +108,19 @@ class UserIdRequest(BaseModel):
 
 # --- Core chat logic ---
 
-async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None):
+async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None, bot_token: Optional[str] = None):
     """Run a single chat turn. Yields SSE data strings.
     If container dies, raises exception — caller can retry."""
 
     cm._new_container = False
     container = await cm.ensure_container(user_id)
+
+    # If a user-specific bot token was provided, write it to the container
+    # so vexa CLI reads it for bot-manager calls (meetings belong to this user)
+    if bot_token:
+        await cm.exec_simple(container, [
+            "sh", "-c", f"echo '{bot_token}' > /tmp/.vexa-bot-token"
+        ])
 
     # Session from Redis — but skip if container was just recreated
     # (session IDs are tied to Claude CLI processes, not portable across containers)
@@ -205,7 +213,7 @@ async def chat(req: ChatRequest):
 
         while retries <= max_retries:
             try:
-                async for data in _run_chat_turn(req.user_id, req.message, req.model):
+                async for data in _run_chat_turn(req.user_id, req.message, req.model, req.bot_token):
                     yield data
                 return  # Success
             except Exception as e:

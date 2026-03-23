@@ -6,6 +6,12 @@ set -euo pipefail
 CHAT_API="${VEXA_CHAT_API:-http://chat-api:8100}"
 USER_ID="${VEXA_USER_ID:-unknown}"
 
+# Override bot token from file if dashboard user injected one
+if [ -f /tmp/.vexa-bot-token ]; then
+  VEXA_BOT_API_TOKEN="$(cat /tmp/.vexa-bot-token)"
+  export VEXA_BOT_API_TOKEN
+fi
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

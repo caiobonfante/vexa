@@ -16,7 +16,35 @@ async function proxyRequest(
   const VEXA_API_KEY = userToken || process.env.VEXA_API_KEY || "";
 
   const { path } = await params;
-  const pathString = path.join("/");
+  let pathString = path.join("/");
+
+  // Rewrite paths for bot-manager compatibility (no api-gateway)
+  // Dashboard expects /meetings but bot-manager has /bots/status
+  if (pathString === "meetings" && method === "GET") {
+    // Return meetings from bot-manager's bots/status + DB
+    // For now, return empty array to prevent 404
+    const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
+      headers: { "X-API-Key": VEXA_API_KEY },
+    });
+    if (statusResp.ok) {
+      const data = await statusResp.json();
+      const bots = data.running_bots || [];
+      const meetings = bots.map((b: any) => ({
+        id: b.meeting_id_from_name || b.container_name,
+        platform: b.platform,
+        platform_specific_id: b.native_meeting_id,
+        status: b.normalized_status === "Up" ? "active" : "completed",
+        start_time: b.created_at,
+        end_time: null,
+        bot_container_id: b.container_id,
+        data: {},
+        created_at: b.created_at,
+      }));
+      return NextResponse.json(meetings);
+    }
+    return NextResponse.json([]);
+  }
+
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${VEXA_API_URL}/${pathString}${searchParams ? `?${searchParams}` : ""}`;
 

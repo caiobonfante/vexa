@@ -9,6 +9,7 @@ import { Send, Square, RotateCcw, Loader2, Wrench, Bot, User } from "lucide-reac
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAgentStore, AgentMessage } from "@/stores/agent-store";
+import { useAuthStore } from "@/stores/auth-store";
 
 const AGENT_API = process.env.NEXT_PUBLIC_AGENT_API_URL || "/api/agent";
 
@@ -69,12 +70,15 @@ export function AgentChat() {
   const {
     messages,
     isStreaming,
-    userId,
     addMessage,
     updateLastAssistant,
     setStreaming,
     clearMessages,
   } = useAgentStore();
+
+  // Use logged-in user's ID and token
+  const { user, token } = useAuthStore();
+  const userId = user?.id?.toString() || user?.email || "default";
 
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
