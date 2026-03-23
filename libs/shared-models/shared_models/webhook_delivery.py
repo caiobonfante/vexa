@@ -17,7 +17,9 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import httpx
 
@@ -46,6 +48,34 @@ def set_redis_client(client: Any) -> None:
 def get_redis_client() -> Any:
     """Return the module-level Redis client (may be None)."""
     return _redis_client
+
+
+WEBHOOK_API_VERSION = "2026-03-01"
+
+# Internal fields to strip from meeting.data before webhook delivery
+_INTERNAL_DATA_KEYS = {"webhook_delivery", "webhook_deliveries", "webhook_secret", "webhook_events"}
+
+
+def build_envelope(event_type: str, data: Dict[str, Any], event_id: str | None = None) -> Dict[str, Any]:
+    """Build a standardized webhook payload envelope.
+
+    All webhook payloads must use this format for consistency:
+    ``{"event_id", "event_type", "api_version", "created_at", "data"}``
+    """
+    return {
+        "event_id": event_id or f"evt_{uuid4().hex}",
+        "event_type": event_type,
+        "api_version": WEBHOOK_API_VERSION,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "data": data,
+    }
+
+
+def clean_meeting_data(data: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Remove internal keys from meeting.data before webhook delivery."""
+    if not data:
+        return {}
+    return {k: v for k, v in data.items() if k not in _INTERNAL_DATA_KEYS}
 
 
 def sign_payload(payload_bytes: bytes, secret: str) -> str:

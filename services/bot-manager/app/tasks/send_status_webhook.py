@@ -2,7 +2,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from shared_models.models import Meeting, User
 from shared_models.webhook_url import validate_webhook_url
-from shared_models.webhook_delivery import deliver
+from shared_models.webhook_delivery import deliver, build_envelope, clean_meeting_data
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -91,8 +91,7 @@ async def run(meeting: Meeting, db: AsyncSession, status_change_info: Optional[D
         if user.data and isinstance(user.data, dict):
             webhook_secret = user.data.get('webhook_secret')
 
-        payload = {
-            'event_type': event_type,
+        event_data = {
             'meeting': {
                 'id': meeting.id,
                 'user_id': meeting.user_id,
@@ -100,23 +99,24 @@ async def run(meeting: Meeting, db: AsyncSession, status_change_info: Optional[D
                 'native_meeting_id': meeting.native_meeting_id,
                 'constructed_meeting_url': meeting.constructed_meeting_url,
                 'status': meeting.status,
-                'bot_container_id': meeting.bot_container_id,
                 'start_time': meeting.start_time.isoformat() if meeting.start_time else None,
                 'end_time': meeting.end_time.isoformat() if meeting.end_time else None,
-                'data': meeting.data or {},
+                'data': clean_meeting_data(meeting.data),
                 'created_at': meeting.created_at.isoformat() if meeting.created_at else None,
                 'updated_at': meeting.updated_at.isoformat() if meeting.updated_at else None,
             }
         }
 
         if status_change_info:
-            payload['status_change'] = {
+            event_data['status_change'] = {
                 'from': status_change_info.get('old_status'),
                 'to': status_change_info.get('new_status', meeting.status),
                 'reason': status_change_info.get('reason'),
                 'timestamp': status_change_info.get('timestamp'),
                 'transition_source': status_change_info.get('transition_source')
             }
+
+        payload = build_envelope(event_type, event_data)
 
         await deliver(
             url=webhook_url,

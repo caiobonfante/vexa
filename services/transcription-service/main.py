@@ -363,13 +363,36 @@ async def transcribe_audio(
         
         # Convert to format suitable for faster-whisper
         # Use soundfile to properly decode audio formats (WAV, MP3, etc.)
+        # Falls back to ffmpeg subprocess for formats soundfile can't handle (webm, opus, etc.)
         audio_io = io.BytesIO(audio_bytes)
         try:
             audio_array, sample_rate = sf.read(audio_io, dtype=np.float32)
             logger.info(f"Worker {WORKER_ID} decoded audio - shape: {audio_array.shape}, sample_rate: {sample_rate}")
         except Exception as e:
-            logger.error(f"Worker {WORKER_ID} failed to decode audio with soundfile: {e}")
-            raise HTTPException(status_code=400, detail=f"Failed to decode audio file: {e}")
+            logger.warning(f"Worker {WORKER_ID} soundfile failed ({e}), trying ffmpeg fallback")
+            try:
+                import subprocess, tempfile
+                with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as tmp_in:
+                    tmp_in.write(audio_bytes)
+                    tmp_in_path = tmp_in.name
+                tmp_out_path = tmp_in_path.replace('.webm', '.wav')
+                result = subprocess.run(
+                    ['ffmpeg', '-y', '-i', tmp_in_path, '-ar', '16000', '-ac', '1', '-f', 'wav', tmp_out_path],
+                    capture_output=True, timeout=120
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()[:500]}")
+                audio_array, sample_rate = sf.read(tmp_out_path, dtype=np.float32)
+                logger.info(f"Worker {WORKER_ID} decoded via ffmpeg - shape: {audio_array.shape}, sample_rate: {sample_rate}")
+                import os
+                os.unlink(tmp_in_path)
+                os.unlink(tmp_out_path)
+            except FileNotFoundError:
+                logger.error(f"Worker {WORKER_ID} ffmpeg not installed - cannot decode non-WAV formats")
+                raise HTTPException(status_code=400, detail=f"Failed to decode audio file: {e}. Install ffmpeg for webm/opus support.")
+            except Exception as e2:
+                logger.error(f"Worker {WORKER_ID} ffmpeg fallback also failed: {e2}")
+                raise HTTPException(status_code=400, detail=f"Failed to decode audio file: {e2}")
         
         # Ensure mono audio (convert stereo to mono if needed)
         if len(audio_array.shape) > 1:

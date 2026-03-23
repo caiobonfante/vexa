@@ -266,12 +266,13 @@ async def schedule_status_webhook_task(
     logger.info(f"Scheduled status webhook task for meeting {meeting.id} status change: {old_status} -> {new_status}")
 
 
-async def send_event_webhook(user_id: int, event_type: str, payload: dict):
+async def send_event_webhook(user_id: int, event_type: str, data: dict):
     """
     Fire-and-forget webhook for recording/transcription events.
-    Looks up user's webhook_url and POSTs the event payload.
+    Looks up user's webhook_url and POSTs the event using the standard envelope.
     """
     from shared_models.webhook_url import validate_webhook_url
+    from shared_models.webhook_delivery import deliver, build_envelope
 
     try:
         async with async_session_local() as db:
@@ -286,18 +287,16 @@ async def send_event_webhook(user_id: int, event_type: str, payload: dict):
             except ValueError:
                 return
 
-            headers = {'Content-Type': 'application/json'}
-            secret = user.data.get('webhook_secret')
-            if secret and isinstance(secret, str) and secret.strip():
-                headers['Authorization'] = f'Bearer {secret.strip()}'
+            webhook_secret = user.data.get('webhook_secret')
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            await client.post(
-                webhook_url,
-                json={'event_type': event_type, **payload},
-                timeout=30.0,
-                headers=headers,
-            )
+        payload = build_envelope(event_type, data)
+        await deliver(
+            url=webhook_url,
+            payload=payload,
+            webhook_secret=webhook_secret,
+            timeout=30.0,
+            label=f"event-webhook {event_type} user={user_id}",
+        )
     except Exception as e:
         logging.getLogger("bot_manager").warning(f"Event webhook ({event_type}) failed for user {user_id}: {e}")
 
@@ -3251,6 +3250,7 @@ async def transcribe_meeting_recording(
 
     # 4. Get recording audio
     audio_bytes = None
+    audio_format = "wav"  # default
     storage = get_storage_client()
 
     # Try meeting_data recordings first (default mode)
@@ -3261,6 +3261,7 @@ async def transcribe_meeting_recording(
                 if isinstance(mf, dict) and mf.get('type') == 'audio' and mf.get('storage_path'):
                     try:
                         audio_bytes = storage.download_file(mf['storage_path'])
+                        audio_format = mf.get('format', 'wav') or mf['storage_path'].rsplit('.', 1)[-1]
                     except Exception:
                         logger.warning(f"Failed to download from meeting_data path: {mf['storage_path']}")
                     if audio_bytes:
@@ -3279,6 +3280,7 @@ async def transcribe_meeting_recording(
                 if mf.type == 'audio' and mf.storage_path:
                     try:
                         audio_bytes = storage.download_file(mf.storage_path)
+                        audio_format = mf.format or mf.storage_path.rsplit('.', 1)[-1]
                     except Exception:
                         logger.warning(f"Failed to download from recording table path: {mf.storage_path}")
                     if audio_bytes:
@@ -3306,11 +3308,16 @@ async def transcribe_meeting_recording(
         logger.info(f"Created vxa_tx_ token for user {current_user.id} for deferred transcription")
 
     # 6. Call Transcription Gateway
-    tg_url = os.getenv("TRANSCRIPTION_GATEWAY_URL", "http://vexa-transcription-gateway:8084")
+    tg_url = os.getenv("TRANSCRIPTION_GATEWAY_URL") or os.getenv("TRANSCRIPTION_SERVICE_URL", "http://vexa-transcription-gateway:8084")
+    # Strip the /v1/audio/transcriptions suffix if present — we append it below
+    if tg_url.endswith("/v1/audio/transcriptions"):
+        tg_url = tg_url[: -len("/v1/audio/transcriptions")]
 
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
-            files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+            mime_types = {"wav": "audio/wav", "webm": "audio/webm", "ogg": "audio/ogg", "mp3": "audio/mpeg", "mp4": "audio/mp4"}
+            mime = mime_types.get(audio_format, f"audio/{audio_format}")
+            files = {"file": (f"audio.{audio_format}", audio_bytes, mime)}
             data = {"model": "whisper-v3-turbo", "response_format": "verbose_json"}
             if req.language:
                 data["language"] = req.language

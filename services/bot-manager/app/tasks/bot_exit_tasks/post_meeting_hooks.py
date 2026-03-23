@@ -2,7 +2,7 @@ import logging
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from shared_models.models import Meeting
-from shared_models.webhook_delivery import deliver
+from shared_models.webhook_delivery import deliver, build_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,7 @@ async def run(meeting: Meeting, db: AsyncSession):
     duration_seconds = (meeting.end_time - meeting.start_time).total_seconds()
 
     meeting_data = meeting.data or {}
-    payload = {
-        "event": "meeting.completed",
+    payload = build_envelope("meeting.completed", {
         "meeting": {
             "id": meeting.id,
             "user_id": meeting.user_id,
@@ -56,9 +55,8 @@ async def run(meeting: Meeting, db: AsyncSession):
             "end_time": meeting.end_time.isoformat(),
             "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
             "transcription_enabled": meeting_data.get("transcribe_enabled", False),
-            "data": meeting_data,
         },
-    }
+    })
 
     for hook_url in POST_MEETING_HOOKS:
         await deliver(

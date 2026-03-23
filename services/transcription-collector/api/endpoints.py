@@ -130,13 +130,10 @@ async def _purge_recordings_for_meeting(
     }
 
 
-class WsMeetingRef(MeetingCreate):
-    """
-    Schema for WS subscription meeting reference.
-    Inherits validation from MeetingCreate but only platform and native_meeting_id are relevant.
-    """
-    class Config:
-        extra = 'ignore'
+class WsMeetingRef(BaseModel):
+    """Schema for WS subscription meeting reference — only platform + native_meeting_id needed."""
+    platform: str
+    native_meeting_id: str
 
 class WsAuthorizeSubscribeRequest(BaseModel):
     meetings: List[WsMeetingRef]
@@ -301,10 +298,26 @@ async def health_check(request: Request, db: AsyncSession = Depends(get_db)):
             dependencies=[Depends(get_current_user)])
 async def get_meetings(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Max meetings to return"),
+    offset: Optional[int] = Query(None, ge=0, description="Number of meetings to skip"),
+    status: Optional[str] = Query(None, description="Filter by status (active, completed, failed)"),
+    platform: Optional[str] = Query(None, description="Filter by platform (google_meet, teams, zoom)"),
 ):
-    """Returns a list of all meetings initiated by the authenticated user."""
-    stmt = select(Meeting).where(Meeting.user_id == current_user.id).order_by(Meeting.created_at.desc())
+    """Returns a list of meetings initiated by the authenticated user.
+
+    Supports pagination (limit/offset) and filtering (status, platform).
+    """
+    stmt = select(Meeting).where(Meeting.user_id == current_user.id)
+    if status:
+        stmt = stmt.where(Meeting.status == status)
+    if platform:
+        stmt = stmt.where(Meeting.platform == platform)
+    stmt = stmt.order_by(Meeting.created_at.desc())
+    if limit:
+        stmt = stmt.limit(limit)
+    if offset:
+        stmt = stmt.offset(offset)
     result = await db.execute(stmt)
     meetings = result.scalars().all()
     return MeetingListResponse(meetings=[MeetingResponse.model_validate(m) for m in meetings])

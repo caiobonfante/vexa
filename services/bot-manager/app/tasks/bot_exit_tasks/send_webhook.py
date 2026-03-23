@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from shared_models.models import Meeting, User
 from shared_models.webhook_url import validate_webhook_url
-from shared_models.webhook_delivery import deliver, get_redis_client
+from shared_models.webhook_delivery import deliver, get_redis_client, build_envelope, clean_meeting_data
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -48,20 +48,21 @@ async def run(meeting: Meeting, db: AsyncSession):
         if user.data and isinstance(user.data, dict):
             webhook_secret = user.data.get('webhook_secret')
 
-        payload = {
-            'id': meeting.id,
-            'user_id': meeting.user_id,
-            'platform': meeting.platform,
-            'native_meeting_id': meeting.native_meeting_id,
-            'constructed_meeting_url': meeting.constructed_meeting_url,
-            'status': meeting.status,
-            'bot_container_id': meeting.bot_container_id,
-            'start_time': meeting.start_time.isoformat() if meeting.start_time else None,
-            'end_time': meeting.end_time.isoformat() if meeting.end_time else None,
-            'data': meeting.data or {},
-            'created_at': meeting.created_at.isoformat() if meeting.created_at else None,
-            'updated_at': meeting.updated_at.isoformat() if meeting.updated_at else None,
-        }
+        payload = build_envelope("meeting.completed", {
+            'meeting': {
+                'id': meeting.id,
+                'user_id': meeting.user_id,
+                'platform': meeting.platform,
+                'native_meeting_id': meeting.native_meeting_id,
+                'constructed_meeting_url': meeting.constructed_meeting_url,
+                'status': meeting.status,
+                'start_time': meeting.start_time.isoformat() if meeting.start_time else None,
+                'end_time': meeting.end_time.isoformat() if meeting.end_time else None,
+                'data': clean_meeting_data(meeting.data),
+                'created_at': meeting.created_at.isoformat() if meeting.created_at else None,
+                'updated_at': meeting.updated_at.isoformat() if meeting.updated_at else None,
+            }
+        })
 
         now = datetime.now(timezone.utc).isoformat()
 

@@ -98,6 +98,7 @@ class Transcription(Base):
     meeting = relationship("Meeting", back_populates="transcriptions")
     
     session_uid = Column(String, nullable=True, index=True) # Link to the specific bot session
+    segment_id = Column(String, nullable=True) # Stable segment identity from bot
 
     # Index for efficient querying by meeting_id and start_time
     __table_args__ = (Index('ix_transcription_meeting_start', 'meeting_id', 'start_time'),)
