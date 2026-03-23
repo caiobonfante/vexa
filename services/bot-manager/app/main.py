@@ -1425,10 +1425,10 @@ async def stop_bot(
                 logger.error(f"Failed to publish leave command to Redis channel {command_channel}: {e}", exc_info=True)
                 # Log error but continue with delayed stop
 
-        # 4. Schedule delayed container stop task
-        logger.info(f"Scheduling delayed stop task for container {meeting.bot_container_id} (meeting {meeting.id}).")
-        # Pass container_id, meeting_id, and delay
-        background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, BOT_STOP_DELAY_SECONDS) 
+        # 4. Schedule container stop task (immediate for browser sessions, delayed for meeting bots)
+        stop_delay = 0 if platform_value == "browser_session" else BOT_STOP_DELAY_SECONDS
+        logger.info(f"Scheduling stop task for container {meeting.bot_container_id} (meeting {meeting.id}, delay={stop_delay}s).")
+        background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, stop_delay)
 
         # 5. Update Meeting status to STOPPING immediately (source of truth)
         # This allows users to immediately request a new bot after stopping
