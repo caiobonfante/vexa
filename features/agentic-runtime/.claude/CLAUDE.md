@@ -11,18 +11,20 @@ Build the universal container runtime for Vexa. Every "do X with a container" fl
 
 This is a **spec-driven feature**.
 
-### Current stage: RESEARCH COMPLETE -> MVP0
+### Current stage: MVP3+ (Dashboard Integration & Hardening)
 
-**Research:** Complete. Architecture validated by analyzing Quorum, Vexa remote-browser, Vexa scheduler.
-**Next:** Build MVP0 (Chat in a Container).
+**Built:** MVP0-MVP2 (commit `6608dadb`), MVP3 meeting pipeline (commit `464568de`), dashboard agent chat, browser sessions, per-user auth, full vexa CLI.
+**Current:** Hardening — env config gaps, auth plumbing, browser session lifecycle.
 
 ### MVP roadmap
 
 | MVP | What it proves | Tests | Status |
 |-----|---------------|-------|--------|
-| MVP0 | Chat API + agent container + system layer + session + persistence | 9 | Not started |
-| MVP1 | Browser + agent cross-container via vexa CLI + CDP | 10 | Blocked on MVP0 |
-| MVP2 | Scheduled meeting pipeline + self-orchestration + Telegram | 13 | Blocked on MVP1 |
+| MVP0 | Chat API + agent container + system layer + session + persistence | 9 | Done |
+| MVP1 | Browser + agent cross-container via vexa CLI + CDP | 10 | Done |
+| MVP2 | Scheduled meeting pipeline + self-orchestration + Telegram | 13 | Done |
+| MVP3 | Meeting pipeline wired to agentic runtime + dashboard | - | Done |
+| Hardening | Auth, env config, browser session stop, workspace sync | - | In progress |
 
 ## Scope
 
@@ -118,28 +120,34 @@ The `vexa` CLI is a thin shell script wrapping curl calls to Runtime/Meeting API
 | Component | Location | Status |
 |-----------|----------|--------|
 | Feature docs | `features/agentic-runtime/` | Done |
-| Agent Dockerfile | `containers/agent/Dockerfile` | MVP0 |
-| System CLAUDE.md | `containers/agent/system/CLAUDE.md` | MVP0 |
-| Vexa CLI | `containers/agent/system/bin/vexa` | MVP0 (stubs), MVP1 (live) |
-| Chat API | `services/chat-api/` | MVP0 |
-| Runtime API | `services/runtime-api/` | MVP1 |
-| Browser Dockerfile | `containers/browser/Dockerfile` | MVP1 |
-| Worker Dockerfile | `containers/worker/Dockerfile` | MVP2 |
-| Scheduler core | `libs/shared-models/shared_models/scheduler.py` | Exists (16/16) |
+| Agent Dockerfile | `containers/agent/Dockerfile` | Done |
+| System CLAUDE.md | `containers/agent/system/CLAUDE.md` | Done |
+| Vexa CLI | `containers/agent/system/bin/vexa` | Done (full API coverage) |
+| Chat API | `services/chat-api/` | Done |
+| Runtime API | `services/runtime-api/` | Done |
+| Browser container | `services/vexa-bot/` (browser_session mode) | Done (reuses vexa-bot) |
+| Bot Manager | `services/bot-manager/` | Done |
+| API Gateway | `services/api-gateway/` | Done |
+| Dashboard | `services/dashboard/` | Done |
+| Telegram Bot | `services/telegram-bot/` | Done |
+| Scheduler core | `libs/shared-models/shared_models/scheduler.py` | Done |
 | Deploy | `features/agentic-runtime/deploy/` | Done |
-| Validation | `features/agentic-runtime/tests/test-mvp{0,1,2}.sh` | Per MVP |
+| Validation | `features/agentic-runtime/tests/test-mvp0.sh` | MVP0 only |
 
 ## How to test
 
 ```bash
-# Start isolated infra
-cd features/agentic-runtime/tests
-make infra-up
+# Start the agentic stack
+cd features/agentic-runtime/deploy
+docker compose up -d
 
-# Run MVP validation
-make test-mvp0   # 9 tests
-make test-mvp1   # 10 tests
-make test-mvp2   # 13 tests
+# Dashboard (runs outside compose)
+cd services/dashboard && npm run dev
+# Open http://localhost:3002
+
+# MVP0 validation script
+cd features/agentic-runtime/tests
+./test-mvp0.sh
 ```
 
 ## Critical findings

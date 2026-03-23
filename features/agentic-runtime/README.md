@@ -399,6 +399,6 @@ Start with Claude Code subscription (free for development). Explore open-source 
 | MVP1 done | 10/10 tests pass | Agent spawns and controls browser cross-container via vexa CLI + CDP |
 | MVP2 done | 13/13 tests pass | Full scheduled meeting pipeline, agent self-orchestrates, zero idle, Telegram |
 
-## Current status: RESEARCH COMPLETE
+## Current status: MVP3+ (Dashboard Integration)
 
-Next: build MVP0.
+MVP0 through MVP2 built (commit `6608dadb`). MVP3 wired meeting pipeline to agentic runtime (commit `464568de`). Dashboard agent chat, browser sessions, live transcripts, and full vexa CLI added in subsequent commits. Currently hardening: auth gaps, env config, browser session lifecycle.
