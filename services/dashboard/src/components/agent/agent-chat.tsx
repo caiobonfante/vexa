@@ -145,7 +145,14 @@ export function AgentChat() {
           if (!line.startsWith("data: ")) continue;
           try {
             const event = JSON.parse(line.slice(6));
-            if (event.type === "text_delta") {
+            if (event.type === "session_reset") {
+              // Container was recreated — clear stale messages, keep only current exchange
+              const currentMessages = useAgentStore.getState().messages;
+              const lastTwo = currentMessages.slice(-2); // current user msg + assistant placeholder
+              useAgentStore.setState({ messages: lastTwo });
+              accumulated = "*Session restarted — previous context is no longer available.*\n\n";
+              updateLastAssistant(accumulated, tools);
+            } else if (event.type === "text_delta") {
               accumulated += event.text || "";
               updateLastAssistant(accumulated, tools);
             } else if (event.type === "tool_use") {

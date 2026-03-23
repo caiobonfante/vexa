@@ -482,12 +482,16 @@ async def get_running_bots_status(user_id: int) -> List[Dict[str, Any]]:
                  meeting_id_int = None # Ensure it's None if parsing fails
             
             # If we have a valid meeting ID, query the DB
+            meeting_data = {}
+            meeting_start_time = None
             if meeting_id_int is not None:
                 try:
                     meeting = await db_session.get(Meeting, meeting_id_int)
                     if meeting:
                         platform = meeting.platform
                         native_meeting_id = meeting.platform_specific_id
+                        meeting_data = meeting.data or {}
+                        meeting_start_time = meeting.start_time.isoformat() if meeting.start_time else None
                         logger.debug(f"[Bot Status] Found DB details for meeting {meeting_id_int}: platform={platform}, native_id={native_meeting_id}")
                     else:
                         logger.warning(f"[Bot Status] No meeting found in DB for ID {meeting_id_int} parsed from container '{name}'")
@@ -511,13 +515,15 @@ async def get_running_bots_status(user_id: int) -> List[Dict[str, Any]]:
             bots_status.append({
                 "container_id": container_id,
                 "container_name": name,
-                "platform": platform, # Added
-                "native_meeting_id": native_meeting_id, # Added
+                "platform": platform,
+                "native_meeting_id": native_meeting_id,
                 "status": status,
                 "normalized_status": normalized_status,
                 "created_at": created_at,
+                "start_time": meeting_start_time,
                 "labels": labels,
-                "meeting_id_from_name": meeting_id_from_name
+                "meeting_id_from_name": meeting_id_from_name,
+                "data": meeting_data,
             })
             
     return bots_status

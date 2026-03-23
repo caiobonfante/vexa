@@ -39,10 +39,10 @@ async function proxyRequest(
             platform: b.platform,
             native_meeting_id: b.native_meeting_id,
             status: "active",
-            start_time: b.created_at,
+            start_time: b.start_time || b.created_at,
             end_time: null,
             bot_container_id: b.container_id,
-            data: {},
+            data: b.data || {},
             created_at: b.created_at,
           });
         }

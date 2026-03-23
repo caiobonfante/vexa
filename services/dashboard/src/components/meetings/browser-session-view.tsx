@@ -134,13 +134,17 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
   async function handleStop() {
     setIsStopping(true);
     try {
-      await fetch(`/api/vexa/bots/browser_session/${meeting.platform_specific_id}`, {
+      const response = await fetch(`/api/vexa/bots/browser_session/${meeting.platform_specific_id}`, {
         method: "DELETE",
       });
-      toast.success("Session stopped");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ detail: "Failed" }));
+        throw new Error(err.detail || `Stop failed (${response.status})`);
+      }
+      toast.success("Browser session stopped");
       router.push("/meetings");
     } catch (error) {
-      toast.error("Failed to stop session");
+      toast.error("Failed to stop session: " + (error as Error).message);
       setIsStopping(false);
     }
   }

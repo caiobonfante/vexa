@@ -708,8 +708,10 @@ class BotStatus(BaseModel):
     status: Optional[str] = None
     normalized_status: Optional[str] = None
     created_at: Optional[str] = None
+    start_time: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
-    meeting_id_from_name: Optional[str] = None # Example auxiliary info
+    meeting_id_from_name: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
     @field_validator('normalized_status')
     @classmethod

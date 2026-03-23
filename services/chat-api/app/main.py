@@ -122,6 +122,10 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
             "sh", "-c", f"echo '{bot_token}' > /tmp/.vexa-bot-token"
         ])
 
+    # Signal frontend if container was recreated (stale messages should be cleared)
+    if cm._new_container:
+        yield f"data: {json.dumps({'type': 'session_reset', 'reason': 'Container was recreated. Previous session context is no longer available.'})}\n\n"
+
     # Session from Redis — but skip if container was just recreated
     # (session IDs are tied to Claude CLI processes, not portable across containers)
     session_id = None
