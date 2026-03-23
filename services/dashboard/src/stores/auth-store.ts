@@ -25,9 +25,6 @@ interface AuthState {
   setUser: (user: VexaUser | null) => void;
   setToken: (token: string | null) => void;
   checkAuth: () => Promise<void>;
-
-  // Legacy login (kept for backwards compatibility)
-  login: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -95,38 +92,6 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
           didLogout: false,
         });
-      },
-
-      // Legacy login that directly authenticates (for backwards compatibility or dev mode)
-      login: async (email: string) => {
-        set({ isLoading: true });
-        try {
-          const response = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            set({ isLoading: false });
-            return { success: false, error: data.error || "Login failed" };
-          }
-
-          set({
-            user: data.user,
-            token: data.token,
-            isAuthenticated: true,
-            isLoading: false,
-            didLogout: false,
-          });
-
-          return { success: true };
-        } catch (error) {
-          set({ isLoading: false });
-          return { success: false, error: (error as Error).message };
-        }
       },
 
       logout: () => {

@@ -172,3 +172,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ path: s
 export async function DELETE(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   return proxyRequest(req, context.params, "DELETE");
 }
+
+export async function PATCH(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  return proxyRequest(req, context.params, "PATCH");
+}

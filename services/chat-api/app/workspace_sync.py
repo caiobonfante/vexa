@@ -45,11 +45,11 @@ _SYNC_EXCLUDES = (
 async def sync_down(user_id: str, container: str) -> bool:
     """Download workspace from MinIO into /workspace/ inside the container."""
     s3_uri = _s3_uri(user_id)
-    cmd = f"aws s3 sync {s3_uri} /workspace/ {_env_args()} {_SYNC_EXCLUDES} 2>&1 || true"
+    cmd = f"aws s3 sync {s3_uri} /workspace/ {_env_args()} {_SYNC_EXCLUDES} 2>&1"
     logger.info(f"Sync down: {s3_uri} -> /workspace/ in {container}")
     rc, out = await _exec(container, cmd)
     if rc != 0:
-        logger.warning(f"Sync down issue for {user_id}: {out}")
+        logger.error(f"Sync down FAILED for {user_id} (rc={rc}): {out}")
     return rc == 0
 
 
@@ -75,13 +75,15 @@ async def git_commit(user_id: str, container: str) -> bool:
 
 async def sync_up(user_id: str, container: str) -> bool:
     """Git commit then upload workspace to MinIO."""
-    await git_commit(user_id, container)
+    committed = await git_commit(user_id, container)
+    if not committed:
+        logger.warning(f"Git commit failed for {user_id}, proceeding with sync anyway")
     s3_uri = _s3_uri(user_id)
-    cmd = f"aws s3 sync /workspace/ {s3_uri} {_env_args()} --delete {_SYNC_EXCLUDES} 2>&1 || true"
+    cmd = f"aws s3 sync /workspace/ {s3_uri} {_env_args()} --delete {_SYNC_EXCLUDES} 2>&1"
     logger.info(f"Sync up: /workspace/ in {container} -> {s3_uri}")
     rc, out = await _exec(container, cmd)
     if rc != 0:
-        logger.warning(f"Sync up issue for {user_id}: {out}")
+        logger.error(f"Sync up FAILED for {user_id} (rc={rc}): {out}")
     return rc == 0
 
 

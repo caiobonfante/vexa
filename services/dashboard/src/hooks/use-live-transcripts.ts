@@ -169,7 +169,8 @@ export function useLiveTranscripts(
       wsUrl = config.wsUrl;
     } catch (error) {
       // Fallback to default (runtime config should always be available)
-      wsUrl = "ws://localhost:18056/ws";
+      console.error("[WS] Failed to fetch config for WebSocket URL:", error);
+      wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
     }
 
     // Use auth token from the Zustand store, fall back to config endpoint token

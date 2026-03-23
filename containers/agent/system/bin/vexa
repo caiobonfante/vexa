@@ -203,6 +203,7 @@ else:
 
   container)
     RUNTIME="${VEXA_RUNTIME_API:-http://runtime-api:8090}"
+    BOT_TOKEN="${VEXA_BOT_API_TOKEN:-}"
     case "${2:-}" in
       spawn)
         PROFILE="agent"
@@ -214,6 +215,7 @@ else:
           esac
         done
         _curl -X POST "$RUNTIME/containers" \
+          -H "X-API-Key: $BOT_TOKEN" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\",\"profile\":\"$PROFILE\",\"config\":{}}" | python3 -c "
 import sys, json
@@ -230,7 +232,7 @@ if ports:
 "
         ;;
       list)
-        _curl "$RUNTIME/containers?user_id=$USER_ID" | python3 -c "
+        _curl -H "X-API-Key: $BOT_TOKEN" "$RUNTIME/containers?user_id=$USER_ID" | python3 -c "
 import sys, json
 containers = json.load(sys.stdin)
 if not containers:
@@ -247,7 +249,7 @@ else:
           echo "Usage: vexa container stop <name>"
           exit 1
         fi
-        _curl -X DELETE "$RUNTIME/containers/$NAME" > /dev/null && \
+        _curl -H "X-API-Key: $BOT_TOKEN" -X DELETE "$RUNTIME/containers/$NAME" > /dev/null && \
           echo "[vexa] Container $NAME stopped."
         ;;
       *)
@@ -258,6 +260,7 @@ else:
 
   browser)
     RUNTIME="${VEXA_RUNTIME_API:-http://runtime-api:8090}"
+    BOT_TOKEN="${VEXA_BOT_API_TOKEN:-}"
     case "${2:-}" in
       connect)
         NAME="${3:-}"
@@ -265,7 +268,7 @@ else:
           echo "Usage: vexa browser connect <container-name>"
           exit 1
         fi
-        _curl "$RUNTIME/containers/$NAME/cdp" | python3 -c "
+        _curl -H "X-API-Key: $BOT_TOKEN" "$RUNTIME/containers/$NAME/cdp" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 print(d.get('cdp_url', 'No CDP URL available'))

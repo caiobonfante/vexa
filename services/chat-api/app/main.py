@@ -113,7 +113,7 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
     If container dies, raises exception — caller can retry."""
 
     cm._new_container = False
-    container = await cm.ensure_container(user_id)
+    container = await cm.ensure_container(user_id, bot_token=bot_token)
 
     # If a user-specific bot token was provided, write it to the container
     # so vexa CLI reads it for bot-manager calls (meetings belong to this user)

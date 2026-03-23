@@ -8,6 +8,18 @@ async function getUserToken(): Promise<string> {
   return cookieStore.get("vexa-token")?.value || "";
 }
 
+async function safeJsonResponse(resp: globalThis.Response): Promise<Response> {
+  const text = await resp.text();
+  try {
+    return Response.json(JSON.parse(text), { status: resp.status });
+  } catch {
+    return new Response(text, {
+      status: resp.status,
+      headers: { "Content-Type": resp.headers.get("content-type") || "text/plain" },
+    });
+  }
+}
+
 export async function GET(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const url = new URL(req.url);
@@ -15,8 +27,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ path: s
   const resp = await fetch(target, {
     headers: { "Content-Type": "application/json" },
   });
-  const data = await resp.json();
-  return Response.json(data, { status: resp.status });
+  return safeJsonResponse(resp);
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
@@ -51,8 +62,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ path: 
     headers: { "Content-Type": "application/json" },
     body: rawBody,
   });
-  const data = await resp.json();
-  return Response.json(data, { status: resp.status });
+  return safeJsonResponse(resp);
 }
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
@@ -64,8 +74,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ path: s
     headers: { "Content-Type": "application/json" },
     body,
   });
-  const data = await resp.json();
-  return Response.json(data, { status: resp.status });
+  return safeJsonResponse(resp);
 }
 
 export async function DELETE(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
@@ -77,6 +86,5 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ path
     headers: { "Content-Type": "application/json" },
     body: body || undefined,
   });
-  const data = await resp.json();
-  return Response.json(data, { status: resp.status });
+  return safeJsonResponse(resp);
 }

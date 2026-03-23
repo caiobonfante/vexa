@@ -80,7 +80,12 @@ class ContainerManager:
         except Exception:
             return False
 
-    async def ensure_container(self, user_id: str) -> str:
+    def _auth_headers(self, bot_token: Optional[str] = None) -> dict:
+        """Return auth headers, preferring per-request bot_token over env default."""
+        token = bot_token or os.getenv("BOT_API_TOKEN", "")
+        return {"X-API-Key": token} if token else {}
+
+    async def ensure_container(self, user_id: str, bot_token: Optional[str] = None) -> str:
         """Ensure a running agent container exists. Returns container name."""
         # Check local cache first
         info = self._containers.get(user_id)
@@ -99,7 +104,7 @@ class ContainerManager:
             "user_id": user_id,
             "profile": "agent",
             "config": {"claude_credentials": True},
-        })
+        }, headers=self._auth_headers(bot_token))
         if resp.status_code not in (200, 201):
             raise RuntimeError(f"Runtime API failed: {resp.status_code} {resp.text[:200]}")
 

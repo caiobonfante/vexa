@@ -42,9 +42,11 @@ async function fetchConfig(): Promise<{ wsUrl: string; authToken: string | null 
     cachedConfig = { wsUrl: config.wsUrl, authToken: config.authToken };
     return cachedConfig;
   } catch {
-    // Fallback to default (runtime config should always be available)
+    console.error("[WS] Failed to fetch config for WebSocket URL");
+    const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = typeof window !== "undefined" ? window.location.host : "localhost:8066";
     return {
-      wsUrl: "ws://localhost:18056/ws",
+      wsUrl: `${proto}//${host}/ws`,
       authToken: null
     };
   }

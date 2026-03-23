@@ -549,7 +549,7 @@ export default function MeetingDetailPage() {
     currentMeeting?.status === "joining" ||
     currentMeeting?.status === "awaiting_admission";
   const isStoppingState = currentMeeting?.status === "stopping";
-  const isBrowserSession = currentMeeting?.platform === "browser_session";
+  const isBrowserSession = currentMeeting?.platform === "browser_session" || currentMeeting?.data?.mode === "browser_session";
   const shouldUseWebSocket =
     !isBrowserSession &&
     (currentMeeting?.status === "active" || isEarlyState || isStoppingState);
