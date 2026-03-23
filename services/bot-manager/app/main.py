@@ -1288,7 +1288,8 @@ async def update_bot_config(
         "action": "reconfigure",
         "meeting_id": internal_meeting_id,
         "language": req.language,
-        "task": req.task
+        "task": req.task,
+        "allowed_languages": req.allowed_languages,
     }
     # Publish to the meeting-specific channel the bot SUBSCRIBED to
     channel = f"bot_commands:meeting:{internal_meeting_id}"

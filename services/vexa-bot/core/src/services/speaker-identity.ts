@@ -26,8 +26,8 @@ const trackVotes = new Map<number, Map<string, number>>();
 /** Locked mappings: trackIndex → speakerName. Once set, permanent. */
 const lockedMappings = new Map<number, string>();
 
-/** Minimum votes to lock */
-const LOCK_THRESHOLD = 3;
+/** Minimum votes to lock (reduced from 3 for faster locking with human participants) */
+const LOCK_THRESHOLD = 2;
 
 /** Minimum vote ratio to lock (70%) */
 const LOCK_RATIO = 0.7;
@@ -44,10 +44,11 @@ export function isNameTaken(name: string, excludeTrackIndex?: number): boolean {
 }
 
 /**
- * Record a vote: track N was active while speaker X was the only one speaking.
+ * Record a vote: track N was active while speaker X was speaking.
+ * Supports fractional weights (0.5 for overlapping speech, 1.0 for exclusive).
  * Once locked, votes are ignored for that track.
  */
-export function recordTrackVote(trackIndex: number, speakerName: string): void {
+export function recordTrackVote(trackIndex: number, speakerName: string, weight: number = 1.0): void {
   // Already locked — nothing to do
   if (lockedMappings.has(trackIndex)) return;
 
@@ -58,7 +59,7 @@ export function recordTrackVote(trackIndex: number, speakerName: string): void {
     trackVotes.set(trackIndex, new Map());
   }
   const votes = trackVotes.get(trackIndex)!;
-  votes.set(speakerName, (votes.get(speakerName) || 0) + 1);
+  votes.set(speakerName, (votes.get(speakerName) || 0) + weight);
 
   // Check if we can lock
   const totalVotes = Array.from(votes.values()).reduce((a, b) => a + b, 0);
@@ -161,21 +162,28 @@ async function resolveGoogleMeetSpeakerName(
 
   const { speaking } = state;
 
-  // Single speaker → vote
+  // Single speaker → full vote (high confidence)
   if (speaking.length === 1) {
     const candidate = speaking[0];
-
-    // Don't return a name already taken by another track
-    if (isNameTaken(candidate, elementIndex)) {
-      return null;
+    if (!isNameTaken(candidate, elementIndex)) {
+      recordTrackVote(elementIndex, candidate, 1.0);
+      return getLockedMapping(elementIndex) || candidate;
     }
-
-    recordTrackVote(elementIndex, candidate);
-    // Re-check lock (may have just locked)
-    return getLockedMapping(elementIndex) || candidate;
   }
 
-  // Multiple or zero speaking — can't vote.
+  // Two speakers overlapping → half vote for each (common in real conversation)
+  if (speaking.length === 2) {
+    for (const candidate of speaking) {
+      if (!isNameTaken(candidate, elementIndex)) {
+        recordTrackVote(elementIndex, candidate, 0.5);
+      }
+    }
+    // Return locked name if just locked, or top voted
+    const justLocked = getLockedMapping(elementIndex);
+    if (justLocked) return justLocked;
+  }
+
+  // Zero or 3+ speaking — can't vote.
   // Return top voted name only if it's not taken by another track.
   const votes = trackVotes.get(elementIndex);
   if (votes && votes.size > 0) {

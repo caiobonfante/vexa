@@ -20,7 +20,8 @@
 | VAD filters silence | 80 | No empty-text segments in output (indirect) | 2026-03-16 | Feed silent audio, verify zero segments |
 | MS Teams pipeline | 90 | 9-speaker live replay with correct attribution, 14 segments delivered | 2026-03-21 | -- |
 | Dashboard rendering | 90 | Simplified to two-map model (confirmed + pendingBySpeaker); legacy transcript.mutable handler removed; collector no longer publishes conflicting messages | 2026-03-22 | Verify with live meeting in browser |
-| Google Meet speaker mapping | 90 | E2E PASS: 9/9 basic (100% speaker, 7% WER), 18/20 stress (100% speaker, 15% WER) — bot labels segments at source via isDuplicateSpeakerName dedup + voting; collector is persistence-only | 2026-03-23 | Test with human participants (non-TTS) |
+| Google Meet speaker mapping (TTS) | 90 | E2E PASS: 9/9 basic (100% speaker, 7% WER), 18/20 stress (100% speaker, 15% WER) | 2026-03-23 | -- |
+| Google Meet speaker mapping (human) | 40 | Meeting 672: 23/215 unnamed segments, lock took 585s. Confirmation fails → 107-226s monolith segments. Multi-track duplication. | 2026-03-23 | Fix confirmation logic, faster locking, track dedup |
 
 ## Platform Status
 
@@ -149,6 +150,66 @@ Replayed 20 consolidated utterances from FINOS panel discussion into live Teams 
 - Rapid exchanges (8 sent, 8 captured): all correct — fast speaker changes work
 - 30s silence gap: 0 hallucinated segments — VAD working correctly
 
+## Live GMeet Meeting Analysis: Meeting 672 (2026-03-23)
+
+Real 3-person Google Meet with human participants (Speaker A, Speaker B, Speaker C). 42-minute meeting, 215 segments. First real human-participant GMeet test.
+
+### Issues Found
+
+**Issue A: Speaker not identified initially (23 unnamed segments)**
+- `speaker-0` produced 23 segments with empty speaker name before identity locked at segment 23 (585.8s)
+- Speaker-0 was eventually identified as "Speaker A" but the first 22 segments (~0-516s) remain unnamed
+- Root cause: speaker identity voting needs 3 votes to lock. With 3 participants and overlapping speech, single-speaker windows (required for voting) were rare in the first minutes
+- **Severity: HIGH** — user sees "Unknown" for the first 8+ minutes
+
+**Issue B: Giant segments cause wrong chronological ordering (confirmation failure)**
+- Speaker C (`speaker-2`) has monster segments: 107s, 226s, 105s
+- These span other speakers' segments in time, making the transcript appear out of order when sorted by `start_time`
+- Root cause: per-segment confirmation (`confirmThreshold=2`) never triggers for this speaker — Whisper returns slightly different segment boundaries on each submission, preventing stability. Buffer grows until idle timeout force-flushes as one monolithic segment.
+- Example: `speaker-2:3` spans 104.2-211.6s (107s) while `speaker-1` has 8 normal segments within that range
+- **Severity: HIGH** — transcript unreadable, segments interleaved incorrectly
+
+**Issue C: Post-meeting playback misaligned for giant segments**
+- Normal 5-15s segments: playback seek is approximately correct
+- Giant 100-226s segments: playback seek is completely off
+- Root cause: `start_time = (windowStartMs - sessionStartMs) / 1000` where `windowStartMs` is set when the buffer first started accumulating. For a 226s segment, the start_time reflects when audio first arrived in the buffer (possibly minutes ago), not when the actual speech starts. The recording position for that speech is much later.
+- This is NOT the `sessionStartMs` offset bug (WI-4 fix) — it's a consequence of confirmation failure. When confirmation works (normal segments), timestamps are accurate. When it fails (giant segments), the entire buffer is flushed as one segment with a stale start_time.
+- **Severity: HIGH** — clicking these segments jumps to wrong audio position
+
+**Issue D: Duplicate content across tracks**
+- Same audio captured by both `speaker-0` (unnamed) and `speaker-1` (Anoop) simultaneously at same timestamps
+- Example: at 366.5s both `speaker-0:17` and `speaker-1:13` have content from the same moment
+- Root cause: GMeet may route the same participant's audio to multiple `<audio>` elements, or the speaker identity system failed to merge tracks
+- **Severity: MEDIUM** — duplicate segments in transcript
+
+**Issue E: Wrong language detection (2 segments)**
+- Speaker C detected as Portuguese (1 segment) and German (1 segment)
+- Root cause: short ambiguous audio + auto-detect. The `allowed_languages` feature (WI-3, deployed) would fix this.
+- **Severity: LOW** — rare, 2/215 segments
+
+### Key Insight
+
+Issues A, B, C, and D all stem from the same root cause chain:
+1. GMeet assigns multiple `<audio>` elements to participants → duplicate tracks
+2. Speaker identity voting fails to lock quickly → unnamed parallel track
+3. Confirmation logic fails for certain speakers → buffer grows unbounded
+4. Giant segments have stale `start_time` → playback misaligned
+5. Interleaved giant + normal segments → wrong chronological order
+
+### Changes Deployed (2026-03-23)
+
+| Change | Status | Addresses |
+|--------|--------|-----------|
+| WI-1: Silero VAD in SpeakerStreamManager | Deployed, tested in sandbox (7 skips on 30s silence), live test confirmed VAD loads | Hallucinations during silence |
+| WI-2: Audio element re-scan + health monitoring | Deployed, live test confirmed health logging works | Silence → transcription stops |
+| WI-3: Language locking whitelist (`allowed_languages`) | Deployed | Issue E (wrong language) |
+| WI-4: Timestamp re-alignment (`__vexaRecordingStarted`) | Deployed, live test confirmed 2.044s delta corrected | Constant offset in all segments |
+
+None of the deployed changes address the primary issues (A, B, C, D) which require:
+- Faster speaker identity locking for GMeet
+- Fixing confirmation logic for long monologues
+- Deduplication of same-person multi-track segments
+
 ## Action Items
 
 1. ~~Connect wscat during active Teams meeting and verify segments arrive in real-time~~ DONE
@@ -156,6 +217,9 @@ Replayed 20 consolidated utterances from FINOS panel discussion into live Teams 
 3. ~~Test with longer meetings (>5 min) to verify buffer stability~~ DONE (98s monologue captured)
 4. ~~Reduce CONFIRMED latency from 10.8s toward <5s target~~ DONE (DRAFT 4.9s meets target)
 5. Short phrase loss is a Teams platform limitation — single-word TTS utterances don't generate captions
+6. **Investigate confirmation failure on GMeet long monologues** — why does `confirmThreshold=2` never trigger for speaker-2?
+7. **Fix speaker identity locking speed for GMeet** — 8+ minutes to lock is unacceptable
+8. **Handle multi-track deduplication** — same person's audio on multiple `<audio>` elements
 
 ### Delivery Iteration (2026-03-21): Right-side pipeline fixes
 

@@ -68,6 +68,15 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
     log("[Google Recording] Audio capture disabled by config.");
   }
 
+  // Expose callback so the browser can signal when MediaRecorder actually starts.
+  // This re-aligns sessionStartMs with the recording, fixing click-to-seek offset.
+  await page.exposeFunction("__vexaRecordingStarted", () => {
+    if (publisher) {
+      publisher.resetSessionStart();
+      log(`[Recording] Session start re-aligned to MediaRecorder start: ${new Date(publisher.sessionStartMs).toISOString()}`);
+    }
+  });
+
   await ensureBrowserUtils(page, require('path').join(__dirname, '../../browser-utils.global.js'));
 
   // Pass the necessary config fields and the resolved URL into the page context
@@ -259,6 +268,8 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
                 };
 
                 recorder.start(1000);
+                // Signal Node.js that recording started — re-aligns segment timestamps
+                (window as any).__vexaRecordingStarted?.();
                 (window as any).logBot?.(
                   `[Google Recording] MediaRecorder started (${recorder.mimeType || mimeType || "default"}).`
                 );

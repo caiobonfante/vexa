@@ -328,7 +328,7 @@ export class SpeakerStreamManager {
   /**
    * @param force - if true, flush regardless of minAudioDuration (end-of-stream)
    */
-  flushSpeaker(speakerId: string, force: boolean = false): void {
+  async flushSpeaker(speakerId: string, force: boolean = false): Promise<void> {
     const buffer = this.buffers.get(speakerId);
     if (!buffer) return;
 
@@ -350,7 +350,7 @@ export class SpeakerStreamManager {
     if (this.unconfirmedSamples(buffer) > 0 && !buffer.inFlight) {
       buffer.idleSubmitted = true;
       log(`[SpeakerStreams] Flush-submit for "${buffer.speakerName}" (${unconfirmedSec.toFixed(1)}s audio, no transcript yet)`);
-      this.submitBuffer(buffer);
+      await this.submitBuffer(buffer);
       return;
     }
 
@@ -363,7 +363,7 @@ export class SpeakerStreamManager {
     return buffer.totalSamples - buffer.confirmedSamples;
   }
 
-  private trySubmit(speakerId: string): void {
+  private async trySubmit(speakerId: string): Promise<void> {
     const buffer = this.buffers.get(speakerId);
     if (!buffer || buffer.inFlight) return;
 
@@ -376,7 +376,7 @@ export class SpeakerStreamManager {
       if (!buffer.idleSubmitted) {
         buffer.idleSubmitted = true;
         log(`[SpeakerStreams] Idle submit for "${buffer.speakerName}" (${(idleMs/1000).toFixed(1)}s idle, final submission)`);
-        this.submitBuffer(buffer);
+        await this.submitBuffer(buffer);
         return;
       }
       if (!buffer.inFlight) {
@@ -397,24 +397,21 @@ export class SpeakerStreamManager {
 
     // Submit if enough unconfirmed audio
     if (unconfirmedSec >= this.minAudioDuration) {
-      this.submitBuffer(buffer);
+      await this.submitBuffer(buffer);
     }
   }
 
   /**
    * Submit only the UNCONFIRMED portion of the buffer to Whisper.
    * Audio before confirmedSamples has already been transcribed and emitted.
+   * If VAD is enabled, checks for speech first — skips Whisper if silence.
    */
-  private submitBuffer(buffer: SpeakerBuffer): void {
+  private async submitBuffer(buffer: SpeakerBuffer): Promise<void> {
     const unconfirmed = this.unconfirmedSamples(buffer);
     if (unconfirmed === 0 || !this.onSegmentReady) return;
 
-    buffer.inFlight = true;
-    this.submitGeneration.set(buffer.speakerId, buffer.generation);
-
     // Build audio from confirmedSamples onward
     const combined = new Float32Array(unconfirmed);
-    let srcOffset = 0;
     let dstOffset = 0;
     let samplesToSkip = buffer.confirmedSamples;
 
@@ -430,6 +427,9 @@ export class SpeakerStreamManager {
       dstOffset += toCopy;
     }
 
+    buffer.inFlight = true;
+    this.submitGeneration.set(buffer.speakerId, buffer.generation);
+
     try {
       this.onSegmentReady(buffer.speakerId, buffer.speakerName, combined);
     } catch (err: any) {
@@ -442,6 +442,11 @@ export class SpeakerStreamManager {
    */
   private emitSegment(buffer: SpeakerBuffer, text: string): void {
     if (!text || !this.onSegmentConfirmed) return;
+    // Dedup: don't re-emit the same text that was just confirmed (acoustic echo / residual audio)
+    if (text === buffer.lastConfirmedText) {
+      log(`[SpeakerStreams] Dedup skip for "${buffer.speakerName}": "${text.substring(0, 50)}" (same as last confirmed)`);
+      return;
+    }
     const endMs = Date.now();
     const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
     this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, text, buffer.windowStartMs, endMs, segmentId);

@@ -12,6 +12,7 @@
 import * as fs from 'fs';
 import { SpeakerStreamManager } from './speaker-streams';
 import { TranscriptionClient } from './transcription-client';
+import { SileroVAD } from './vad';
 
 const SAMPLE_RATE = 16000;
 const CHUNK_SIZE = 4096;
@@ -73,6 +74,20 @@ async function main() {
     sampleRate: SAMPLE_RATE,
     maxSpeechDurationSec: 15,
   });
+
+  // Load Silero VAD if VAD=1 is set (test silence rejection at entry gate)
+  const useVad = process.env.VAD === '1';
+  let vadModel: SileroVAD | null = null;
+  let vadState: import('./vad').VadSpeakerState | null = null;
+  if (useVad) {
+    try {
+      vadModel = await SileroVAD.create();
+      vadState = vadModel.createSpeakerState();
+      console.log('  VAD:      Silero streaming enabled (per-chunk gate)\n');
+    } catch (err: any) {
+      console.log(`  VAD:      failed to load (${err.message}), disabled\n`);
+    }
+  }
 
   const mgr = new SpeakerStreamManager({
     sampleRate: SAMPLE_RATE,
@@ -186,10 +201,24 @@ async function main() {
   console.log(`  [0.0s] ▶ Playing ${totalDuration.toFixed(1)}s of audio...\n`);
   mgr.addSpeaker('s1', 'Speaker');
 
+  let vadSkipCount = 0;
   for (let i = 0; i < totalChunks; i++) {
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, audio.length);
-    mgr.feedAudio('s1', audio.subarray(start, end));
+    const chunk = audio.subarray(start, end);
+
+    // VAD gate at entry (same as production handlePerSpeakerAudioData)
+    if (vadModel && vadState && chunk.length >= 512) {
+      const isSpeech = await vadModel.isSpeechStreaming(chunk, vadState);
+      if (!isSpeech) {
+        vadSkipCount++;
+        // Don't feed — simulates ambient noise rejection
+        await new Promise(r => setTimeout(r, CHUNK_DURATION_MS));
+        continue;
+      }
+    }
+
+    mgr.feedAudio('s1', chunk);
 
     const audioSec = (i * CHUNK_SIZE) / SAMPLE_RATE;
     if (i > 0 && Math.floor(audioSec) % 5 === 0 && Math.floor(((i - 1) * CHUNK_SIZE) / SAMPLE_RATE) % 5 !== 0) {
@@ -272,6 +301,7 @@ async function main() {
   console.log(`  │ Wall time:  ${wallTimeSec.toFixed(1)}s`);
   console.log(`  │ Whisper:    ${whisperCalls} calls, avg ${whisperCalls > 0 ? (totalWhisperMs / whisperCalls).toFixed(0) : 0}ms`);
   console.log(`  │ Filtered:   ${filteredCount} (quality gate rejections)`);
+  console.log(`  │ VAD skips:  ${vadSkipCount} (chunks rejected by Silero streaming VAD at entry)`);
   console.log(`  │ Segments:   ${confirmed.length}`);
   console.log(`  │`);
   console.log(`  │ PERFORMANCE:`);
