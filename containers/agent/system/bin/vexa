@@ -309,17 +309,379 @@ else:
           -H "X-API-Key: $BOT_TOKEN" && \
           echo "[vexa] Meeting bot stopped." || echo "[vexa] Stop failed."
         ;;
+
+      speak)
+        # vexa meeting speak --platform teams --id <native_id> --text "Hello" [--voice alloy]
+        PLATFORM="" NATIVE_ID="" TEXT="" VOICE="alloy"
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --text) TEXT="$2"; shift 2 ;;
+            --voice) VOICE="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ] || [ -z "$TEXT" ]; then
+          echo "Usage: vexa meeting speak --platform <platform> --id <native_meeting_id> --text <text> [--voice <voice>]"
+          echo "Voices: alloy, echo, fable, onyx, nova, shimmer (or any Piper voice name)"
+          exit 1
+        fi
+        ESCAPED_TEXT=$(_json_escape "$TEXT")
+        curl -sf -X POST "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/speak" \
+          -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+          -d "{\"text\":$ESCAPED_TEXT,\"voice\":\"$VOICE\"}" && \
+          echo "[vexa] Speak command sent." || echo "[vexa] Speak failed."
+        ;;
+
+      speak-stop)
+        # vexa meeting speak-stop --platform teams --id <native_id>
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting speak-stop --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/speak" \
+          -H "X-API-Key: $BOT_TOKEN" && \
+          echo "[vexa] Speak stopped." || echo "[vexa] Speak stop failed."
+        ;;
+
+      chat)
+        # vexa meeting chat --platform teams --id <native_id> --text "Hello"
+        PLATFORM="" NATIVE_ID="" TEXT=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --text) TEXT="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ] || [ -z "$TEXT" ]; then
+          echo "Usage: vexa meeting chat --platform <platform> --id <native_meeting_id> --text <message>"
+          exit 1
+        fi
+        ESCAPED_TEXT=$(_json_escape "$TEXT")
+        curl -sf -X POST "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/chat" \
+          -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+          -d "{\"text\":$ESCAPED_TEXT}" && \
+          echo "[vexa] Chat message sent." || echo "[vexa] Chat send failed."
+        ;;
+
+      chat-read)
+        # vexa meeting chat-read --platform teams --id <native_id>
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting chat-read --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        curl -sf "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/chat" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+msgs = data.get('messages', [])
+if not msgs:
+    print('[vexa] No chat messages.')
+else:
+    for m in msgs:
+        sender = m.get('sender', 'Unknown')
+        text = m.get('text', '')
+        ts = m.get('timestamp', '')
+        print(f'  [{ts}] {sender}: {text}')
+" 2>/dev/null || echo "[vexa] Could not read chat."
+        ;;
+
+      screen)
+        # vexa meeting screen --platform teams --id <native_id> --type url --url "https://..."
+        # vexa meeting screen --platform teams --id <native_id> --type html --html "<h1>Hi</h1>"
+        PLATFORM="" NATIVE_ID="" TYPE="" URL="" HTML_CONTENT=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --type) TYPE="$2"; shift 2 ;;
+            --url) URL="$2"; shift 2 ;;
+            --html) HTML_CONTENT="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ] || [ -z "$TYPE" ]; then
+          echo "Usage: vexa meeting screen --platform <platform> --id <native_meeting_id> --type <image|video|url|html> [--url <url>] [--html <html>]"
+          exit 1
+        fi
+        if [ "$TYPE" = "html" ]; then
+          ESCAPED_HTML=$(_json_escape "$HTML_CONTENT")
+          BODY="{\"type\":\"$TYPE\",\"html\":$ESCAPED_HTML}"
+        else
+          BODY="{\"type\":\"$TYPE\",\"url\":\"$URL\"}"
+        fi
+        curl -sf -X POST "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/screen" \
+          -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+          -d "$BODY" && \
+          echo "[vexa] Screen share started." || echo "[vexa] Screen share failed."
+        ;;
+
+      screen-stop)
+        # vexa meeting screen-stop --platform teams --id <native_id>
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting screen-stop --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/screen" \
+          -H "X-API-Key: $BOT_TOKEN" && \
+          echo "[vexa] Screen share stopped." || echo "[vexa] Screen stop failed."
+        ;;
+
+      avatar)
+        # vexa meeting avatar --platform teams --id <native_id> --url "https://..."
+        PLATFORM="" NATIVE_ID="" URL=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --url) URL="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ] || [ -z "$URL" ]; then
+          echo "Usage: vexa meeting avatar --platform <platform> --id <native_meeting_id> --url <image_url>"
+          exit 1
+        fi
+        curl -sf -X PUT "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/avatar" \
+          -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+          -d "{\"url\":\"$URL\"}" && \
+          echo "[vexa] Avatar set." || echo "[vexa] Avatar set failed."
+        ;;
+
+      avatar-reset)
+        # vexa meeting avatar-reset --platform teams --id <native_id>
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting avatar-reset --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/avatar" \
+          -H "X-API-Key: $BOT_TOKEN" && \
+          echo "[vexa] Avatar reset." || echo "[vexa] Avatar reset failed."
+        ;;
+
+      config)
+        # vexa meeting config --platform teams --id <native_id> [--language en] [--task transcribe]
+        PLATFORM="" NATIVE_ID="" LANGUAGE="" TASK=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --language) LANGUAGE="$2"; shift 2 ;;
+            --task) TASK="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting config --platform <platform> --id <native_meeting_id> [--language <lang>] [--task <task>]"
+          exit 1
+        fi
+        BODY="{"
+        [ -n "$LANGUAGE" ] && BODY="$BODY\"language\":\"$LANGUAGE\","
+        [ -n "$TASK" ] && BODY="$BODY\"task\":\"$TASK\","
+        BODY="${BODY%,}}"
+        curl -sf -X PUT "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID/config" \
+          -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+          -d "$BODY" && \
+          echo "[vexa] Config updated." || echo "[vexa] Config update failed."
+        ;;
+
       *)
-        echo "Usage: vexa meeting {join|list|transcript|stop}"
+        echo "Usage: vexa meeting {join|list|transcript|stop|speak|speak-stop|chat|chat-read|screen|screen-stop|avatar|avatar-reset|config}"
         echo ""
-        echo "Examples:"
-        echo "  vexa meeting join --platform teams --url 'https://teams.microsoft.com/...'"
+        echo "Bot lifecycle:"
+        echo "  vexa meeting join --platform {teams|google_meet|zoom} --url {url}"
         echo "  vexa meeting list"
-        echo "  vexa meeting transcript 42"
-        echo "  vexa meeting stop --platform teams --id 123456789"
+        echo "  vexa meeting transcript {meeting_id}"
+        echo "  vexa meeting stop --platform {p} --id {id}"
+        echo "  vexa meeting config --platform {p} --id {id} [--language en] [--task transcribe]"
+        echo ""
+        echo "Voice (TTS):"
+        echo "  vexa meeting speak --platform {p} --id {id} --text {text} [--voice alloy]"
+        echo "  vexa meeting speak-stop --platform {p} --id {id}"
+        echo ""
+        echo "Chat:"
+        echo "  vexa meeting chat --platform {p} --id {id} --text {message}"
+        echo "  vexa meeting chat-read --platform {p} --id {id}"
+        echo ""
+        echo "Screen share:"
+        echo "  vexa meeting screen --platform {p} --id {id} --type {image|video|url|html} [--url {url}] [--html {html}]"
+        echo "  vexa meeting screen-stop --platform {p} --id {id}"
+        echo ""
+        echo "Avatar:"
+        echo "  vexa meeting avatar --platform {p} --id {id} --url {image_url}"
+        echo "  vexa meeting avatar-reset --platform {p} --id {id}"
         ;;
     esac
     ;;
+  recording)
+    BOT_MGR="${VEXA_BOT_MANAGER:-http://bot-manager:8080}"
+    BOT_TOKEN="${VEXA_BOT_API_TOKEN:-}"
+    case "${2:-}" in
+      list)
+        # vexa recording list [--meeting-id 42]
+        MEETING_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --meeting-id) MEETING_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        PARAMS=""
+        [ -n "$MEETING_ID" ] && PARAMS="?meeting_id=$MEETING_ID"
+        curl -sf "$BOT_MGR/recordings$PARAMS" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+recs = data.get('recordings', [])
+if not recs:
+    print('[vexa] No recordings.')
+else:
+    for r in recs:
+        rid = r.get('id', '')
+        mid = r.get('meeting_id', '')
+        created = r.get('created_at', '')
+        media = r.get('media_files', [])
+        media_str = ', '.join(f\"{m.get('type','?')}/{m.get('format','?')}\" for m in media) if media else 'none'
+        print(f'  {rid}  meeting={mid}  {created}  media=[{media_str}]')
+" 2>/dev/null || echo "[vexa] Could not list recordings."
+        ;;
+
+      get)
+        # vexa recording get <recording_id>
+        REC_ID="${3:-}"
+        if [ -z "$REC_ID" ]; then
+          echo "Usage: vexa recording get <recording_id>"
+          exit 1
+        fi
+        curl -sf "$BOT_MGR/recordings/$REC_ID" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -m json.tool 2>/dev/null || \
+          echo "[vexa] Could not get recording."
+        ;;
+
+      download)
+        # vexa recording download <recording_id> <media_file_id>
+        REC_ID="${3:-}"
+        MEDIA_ID="${4:-}"
+        if [ -z "$REC_ID" ] || [ -z "$MEDIA_ID" ]; then
+          echo "Usage: vexa recording download <recording_id> <media_file_id>"
+          exit 1
+        fi
+        curl -sf "$BOT_MGR/recordings/$REC_ID/media/$MEDIA_ID/download" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(f\"[vexa] Download URL: {data.get('download_url', 'N/A')}\")
+print(f\"  filename: {data.get('filename', 'N/A')}\")
+print(f\"  size: {data.get('file_size_bytes', 'N/A')} bytes\")
+" 2>/dev/null || echo "[vexa] Could not get download URL."
+        ;;
+
+      delete)
+        # vexa recording delete <recording_id>
+        REC_ID="${3:-}"
+        if [ -z "$REC_ID" ]; then
+          echo "Usage: vexa recording delete <recording_id>"
+          exit 1
+        fi
+        curl -sf -X DELETE "$BOT_MGR/recordings/$REC_ID" \
+          -H "X-API-Key: $BOT_TOKEN" && \
+          echo "[vexa] Recording deleted." || echo "[vexa] Delete failed."
+        ;;
+
+      config)
+        # vexa recording config [--enabled true|false] [--capture-modes audio,video]
+        shift 2
+        if [ $# -eq 0 ]; then
+          # GET config
+          curl -sf "$BOT_MGR/recording-config" \
+            -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(f\"[vexa] Recording config:\")
+print(f\"  enabled: {data.get('enabled')}\")
+print(f\"  capture_modes: {data.get('capture_modes')}\")
+" 2>/dev/null || echo "[vexa] Could not get config."
+        else
+          ENABLED="" MODES=""
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              --enabled) ENABLED="$2"; shift 2 ;;
+              --capture-modes) MODES="$2"; shift 2 ;;
+              *) shift ;;
+            esac
+          done
+          BODY="{"
+          [ -n "$ENABLED" ] && BODY="$BODY\"enabled\":$ENABLED,"
+          if [ -n "$MODES" ]; then
+            MODES_JSON=$(python3 -c "import json; print(json.dumps('$MODES'.split(',')))")
+            BODY="$BODY\"capture_modes\":$MODES_JSON,"
+          fi
+          BODY="${BODY%,}}"
+          curl -sf -X PUT "$BOT_MGR/recording-config" \
+            -H "X-API-Key: $BOT_TOKEN" -H "Content-Type: application/json" \
+            -d "$BODY" && \
+            echo "[vexa] Recording config updated." || echo "[vexa] Config update failed."
+        fi
+        ;;
+
+      *)
+        echo "Usage: vexa recording {list|get|download|delete|config}"
+        echo ""
+        echo "  vexa recording list [--meeting-id <id>]"
+        echo "  vexa recording get <recording_id>"
+        echo "  vexa recording download <recording_id> <media_file_id>"
+        echo "  vexa recording delete <recording_id>"
+        echo "  vexa recording config                                    # show config"
+        echo "  vexa recording config --enabled true --capture-modes audio,video"
+        ;;
+    esac
+    ;;
+
   --help|-h|"")
     echo "vexa -- Vexa Agentic Runtime CLI"
     echo ""
