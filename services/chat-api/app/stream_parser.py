@@ -31,6 +31,11 @@ def parse_event(data: dict) -> list[dict]:
             events.append({"type": "text_delta", "text": delta.get("text", "")})
 
     elif msg_type == "result":
+        # Check for errors (e.g., stale --resume session ID)
+        if data.get("is_error") or data.get("subtype") == "error_during_execution":
+            errors = data.get("errors", [])
+            error_msg = errors[0] if errors else "Claude CLI error"
+            events.append({"type": "error", "message": error_msg})
         events.append({
             "type": "done",
             "session_id": data.get("session_id"),

@@ -169,6 +169,15 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
     # (session IDs are tied to Claude CLI processes, not portable across containers)
     if not cm._new_container:
         session_id = await get_session(user_id, session_id)
+        # Validate session file exists in container (stale IDs cause silent failures)
+        if session_id:
+            check = await cm.exec_simple(container, [
+                "sh", "-c", f"test -f /root/.claude/projects/-workspace/{session_id}.jsonl && echo OK || echo MISSING"
+            ])
+            if check and "MISSING" in check:
+                logger.warning(f"Session {session_id[:12]} not found in container, starting fresh")
+                await clear_session(user_id)
+                session_id = None
     else:
         session_id = None
 
