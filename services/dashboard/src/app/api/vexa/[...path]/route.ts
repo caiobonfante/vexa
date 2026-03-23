@@ -42,30 +42,65 @@ async function proxyRequest(
 
   // Route /recordings/* to bot-manager (already correct)
 
-  // Rewrite /meetings to bot-manager's /bots/status
+  // Rewrite /meetings — combine bot-manager active bots + TC meeting history
   if (pathString === "meetings" && method === "GET") {
-    // Return meetings from bot-manager's bots/status + DB
-    // For now, return empty array to prevent 404
-    const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
-      headers: { "X-API-Key": VEXA_API_KEY },
-    });
-    if (statusResp.ok) {
-      const data = await statusResp.json();
-      const bots = data.running_bots || [];
-      const meetings = bots.map((b: any) => ({
-        id: parseInt(b.meeting_id_from_name) || 0,
-        platform: b.platform,
-        native_meeting_id: b.native_meeting_id,
-        status: b.normalized_status === "Up" ? "active" : "completed",
-        start_time: b.created_at,
-        end_time: null,
-        bot_container_id: b.container_id,
-        data: {},
-        created_at: b.created_at,
-      }));
-      return NextResponse.json({ meetings });
-    }
-    return NextResponse.json({ meetings: [] });
+    const meetings: any[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Get active bots from bot-manager
+    try {
+      const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
+        headers: { "X-API-Key": VEXA_API_KEY },
+      });
+      if (statusResp.ok) {
+        const data = await statusResp.json();
+        for (const b of data.running_bots || []) {
+          const id = b.meeting_id_from_name || b.container_name;
+          seenIds.add(id);
+          meetings.push({
+            id: parseInt(id) || 0,
+            platform: b.platform,
+            native_meeting_id: b.native_meeting_id,
+            status: "active",
+            start_time: b.created_at,
+            end_time: null,
+            bot_container_id: b.container_id,
+            data: {},
+            created_at: b.created_at,
+          });
+        }
+      }
+    } catch {}
+
+    // 2. Get recent meetings from TC (includes completed + browser sessions with full data)
+    try {
+      const tcResp = await fetch(`${TC_URL}/transcripts`, {
+        headers: { "X-API-Key": VEXA_API_KEY },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (tcResp.ok) {
+        const tcData = await tcResp.json();
+        const tcMeetings = Array.isArray(tcData) ? tcData : tcData.meetings || [];
+        for (const m of tcMeetings) {
+          const id = (m.id || "").toString();
+          if (seenIds.has(id)) continue; // already in active list
+          seenIds.add(id);
+          meetings.push({
+            id: m.id,
+            platform: m.platform,
+            native_meeting_id: m.native_meeting_id,
+            status: m.status || "completed",
+            start_time: m.start_time,
+            end_time: m.end_time,
+            bot_container_id: null,
+            data: m.data || {},
+            created_at: m.created_at || m.start_time,
+          });
+        }
+      }
+    } catch {}
+
+    return NextResponse.json({ meetings });
   }
 
   const searchParams = request.nextUrl.searchParams.toString();
