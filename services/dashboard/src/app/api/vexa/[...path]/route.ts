@@ -53,9 +53,9 @@ async function proxyRequest(
       const data = await statusResp.json();
       const bots = data.running_bots || [];
       const meetings = bots.map((b: any) => ({
-        id: b.meeting_id_from_name || b.container_name,
+        id: parseInt(b.meeting_id_from_name) || 0,
         platform: b.platform,
-        platform_specific_id: b.native_meeting_id,
+        native_meeting_id: b.native_meeting_id,
         status: b.normalized_status === "Up" ? "active" : "completed",
         start_time: b.created_at,
         end_time: null,
