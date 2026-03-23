@@ -63,9 +63,9 @@ async function proxyRequest(
         data: {},
         created_at: b.created_at,
       }));
-      return NextResponse.json(meetings);
+      return NextResponse.json({ meetings });
     }
-    return NextResponse.json([]);
+    return NextResponse.json({ meetings: [] });
   }
 
   const searchParams = request.nextUrl.searchParams.toString();
