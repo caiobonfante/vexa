@@ -3156,6 +3156,35 @@ async def bot_avatar_reset(
     return {"message": "Avatar reset command sent", "meeting_id": meeting.id}
 
 
+@app.get("/bots/{platform}/{native_meeting_id}/events",
+         summary="Get recent voice agent events for the meeting",
+         description="Returns recent events (speak.started, speak.completed, speak.error, chat.sent, screen.*, etc.) from the bot's event log. Useful for diagnosing command failures.",
+         dependencies=[Depends(get_user_and_token)])
+async def bot_events(
+    platform: Platform,
+    native_meeting_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db)
+):
+    user_token, current_user = auth_data
+    platform_value = platform.value
+
+    meeting = await _find_active_meeting(db, current_user.id, platform_value, native_meeting_id)
+
+    list_key = f"va:meeting:{meeting.id}:event_log"
+    raw_events = await redis_client.lrange(list_key, -limit, -1)
+
+    events = []
+    for raw in raw_events:
+        try:
+            events.append(json.loads(raw))
+        except json.JSONDecodeError:
+            pass
+
+    return {"events": events, "meeting_id": meeting.id, "count": len(events)}
+
+
 async def _find_active_meeting(
     db: AsyncSession,
     user_id: int,

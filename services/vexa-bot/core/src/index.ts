@@ -718,11 +718,20 @@ async function performGracefulLeave(
 async function publishVoiceEvent(event: string, data: any = {}): Promise<void> {
   if (!redisPublisher || !currentBotConfig) return;
   const meetingId = currentBotConfig.meeting_id;
+  const payload = JSON.stringify({ event, meeting_id: meetingId, ...data, ts: new Date().toISOString() });
+  const channel = `va:meeting:${meetingId}:events`;
+  const listKey = `va:meeting:${meetingId}:event_log`;
   try {
-    await redisPublisher.publish(
-      `va:meeting:${meetingId}:events`,
-      JSON.stringify({ event, meeting_id: meetingId, ...data, ts: new Date().toISOString() })
-    );
+    await Promise.all([
+      redisPublisher.publish(channel, payload),
+      // Persist to list so events can be read after the fact (capped at 200, TTL 1h)
+      redisPublisher.rPush(listKey, payload).then(() =>
+        Promise.all([
+          redisPublisher!.lTrim(listKey, -200, -1),
+          redisPublisher!.expire(listKey, 3600)
+        ])
+      )
+    ]);
   } catch (err: any) {
     log(`[VoiceAgent] Failed to publish event ${event}: ${err.message}`);
   }

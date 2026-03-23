@@ -119,8 +119,8 @@ services:
     build:
       context: ../../..
       dockerfile: services/admin-api/Dockerfile
-    expose:
-      - "8001"
+    ports:
+      - "${ADMIN_API_PORT:-8067}:8001"
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -140,8 +140,8 @@ services:
     build:
       context: ../../..
       dockerfile: services/bot-manager/Dockerfile
-    expose:
-      - "8080"
+    ports:
+      - "${BOT_MANAGER_PORT:-8070}:8080"
     environment:
       - REDIS_URL=redis://redis:6379/0
       - BOT_IMAGE_NAME=vexa-bot:dev
@@ -163,6 +163,7 @@ services:
       - MINIO_SECURE=false
       - RECORDING_ENABLED=true
       - CAPTURE_MODES=audio
+      - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

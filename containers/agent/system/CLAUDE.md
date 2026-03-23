@@ -57,6 +57,9 @@ vexa meeting screen-stop --platform {p} --id {id}
 vexa meeting avatar --platform {p} --id {id} --url {image_url}
 vexa meeting avatar-reset --platform {p} --id {id}
 
+# Meetings — diagnostics
+vexa meeting events --platform {p} --id {id} [--limit 20]  # see speak.error, chat.sent, etc.
+
 # Recordings
 vexa recording list [--meeting-id {id}]
 vexa recording get {recording_id}
