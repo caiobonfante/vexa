@@ -224,7 +224,7 @@ def mix_at_snr(speech: np.ndarray, noise: np.ndarray, snr_db: float) -> np.ndarr
 # ---------------------------------------------------------------------------
 
 def main():
-    audio_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
+    audio_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "raw", "synthetic", "audio")
     os.makedirs(audio_dir, exist_ok=True)
 
     # --- Step 1: Generate standalone noise files ---

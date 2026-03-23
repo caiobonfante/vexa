@@ -1,12 +1,12 @@
 #!/bin/bash
 # Generate test WAV files + ground truth text using the Piper TTS service.
-# Outputs to tests/audio/ directory: name.wav + name.txt (ground truth)
+# Outputs to data/raw/synthetic/audio/: name.wav + name.txt (ground truth)
 #
 # Requires: vexa-restore-tts-service-1 container running
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-AUDIO_DIR="$SCRIPT_DIR/audio"
+AUDIO_DIR="$SCRIPT_DIR/../data/raw/synthetic/audio"
 mkdir -p "$AUDIO_DIR"
 
 TTS_CONTAINER="vexa-restore-tts-service-1"

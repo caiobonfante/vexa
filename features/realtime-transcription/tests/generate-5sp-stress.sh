@@ -2,7 +2,7 @@
 # Generate TTS audio + ground truth + synthetic events for teams-5sp-stress dataset
 set -e
 
-OUTDIR="$(cd "$(dirname "$0")" && pwd)/audio/teams-5sp-stress"
+OUTDIR="$(cd "$(dirname "$0")" && pwd)/../data/raw/teams-5sp-stress/audio"
 mkdir -p "$OUTDIR"
 NETWORK="vexa-restore_vexa_default"
 TTS_HOST="tts-service:8002"

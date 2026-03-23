@@ -130,8 +130,41 @@ for speaker_pair in "Host:host:$(echo $MEETING_IDS | awk '{print $1}')" \
   fi
 done
 
-# --- Step 6: Orchestrate playback ---
-echo "[6/6] Starting synchronized playback..."
+# --- Step 6: Start tick capture BEFORE playback ---
+echo "[6/7] Starting tick capture..."
+CORE_DIR="$DATASET/core"
+mkdir -p "$CORE_DIR"
+TICK_JSONL="$CORE_DIR/transcript.jsonl"
+> "$TICK_JSONL"  # clear previous
+
+node -e "
+const path = require('path');
+const fs = require('fs');
+const { createClient } = require(path.resolve('$DIR/../../../..', 'services/vexa-bot/node_modules/redis'));
+async function main() {
+  const client = createClient({ url: '${REDIS_URL:-redis://172.25.0.2:6379}' });
+  await client.connect();
+  const stream = fs.createWriteStream('$TICK_JSONL');
+  let count = 0;
+  await client.pSubscribe('tc:meeting:${RECORDER_ID}:mutable', (msg) => {
+    const tick = JSON.parse(msg);
+    if (tick.type === 'transcript') {
+      stream.write(JSON.stringify({ ts: tick.ts, speaker: tick.speaker, confirmed: tick.confirmed || [], pending: tick.pending || [] }) + '\n');
+      count++;
+    }
+  });
+  console.log('Tick capture started for meeting $RECORDER_ID');
+  setTimeout(() => { stream.end(); client.disconnect(); console.log('Captured ' + count + ' ticks'); process.exit(0); }, 360000);
+  process.on('SIGINT', () => { stream.end(); client.disconnect(); console.log('Captured ' + count + ' ticks'); process.exit(0); });
+}
+main();
+" &
+CAPTURE_PID=$!
+echo "  Tick capture PID: $CAPTURE_PID"
+sleep 2
+
+# --- Step 7: Orchestrate playback ---
+echo "[7/7] Starting synchronized playback..."
 echo "  T=0 at $(date -Iseconds)"
 
 # Play each speaker's segments at the correct offsets
@@ -174,5 +207,14 @@ echo "  1. Check recorder bot logs: docker logs vexa-bot-${RECORDER_ID}-*"
 echo "  2. Check dashboard: http://localhost:3001/meetings/$RECORDER_ID"
 echo ""
 
+# Wait for final processing (30s for last confirmations)
+echo "Waiting 30s for final confirmations..."
+sleep 30
+
 # Cleanup
+kill $CAPTURE_PID 2>/dev/null
 kill $ADMIT_PID 2>/dev/null
+
+# Report tick capture
+TICK_COUNT=$(wc -l < "$TICK_JSONL" 2>/dev/null || echo 0)
+echo "Tick capture: $TICK_COUNT ticks saved to $TICK_JSONL"

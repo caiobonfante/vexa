@@ -8,12 +8,12 @@
 #
 # Requires:
 #   - transcription-service running (port 8085)
-#   - Test audio files in tests/audio/ (run generate-test-audio.sh first)
+#   - Test audio files in data/raw/synthetic/audio/ (run generate-test-audio.sh first)
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-AUDIO_DIR="$SCRIPT_DIR/audio"
+AUDIO_DIR="$SCRIPT_DIR/../data/raw/synthetic/audio"
 BOT_DIR="$REPO_ROOT/services/vexa-bot"
 TEST_SCRIPT="$BOT_DIR/core/src/services/speaker-streams.wav-test.ts"
 

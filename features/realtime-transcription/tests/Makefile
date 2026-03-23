@@ -13,7 +13,8 @@ export
 export TRANSCRIPTION_URL ?= http://localhost:8085/v1/audio/transcriptions
 export TRANSCRIPTION_TOKEN ?=
 
-AUDIO := $(TEST)/audio
+DATA := $(FEATURE)/data
+AUDIO := $(DATA)/raw/synthetic/audio
 WAVS := $(AUDIO)/short-sentence.wav $(AUDIO)/medium-paragraph.wav $(AUDIO)/long-monologue.wav $(AUDIO)/long-dialogue.wav
 
 .PHONY: audio unit play play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers play-all test env-check smoke help
@@ -114,28 +115,28 @@ play:
 endif
 
 play-speakers:
-	@cd $(BOT) && npx ts-node core/src/services/speaker-mapper.pipeline-test.ts $(TEST)/audio
+	@cd $(BOT) && npx ts-node core/src/services/speaker-mapper.pipeline-test.ts $(DATA)/raw
 
 play-replay:
-	@cd $(BOT) && DATASET=$(or $(DATASET),collection-run) npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+	@cd $(BOT) && DATASET=$(or $(DATASET),teams-3sp-collection) npx ts-node core/src/services/production-replay.test.ts $(DATA)/raw $(TEST)
 
 # Full system replay: publishes to Redis → transcription-collector → WS → DB
 # Segments visible in observe.html, dashboard, and REST API
-# Usage: make play-replay-full DATASET=collection-run
+# Usage: make play-replay-full DATASET=teams-3sp-collection
 # Full system replay always generates a unique NATIVE_MEETING_ID to avoid
 # polluting existing meetings. Unset the .env value explicitly.
 play-replay-full:
 	@cd $(BOT) && PUBLISH=true \
-		DATASET=$(or $(DATASET),collection-run) \
+		DATASET=$(or $(DATASET),teams-3sp-collection) \
 		NATIVE_MEETING_ID= \
 		REDIS_URL=$(or $(REDIS_URL),redis://localhost:6379) \
 		API_GATEWAY_URL=$(or $(API_GATEWAY_URL),http://localhost:8066) \
 		API_TOKEN=$(API_TOKEN) \
 		ADMIN_TOKEN=$(or $(ADMIN_TOKEN),changeme) \
-		npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+		npx ts-node core/src/services/production-replay.test.ts $(DATA)/raw $(TEST)
 
 play-panel:
-	@cd $(BOT) && DATASET=panel-20 npx ts-node core/src/services/production-replay.test.ts $(AUDIO) $(TEST)
+	@cd $(BOT) && DATASET=teams-7sp-panel npx ts-node core/src/services/production-replay.test.ts $(DATA)/raw $(TEST)
 
 play-all: play-short play-medium play-long play-noisy-office play-noisy-cafe play-noisy-silence play-speakers
 

@@ -15,7 +15,7 @@
  *
  * Example:
  *   npx ts-node core/src/services/replay-meeting.test.ts \
- *     features/realtime-transcription/tests/audio \
+ *     features/realtime-transcription/data/raw \
  *     features/realtime-transcription/tests
  */
 
@@ -39,7 +39,7 @@ const CHUNK_DURATION_MS = (CHUNK_SIZE / SAMPLE_RATE) * 1000; // ~256ms
 const TX_URL = process.env.TRANSCRIPTION_URL || 'http://localhost:8085/v1/audio/transcriptions';
 const TX_TOKEN = process.env.TRANSCRIPTION_TOKEN || '32c59b9f654f1b6e376c6f020d79897d';
 
-const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/tests/audio`;
+const AUDIO_DIR = process.argv[2] || `${__dirname}/../../../../features/realtime-transcription/data/raw`;
 const TEST_DIR = process.argv[3] || `${__dirname}/../../../../features/realtime-transcription/tests`;
 
 // ── Ground truth: Session 1 TTS texts and send times ────────────────
