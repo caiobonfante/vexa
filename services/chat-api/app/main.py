@@ -12,7 +12,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -249,6 +249,43 @@ async def reset_chat(req: UserIdRequest):
     await cm.reset_session(req.user_id)
     await clear_session(req.user_id)
     return {"status": "reset"}
+
+
+# --- Webhook receiver (called by bot-manager post-meeting hooks) ---
+
+@app.post("/api/webhooks/meeting-completed")
+async def on_meeting_completed(event: dict, background_tasks: BackgroundTasks):
+    """Receive meeting.completed webhook from bot-manager POST_MEETING_HOOKS.
+    Wakes the user's agent with a message to process the meeting."""
+    data = event.get("data", {}).get("meeting", {})
+    user_id = str(data.get("user_id", ""))
+    meeting_id = data.get("id")
+    platform = data.get("platform", "unknown")
+    duration = data.get("duration_seconds", 0)
+
+    if not user_id or not meeting_id:
+        raise HTTPException(400, "Missing user_id or meeting id in event")
+
+    message = (
+        f"Meeting {meeting_id} ({platform}) just ended after {duration // 60}m{duration % 60}s. "
+        f"Process this meeting: fetch the transcript with `vexa meeting transcript {meeting_id}`, "
+        f"summarize it, extract action items and decisions, save to knowledge/meetings/, "
+        f"and update timeline.md with any dates or deadlines mentioned. "
+        f"Send me a brief summary when done."
+    )
+
+    logger.info(f"Meeting completed webhook: meeting {meeting_id} for user {user_id}")
+
+    # Fire-and-forget: run the chat turn in background so we return 200 immediately
+    async def _process():
+        try:
+            async for _ in _run_chat_turn(user_id, message):
+                pass  # consume the stream, we don't need to deliver it
+        except Exception as e:
+            logger.error(f"Post-meeting processing failed for meeting {meeting_id}: {e}")
+
+    background_tasks.add_task(_process)
+    return {"status": "accepted", "meeting_id": meeting_id}
 
 
 # --- Internal endpoints (called by vexa CLI inside containers) ---

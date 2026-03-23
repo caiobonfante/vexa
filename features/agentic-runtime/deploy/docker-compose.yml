@@ -187,6 +187,7 @@ services:
       - RECORDING_ENABLED=true
       - CAPTURE_MODES=audio
       - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
+      - POST_MEETING_HOOKS=http://chat-api:8100/api/webhooks/meeting-completed
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
