@@ -9,6 +9,7 @@ import {
   ChevronRight, ChevronDown, Loader2, RefreshCw, FolderPlus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 import { MarkdownEditor } from "./markdown-editor";
 
 const AGENT_API = "/api/agent";
@@ -100,6 +101,9 @@ function FileTreeNode({
 }
 
 export function WorkspaceEditor() {
+  const { user } = useAuthStore();
+  const userId = user?.id?.toString() || user?.email || "default";
+
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -114,22 +118,25 @@ export function WorkspaceEditor() {
 
   const loadTree = useCallback(async () => {
     try {
-      const resp = await fetch(`${AGENT_API}/workspace/tree`);
+      const resp = await fetch(`${AGENT_API}/workspace/tree?user_id=${userId}`);
       if (!resp.ok) return;
       const data = await resp.json();
       const files: string[] = data.files || [];
       setTree(buildTree(files));
     } catch {}
-  }, []);
+  }, [userId]);
 
   const loadDiff = useCallback(async () => {
     try {
-      const resp = await fetch(`${AGENT_API}/workspace/diff`);
+      const resp = await fetch(`${AGENT_API}/workspace/diff?user_id=${userId}`);
       if (!resp.ok) return;
       const data = await resp.json();
-      setChangedCount(data.changed_files || 0);
+      // Count changed files from summary (lines with | character)
+      const summary = data.summary || "";
+      const changedLines = summary.split("\n").filter((l: string) => l.includes("|")).length;
+      setChangedCount(data.has_changes ? Math.max(changedLines, 1) : 0);
     } catch {}
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     loadTree();
@@ -140,7 +147,7 @@ export function WorkspaceEditor() {
     setIsLoading(true);
     setSelectedFile(path);
     try {
-      const resp = await fetch(`${AGENT_API}/workspace/file?path=${encodeURIComponent(path)}`);
+      const resp = await fetch(`${AGENT_API}/workspace/file?user_id=${userId}&path=${encodeURIComponent(path)}`);
       if (!resp.ok) throw new Error("Failed to load file");
       const data = await resp.json();
       setContent(data.content || "");
@@ -161,7 +168,7 @@ export function WorkspaceEditor() {
       const resp = await fetch(`${AGENT_API}/workspace/file`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: selectedFile, content }),
+        body: JSON.stringify({ user_id: userId, path: selectedFile, content }),
       });
       if (!resp.ok) throw new Error("Save failed");
       setOriginalContent(content);
@@ -172,7 +179,7 @@ export function WorkspaceEditor() {
     } finally {
       setIsSaving(false);
     }
-  }, [selectedFile, content, loadDiff]);
+  }, [selectedFile, content, loadDiff, userId]);
 
   const commitChanges = useCallback(async () => {
     setIsCommitting(true);
@@ -180,7 +187,7 @@ export function WorkspaceEditor() {
       const resp = await fetch(`${AGENT_API}/workspace/commit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: commitMsg || "Update workspace" }),
+        body: JSON.stringify({ user_id: userId, message: commitMsg || "Update workspace" }),
       });
       if (!resp.ok) throw new Error("Commit failed");
       toast.success("Committed and synced");
@@ -192,7 +199,7 @@ export function WorkspaceEditor() {
     } finally {
       setIsCommitting(false);
     }
-  }, [commitMsg, loadDiff]);
+  }, [commitMsg, loadDiff, userId]);
 
   const createFile = useCallback(async () => {
     const path = newFilePath.trim();
@@ -201,7 +208,7 @@ export function WorkspaceEditor() {
       const resp = await fetch(`${AGENT_API}/workspace/file`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content: "" }),
+        body: JSON.stringify({ user_id: userId, path, content: "" }),
       });
       if (!resp.ok) throw new Error("Create failed");
       setShowNewFile(false);
@@ -211,7 +218,7 @@ export function WorkspaceEditor() {
     } catch {
       toast.error("Failed to create file");
     }
-  }, [newFilePath, loadTree, loadFile]);
+  }, [newFilePath, loadTree, loadFile, userId]);
 
   const deleteFile = useCallback(async (path: string) => {
     // Delete via writing empty + noting in UI (no delete endpoint yet)
