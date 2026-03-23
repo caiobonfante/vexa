@@ -15,11 +15,34 @@ async function proxyRequest(
   // Fall back to env variable for backwards compatibility
   const VEXA_API_KEY = userToken || process.env.VEXA_API_KEY || "";
 
+  const TC_URL = process.env.TC_URL || "http://localhost:8000"; // transcription-collector
+
   const { path } = await params;
   let pathString = path.join("/");
 
-  // Rewrite paths for bot-manager compatibility (no api-gateway)
-  // Dashboard expects /meetings but bot-manager has /bots/status
+  // Route /transcripts/* to transcription-collector (not bot-manager)
+  if (pathString.startsWith("transcripts")) {
+    const tcTarget = `${TC_URL}/${pathString}${request.nextUrl.searchParams.toString() ? `?${request.nextUrl.searchParams.toString()}` : ""}`;
+    try {
+      const resp = await fetch(tcTarget, {
+        headers: { "X-API-Key": VEXA_API_KEY, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        return NextResponse.json(data);
+      }
+      // TC returned error — return it
+      const errText = await resp.text();
+      return NextResponse.json({ error: errText }, { status: resp.status });
+    } catch (e) {
+      return NextResponse.json({ error: "Transcription service unavailable" }, { status: 503 });
+    }
+  }
+
+  // Route /recordings/* to bot-manager (already correct)
+
+  // Rewrite /meetings to bot-manager's /bots/status
   if (pathString === "meetings" && method === "GET") {
     // Return meetings from bot-manager's bots/status + DB
     // For now, return empty array to prevent 404

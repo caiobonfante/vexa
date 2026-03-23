@@ -179,8 +179,8 @@ services:
     build:
       context: ../../..
       dockerfile: services/transcription-collector/Dockerfile
-    expose:
-      - "8000"
+    ports:
+      - "${TC_PORT:-8060}:8000"
     volumes:
       - ../../../alembic.ini:/app/alembic.ini
       - ../../../libs/shared-models/alembic:/app/alembic
