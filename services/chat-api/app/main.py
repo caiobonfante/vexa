@@ -48,11 +48,15 @@ cm = ContainerManager()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 SESSION_PREFIX = "agent:session:"
+SESSIONS_INDEX = "agent:sessions:"  # hash of session_id -> metadata JSON
 
 
 # --- Session in Redis (survives container death) ---
 
-async def get_session(user_id: str) -> Optional[str]:
+async def get_session(user_id: str, session_id: Optional[str] = None) -> Optional[str]:
+    """Get Claude CLI session ID. If session_id provided, look up that specific session."""
+    if session_id:
+        return session_id  # Client provides the session UUID directly
     return await app.state.redis.get(f"{SESSION_PREFIX}{user_id}")
 
 
@@ -62,6 +66,37 @@ async def save_session(user_id: str, session_id: str):
 
 async def clear_session(user_id: str):
     await app.state.redis.delete(f"{SESSION_PREFIX}{user_id}")
+
+
+async def list_sessions(user_id: str) -> list[dict]:
+    """List all sessions for a user from Redis index."""
+    data = await app.state.redis.hgetall(f"{SESSIONS_INDEX}{user_id}")
+    sessions = []
+    for sid, meta_json in data.items():
+        try:
+            meta = json.loads(meta_json)
+            meta["id"] = sid
+            sessions.append(meta)
+        except json.JSONDecodeError:
+            sessions.append({"id": sid, "name": sid[:8]})
+    sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+    return sessions
+
+
+async def save_session_meta(user_id: str, session_id: str, name: str):
+    """Save/update session metadata in Redis index."""
+    import time
+    existing = await app.state.redis.hget(f"{SESSIONS_INDEX}{user_id}", session_id)
+    meta = json.loads(existing) if existing else {"created_at": time.time()}
+    meta["name"] = name
+    meta["updated_at"] = time.time()
+    await app.state.redis.hset(f"{SESSIONS_INDEX}{user_id}", session_id, json.dumps(meta))
+    await app.state.redis.expire(f"{SESSIONS_INDEX}{user_id}", 86400 * 30)  # 30 day TTL
+
+
+async def delete_session_meta(user_id: str, session_id: str):
+    """Remove a session from the index."""
+    await app.state.redis.hdel(f"{SESSIONS_INDEX}{user_id}", session_id)
 
 
 # --- Startup / Shutdown ---
@@ -98,6 +133,8 @@ async def shutdown():
 class ChatRequest(BaseModel):
     user_id: str
     message: str
+    session_id: Optional[str] = None  # Claude CLI session UUID (omit for default)
+    session_name: Optional[str] = None  # Human-readable name for new sessions
     model: Optional[str] = None
     bot_token: Optional[str] = None  # User's API token for bot-manager calls
 
@@ -108,7 +145,9 @@ class UserIdRequest(BaseModel):
 
 # --- Core chat logic ---
 
-async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None, bot_token: Optional[str] = None):
+async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None,
+                         bot_token: Optional[str] = None, session_id: Optional[str] = None,
+                         session_name: Optional[str] = None):
     """Run a single chat turn. Yields SSE data strings.
     If container dies, raises exception — caller can retry."""
 
@@ -128,9 +167,10 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
 
     # Session from Redis — but skip if container was just recreated
     # (session IDs are tied to Claude CLI processes, not portable across containers)
-    session_id = None
     if not cm._new_container:
-        session_id = await get_session(user_id)
+        session_id = await get_session(user_id, session_id)
+    else:
+        session_id = None
 
     # Workspace context injection
     ws_context = await build_workspace_context(cm.exec_simple, container)
@@ -194,9 +234,10 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
     # Save session to Redis (not /tmp)
     if new_session_id:
         await save_session(user_id, new_session_id)
+        await save_session_meta(user_id, new_session_id, session_name or f"Session {new_session_id[:8]}")
         logger.info(f"Session saved to Redis: {new_session_id[:12]}... for {user_id}")
 
-    yield f"data: {json.dumps({'type': 'stream_end'})}\n\n"
+    yield f"data: {json.dumps({'type': 'stream_end', 'session_id': new_session_id or session_id})}\n\n"
 
 
 # --- Endpoints ---
@@ -217,7 +258,7 @@ async def chat(req: ChatRequest):
 
         while retries <= max_retries:
             try:
-                async for data in _run_chat_turn(req.user_id, req.message, req.model, req.bot_token):
+                async for data in _run_chat_turn(req.user_id, req.message, req.model, req.bot_token, req.session_id, req.session_name):
                     yield data
                 return  # Success
             except Exception as e:
@@ -249,6 +290,38 @@ async def reset_chat(req: UserIdRequest):
     await cm.reset_session(req.user_id)
     await clear_session(req.user_id)
     return {"status": "reset"}
+
+
+# --- Session management endpoints ---
+
+@app.get("/api/sessions")
+async def get_sessions(user_id: str):
+    """List all sessions for a user."""
+    sessions = await list_sessions(user_id)
+    return {"sessions": sessions}
+
+
+@app.post("/api/sessions")
+async def create_session(user_id: str, name: str = "New session"):
+    """Create a new named session. Returns the session_id (UUID)."""
+    import uuid
+    session_id = str(uuid.uuid4())
+    await save_session_meta(user_id, session_id, name)
+    return {"session_id": session_id, "name": name}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str, user_id: str):
+    """Delete a session from the index."""
+    await delete_session_meta(user_id, session_id)
+    return {"status": "deleted"}
+
+
+@app.put("/api/sessions/{session_id}")
+async def rename_session(session_id: str, user_id: str, name: str):
+    """Rename a session."""
+    await save_session_meta(user_id, session_id, name)
+    return {"status": "renamed", "name": name}
 
 
 # --- Webhook receiver (called by bot-manager post-meeting hooks) ---
