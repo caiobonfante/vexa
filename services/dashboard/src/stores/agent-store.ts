@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export interface AgentMessage {
   id: string;
@@ -20,24 +21,36 @@ interface AgentState {
   clearMessages: () => void;
 }
 
-export const useAgentStore = create<AgentState>()((set) => ({
-  messages: [],
-  isStreaming: false,
-  userId: "dima",
+export const useAgentStore = create<AgentState>()(
+  persist(
+    (set) => ({
+      messages: [],
+      isStreaming: false,
+      userId: "default",
 
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+      addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
 
-  updateLastAssistant: (content, tools) =>
-    set((s) => {
-      const msgs = [...s.messages];
-      const last = msgs[msgs.length - 1];
-      if (last && last.role === "assistant") {
-        msgs[msgs.length - 1] = { ...last, content, tools: tools || last.tools };
-      }
-      return { messages: msgs };
+      updateLastAssistant: (content, tools) =>
+        set((s) => {
+          const msgs = [...s.messages];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            msgs[msgs.length - 1] = { ...last, content, tools: tools || last.tools };
+          }
+          return { messages: msgs };
+        }),
+
+      setStreaming: (v) => set({ isStreaming: v }),
+      setUserId: (id) => set({ userId: id }),
+      clearMessages: () => set({ messages: [] }),
     }),
-
-  setStreaming: (v) => set({ isStreaming: v }),
-  setUserId: (id) => set({ userId: id }),
-  clearMessages: () => set({ messages: [] }),
-}));
+    {
+      name: "vexa-agent-chat",
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        messages: state.messages,
+        userId: state.userId,
+      }),
+    }
+  )
+);
