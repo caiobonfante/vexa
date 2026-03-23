@@ -165,8 +165,14 @@ export const useAuthStore = create<AuthState>()(
                 // OAuth callback failed, but cookie is still valid
               }
             }
-            // Cookie is valid, but we don't have user info
-            set({ isAuthenticated: true, isLoading: false, didLogout: false });
+            // Cookie returned 200 but no user data — not truly authenticated
+            // Only keep isAuthenticated if we already have local user+token
+            const current = get();
+            if (current.user && current.token) {
+              set({ isAuthenticated: true, isLoading: false, didLogout: false });
+            } else {
+              set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+            }
           } else {
             // Server returned 401 or error — clear stale localStorage
             set({ user: null, token: null, isAuthenticated: false, isLoading: false });

@@ -24,8 +24,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ path: s
   const { path } = await context.params;
   const url = new URL(req.url);
   const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
+  const userToken = await getUserToken();
   const resp = await fetch(target, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
   });
   return safeJsonResponse(resp);
 }
@@ -69,9 +70,10 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ path: s
   const { path } = await context.params;
   const body = await req.text();
   const target = `${AGENT_API_URL}/api/${path.join("/")}`;
+  const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
     body,
   });
   return safeJsonResponse(resp);
@@ -81,9 +83,10 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ path
   const { path } = await context.params;
   const body = await req.text();
   const target = `${AGENT_API_URL}/api/${path.join("/")}`;
+  const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
     body: body || undefined,
   });
   return safeJsonResponse(resp);

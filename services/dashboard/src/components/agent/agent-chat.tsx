@@ -152,12 +152,29 @@ export function AgentChat() {
               useAgentStore.setState({ messages: lastTwo });
               accumulated = "*Session restarted — previous context is no longer available.*\n\n";
               updateLastAssistant(accumulated, tools);
+            } else if (event.type === "reconnecting") {
+              // Backend is retrying with a fresh container — finalize current message and start a new one
+              if (accumulated) {
+                updateLastAssistant(accumulated + "\n\n---\n*Reconnecting...*", tools);
+              }
+              // Reset state for the new response that will follow the retry
+              accumulated = "";
+              tools = [];
+              addMessage({
+                id: `assistant-${Date.now()}`,
+                role: "assistant",
+                content: "",
+                tools: [],
+                timestamp: Date.now(),
+              });
             } else if (event.type === "text_delta") {
               accumulated += event.text || "";
               updateLastAssistant(accumulated, tools);
             } else if (event.type === "tool_use") {
               tools = [...tools, { tool: event.tool, summary: event.summary }];
               updateLastAssistant(accumulated, tools);
+            } else if (event.type === "stream_end") {
+              // Response complete — no action needed, stream will close naturally
             } else if (event.type === "error") {
               accumulated += `\n\n⚠️ ${event.message}`;
               updateLastAssistant(accumulated, tools);

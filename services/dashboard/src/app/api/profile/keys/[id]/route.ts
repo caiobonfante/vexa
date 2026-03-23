@@ -31,6 +31,7 @@ export async function DELETE(
       method: "DELETE",
       headers: {
         "X-Admin-API-Key": VEXA_ADMIN_API_KEY,
+        "X-API-Key": token,
       },
     });
 

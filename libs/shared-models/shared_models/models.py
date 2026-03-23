@@ -101,7 +101,12 @@ class Transcription(Base):
     segment_id = Column(String, nullable=True) # Stable segment identity from bot
 
     # Index for efficient querying by meeting_id and start_time
-    __table_args__ = (Index('ix_transcription_meeting_start', 'meeting_id', 'start_time'),)
+    # Partial unique index required by TC's ON CONFLICT upsert
+    __table_args__ = (
+        Index('ix_transcription_meeting_start', 'meeting_id', 'start_time'),
+        Index('ix_transcription_meeting_segment', 'meeting_id', 'segment_id',
+              unique=True, postgresql_where=segment_id.isnot(None)),
+    )
 
 # New table to store session start times
 class MeetingSession(Base):

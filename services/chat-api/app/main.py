@@ -226,7 +226,7 @@ async def chat(req: ChatRequest):
                     logger.warning(f"Chat failed for {req.user_id}, retrying ({retries}/{max_retries}): {e}")
                     # Invalidate cached container — force fresh one
                     cm._containers.pop(req.user_id, None)
-                    yield f"data: {json.dumps({'type': 'text_delta', 'text': '(reconnecting...)'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'reconnecting'})}\n\n"
                 else:
                     logger.error(f"Chat failed for {req.user_id} after {max_retries} retries: {e}", exc_info=True)
                     yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

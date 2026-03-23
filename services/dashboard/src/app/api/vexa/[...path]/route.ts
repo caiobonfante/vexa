@@ -81,6 +81,10 @@ async function proxyRequest(
   }
 
   // Everything else: proxy through api-gateway (handles /transcripts, /recordings, /bots, etc.)
+  if (!VEXA_API_KEY) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${VEXA_API_URL}/${pathString}${searchParams ? `?${searchParams}` : ""}`;
 
