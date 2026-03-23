@@ -395,6 +395,8 @@ async def get_transcript_by_native_id(
     response_data["recordings"] = (meeting.data or {}).get("recordings", []) if isinstance(meeting.data, dict) else []
     # Surface user-provided meeting notes (stored in meeting.data).
     response_data["notes"] = (meeting.data or {}).get("notes") if isinstance(meeting.data, dict) else None
+    # Surface full meeting data (includes mode, session_token for browser sessions)
+    response_data["data"] = dict(meeting.data) if isinstance(meeting.data, dict) else {}
     # Surface raw speaker events for API consumers (deferred transcription, exports).
     response_data["speaker_events"] = (meeting.data or {}).get("speaker_events", []) if isinstance(meeting.data, dict) else []
     response_data["segments"] = sorted_segments
