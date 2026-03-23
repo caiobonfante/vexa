@@ -13,11 +13,12 @@ import uuid
 from typing import Optional
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app import config, state
+from app.auth import get_current_user
 from app.docker_ops import (
     close_session,
     create_container,
@@ -65,6 +66,11 @@ async def startup():
     await app.state.redis.ping()
     logger.info("Redis connected")
 
+    # Init DB for auth (token validation)
+    from shared_models.database import init_db
+    await init_db()
+    logger.info("DB connected")
+
     # Verify Docker connection
     get_session()
     logger.info("Docker connected")
@@ -96,10 +102,12 @@ async def health():
 
 
 @app.post("/containers", status_code=201)
-async def create(req: CreateContainerRequest):
-    """Create and start a container."""
+async def create(req: CreateContainerRequest, user=Depends(get_current_user)):
+    """Create and start a container. User resolved from X-API-Key token."""
     profile_def = get_profile(req.profile)
     user_config = req.config
+    # Use authenticated user ID; request body user_id is for container naming only
+    req.user_id = req.user_id or str(user.id)
 
     # Generate container name
     if req.profile == "agent":
@@ -230,8 +238,8 @@ async def create(req: CreateContainerRequest):
 
 
 @app.get("/containers")
-async def list_all(user_id: str = None, profile: str = None):
-    """List containers, optionally filtered."""
+async def list_all(user_id: str = None, profile: str = None, user=Depends(get_current_user)):
+    """List containers, optionally filtered. Scoped to authenticated user."""
     containers = await state.list_containers(app.state.redis, user_id=user_id, profile=profile)
     return [
         {
@@ -257,7 +265,7 @@ async def get_one(name: str):
 
 
 @app.delete("/containers/{name}")
-async def delete(name: str):
+async def delete(name: str, user=Depends(get_current_user)):
     """Stop and remove a container."""
     data = await state.get_container(app.state.redis, name)
     stop_container(name)

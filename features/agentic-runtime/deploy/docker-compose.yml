@@ -249,6 +249,12 @@ services:
       - CLAUDE_CREDENTIALS_PATH=${CLAUDE_CREDENTIALS_PATH}
       - CLAUDE_JSON_PATH=${CLAUDE_JSON_PATH}
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-vexa_agentic}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSL_MODE=disable
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -256,6 +262,7 @@ services:
       - vexa_agentic
     depends_on:
       - redis
+      - postgres
     restart: unless-stopped
 
 volumes:

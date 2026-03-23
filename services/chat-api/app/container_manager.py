@@ -7,6 +7,7 @@ subprocess — streaming exec through HTTP would add latency for no benefit.
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -37,7 +38,9 @@ class ContainerManager:
 
     async def startup(self):
         """Initialize HTTP client for Runtime API."""
-        self._http = httpx.AsyncClient(base_url=RUNTIME_API, timeout=30)
+        bot_token = os.getenv("BOT_API_TOKEN", "")
+        headers = {"X-API-Key": bot_token} if bot_token else {}
+        self._http = httpx.AsyncClient(base_url=RUNTIME_API, timeout=30, headers=headers)
         # Discover existing agent containers from Runtime API
         try:
             resp = await self._http.get("/containers", params={"profile": "agent"})
