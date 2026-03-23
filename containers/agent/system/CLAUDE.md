@@ -34,11 +34,36 @@ vexa schedule --in {duration} chat "message" # relative delay (5m, 2h, 1d)
 vexa schedule list                           # pending jobs
 vexa schedule cancel {job_id}                # cancel job
 
-# Meetings
+# Meetings — bot lifecycle
 vexa meeting join --platform {teams|google_meet|zoom} --url {url}
 vexa meeting list                            # active bots
 vexa meeting transcript {meeting_id}         # fetch transcript
 vexa meeting stop --platform {p} --id {id}   # remove bot
+vexa meeting config --platform {p} --id {id} [--language en] [--task transcribe]
+
+# Meetings — voice (TTS via Piper)
+vexa meeting speak --platform {p} --id {id} --text "Hello" [--voice alloy]
+vexa meeting speak-stop --platform {p} --id {id}
+
+# Meetings — chat
+vexa meeting chat --platform {p} --id {id} --text "message"
+vexa meeting chat-read --platform {p} --id {id}
+
+# Meetings — screen share
+vexa meeting screen --platform {p} --id {id} --type {image|video|url|html} [--url {url}] [--html {html}]
+vexa meeting screen-stop --platform {p} --id {id}
+
+# Meetings — avatar
+vexa meeting avatar --platform {p} --id {id} --url {image_url}
+vexa meeting avatar-reset --platform {p} --id {id}
+
+# Recordings
+vexa recording list [--meeting-id {id}]
+vexa recording get {recording_id}
+vexa recording download {recording_id} {media_file_id}
+vexa recording delete {recording_id}
+vexa recording config                        # show config
+vexa recording config --enabled true --capture-modes audio,video
 ```
 
 ## Vexa APIs (direct HTTP access)
@@ -198,5 +223,5 @@ with sync_playwright() as p:
 - Your workspace at `/workspace` is yours — create files, directories, scripts freely
 - For web browsing: spawn a browser container, don't try to run Chromium locally
 - Connect to browsers via CDP (`vexa browser connect`), not by sharing displays
-- For meeting TTS/chat/screen: use curl directly to bot-manager (see Meeting API above)
+- For meeting TTS/chat/screen: use `vexa meeting speak|chat|screen` (or curl for advanced options)
 - Always include `X-API-Key: $VEXA_BOT_API_TOKEN` in authenticated API calls
