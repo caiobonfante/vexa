@@ -402,6 +402,49 @@ Before attempting a fix, the executor checks the ledger:
 
 ---
 
+## Delivery Gate — `/deliver`
+
+**MANDATORY before any human-facing asset is handed to the user.** This includes dashboard pages, web UIs, API endpoints the user will hit directly, and any "it's ready to test" claim.
+
+### Rule: Never say "ready" without browser verification
+
+An agent team that modifies dashboard code or web-facing services MUST:
+
+1. **Build clean:** `npx next build` with ZERO errors
+2. **Browser verify:** Open every affected page in a real browser (Playwright headless), check for:
+   - Zero JS console errors
+   - No error boundaries or blank screens
+   - Interactive elements render and respond
+3. **Leave the server running:** The human's first click must work. If the dev server dies when the agent exits, the delivery failed.
+4. **Fix before reporting:** If validation finds issues, fix them. DO NOT report failures to the human — fix them first.
+
+### How to run
+
+```
+/deliver
+```
+
+This runs the full white-glove validation: build, service health, browser-based page testing, feature flow testing, screenshot evidence. See `.claude/commands/deliver.md` for the full protocol.
+
+### When to run
+
+- After ANY dashboard code change (component, page, style, API route)
+- After integrating external PRs that touch the dashboard
+- Before telling the user "ready to test" or "dashboard is up"
+- After container rebuilds that affect API responses the dashboard depends on
+
+### What counts as failure
+
+- Build error = failure
+- Any page returns blank/error in browser = failure
+- JS console.error on any page = failure
+- Server not running when human tries to access = failure
+- curl returning 200 but page not rendering in browser = failure (curl is not validation)
+
+**curl returning 200 is NOT validation. A real browser rendering the page is.**
+
+---
+
 ## What This File Is
 
 This file is the operating manual for the self-improvement system. It changes based on what we learn. Every run should end with Phase 4 (REFLECT) which may update this file.
@@ -492,3 +535,4 @@ The self-improvement system works when:
 | Regressions caught | Batch gate detects when Feature B breaks Feature A | Features advance in isolation, regressions compound |
 | Experiment ledger prevents waste | Known dead ends are not re-attempted | Same failed approach tried repeatedly |
 | Demo artifacts produced | Human can evaluate each advance in <30s | Score changes only visible in markdown |
+| Web delivery validated | `/deliver` passes: build clean, all pages render in browser, zero JS errors, server running | Agent says "ready" but dashboard is broken, blank, or server not running |
