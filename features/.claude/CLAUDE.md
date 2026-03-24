@@ -1,0 +1,116 @@
+# Features — Self-Improvement System
+
+> This is the meta-feature. It manages all product features and the tools they use to validate.
+
+## Objective
+
+Take any product feature up the cost ladder autonomously, with execution evidence at each level. Target: reach Level 5 (score 80) without human involvement.
+
+## The Loop
+
+```
+1. READ all features/*/tests/findings.md → build priority map
+2. PICK highest-impact feature (lowest score × highest user impact)
+3. READ that feature's .claude/CLAUDE.md → resources table
+4. FIND highest reachable level:
+   for each level above current score:
+     check all required tools' confidence
+     if any tool < 80 → that level is BLOCKED
+     first non-blocked level = target
+5. CHECK data requirements for target level
+   if data missing → check if generator tool is available and confident
+6. EXECUTE validation at target level
+   capture command + stdout as evidence
+7. UPDATE findings.md with new score + evidence
+8. BLOCKED? → either:
+   a. improve the blocking tool (recurse into tool's manifest)
+   b. log blocker, move to next feature
+9. NOT BLOCKED? → continue to next level (back to step 4)
+10. DONE with this feature? → back to step 1, pick next feature
+```
+
+## Resource Dependency Resolution
+
+An agent can only validate at a level where ALL required tools have confidence ≥ 80.
+
+```
+want Level 5 → needs host-gmeet (30), send-tts-bots (70), score-output (90)
+  host-gmeet < 80 → BLOCKED
+
+fall back to Level 4 → needs generate-test-audio (50)
+  generate-test-audio < 80 → BLOCKED
+
+fall back to Level 3 → needs replay-pipeline (80), score-output (90)
+  both ≥ 80 → REACHABLE
+  but: needs data/raw/ populated → check: does data exist?
+    yes → execute Level 3
+    no → can generate-test-audio create it? confidence 50 < 80 → no
+    → Level 3 BLOCKED by missing data
+
+fall back to Level 2 → needs wav-pipeline (80)
+  ≥ 80 → REACHABLE, needs transcription-service running
+  check: docker ps → running? → execute Level 2
+
+Agent validates at Level 2. Score moves.
+Then: improve generate-test-audio (50 → 80) to unlock Level 3.
+Then: improve host-gmeet-meeting (30 → 80) to unlock Level 5.
+```
+
+**When blocked, the agent improves the blocking tool.** The tool has its own README with confidence, dead ends, and dependencies. Improving the tool is a sub-loop of the same algorithm.
+
+## Shared Tools
+
+Tools that multiple features use live in `features/tools/`. Each tool is a mini-feature:
+
+```
+features/tools/{name}/
+  README.md     ← confidence, command, dependencies, dead ends
+  run.sh        ← single entry point (or .js, .py)
+```
+
+The tool README format:
+
+```markdown
+# {Tool Name}
+Confidence: {score} — {evidence}
+Command: {exact command to run}
+Output: {what it produces}
+Needs: {dependencies — services, data, credentials}
+Dead ends: {what was tried and failed}
+```
+
+## Product Features
+
+Each product feature's CLAUDE.md has a resources table:
+
+```markdown
+## Resources
+
+| Level | Cap | Tool | Tool Confidence | Command | Data needed |
+|-------|-----|------|----------------|---------|-------------|
+| 1 | 50 | (built-in) | — | make unit | none |
+| 2 | 60 | wav-pipeline | 80 | make play-medium | transcription-service running |
+| ... | ... | ... | ... | ... | ... |
+```
+
+The agent reads this table to determine highest reachable level.
+
+## On Entry
+
+1. Read `features/tests/findings.md` → does the loop itself work?
+2. Read `features/orchestrator-log.md` → what happened last time?
+3. Scan all `features/*/tests/findings.md` → priority map
+4. Check `features/tools/*/README.md` → what tools are available and at what confidence?
+5. Pick target → execute the loop
+
+## Gate
+
+The self-improvement system works when:
+
+| Check | Pass | Fail |
+|-------|------|------|
+| Loop executes | Agent runs validation command, captures output | Agent only reads code or writes markdown |
+| Score moves with evidence | findings.md updated with command + stdout | Score claimed without execution |
+| Tool dependency chain works | Agent detects blocked level, improves tool, retries | Agent skips levels or ignores broken tools |
+| Recursive improvement | Improving a tool improves all features that use it | Tool fixes are one-off hacks |
+| No human in loop | Levels 0-5 complete without human intervention | Agent asks human to run something |
