@@ -4,6 +4,9 @@
 > **Tested:** Bot joins, audio capture, Whisper transcription, WebSocket delivery, REST consistency, VAD silence filtering.
 > **Not tested:** Zoom, human speaker locking (<585s), multi-track dedup, language locking in live meeting.
 > **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).
+>
+> **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md) | **Cycle:** validation (collect → iterate → expand)
+> **Sub-agents:** [google-meet](google-meet/) | [ms-teams](ms-teams/) | [zoom](zoom/) — each with own gate, findings, tests
 
 ## Why
 
