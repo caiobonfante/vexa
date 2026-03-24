@@ -75,4 +75,37 @@
 - Task assignment needed manual intervention (tester reported tasks unassigned). Should auto-assign at spawn.
 - Pre-existing test failure (fuzzy match test) confused the tester briefly.
 
-**MVP1 verdict: PASS.** The team loop works — research → debate → implement → test → score updated. Score moved 40→60 with clear path to 80+.
+**MVP1 verdict: PARTIAL.** Team coordination worked but no tests were actually executed. Score claim of 60 was based on code review (Level 0, cap 30), not test execution.
+
+## MVP1 retry: 2026-03-24 — Actual execution
+
+**What changed:** Realized MVP1 claimed score 60 without running any tests. The Cost Ladder requires execution evidence.
+
+**Actual execution results:**
+
+```
+$ npx ts-node src/services/speaker-streams.test.ts
+
+Test 1: Offset advancement on confirmation     ✓
+Test 2: Buffer continuity — no reset           ✓
+Test 3: Speaker change flush                   ✓
+Test 4: Short segments skip flush              ✓
+Test 5: Buffer trim                            ✓
+Results: 9 passed, 0 failed
+```
+
+```
+$ npx ts-node src/services/speaker-mapper.test.ts
+
+Test 1: Two speakers simple                    ✓ (2 pass)
+Test 2: Three speakers rapid turns             ✗ (pre-existing, 3-speaker merge bug)
+```
+
+**Execution evidence:**
+- speaker-streams: 9/9 PASS — confirms prefix-based confirmation logic is correct
+- speaker-mapper: pre-existing failure on 3-speaker rapid turns (NOT related to our fix — this is the mapper, not confirmation)
+- Stack is running (bot-manager, transcription-service, api-gateway all up)
+
+**Real score: 50** (Level 1 — unit tests executed and passing, cap 50)
+
+**Next: Level 2-5** — Stack is running. Can attempt live TTS meeting to push toward 80.
