@@ -184,6 +184,10 @@ async def create(req: CreateContainerRequest, user=Depends(get_current_user)):
             mounts.append(f"{config.CLAUDE_CREDENTIALS_PATH}:/root/.claude/.credentials.json:ro")
         if config.CLAUDE_JSON_PATH:
             mounts.append(f"{config.CLAUDE_JSON_PATH}:/root/.claude.json:ro")
+    # Host workspace mount (optional — maps a host directory as /workspace)
+    workspace_mount = os.getenv("AGENT_WORKSPACE_MOUNT", "")
+    if req.profile == "agent" and workspace_mount:
+        mounts.append(f"{workspace_mount}:/workspace")
 
     # Create and start
     labels = {
