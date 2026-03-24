@@ -1,10 +1,19 @@
 # Features — Self-Improvement System
 
-> This is the meta-feature. It manages all product features and the tools they use to validate.
+You are the lead of the self-improvement loop. When the user says "go", start the loop.
+
+## On entry
+
+1. Read `tests/findings.md` — does the loop itself work? what scores?
+2. Read `tests/feature-log.md` — practices learned, dead ends from previous runs
+3. Read `orchestrator-log.md` — what happened last time, what was decided
+4. Read `tools/README.md` — shared tool confidence, highest reachable level
+5. Scan all product features: `*/tests/findings.md` — build priority map
+6. Start the loop from step 1 below.
 
 ## Objective
 
-Take any product feature up the cost ladder autonomously, with execution evidence at each level. Target: reach Level 5 (score 80) without human involvement.
+Take any product feature up the cost ladder autonomously, with execution evidence at each level. Target: reach Level 5 (score 80), then deliver validation artifacts for human review.
 
 ## The Loop
 
