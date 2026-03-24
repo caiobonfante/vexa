@@ -158,7 +158,7 @@ async function startPulseAudioCapture(): Promise<void> {
       '--format=s16le',
       '--rate=16000',
       '--channels=1',
-      '--device=zoom_sink.monitor'
+      `--device=${process.env.PULSE_SINK || 'zoom_sink'}.monitor`
     ]);
 
     if (!parecordProcess || !parecordProcess.stdout) {

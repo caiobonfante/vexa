@@ -4,11 +4,13 @@ import { callStatusChangeCallback, mapExitReasonToStatus } from "./services/unif
 import { chromium } from "playwright-extra";
 import { handleGoogleMeet, leaveGoogleMeet } from "./platforms/googlemeet";
 import { handleMicrosoftTeams, leaveMicrosoftTeams } from "./platforms/msteams";
-import { handleZoom, leaveZoom } from "./platforms/zoom";
+import { handleZoom, leaveZoom, leaveZoomWeb } from "./platforms/zoom";
+import { reconfigureZoomWebRecording } from "./platforms/zoom/web/recording";
 import { getZoomSpeakerEvents } from "./platforms/zoom/strategies/recording";
 import { browserArgs, getBrowserArgs, userAgent } from "./constans";
 import { BotConfig } from "./types";
 import { RecordingService } from "./services/recording";
+import { VideoRecordingService } from "./services/video-recording";
 import { TTSPlaybackService } from "./services/tts-playback";
 import { MicrophoneService } from "./services/microphone";
 import { MeetingChatService, ChatTranscriptConfig } from "./services/chat";
@@ -16,6 +18,7 @@ import { ScreenContentService, getVirtualCameraInitScript, getVideoBlockInitScri
 import { ScreenShareService } from "./services/screen-share"; // kept for Teams; unused for Google Meet camera-feed approach
 import { createClient, RedisClientType } from 'redis';
 import { Page, Browser } from 'playwright-core';
+import { execSync } from 'child_process';
 // HTTP imports removed - using unified callback service instead
 
 // Per-speaker transcription pipeline
@@ -50,9 +53,55 @@ let browserInstance: Browser | null = null;
 
 // --- Recording service reference (set by platform handlers) ---
 let activeRecordingService: RecordingService | null = null;
+let activeVideoRecordingService: VideoRecordingService | null = null;
+let botPaSinkModuleId: string | null = null; // PulseAudio module ID for per-bot sink cleanup
 let currentBotConfig: BotConfig | null = null;
 export function setActiveRecordingService(svc: RecordingService | null): void {
   activeRecordingService = svc;
+}
+
+/**
+ * Start video recording if the bot config requests it.
+ * Called by meetingFlow.ts after admission so video and audio start at the same time.
+ */
+export function startVideoRecordingIfNeeded(): void {
+  if (!currentBotConfig) return;
+  const wantsVideoCapture = !!currentBotConfig.recordingEnabled &&
+    Array.isArray(currentBotConfig.captureModes) && currentBotConfig.captureModes.includes('video');
+  const isZoomNative = currentBotConfig.platform === 'zoom' && process.env.ZOOM_WEB !== 'true';
+
+  if (wantsVideoCapture && !isZoomNative) {
+    try {
+      const sessionUid = currentBotConfig.connectionId || `video-${Date.now()}`;
+      activeVideoRecordingService = new VideoRecordingService(currentBotConfig.meeting_id, sessionUid);
+      activeVideoRecordingService.start();
+      log('[VideoRecording] Screen capture started (post-admission)');
+    } catch (err: any) {
+      log(`[VideoRecording] Failed to start (non-fatal): ${err.message}`);
+      activeVideoRecordingService = null;
+    }
+  } else if (wantsVideoCapture && isZoomNative) {
+    log('[VideoRecording] Video recording not supported for Zoom Native SDK — use ZOOM_WEB=true for screen capture');
+  }
+}
+
+/**
+ * Enter true fullscreen via CDP, hiding all browser chrome (tabs, address bar).
+ * Must be called after the page has navigated to a real URL.
+ */
+export async function enterBrowserFullscreen(): Promise<void> {
+  if (!page || page.isClosed()) return;
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    const { windowId } = await cdp.send('Browser.getWindowForTarget');
+    await cdp.send('Browser.setWindowBounds', {
+      windowId,
+      bounds: { windowState: 'fullscreen' },
+    });
+    log('[Browser] Entered fullscreen via CDP (no tabs/address bar)');
+  } catch (err: any) {
+    log(`[Browser] CDP fullscreen failed (non-fatal): ${err.message}`);
+  }
 }
 // ----------------------------------------------------------
 
@@ -412,8 +461,16 @@ const handleRedisMessage = async (message: string, channel: string, page: Page |
           allowedLanguages = command.allowed_languages?.length ? command.allowed_languages : null;
           currentTask = command.task;
 
-          // Trigger browser-side reconfiguration via the exposed function
-          if (page && !page.isClosed()) { // Ensure page exists and is open
+          // Zoom Web uses a Node.js-side WhisperLive (not browser-based) — reconfigure directly
+          const isZoomWeb = process.env.ZOOM_WEB === 'true' && (globalThis as any).botConfig?.platform === 'zoom';
+          if (isZoomWeb) {
+            await reconfigureZoomWebRecording(currentLanguage ?? null, currentTask ?? null);
+            log('[Zoom Web] Reconfigure handled via Node.js WhisperLive reconnect');
+          }
+
+          // Trigger browser-side reconfiguration via the exposed function (for Google Meet / Teams)
+          if (!isZoomWeb) {
+            if (page && !page.isClosed()) { // Ensure page exists and is open
               try {
                   await page.evaluate(
                       ([lang, task]) => {
@@ -449,8 +506,9 @@ const handleRedisMessage = async (message: string, channel: string, page: Page |
               } catch (evalError: any) {
                   log(`Error evaluating reconfiguration script in browser: ${evalError.message}`);
               }
-          } else {
+            } else {
                log("Page not available or closed, cannot send reconfigure command to browser.");
+            }
           }
       } else if (command.action === 'leave') {
         // Mark that a stop was requested via Redis
@@ -553,11 +611,17 @@ async function performGracefulLeave(
 
   let platformLeaveSuccess = false;
 
-  // Handle SDK-based platforms (Zoom) separately - they don't use Playwright page
+  // Handle Zoom separately — SDK mode uses null page, web mode uses browser page
   if (currentPlatform === "zoom") {
     try {
-      log("[Graceful Leave] Attempting Zoom SDK cleanup...");
-      platformLeaveSuccess = await leaveZoom(null); // Zoom doesn't use page
+      const zoomWebMode = process.env.ZOOM_WEB === 'true';
+      if (zoomWebMode) {
+        log("[Graceful Leave] Attempting Zoom Web cleanup...");
+        platformLeaveSuccess = await leaveZoomWeb(page);
+      } else {
+        log("[Graceful Leave] Attempting Zoom SDK cleanup...");
+        platformLeaveSuccess = await leaveZoom(null);
+      }
     } catch (error: any) {
       log(`[Graceful Leave] Zoom cleanup error: ${error.message}`);
       platformLeaveSuccess = false;
@@ -613,14 +677,55 @@ async function performGracefulLeave(
     log(`[Graceful Leave] Per-speaker pipeline cleanup error: ${pipelineCleanupErr.message}`);
   }
 
-  // Upload recording if available
+  // Clean up per-bot PulseAudio sink if one was created
+  if (botPaSinkModuleId) {
+    try {
+      execSync(`pactl unload-module ${botPaSinkModuleId}`, { stdio: 'ignore' });
+      log(`[Graceful Leave] Unloaded PulseAudio sink module ${botPaSinkModuleId}`);
+    } catch (e: any) {
+      log(`[Graceful Leave] Warning: Could not unload PulseAudio sink module: ${e.message}`);
+    }
+    botPaSinkModuleId = null;
+  }
+
+  // Stop video recording, mux audio in, and upload the combined file
+  if (activeVideoRecordingService && currentBotConfig?.recordingUploadUrl && currentBotConfig?.token) {
+    try {
+      log("[Graceful Leave] Stopping video recording...");
+      await activeVideoRecordingService.stop();
+
+      // Finalize audio and mux into the video so the upload is a single self-contained file
+      if (activeRecordingService) {
+        try {
+          const audioPath = await activeRecordingService.finalize();
+          // Compute how much later audio started compared to video
+          const audioDelayMs = activeRecordingService.getStartTime() - activeVideoRecordingService.getStartTime();
+          log(`[Graceful Leave] Muxing audio into video (audio delay: ${audioDelayMs}ms)...`);
+          await activeVideoRecordingService.muxAudio(audioPath, audioDelayMs);
+        } catch (muxErr: any) {
+          log(`[Graceful Leave] Audio mux failed (will upload video-only): ${muxErr.message}`);
+        }
+      }
+
+      log("[Graceful Leave] Uploading video to bot-manager...");
+      await activeVideoRecordingService.upload(currentBotConfig.recordingUploadUrl, currentBotConfig.token);
+      log("[Graceful Leave] Video uploaded successfully.");
+    } catch (uploadError: any) {
+      log(`[Graceful Leave] Video upload failed: ${uploadError.message}`);
+    } finally {
+      await activeVideoRecordingService.cleanup();
+      activeVideoRecordingService = null;
+    }
+  }
+
+  // Upload audio recording separately (used for audio-only playback / transcription alignment)
   if (activeRecordingService && currentBotConfig?.recordingUploadUrl && currentBotConfig?.token) {
     try {
-      log("[Graceful Leave] Uploading recording to bot-manager...");
+      log("[Graceful Leave] Uploading audio recording to bot-manager...");
       await activeRecordingService.upload(currentBotConfig.recordingUploadUrl, currentBotConfig.token);
-      log("[Graceful Leave] Recording uploaded successfully.");
+      log("[Graceful Leave] Audio recording uploaded successfully.");
     } catch (uploadError: any) {
-      log(`[Graceful Leave] Recording upload failed: ${uploadError.message}`);
+      log(`[Graceful Leave] Audio recording upload failed: ${uploadError.message}`);
     } finally {
       await activeRecordingService.cleanup();
       activeRecordingService = null;
@@ -1818,6 +1923,23 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
   }
   // -------------------------------------------------
 
+  // For Zoom Web: create a per-bot PulseAudio null sink so concurrent bots don't
+  // cross-contaminate each other's audio via the shared zoom_sink.monitor.
+  if (botConfig.platform === 'zoom' && process.env.ZOOM_WEB === 'true') {
+    const sinkName = `bot_sink_${botConfig.meeting_id}`;
+    try {
+      const moduleId = execSync(
+        `pactl load-module module-null-sink sink_name=${sinkName} sink_properties=device.description="BotSink_${botConfig.meeting_id}"`,
+        { stdio: ['ignore', 'pipe', 'ignore'] }
+      ).toString().trim();
+      botPaSinkModuleId = moduleId;
+      process.env.PULSE_SINK = sinkName;
+      log(`[Bot] Per-bot PulseAudio sink created: ${sinkName} (module ${moduleId})`);
+    } catch (e: any) {
+      log(`[Bot] Warning: Could not create per-bot PulseAudio sink: ${e.message}. Falling back to shared zoom_sink.`);
+    }
+  }
+
   // Simple browser setup like simple-bot.js
   if (botConfig.platform === "teams") {
     // Use shared browser args so Teams gets the same fake-device flags as Google Meet.
@@ -1846,7 +1968,8 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     const context = await browserInstance.newContext({
       permissions: ['microphone', 'camera'],
       ignoreHTTPSErrors: true,
-      bypassCSP: true
+      bypassCSP: true,
+      viewport: null, // CDP fullscreen removes browser chrome; window fills the 1920x1080 Xvfb display
     });
     
     // Pre-inject browser utils before any page scripts (affects current + future navigations)
@@ -1910,10 +2033,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     const context = await browserInstance.newContext({
       permissions: ["camera", "microphone"],
       userAgent: userAgent,
-      viewport: {
-        width: 1280,
-        height: 720
-      }
+      viewport: null, // CDP fullscreen removes browser chrome; window fills the 1920x1080 Xvfb display
     });
 
     // Set voice agent flag before virtual camera script so it knows

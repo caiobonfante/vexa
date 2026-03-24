@@ -1,7 +1,7 @@
 import { Page } from "playwright";
 import { BotConfig } from "../../types";
 import { log, callStartupCallback } from "../../utils";
-import { hasStopSignalReceived, triggerPostAdmissionCamera, triggerPostAdmissionChat } from "../../index";
+import { hasStopSignalReceived, triggerPostAdmissionCamera, triggerPostAdmissionChat, startVideoRecordingIfNeeded, enterBrowserFullscreen } from "../../index";
 import { enableTeamsLiveCaptions } from "../msteams/captions";
 
 export type AdmissionDecision = {
@@ -178,6 +178,12 @@ export async function runMeetingFlow(
       log(`Error during startup callback or verification: ${error?.message || String(error)}`);
       // Continue to recording phase even if callback/verification fails
     }
+
+    // Enter fullscreen via CDP to hide tabs/address bar before recording starts.
+    await enterBrowserFullscreen();
+
+    // Start video recording now (same time as audio) so they stay in sync.
+    startVideoRecordingIfNeeded();
 
     // Removal monitoring + recording race
     let signalRemoval: (() => void) | null = null;
