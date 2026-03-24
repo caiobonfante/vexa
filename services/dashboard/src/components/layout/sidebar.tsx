@@ -31,6 +31,7 @@ import { useJoinModalStore } from "@/stores/join-modal-store";
 import { useAdminAuthStore } from "@/stores/admin-auth-store";
 import { AdminAuthModal } from "@/components/admin/admin-auth-modal";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
+import { withBasePath } from "@/lib/base-path";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -62,7 +63,7 @@ function BillingStatus() {
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/billing/status")
+    fetch(withBasePath("/api/billing/status"))
       .then((r) => r.json())
       .then(setStatus)
       .catch(() => {});

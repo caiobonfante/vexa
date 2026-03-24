@@ -12,6 +12,7 @@ import { consumePendingZoomBotRequest } from "@/lib/zoom-oauth-client";
 import { useLiveStore } from "@/stores/live-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { getUserFriendlyError } from "@/lib/error-messages";
+import { withBasePath } from "@/lib/base-path";
 
 type CallbackState = "loading" | "starting_meeting" | "success" | "error";
 
@@ -50,7 +51,7 @@ function ZoomCallbackContent() {
         return;
       }
 
-      const completeResp = await fetch("/api/zoom/oauth/complete", {
+      const completeResp = await fetch(withBasePath("/api/zoom/oauth/complete"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, state: stateParam }),

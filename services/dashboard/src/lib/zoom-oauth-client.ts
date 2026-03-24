@@ -1,4 +1,5 @@
 import type { CreateBotRequest } from "@/types/vexa";
+import { withBasePath } from "@/lib/base-path";
 
 const PENDING_ZOOM_BOT_REQUEST_KEY = "vexa.pending_zoom_bot_request";
 
@@ -80,7 +81,7 @@ export async function startZoomOAuth({
     returnTo,
   };
 
-  const resp = await fetch("/api/zoom/oauth/start", {
+  const resp = await fetch(withBasePath("/api/zoom/oauth/start"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

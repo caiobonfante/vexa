@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/base-path";
 
 // ==========================================
 // Types
@@ -97,7 +98,7 @@ export default function ProfilePage() {
     async function fetchKeys() {
       if (!user?.id) return;
       try {
-        const response = await fetch(`/api/profile/keys?userId=${user.id}`);
+        const response = await fetch(withBasePath(`/api/profile/keys?userId=${user.id}`));
         if (!response.ok) {
           // Graceful fallback — endpoint may not exist yet
           setApiKeys([]);
@@ -127,7 +128,7 @@ export default function ProfilePage() {
   const handleCreateKey = async () => {
     setIsCreatingKey(true);
     try {
-      const response = await fetch("/api/profile/keys", {
+      const response = await fetch(withBasePath("/api/profile/keys"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newKeyName, scope: newKeyScope, userId: user?.id }),
@@ -157,7 +158,7 @@ export default function ProfilePage() {
 
   const handleRevokeKey = async (keyId: string) => {
     try {
-      const response = await fetch(`/api/profile/keys/${keyId}`, { method: "DELETE" });
+      const response = await fetch(withBasePath(`/api/profile/keys/${keyId}`), { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to revoke key");
       setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
       toast.success("API key revoked");
@@ -435,7 +436,7 @@ function GitWorkspaceCard() {
 
   useEffect(() => {
     // Load from server
-    fetch("/api/vexa/user/workspace-git").then(async (r) => {
+    fetch(withBasePath("/api/vexa/user/workspace-git")).then(async (r) => {
       // GET doesn't exist — load from user profile data instead
     }).catch(() => {});
     // Also check localStorage as fallback
@@ -453,7 +454,7 @@ function GitWorkspaceCard() {
   async function handleSave() {
     setIsSaving(true);
     try {
-      const response = await fetch("/api/vexa/user/workspace-git", {
+      const response = await fetch(withBasePath("/api/vexa/user/workspace-git"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repo, token, branch }),
@@ -472,7 +473,7 @@ function GitWorkspaceCard() {
 
   async function handleClear() {
     try {
-      await fetch("/api/vexa/user/workspace-git", { method: "DELETE" });
+      await fetch(withBasePath("/api/vexa/user/workspace-git"), { method: "DELETE" });
       localStorage.removeItem("vexa-browser-git");
       setRepo("");
       setToken("");

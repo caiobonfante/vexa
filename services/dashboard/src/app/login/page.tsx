@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { parseMeetingInput } from "@/lib/parse-meeting-input";
 import { savePendingMeetingUrl } from "@/lib/pending-meeting";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/base-path";
 
 type LoginState = "onboarding" | "email" | "sent";
 
@@ -56,7 +57,7 @@ export default function LoginPage() {
     // Hosted mode: redirect to external auth (webapp) instead of showing dashboard login
     const checkHostedMode = async () => {
       try {
-        const res = await fetch("/api/config");
+        const res = await fetch(withBasePath("/api/config"));
         const config = await res.json();
         if (config.hostedMode && config.webappUrl) {
           const returnUrl = encodeURIComponent(window.location.origin);
@@ -70,7 +71,7 @@ export default function LoginPage() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch("/api/health");
+        const response = await fetch(withBasePath("/api/health"));
         const data = await response.json();
         setHealthStatus(data);
       } catch {

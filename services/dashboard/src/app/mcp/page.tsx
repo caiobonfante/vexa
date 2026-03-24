@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { withBasePath } from "@/lib/base-path";
 
 interface RuntimeConfig {
   wsUrl: string;
@@ -24,7 +25,7 @@ export default function MCPPage() {
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const response = await fetch("/api/config");
+        const response = await fetch(withBasePath("/api/config"));
         const data = await response.json();
         setConfig(data);
       } catch (error) {

@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { Meeting, TranscriptSegment } from "@/types/vexa";
+import { withBasePath } from "@/lib/base-path";
 
 interface AIChatPanelProps {
   meeting?: Meeting;
@@ -85,7 +86,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
   useEffect(() => {
     async function checkAIConfig() {
       try {
-        const response = await fetch("/api/ai/config");
+        const response = await fetch(withBasePath("/api/ai/config"));
         const config = await response.json();
         setAIConfig(config);
       } catch (error) {

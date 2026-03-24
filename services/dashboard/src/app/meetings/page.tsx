@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePendingMeeting } from "@/hooks/use-pending-meeting";
 import { toast } from "sonner";
+import { withBasePath } from "@/lib/base-path";
 
 function PlatformIcon({ platform }: { platform: string }) {
   if (platform === "google_meet") {
@@ -97,7 +98,7 @@ export default function MeetingsPage() {
           body.workspaceGitBranch = git.branch || "main";
         }
       } catch {}
-      const response = await fetch("/api/vexa/bots", {
+      const response = await fetch(withBasePath("/api/vexa/bots"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

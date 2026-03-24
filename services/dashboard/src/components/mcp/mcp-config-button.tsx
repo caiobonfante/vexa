@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { withBasePath } from "@/lib/base-path";
 
 interface RuntimeConfig {
   wsUrl: string;
@@ -37,7 +38,7 @@ export function MCPConfigButton() {
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const response = await fetch("/api/config");
+        const response = await fetch(withBasePath("/api/config"));
         const data = await response.json();
         setConfig(data);
       } catch (error) {

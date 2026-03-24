@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Meeting } from "@/types/vexa";
+import { withBasePath } from "@/lib/base-path";
 
 function CopyBlock({ label, text }: { label: string; text: string }) {
   return (
@@ -57,7 +58,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
   const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
-    fetch("/api/config")
+    fetch(withBasePath("/api/config"))
       .then((r) => r.json())
       .then((cfg) => {
         setApiUrl(cfg.publicApiUrl || cfg.apiUrl || "http://localhost:8056");
@@ -134,7 +135,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
   async function handleStop() {
     setIsStopping(true);
     try {
-      const response = await fetch(`/api/vexa/bots/browser_session/${meeting.platform_specific_id}`, {
+      const response = await fetch(withBasePath(`/api/vexa/bots/browser_session/${meeting.platform_specific_id}`), {
         method: "DELETE",
       });
       if (!response.ok) {

@@ -29,6 +29,7 @@ import { parseMeetingInput } from "@/lib/parse-meeting-input";
 import { DocsLink } from "@/components/docs/docs-link";
 import { useAuthStore } from "@/stores/auth-store";
 import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
+import { withBasePath } from "@/lib/base-path";
 
 
 export function JoinModal() {
@@ -204,7 +205,7 @@ export function JoinModal() {
           body.workspaceGitBranch = git.branch || "main";
         }
       } catch {}
-      const response = await fetch("/api/vexa/bots", {
+      const response = await fetch(withBasePath("/api/vexa/bots"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
