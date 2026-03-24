@@ -1,6 +1,6 @@
 # Features
 
-Features are **self-describing, self-improving manifests.** Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't. Six concepts make this work.
+Features are **self-describing, self-improving manifests.** Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't. Seven concepts make this work.
 
 ## Core Concepts
 
@@ -113,11 +113,46 @@ On entry, the agent determines its stage from artifacts — no human tells it wh
 
 The artifacts tell the agent where it is. Findings show the scores. Feature log shows the trajectory. The agent acts accordingly.
 
+### 7. Cost Ladder
+
+Improve confidence with **minimum cost.** Never go to a higher level until you've exhausted lower levels.
+
+| Level | Cost | Score cap | What it proves | What it can't prove |
+|-------|------|-----------|---------------|-------------------|
+| 0 Read code | Free, seconds | 30 | Logic is correct | Timing, integration, real behavior |
+| 1 Unit test | Free, seconds | 60 | Function produces right output | Pipeline interactions, platform quirks |
+| 2 Replay existing data | Free, minutes | 80 | Pipeline works on known audio | Unseen scenarios, platform changes |
+| 3 Replay modified data | Free, minutes | 80 | Pipeline works under stress (overlaps, long monologues) | Real platform behavior |
+| 4 Live meeting + TTS bots | Cheap, minutes | 90 | Works on real platform with controlled audio | Human speech patterns |
+| 5 Live meeting + humans | Expensive, hours | 95 | Works with real human speech | Production scale |
+
+**Score caps are enforced.** A unit test proving the function works cannot give a score of 90 — it hasn't been tested in the pipeline. A TTS bot test cannot give 95 — it hasn't been tested with real speech. The cap prevents overclaiming.
+
+**The rule:** If a bug is in code logic → Level 0-1 fixes it. If it's in pipeline timing → Level 2-3. If it's in platform behavior → Level 4. If it's in human speech patterns → Level 5, but ONLY after 0-4 pass.
+
+**The improvement cycle:**
+
+```
+1. READ FINDINGS → lowest score, what level of testing does it need?
+2. READ DEAD ENDS → what was tried, what failed?
+3. RESEARCH (if root cause unknown) → cheapest method first
+4. FIX → minimal change to root cause
+5. VALIDATE at cheapest sufficient level
+     Unit test proves it? → Level 1, done
+     Need pipeline timing? → Level 2-3
+     Need real platform? → Level 4
+     Need human speech? → Level 5
+6. UPDATE SCORE → findings.md with evidence + feature-log.md with what changed
+7. DECIDE → score ≥ 80? done. Didn't improve? log dead end, back to 3.
+```
+
+Each step only happens if the previous passes. If the unit test fails, don't waste time on live meetings — the logic is wrong.
+
 ---
 
 ## Feature Completeness
 
-Every feature should implement all 6 concepts:
+Every feature should implement all 7 concepts:
 
 | Concept | File | Required |
 |---------|------|----------|
@@ -127,6 +162,7 @@ Every feature should implement all 6 concepts:
 | Edge Contracts | `.claude/CLAUDE.md` | Yes — edges section with from/to/format/failure |
 | Agent Manifest | All 4 files above + `README.md` | Yes — complete set for zero-handoff onboarding |
 | Stage Determination | `.claude/CLAUDE.md` | Yes — "on entry" section with stage checks |
+| Cost Ladder | `tests/findings.md` | Yes — score caps enforced, cheapest validation level used |
 
 ## Status (2026-03-24)
 
