@@ -42,7 +42,14 @@
 
 ## What is Vexa?
 
-**Vexa** is an open-source, self-hostable API for real-time meeting transcription — with an agent runtime built in. It automatically joins Google Meet, Microsoft Teams, and Zoom meetings, captures audio, provides real-time transcriptions, and lets AI agents actively participate in and act on meetings.
+**Vexa** is an open-source toolkit for building anything with meetings. Twelve independent features — use one or all:
+
+- **Need transcription?** Send a bot to Google Meet, Teams, or Zoom. Get real-time transcripts via WebSocket.
+- **Need automation?** Webhooks fire when meetings end. Agent containers wake up, summarize, push to Slack.
+- **Need AI agents in meetings?** MCP server gives Claude/Cursor 17 meeting tools. Agents speak, chat, share screen.
+- **Need a personal assistant?** Persistent knowledge workspace builds itself from your meetings. Schedule agents on your calendar.
+
+Every feature is a separate service. Pick what you need, skip what you don't. Self-host everything or use [vexa.ai](https://vexa.ai) hosted.
 
 ### At a glance
 
