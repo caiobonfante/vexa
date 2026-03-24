@@ -323,6 +323,11 @@ export const vexaAPI = {
     return withBasePath(`/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`);
   },
 
+  // Recordings - get the proxied URL for streaming video via /raw endpoint
+  getRecordingVideoUrl(recordingId: number, mediaFileId: number): string {
+    return withBasePath(`/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`);
+  },
+
   // Transcribe a recorded meeting (deferred transcription)
   async transcribeMeeting(
     meetingId: string | number,
