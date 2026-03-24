@@ -20,14 +20,41 @@ Take any product feature up the cost ladder autonomously, with execution evidenc
 5. CHECK data requirements for target level
    if data missing → check if generator tool is available and confident
 6. EXECUTE validation at target level
-   capture command + stdout as evidence
-7. UPDATE findings.md with new score + evidence
+   one teammate executes, another verifies independently (same command, separate context)
+   if outputs conflict → investigate WHY, don't pick a winner
+   capture command + stdout from BOTH as evidence
+7. UPDATE findings.md with new score + evidence from both teammates
 8. BLOCKED? → either:
    a. improve the blocking tool (recurse into tool's manifest)
    b. log blocker, move to next feature
 9. NOT BLOCKED? → continue to next level (back to step 4)
-10. DONE with this feature? → back to step 1, pick next feature
+10. REFLECT (mandatory, not optional):
+    - What practices worked this session? → [PRACTICE] entries in feature-log.md
+    - What failed or surprised us? → [DEAD-END] entries in feature-log.md
+    - Did a practice prove valuable enough to codify? → update this CLAUDE.md
+    - Update features/tests/findings.md with meta-feature scores
+    - Chronicler writes narrative to blog_articles/ for knowledge persistence
+    The loop doesn't close without this step. Knowledge that isn't written down evaporates.
+11. DONE with this feature? → back to step 1, pick next feature
 ```
+
+## Team Pattern
+
+Every team has these roles:
+
+**Executor** — runs commands, improves tools, climbs the ladder.
+**Verifier** — independently runs the SAME commands, confirms or rejects. Verification BLOCKS next execution — executor cannot start Level N+1 until verifier confirms Level N.
+**Chronicler** — writes narrative during the run (not after). Captures plot twists, conflicts, surprises. Output goes to blog_articles/ for knowledge persistence.
+
+When verifier and executor conflict: investigate the difference. The most valuable findings come from understanding WHY two agents got different results on the same code.
+
+When verifier goes stale: lead nudges after 2 tasks complete without verification. If this keeps happening, the pattern needs revision (log as [PRACTICE] observation).
+
+## What This File Is
+
+This file is the operating manual for the self-improvement system. It changes based on what we learn. Every run should end with step 10 (REFLECT) which may update this file.
+
+Practices that survive multiple runs become permanent parts of the algorithm. Practices that fail become [DEAD-END] entries in feature-log.md. This file is a living document — the loop improves itself.
 
 ## Resource Dependency Resolution
 
