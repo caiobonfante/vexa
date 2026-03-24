@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { redirect } from "next/navigation";
 import {
   Zap,
   Plus,
@@ -127,10 +126,6 @@ function CategoryRow({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TrackerPage() {
-  if (process.env.NEXT_PUBLIC_TRACKER_ENABLED !== "true") {
-    redirect("/");
-  }
-
   const [config, setConfig] = useState<TrackerConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -238,7 +233,7 @@ export default function TrackerPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground flex items-center gap-2">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Zap className="h-7 w-7 text-amber-500" />
             Tracker Config
           </h1>

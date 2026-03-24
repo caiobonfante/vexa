@@ -10,12 +10,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { MCPConfigButton } from "@/components/mcp/mcp-config-button";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
-import { usePendingMeeting } from "@/hooks/use-pending-meeting";
 
 export default function DashboardPage() {
-  // Auto-join pending meeting from onboarding flow
-  usePendingMeeting();
-
   const { meetings, isLoadingMeetings, fetchMeetings, error } = useMeetingsStore();
   const openJoinModal = useJoinModalStore((state) => state.openModal);
 
@@ -42,8 +38,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
             Overview of your meeting transcriptions
           </p>
         </div>
@@ -98,7 +94,7 @@ export default function DashboardPage() {
             <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold tracking-[-0.02em]">{totalMeetings}</div>
+            <div className="text-2xl font-bold">{totalMeetings}</div>
             <p className="text-xs text-muted-foreground">
               All recorded meetings
             </p>
@@ -111,7 +107,7 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold tracking-[-0.02em]">{thisWeekMeetings}</div>
+            <div className="text-2xl font-bold">{thisWeekMeetings}</div>
             <p className="text-xs text-muted-foreground">
               Meetings in the last 7 days
             </p>
@@ -124,7 +120,7 @@ export default function DashboardPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold tracking-[-0.02em]">{activeMeetings}</div>
+            <div className="text-2xl font-bold">{activeMeetings}</div>
             <p className="text-xs text-muted-foreground">
               Currently recording
             </p>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Settings, Menu, LogOut, User, BookOpen, Code, FileCode, Code2, ExternalLink } from "lucide-react";
+import { Settings, Menu, LogOut, User, BookOpen, Code, FileCode, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
 import {
@@ -28,7 +28,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { getDocsUrl } from "@/lib/docs/webapp-url";
-import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -38,7 +37,6 @@ export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const [docsModeEnabled, setDocsModeEnabled] = useState(false);
-  const { config } = useRuntimeConfig();
 
   useEffect(() => {
     // Read from localStorage on mount
@@ -95,7 +93,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="shrink-0 z-50 w-full border-b border-border/70 bg-card/80 backdrop-blur-md">
+    <header className="shrink-0 z-50 w-full border-b bg-background">
       <div className="flex h-14 items-center px-4 md:px-6">
         {/* Mobile menu button */}
         <Button
@@ -109,9 +107,9 @@ export function Header({ onMenuClick }: HeaderProps) {
         </Button>
 
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href="/" className="flex items-center gap-2 font-semibold group">
           <Logo size="md" showText={false} className="group-hover:scale-105 transition-transform" />
-          <span className="hidden sm:inline-block text-[15px] font-semibold tracking-[-0.01em] text-foreground">vexa</span>
+          <span className="hidden sm:inline-block">Vexa Dashboard</span>
         </Link>
 
         {/* Spacer */}
@@ -187,7 +185,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     className="text-xs"
                     asChild
                   >
-                    <a href={getDocsUrl()} target="_blank" rel="noopener noreferrer">
+                    <a href={getDocsUrl("/docs")} target="_blank" rel="noopener noreferrer">
                       <BookOpen className="h-3.5 w-3.5 mr-1.5" />
                       Docs
                     </a>
@@ -238,14 +236,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                   Settings
                 </Link>
               </DropdownMenuItem>
-              {config?.hostedMode && (
-                <DropdownMenuItem asChild>
-                  <a href={`${config?.webappUrl || "https://vexa.ai"}/account`}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Account
-                  </a>
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />

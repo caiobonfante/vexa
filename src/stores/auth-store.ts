@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
-      isLoading: true, // Start true so auth-provider waits for checkAuth() before redirecting
+      isLoading: false, // Changed to false - hydration handled by onRehydrateStorage
       isAuthenticated: false,
 
       sendMagicLink: async (email: string): Promise<LoginResult> => {
@@ -150,20 +150,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await fetch("/api/auth/me");
           if (response.ok) {
-            const meData = await response.json();
-
-            // SSO path: /api/auth/me returns user+token from shared cookies
-            if (meData.user && meData.token) {
-              set({
-                user: meData.user,
-                token: meData.token,
-                isAuthenticated: true,
-                isLoading: false,
-              });
-              return;
-            }
-
-            // OAuth callback path (Dashboard's own auth flow)
+            // Cookie is valid - try to sync OAuth user info if available
             if (!user || !token) {
               try {
                 const oauthResponse = await fetch("/api/auth/oauth-callback");
@@ -181,9 +168,11 @@ export const useAuthStore = create<AuthState>()(
                 }
               } catch {
                 // OAuth callback failed, but cookie is still valid
+                // User might have logged in via email, so just set authenticated
               }
             }
             // Cookie is valid, but we don't have user info
+            // Keep existing user if any
             set({ isAuthenticated: true, isLoading: false });
           } else {
             set({ user: null, token: null, isAuthenticated: false, isLoading: false });

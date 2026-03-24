@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getVexaCookieOptions } from "@/lib/cookie-utils";
 
 /**
  * Login endpoint - uses Admin API to find/create user and generate token
@@ -144,7 +143,13 @@ export async function POST(request: NextRequest) {
 
     // Step 5: Set token in HTTP-only cookie for security
     const cookieStore = await cookies();
-    cookieStore.set("vexa-token", token, getVexaCookieOptions());
+    cookieStore.set("vexa-token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: "/",
+    });
 
     // Step 6: Return user info (without sensitive token in response for extra security)
     return NextResponse.json({
@@ -152,7 +157,6 @@ export async function POST(request: NextRequest) {
         id: user.id,
         email: user.email,
         name: user.name,
-        data: user.data || {},
         max_concurrent_bots: user.max_concurrent_bots,
         created_at: user.created_at,
       },

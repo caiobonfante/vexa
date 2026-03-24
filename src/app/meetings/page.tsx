@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Plus, Search, Filter, RefreshCw, CreditCard } from "lucide-react";
+import { Plus, Search, Filter, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,10 +18,9 @@ import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 import type { Platform, MeetingStatus } from "@/types/vexa";
 import { DocsLink } from "@/components/docs/docs-link";
-import { getWebappUrl } from "@/lib/docs/webapp-url";
 
 export default function MeetingsPage() {
-  const { meetings, isLoadingMeetings, fetchMeetings, error, subscriptionRequired } = useMeetingsStore();
+  const { meetings, isLoadingMeetings, fetchMeetings, error } = useMeetingsStore();
   const openJoinModal = useJoinModalStore((state) => state.openModal);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,44 +66,16 @@ export default function MeetingsPage() {
     fetchMeetings();
   };
 
-  const handleSubscribe = () => {
-    window.open(`${getWebappUrl()}/pricing`, "_blank");
-  };
-
   return (
     <div className="space-y-6">
-      {/* Subscription Required Banner */}
-      {subscriptionRequired && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CreditCard className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Subscription required
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Subscribe to a plan to create new bots and access the API. Your existing meetings are still visible below.
-              </p>
-            </div>
-          </div>
-          <Button
-            onClick={handleSubscribe}
-            size="sm"
-            className="bg-amber-600 hover:bg-amber-700 text-white flex-shrink-0"
-          >
-            View Plans
-          </Button>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">Meetings</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Meetings</h1>
             <DocsLink href="/docs/rest/meetings#list-meetings" />
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground">
             Browse and search your meeting transcriptions
           </p>
         </div>
@@ -112,15 +83,13 @@ export default function MeetingsPage() {
           <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoadingMeetings}>
             <RefreshCw className={`h-4 w-4 ${isLoadingMeetings ? "animate-spin" : ""}`} />
           </Button>
-          {!subscriptionRequired && (
-            <div className="flex items-center">
-              <Button onClick={openJoinModal}>
-                <Plus className="mr-2 h-4 w-4" />
-                Join Meeting
-              </Button>
-              <DocsLink href="/docs/rest/bots#create-bot" />
-            </div>
-          )}
+          <div className="flex items-center">
+            <Button onClick={openJoinModal}>
+              <Plus className="mr-2 h-4 w-4" />
+              Join Meeting
+            </Button>
+            <DocsLink href="/docs/rest/bots#create-bot" />
+          </div>
         </div>
       </div>
 
@@ -184,14 +153,6 @@ export default function MeetingsPage() {
       {/* Meetings List */}
       {error ? (
         <ErrorState error={error} onRetry={fetchMeetings} />
-      ) : subscriptionRequired && meetings.length === 0 ? (
-        <ErrorState
-          type="subscription"
-          title="Subscribe to continue"
-          message="Your trial has ended. Subscribe to a plan to create bots and access meeting transcriptions."
-          actionLabel="View Plans"
-          onAction={handleSubscribe}
-        />
       ) : (
         <MeetingList
           meetings={filteredMeetings}

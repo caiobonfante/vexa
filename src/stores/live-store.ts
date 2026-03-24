@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Meeting, TranscriptSegment, Platform, MeetingStatus } from "@/types/vexa";
-import { deduplicateSegments } from "@vexaai/transcript-rendering";
+import { deduplicateOverlappingSegments } from "@/lib/transcript-dedup";
 
 interface LiveMeetingState {
   // Current live meeting
@@ -66,7 +66,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
         const sorted = updated.sort(
           (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
         );
-        const deduped = deduplicateSegments(sorted);
+        const deduped = deduplicateOverlappingSegments(sorted);
         set({ liveTranscripts: deduped });
       } else if (segment.updated_at && existing.updated_at) {
         // Text is the same - use timestamp-based deduplication
@@ -77,7 +77,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
           const sorted = updated.sort(
             (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
           );
-          const deduped = deduplicateSegments(sorted);
+          const deduped = deduplicateOverlappingSegments(sorted);
           set({ liveTranscripts: deduped });
         }
       } else {
@@ -88,7 +88,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
         const sorted = updated.sort(
           (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
         );
-        const deduped = deduplicateSegments(sorted);
+        const deduped = deduplicateOverlappingSegments(sorted);
         set({ liveTranscripts: deduped });
       }
     } else {
@@ -97,7 +97,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
         (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
       );
       // Deduplicate overlapping segments
-      const deduped = deduplicateSegments(updated);
+      const deduped = deduplicateOverlappingSegments(updated);
       set({ liveTranscripts: deduped });
     }
   },
@@ -111,7 +111,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
     const sorted = updated.sort(
       (a, b) => a.absolute_start_time.localeCompare(b.absolute_start_time)
     );
-    const deduped = deduplicateSegments(sorted);
+    const deduped = deduplicateOverlappingSegments(sorted);
     set({ liveTranscripts: deduped });
   },
 
@@ -133,7 +133,7 @@ export const useLiveStore = create<LiveMeetingState>((set, get) => ({
     );
 
     // Deduplicate overlapping segments (expansion, tail-repeat, containment)
-    const dedupedTranscripts = deduplicateSegments(sortedTranscripts);
+    const dedupedTranscripts = deduplicateOverlappingSegments(sortedTranscripts);
 
     set({ liveTranscripts: dedupedTranscripts });
   },

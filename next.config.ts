@@ -4,7 +4,6 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Only use standalone output for production builds
   ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
-  transpilePackages: ['@vexaai/transcript-rendering'],
   // Ensure Turbopack uses this project as root
   // (avoids picking a parent lockfile and serving nothing)
   turbopack: {
