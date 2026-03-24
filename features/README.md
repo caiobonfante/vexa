@@ -1,6 +1,6 @@
 # Features
 
-Features are **self-describing, self-improving manifests.** Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't. Seven concepts make this work.
+Features are **self-describing, self-improving manifests.** Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't. Eight concepts make this work.
 
 ## Core Concepts
 
@@ -155,11 +155,64 @@ Improve confidence with **minimum cost.** Never go to a higher level until you'v
 
 Each step requires the previous to pass. If the unit test fails, don't run replay — the logic is wrong. **No skipping levels.**
 
+### 8. Tools as Features
+
+Validation tools (host a meeting, send TTS bots, replay pipeline, score output) are **themselves features with confidence scores.** A product feature can only validate as high as its tools allow.
+
+```
+realtime-transcription wants Level 5 (live TTS meeting, cap 80)
+  → needs: host-gmeet-meeting (confidence ??)
+  → needs: send-tts-bots (confidence ??)
+  → needs: score-output (confidence ??)
+
+If host-gmeet-meeting is broken (confidence 30),
+realtime-transcription can NEVER validate above Level 4.
+```
+
+**Every tool an agent might use lives in the feature's `tools/` directory.** Each tool has:
+
+```
+tools/{tool-name}/
+  README.md       ← what it does, how to use it (exact command), dependencies, confidence score
+  run.sh          ← the executable (or .js, .py — one entry point)
+```
+
+The tool README is minimal — not a full feature manifest, but enough for an agent to use it:
+
+```markdown
+# Host Google Meet Meeting
+Confidence: 80 — works with auto-admit, tested on 3 real meetings.
+Command: `node tools/host-gmeet-meeting/run.js`
+Output: MEETING_URL, NATIVE_MEETING_ID written to stdout
+Needs: browser session (CDP), Google account signed in via VNC
+Dead ends: meet.new sometimes redirects to calendar — retry once
+```
+
+**Shared tools** that multiple features use live at the repo root in `tools/`. Feature-specific tools live in `features/{name}/tools/`.
+
+**The agent's view — one table in CLAUDE.md:**
+
+```markdown
+## Resources
+
+| Level | Cap | Tool | Confidence | Command |
+|-------|-----|------|-----------|---------|
+| 1 | 50 | unit-tests | 90 | make unit |
+| 2 | 60 | wav-pipeline | 80 | make play-medium |
+| 3 | 70 | replay-dataset | 70 | make play-replay DATASET=X |
+| 4 | 75 | generate-audio + replay | 80 | make audio && make play-speakers |
+| 5 | 80 | host-gmeet + tts-bots + score | 80/70/90 | scripts in tools/ |
+```
+
+The agent reads this table and knows: "I need Level 3, the tool is at confidence 70, the command is `make play-replay`. If the tool fails, I fix the tool first — it has its own README with dead ends."
+
+**This is recursive.** An agent working on realtime-transcription discovers that `host-gmeet-meeting` is broken. It can fix the tool (improving infrastructure for all features), log the fix in the tool's README, and then continue with its original validation.
+
 ---
 
 ## Feature Completeness
 
-Every feature should implement all 7 concepts:
+Every feature should implement all 8 concepts:
 
 | Concept | File | Required |
 |---------|------|----------|
@@ -170,6 +223,7 @@ Every feature should implement all 7 concepts:
 | Agent Manifest | All 4 files above + `README.md` | Yes — complete set for zero-handoff onboarding |
 | Stage Determination | `.claude/CLAUDE.md` | Yes — "on entry" section with stage checks |
 | Cost Ladder | `tests/findings.md` | Yes — score caps enforced, cheapest validation level used |
+| Tools as Features | `tools/` + `.claude/CLAUDE.md` resources table | Yes — every validation tool has confidence, command, dependencies |
 
 ## Status (2026-03-24)
 
