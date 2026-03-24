@@ -17,6 +17,12 @@ Append-only. Records trajectory, decisions, dead ends.
 
 [DEAD-END] **Simple mock HTML** (`tests/mock-meeting/index.html`) — lacks Google Meet DOM structure (no pre-join screen, toolbar, participant tiles). Bot stuck at "find name input." Must use `features/realtime-transcription/mocks/google-meet.html`.
 
+[DEAD-END] **Prefix-based confirmation (LocalAgreement-2) passes unit tests but fails on real audio (2026-03-24).** 163s gTTS monologue → 1 monolith segment (333 words). Confirmation never triggered mid-stream. Root causes:
+1. **wav-test.ts uses `maxBufferDuration: 120`**, not the intended 30s. The production bot (`index.ts:1050`) also uses 120s. The default 30s in speaker-streams.ts is overridden everywhere.
+2. **`trimBuffer` is a no-op when `confirmedSamples === 0`** (line 493). The "cap" only trims already-confirmed audio — it does NOT force-flush unconfirmed audio. If prefix confirmation never triggers, the buffer grows unbounded regardless of `maxBufferDuration`.
+3. **Whisper changes words, not just segment boundaries**, across submissions with growing buffers. Even word-level prefix comparison fails because early words shift as the attention context expands.
+The challenger's recommended fix was LAYERED: prefix + 30s cap + VAD-informed submission. We implemented prefix but the cap value didn't take effect (overridden to 120s), and `trimBuffer` doesn't force-flush. The 30s cap needs to be a FORCE-FLUSH (emit whatever is in the buffer + reset), not a trim of confirmed audio.
+
 [DEAD-END] **False-positive waiting room selectors** — `[role="progressbar"]`, `[aria-label*="loading"]`, `.loading-spinner` present in real DOM but not in waiting room. Removed from `googleWaitingRoomIndicators`.
 
 ## Results

@@ -1,5 +1,5 @@
 # Generate Test Audio
-Confidence: 40 — script exists but TTS service not port-mapped. Untested since move.
+Confidence: 80 — gTTS alternative validated 2026-03-24. Produced 163.7s monologue WAV, 96.5% accuracy through pipeline.
 Command: `cd features/realtime-transcription && bash scripts/generate-test-audio.sh`
 Output: WAV files + .txt ground truth in data/raw/synthetic/audio/
   - short-sentence.wav, medium-paragraph.wav, long-monologue.wav, long-dialogue.wav

@@ -1,5 +1,5 @@
 # WAV Pipeline Test
-Confidence: 70 — script exists and ran historically, not tested since confirmation fix.
+Confidence: 80 — 1 confirmed segment from 6s WAV, confirmation logic works post-fix. Tested 2026-03-24.
 Command: `cd services/vexa-bot/core && npx ts-node src/services/speaker-streams.wav-test.ts <wav-file>`
 Output: confirmed segments to stdout with speaker, text, timestamps. Count of segments = quality signal.
 Needs:

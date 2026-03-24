@@ -1,5 +1,5 @@
 # Send TTS Bots
-Confidence: 70 — used in collection runs, sends bots that speak from script.
+Confidence: 80 — validated 2026-03-24: bot joined meeting 9317490635185, TTS spoke via OpenAI alloy voice, captions appeared. Needs recorder bot (separate user) for full pipeline test.
 Command: `curl -X POST http://localhost:8066/bots -H "X-API-Key: $TOKEN" -d '{"platform":"google_meet","native_meeting_id":"abc-defg-hij","bot_name":"Alice","tts_text":"Hello everyone..."}'`
 Output: bot joins meeting, speaks the text, captures audio
 Needs:

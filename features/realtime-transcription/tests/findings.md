@@ -22,6 +22,19 @@
 | Dashboard rendering | 90 | Simplified to two-map model (confirmed + pendingBySpeaker); legacy transcript.mutable handler removed; collector no longer publishes conflicting messages | 2026-03-22 | Verify with live meeting in browser |
 | Google Meet speaker mapping (TTS) | 90 | E2E PASS: 9/9 basic (100% speaker, 7% WER), 18/20 stress (100% speaker, 15% WER) | 2026-03-23 | -- |
 | Google Meet speaker mapping (human) | 40 | Meeting 672: 23/215 unnamed segments, lock took 585s. Confirmation fails → 107-226s monolith segments. Multi-track duplication. | 2026-03-23 | Fix confirmation logic, faster locking, track dedup |
+| Unit tests (speaker-streams) | 90 | 9/9 pass: offset advancement, buffer continuity, speaker change flush, short segment skip, buffer trim. Verified by Alpha + Beta independently. | 2026-03-24 | -- |
+| Confirmation on real audio (monologue) | 40 | 163s gTTS monologue → 1 monolith segment (333 words). Prefix confirmation never triggered mid-stream. maxBufferDuration=120 overrides default 30. trimBuffer is no-op when confirmedSamples=0. | 2026-03-24 | Force-flush at buffer cap (not just trim), apply 30s cap in production + all tests |
+| Live meeting pipeline (Teams) | 60 | 5 participants, 6 utterances sent. 5 confirmed segments (2-8.4s, no monoliths). But text quality poor (garbled mixed audio). 3 speakers sent, only 2 detected. | 2026-03-24 | Improve Teams mixed audio transcription quality |
+
+## Cost Ladder
+
+| Level | Cap | Status | Evidence | Date |
+|-------|-----|--------|----------|------|
+| 1 | 50 | **VALIDATED** | `npx ts-node src/services/speaker-streams.test.ts` → 9 passed, 0 failed. Alpha + Beta verified. | 2026-03-24 |
+| 2 | 60 | **VALIDATED** | wav-pipeline: 6s WAV → 1 confirmed segment. Alpha + Beta verified. | 2026-03-24 |
+| 3 | 70 | EVIDENCE AGAINST | 163s monologue → 1 monolith. Confirmation fix fails on real Whisper output. Score stays at 40 for confirmation. | 2026-03-24 |
+| 4 | 75 | BLOCKED | generate-test-audio validated (80), but confirmation fix must work first | 2026-03-24 |
+| 5 | 80 | PARTIALLY RUN | Live meeting: pipeline runs, segments are sentence-level for short speech, but text quality poor and Alice missing. Tools all ≥80. | 2026-03-24 |
 
 ## Platform Status
 
@@ -31,6 +44,8 @@
 | MS Teams | **PASS** | Core pipeline + delivery both at 90+; bot is single WS publisher; dashboard simplified |
 
 ## Aggregate: Lowest score = 80 (VAD filters silence — indirect evidence only)
+
+**Cost Ladder score: 60** (Level 2 validated. Level 3 BLOCKED: confirmation fix fails on real audio — 163s monologue → 1 monolith. Needs force-flush at buffer cap + 30s cap applied everywhere.)
 
 Gate verdict: **Both platforms PASS** — Delivery pipeline fixed: collector is persistence-only (no WS publish, no mapping, no dedup), bot publishes transcript bundles directly, dashboard uses two-map model. Google Meet E2E validated with TTS bots (2026-03-22/23); untested with human participants.
 
