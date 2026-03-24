@@ -5,7 +5,7 @@
 <h1 align="center" style="margin-top: 0.25em; margin-bottom: 0.5em; font-size: 2.5em; font-weight: 700; letter-spacing: -0.02em;">Vexa</h1>
 
 <p align="center" style="font-size: 1.75em; margin-top: 0.5em; margin-bottom: 0.75em; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em;">
-  <strong>Open-source meeting transcription API & agent runtime</strong>
+  <strong>Open-source meeting transcription API & agent runtime infrastructure</strong>
 </p>
 
 <p align="center" style="font-size: 1em; color: #a0a0a0; margin-top: 0.5em; margin-bottom: 1.5em; letter-spacing: 0.01em;">
