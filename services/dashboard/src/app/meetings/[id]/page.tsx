@@ -32,6 +32,7 @@ import {
   Share,
   Volume2,
   Send,
+  Bot,
 } from "lucide-react";
 import { AudioPlayer, type AudioPlayerHandle, type AudioFragment } from "@/components/recording/audio-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +88,7 @@ import {
 import { getCookie, setCookie } from "@/lib/cookies";
 import { DocsLink } from "@/components/docs/docs-link";
 import { DecisionsPanel } from "@/components/decisions/decisions-panel";
+import { MeetingAgentPanel } from "@/components/agent/meeting-agent-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
 import { BrowserSessionView } from "@/components/meetings/browser-session-view";
 
@@ -121,6 +123,9 @@ export default function MeetingDetailPage() {
 
   // Decisions panel state
   const [decisionsOpen, setDecisionsOpen] = useState(false);
+
+  // Agent panel state
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
 
   // API view toggle state — default ON when coming from onboarding (?apiView=1)
   const [apiViewOpen, setApiViewOpen] = useState(() => searchParams?.get("apiView") === "1");
@@ -1081,6 +1086,29 @@ export default function MeetingDetailPage() {
             </div>
           )}
 
+          {/* Agent panel toggle */}
+          {(currentMeeting.status === "active" || currentMeeting.status === "completed") && (
+            <Button
+              variant={agentPanelOpen ? "secondary" : "outline"}
+              size="sm"
+              className="gap-1.5 h-9"
+              onClick={() => {
+                setAgentPanelOpen((v) => {
+                  const next = !v;
+                  // Close conflicting panels when opening
+                  if (next) {
+                    setApiViewOpen(false);
+                    setDecisionsOpen(false);
+                  }
+                  return next;
+                });
+              }}
+            >
+              <Bot className="h-4 w-4 text-violet-500" />
+              <span className="hidden sm:inline">Agent</span>
+            </Button>
+          )}
+
           {/* API view toggle */}
           <Button
             ref={apiButtonRef}
@@ -1091,7 +1119,11 @@ export default function MeetingDetailPage() {
               apiButtonHighlight && "ring-2 ring-gray-950 dark:ring-white ring-offset-2 ring-offset-background animate-pulse"
             )}
             onClick={() => {
-              setApiViewOpen((v) => !v);
+              setApiViewOpen((v) => {
+                const next = !v;
+                if (next) setAgentPanelOpen(false);
+                return next;
+              });
               setApiButtonHighlight(false);
             }}
           >
@@ -1105,7 +1137,11 @@ export default function MeetingDetailPage() {
             variant={decisionsOpen ? "secondary" : "outline"}
             size="sm"
             className="gap-1.5 h-9"
-            onClick={() => setDecisionsOpen((v) => !v)}
+            onClick={() => setDecisionsOpen((v) => {
+              const next = !v;
+              if (next) setAgentPanelOpen(false);
+              return next;
+            })}
           >
             <Zap className="h-4 w-4 text-amber-500" />
             <span className="hidden sm:inline">Decisions</span>
@@ -1553,7 +1589,14 @@ export default function MeetingDetailPage() {
         {/* Sidebar - sticky on desktop, hidden on mobile */}
         <div className="hidden lg:block order-1 lg:order-2">
           <div className="lg:sticky lg:top-6 space-y-6">
-          {apiViewOpen ? (
+          {agentPanelOpen && (currentMeeting.status === "active" || currentMeeting.status === "completed") ? (
+            <div className="rounded-lg border bg-card shadow-sm overflow-hidden" style={{ height: "calc(100vh - 10rem)" }}>
+              <MeetingAgentPanel
+                meetingId={currentMeeting.platform_specific_id}
+                platform={currentMeeting.platform}
+              />
+            </div>
+          ) : apiViewOpen ? (
             <>
             <WsEventLog
               status={currentMeeting.status}
