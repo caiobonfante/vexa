@@ -15,7 +15,7 @@ Append-only. Records trajectory, decisions, dead ends.
 
 [DEAD-END] **3-vote threshold for speaker locking** — too slow with overlapping speech. Meeting 672: 585s to lock speaker-0. Reduced to 2 votes + weighted voting. Still insufficient for fast-paced human conversations.
 
-[DEAD-END] **Simple mock HTML** (`tests/mock-meeting/index.html`) — lacks Google Meet DOM structure (no pre-join screen, toolbar, participant tiles). Bot stuck at "find name input." Must use `features/realtime-transcription/mocks/google-meet.html`.
+[DEAD-END] **Simple mock HTML** (`tests/mock-meeting/index.html`) — lacks Google Meet DOM structure (no pre-join screen, toolbar, participant tiles). Bot stuck at "find name input." A proper mock at `features/realtime-transcription/mocks/google-meet.html` is needed but the `mocks/` directory does not exist yet — it must be created before mock-based testing can resume.
 
 [DEAD-END] **Prefix-based confirmation (LocalAgreement-2) passes unit tests but fails on real audio (2026-03-24).** 163s gTTS monologue → 1 monolith segment (333 words). Confirmation never triggered mid-stream. Root causes:
 1. **wav-test.ts uses `maxBufferDuration: 120`**, not the intended 30s. The production bot (`index.ts:1050`) also uses 120s. The default 30s in speaker-streams.ts is overridden everywhere.
@@ -273,12 +273,30 @@ Based on: UFAL whisper_streaming LocalAgreement-2 policy (arxiv 2307.14743).
 **Execution evidence:** `npx ts-node src/services/speaker-streams.test.ts` → "Results: 9 passed, 0 failed"
 **Remaining gap to 90:** (1) Collect data to enable replay; (2) Add unit test covering prefix path with segments; (3) Run challenger overlap scenarios
 
-## Current Blockers (2026-03-24)
+## Force-flush fix validated (2026-03-24)
 
-1. **No replay data in repo** — `features/realtime-transcription/data/raw/` doesn't exist. Can't run Level 2-3 replay tests. Need to either commit datasets or document how to collect them. THIS BLOCKS ALL FURTHER VALIDATION.
-2. **Confirmation fix at Level 1 only (score 50)** — unit tests pass but no audio has gone through the changed code. Need replay data to validate Level 2-3, then live TTS meeting for Level 5.
-3. **Human speaker locking (score 40)** — 8+ minutes to lock with overlapping speech. Fix implemented but not tested beyond unit level.
-4. **Multi-track duplication** — same participant audio on multiple `<audio>` elements. Not addressed yet.
+[RESULT] **Confirmation fix — Level 2 wav-pipeline PASS: 1 monolith → 27 segments**
+
+**What changed:** Added force-flush path in `trySubmit`: when `totalSec > maxBufferDuration` AND `confirmedSamples===0`, emit lastTranscript + fullReset. Changed `maxBufferDuration` from 120 to 30 in production (index.ts) and all 8 test call sites.
+
+**Level 2 — wav-pipeline (163s monologue):**
+- 27 confirmed segments (was 1 monolith)
+- 96.5% word accuracy (327/339 words, diff is number formatting)
+- 56 Whisper calls, avg 262ms, RTF 0.09x
+- Force-flush safety net NOT triggered — 30s cap made prefix confirmation work naturally
+- Alpha + Beta independently verified identical results
+
+**Key insight:** The 120s maxBufferDuration was 4x Whisper's 30s training window. Reducing to 30s made the prefix confirmation algorithm effective without needing the force-flush. The force-flush is a safety net for pathological cases only.
+
+**Score change:** Confirmation logic: 40 → 80 (Level 2 validated with real Whisper output)
+
+**Level 5 BLOCKED:** Teams browser login needed (one-time human step). vexa-bot:dev rebuilt with fix. All tools ≥80 via Teams path.
+
+## Current Blockers (2026-03-24, updated)
+
+1. **Teams browser login** — Level 5 requires logged-in browser session. New containers start at login page. VNC/noVNC missing from vexa-bot:dev. Need human one-time login.
+2. **Human speaker locking (score 40)** — 8+ minutes to lock with overlapping speech. Fix implemented but not tested beyond unit level.
+3. **Multi-track duplication** — same participant audio on multiple `<audio>` elements. Not addressed yet.
 
 ## Test Infrastructure (for next agent)
 

@@ -60,8 +60,8 @@ Teams provides ONE mixed audio stream for all participants. Unlike Google Meet (
 |  |                        |              |                              |  |
 |  | Sends WAV to           |              | XADD -> transcription_       |  |
 |  | Whisper service        |              |         segments stream      |  |
-|  | Returns text +         |              | PUBLISH -> meeting:{id}:     |  |
-|  | word timestamps        |              |            segments channel  |  |
+|  | Returns text +         |              | PUBLISH -> tc:meeting:{id}: |  |
+|  | word timestamps        |              |            mutable channel  |  |
 |  +------------------------+              |                              |  |
 |                                          | Drafts  (completed=false)    |  |
 |                                          | Confirmed (completed=true)   |  |

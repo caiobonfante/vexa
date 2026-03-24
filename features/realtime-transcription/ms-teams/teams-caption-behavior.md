@@ -1,7 +1,7 @@
 # Teams Live Caption Behavior — Observed Patterns
 
 Reference data collected 2026-03-20 from real Teams meetings with TTS speaker bots.
-Source: `tests/reference-caption-data.json` (273 events, 3 speakers).
+Source: original `tests/reference-caption-data.json` (273 events, 3 speakers) — file has been removed; patterns below are derived from it.
 
 ## Caption Event Model
 

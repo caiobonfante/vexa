@@ -1047,7 +1047,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       minAudioDuration: 3,     // 3s of unconfirmed audio before submission
       submitInterval: 2,       // submit every 2s — lower latency
       confirmThreshold: 2,     // 2 consecutive matches — faster confirmation
-      maxBufferDuration: 120,  // trim buffer front when exceeding 120s total
+      maxBufferDuration: 30,   // force-flush at 30s — matches Whisper training window
       idleTimeoutSec: 15,      // 15s idle → emit + reset
     });
     // VAD gating moved to handlePerSpeakerAudioData entry (per-speaker streaming).

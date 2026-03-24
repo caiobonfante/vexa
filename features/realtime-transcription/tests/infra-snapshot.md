@@ -71,17 +71,17 @@ const txClient = new TranscriptionClient({
 
 ## SpeakerStreamManager Config
 
-**Production bot (index.ts line 1022):**
+**Production bot (index.ts ~line 1037, updated since this snapshot):**
 ```
 sampleRate: 16000
 minAudioDuration: 3
-submitInterval: 3
-confirmThreshold: 3
+submitInterval: 2      ← was 3 at snapshot time; changed after latency tuning (Iteration 3)
+confirmThreshold: 2    ← was 3 at snapshot time; changed after latency tuning (Iteration 3)
 maxBufferDuration: 120
 idleTimeoutSec: 15
 ```
 
-**All tests use the same config** — verified identical.
+**Note:** This snapshot was captured 2026-03-20 when submitInterval=3, confirmThreshold=3. The values were reduced to 2 each in Iteration 3 (2026-03-21) during latency tuning (16.5s → 10.8s). The sandbox and production bot now use the same updated values.
 
 ## Sandbox Requirements
 

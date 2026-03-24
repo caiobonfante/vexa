@@ -40,6 +40,20 @@ Append-only. Tracks what we tried to make the loop work.
 
 [PRACTICE] **Manifests must specify the verification pattern.** Alpha-Beta worked because the spawn prompt said "one executes, one verifies." It's not in CLAUDE.md. Next team won't know to do it unless it's codified.
 
+## Practices Learned (MVP1 Partial — confirmation fix run, 2026-03-24)
+
+[PRACTICE] **The real fix is often the config, not the algorithm.** The force-flush safety net was never triggered during testing — reducing maxBufferDuration from 120→30 made prefix confirmation work naturally by keeping Whisper in its 30s training window. The algorithm was fine; it was being fed 4x more audio than it was trained for.
+
+[PRACTICE] **Two-layer fixes are robust.** Layer 1 (30s cap) makes the normal path work. Layer 2 (force-flush) catches pathological cases. Beta discovered this by observing the force-flush never fired — a stronger result than designed.
+
+[PRACTICE] **TeamCreate + Alpha/Beta/Chronicler pattern works with formal task dependencies.** Tasks with blockedBy created a proper execution chain: fix → unit test → wav-test → live meeting. Each step blocked until verified.
+
+[PRACTICE] **Level 5 is gated by infrastructure, not code.** Teams browser login is a one-time human step. Once done, sessions persist. This is the bottleneck for autonomous operation — need persistent browser credentials in MinIO.
+
+[DEAD-END] **Browser sessions without saved credentials.** New browser containers start at login.microsoftonline.com. Without VNC/noVNC access (websockify missing from vexa-bot:dev), human can't log in. Need: (1) include websockify in image, or (2) save credentials to MinIO after first login.
+
+[DEAD-END] **Transcription LB port 8085 returns 502.** The load balancer container was unhealthy. Direct worker port 8083 worked. Tool READMEs should document fallback ports.
+
 ## What Must Be Codified
 
 These practices need to become part of `features/.claude/CLAUDE.md`:

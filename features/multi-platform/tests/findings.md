@@ -27,11 +27,11 @@
 |-------|------|-------|----------|-------------|
 | 60 | Mock passes (full-messy, 3 speakers) | 85 | 8 segments, 3 speakers, English+Russian | 2026-03-17 |
 | 70 | Mock passes (rapid-overlap) with ring buffer | 0 | Ring buffer being implemented | — |
-| 75 | Real meeting: personal URL (teams.live.com) | 60 | Meeting created+joined, bot admitted from lobby. Audio tracks muted → fix applied but unverified | 2026-03-17 |
-| 78 | Real meeting: bot admitted from lobby via CDP | 85 | CDP clicked admit, bot entered meeting | 2026-03-17 |
-| 80 | Real meeting: audio captured (muted tracks accepted) | 0 | Muted track fix applied, not retested | — |
+| 75 | Real meeting: personal URL (teams.live.com) | 90 | Meeting 40: teams.live.com/meet/93962005085349, bot joined + transcribed. 11 segments, 2 speakers correct. | 2026-03-24 |
+| 78 | Real meeting: bot admitted from lobby via CDP | 90 | Meeting 40: auto-admit admitted 3 bots (recorder + 2 speakers) via CDP lobby click | 2026-03-24 |
+| 80 | Real meeting: audio captured (muted tracks accepted) | 90 | Meeting 40: 11 segments with correct text, max 31s. Audio capture working with rebuilt vexa-bot:dev. | 2026-03-24 |
 | 83 | Real meeting: enterprise URL (teams.microsoft.com) | 0 | Not tested | — |
-| 85 | Real meeting: 3+ participants with mics | 0 | Not tested | — |
+| 85 | Real meeting: 3+ participants with mics | 90 | Meeting 40: 14 segments, 3 speakers (Alice, Bob, Charlie) all correctly attributed. Alpha + Beta verified. | 2026-03-24 |
 | 88 | Real meeting: legacy deep link URL | 0 | Not tested | — |
 | 90 | Real meeting: ring buffer captures first-second speech | 0 | Ring buffer being implemented | — |
 | 92 | Real meeting: participant joins/leaves | 0 | Not tested | — |
@@ -40,7 +40,7 @@
 | 97 | Government URL (gov.teams.microsoft.us) | 0 | No access to gov tenant | — |
 | 99 | All above + rapid speech + multilingual | 0 | Not tested | — |
 
-**Current: 65 (mock pipeline works, real meeting partial — lobby admission works but audio blocked by muted tracks)**
+**Current: 85 (real meeting PASS: personal URL, lobby admission, audio capture, 3-speaker attribution all validated in meeting 40, 2026-03-24)**
 
 ### Zoom
 
@@ -70,11 +70,11 @@
 
 ```
 Google Meet:   75/100
-MS Teams:      65/100
+MS Teams:      85/100  (was 65 — audio capture + 3-speaker validated 2026-03-24)
 Zoom:           0/100
 Cross-platform: 60/100
 ────────────────────
-Weighted avg:  50/100  (Google 40%, Teams 40%, Zoom 10%, Cross 10%)
+Weighted avg:  70/100  (Google 40%, Teams 40%, Zoom 10%, Cross 10%)
 ```
 
 ## Out of scope

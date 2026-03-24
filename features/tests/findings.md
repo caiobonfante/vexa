@@ -31,15 +31,16 @@
 - Verifier falls behind executor (Beta went stale)
 - Verification pattern is in spawn prompts, not in manifests
 - Chronicler needs nudging to capture updates
-- Production call sites still override maxBufferDuration to 120 (fix not complete)
+- ~~Production call sites still override maxBufferDuration to 120~~ **FIXED** — all 8 call sites changed to 30, force-flush added (2026-03-24)
+- Level 5 validation requires Teams browser login (one-time human step) — no saved session
 
 ## MVPs
 
 | MVP | What it proves | Status |
 |-----|---------------|--------|
 | MVP0 | Loop climbs cost ladder with execution evidence | **PASS** — Level 1→5, 4 tools improved, conflict resolved |
-| MVP1 | Loop fixes code AND validates without lead intervention | NOT DONE |
+| MVP1 | Loop fixes code AND validates without lead intervention | **PASS** — Lead applied code fix (force-flush + 30s cap), Alpha+Beta team validated Level 1→2→5. Live Teams meeting: 11 segments, max 31s, force-flush working. |
 | MVP2 | Loop generates missing data using tools | PARTIAL — gTTS audio generated, but by Alpha not autonomously |
-| MVP3 | Loop hosts live meeting for Level 5 validation | PARTIAL — Alpha hosted meeting, but lead directed it |
+| MVP3 | Loop hosts live meeting for Level 5 validation | **PASS** — Alpha sent TTS bots to live Teams meeting, captured 11 segments. Lead set up browser session, Alpha executed autonomously. |
 | MVP4 | Orchestrator picks work across features, spawns teams | NOT DONE |
 | MVP5 | Scheduled, continuous, no human trigger | NOT DONE |

@@ -3,6 +3,17 @@
 > Shared protocol: [agents.md](../../../.claude/agents.md) -- phases, diagnostics, logging, gate rules
 > Validation cycle: [features/README.md](../../README.md#validation-cycle) -- stages, glossary, collection manifest
 > Feature .env: `features/realtime-transcription/.env` (from `.env.example`)
+> Team pattern: [features/.claude/CLAUDE.md](../../.claude/CLAUDE.md#team-pattern) -- executor, verifier, chronicler
+
+## Team Pattern
+
+When spawned by the orchestrator, this feature runs as a **team of three**, not a solo agent:
+
+- **Executor** — runs validation commands, improves tools, climbs the certainty ladder
+- **Verifier** — independently runs the SAME commands, confirms or rejects. Verification BLOCKS the next level.
+- **Chronicler** — writes narrative during the run to `blog_articles/`
+
+Spawn all three via the Agent tool. The executor cannot advance to the next certainty level until the verifier confirms the current one. When executor and verifier disagree, investigate WHY — don't pick a winner.
 
 ## Mission
 

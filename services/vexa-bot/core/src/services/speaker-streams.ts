@@ -58,7 +58,7 @@ export interface SpeakerStreamManagerConfig {
   submitInterval?: number;
   /** Consecutive matches to confirm. Default: 2 */
   confirmThreshold?: number;
-  /** Max total buffer size before trimming (seconds). Default: 120 */
+  /** Max total buffer size before force-flush (seconds). Default: 30 */
   maxBufferDuration?: number;
   /** Idle timeout — emit and reset after this many seconds of no audio. Default: 15 */
   idleTimeoutSec?: number;
@@ -386,8 +386,18 @@ export class SpeakerStreamManager {
       return;
     }
 
-    // Buffer too large — trim confirmed audio from front
+    // Buffer too large — force-flush or trim
     if (totalSec > this.maxBufferDuration) {
+      if (buffer.confirmedSamples === 0) {
+        // Nothing confirmed — confirmation never triggered. Force-flush whatever
+        // transcript we have to prevent monolith segments (e.g. 120s+ buffer).
+        if (buffer.lastTranscript) {
+          log(`[SpeakerStreams] Hard cap force-flush for "${buffer.speakerName}" (${totalSec.toFixed(1)}s > ${this.maxBufferDuration}s, no confirmation)`);
+          this.emitSegment(buffer, buffer.lastTranscript);
+        }
+        this.fullReset(buffer);
+        return;
+      }
       this.trimBuffer(buffer);
     }
 

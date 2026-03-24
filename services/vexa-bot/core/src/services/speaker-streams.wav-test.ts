@@ -94,7 +94,7 @@ async function main() {
     minAudioDuration: 3,
     submitInterval: 3,
     confirmThreshold: 3,
-    maxBufferDuration: 120,
+    maxBufferDuration: 30,
     idleTimeoutSec: 15,
   });
 

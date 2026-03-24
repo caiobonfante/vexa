@@ -189,7 +189,7 @@ async function main() {
   });
   const mgr = new SpeakerStreamManager({
     sampleRate: SAMPLE_RATE, minAudioDuration: 3, submitInterval: 3,
-    confirmThreshold: 3, maxBufferDuration: 120, idleTimeoutSec: 15,
+    confirmThreshold: 3, maxBufferDuration: 30, idleTimeoutSec: 15,
   });
 
   const t0 = Date.now();

@@ -56,7 +56,7 @@ console.log('\nTest 1: Offset advancement on confirmation');
     minAudioDuration: 1,
     submitInterval: 1,
     confirmThreshold: 2,
-    maxBufferDuration: 120,
+    maxBufferDuration: 30,
     idleTimeoutSec: 15,
   });
 
@@ -118,7 +118,7 @@ console.log('\nTest 2: Buffer continuity — no reset on confirmation');
     minAudioDuration: 1,
     submitInterval: 1,
     confirmThreshold: 2,
-    maxBufferDuration: 120,
+    maxBufferDuration: 30,
     idleTimeoutSec: 15,
   });
 
@@ -164,7 +164,7 @@ console.log('\nTest 3: Speaker change flush');
     minAudioDuration: 1,
     submitInterval: 1,
     confirmThreshold: 2,
-    maxBufferDuration: 120,
+    maxBufferDuration: 30,
     idleTimeoutSec: 15,
   });
 
@@ -202,7 +202,7 @@ console.log('\nTest 4: Short segments skip flush');
     minAudioDuration: 2,
     submitInterval: 1,
     confirmThreshold: 2,
-    maxBufferDuration: 120,
+    maxBufferDuration: 30,
     idleTimeoutSec: 15,
   });
 

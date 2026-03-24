@@ -4,7 +4,7 @@
 
 ## Scope
 
-You test the MS Teams per-speaker transcription pipeline: bot joins a Teams meeting, hooks the single mixed audio stream, enables live captions, and routes audio using caption-driven speaker detection (primary) with DOM blue squares as fallback. A 5s ring buffer provides lookback for retroactive speaker attribution. Transcribes via TranscriptionClient and publishes confirmed segments to Redis.
+You test the MS Teams per-speaker transcription pipeline: bot joins a Teams meeting, hooks the single mixed audio stream, enables live captions, and routes audio using caption-driven speaker detection (primary) with DOM blue squares as fallback. A 3s ring buffer (MAX_QUEUE_AGE_MS=3000) provides lookback for retroactive speaker attribution (2s lookback window on caption flush). Transcribes via TranscriptionClient and publishes confirmed segments to Redis.
 
 ### Gate (local)
 

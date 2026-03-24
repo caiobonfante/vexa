@@ -266,7 +266,7 @@ Whisper returns per-segment quality signals (`no_speech_prob`, `avg_logprob`, `c
 
 ### Current Config
 
-Values hardcoded in `index.ts` (lines 1022-1028). Note: `.env.example` shows different values (3, 3, 3, 120, 15, 15) — the code overrides `submitInterval` and `confirmThreshold`.
+Values hardcoded in `index.ts` (around lines 1037-1041). Note: `.env.example` shows different values (3, 3, 3, 120, 15, 15) — the code overrides `submitInterval` to 2s and `confirmThreshold` to 2.
 
 | Parameter | Value (code) | Why |
 |-----------|-------------|-----|

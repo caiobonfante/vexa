@@ -54,7 +54,7 @@
 - Mutable segments (completed=false) arrive before final (completed=true) — streaming behavior confirmed
 - Message format: `{type: "transcript.mutable", meeting: {id: N}, payload: {segments: [{speaker, text, start, end_time, language, completed, session_uid, speaker_id}]}}`
 
-**Note:** Simple mock (`tests/mock-meeting/index.html`) does NOT work — bot gets stuck at "Attempting to find name input field" because it lacks the Google Meet DOM structure. Must use `features/realtime-transcription/mocks/google-meet.html` which has pre-join screen, name input, toolbar, and participant tiles.
+**Note:** Simple mock (`tests/mock-meeting/index.html`) does NOT work — bot gets stuck at "Attempting to find name input field" because it lacks the Google Meet DOM structure. A proper mock (`features/realtime-transcription/mocks/google-meet.html`) with pre-join screen, name input, toolbar, and participant tiles is required but **does not currently exist** — the `mocks/` directory has not been created yet.
 
 ## Multi-meeting real test (2026-03-17 10:43-10:50)
 
@@ -90,7 +90,7 @@ From live DOM inspection (2026-03-17):
 4. `[role="toolbar"]` NOT found in real DOM — admission selector unreliable
 5. `data-self-name`, `data-meeting-id` absent from real DOM
 
-Full comparison: `services/vexa-bot/tests/mock-meeting/real-meet-dom-comparison.md`
+Full comparison was documented in `services/vexa-bot/tests/mock-meeting/real-meet-dom-comparison.md` (file no longer present in repo)
 
 ## Test matrix for 95 certainty
 

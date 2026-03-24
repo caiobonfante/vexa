@@ -64,20 +64,20 @@ This **feature** follows the [validation cycle](../../README.md#validation-cycle
 
 All datasets live in `../data/` organized by [data stage](../../README.md#data--feature-data-organized-by-pipeline-stage):
 
-| Dataset | Stage | Contents |
-|---------|-------|----------|
-| `data/raw/teams-3sp-collection/` | raw | 3 speakers, 17 utterances, diverse scenarios. Audio + events + ground truth. |
-| `data/raw/teams-7sp-panel/` | raw | 7 speakers, 20 segments, panel discussion. Audio + events. |
-| `data/raw/teams-5sp-stress/` | raw | 5 speakers, stress test. Audio + events. |
-| `data/raw/teams-3sp-diverse/` | raw | 3 speakers, diverse scenario. Events + ground truth. |
-| `data/raw/teams-meeting-328/` | raw | Live meeting 328 capture. Events + transcript. |
-| `data/raw/teams-meeting-320/` | raw | Live meeting 320 capture. Events. |
-| `data/raw/teams-realmeeting/` | raw | Real meeting. Events + ground truth. |
-| `data/raw/reference/` | raw | Early 2-speaker reference data. Events + ground truth. |
-| `data/raw/synthetic/` | raw | Generated test audio (not from live meetings). |
-| `data/core/teams-7sp-panel/` | core | Pipeline output: 43 confirmed segments. |
-| `data/core/teams-3sp-collection/` | core | Pipeline output for collection dataset. |
-| `data/rendered/teams-7sp-panel/` | rendered | REST/DB audit output. |
+| Dataset | Stage | Contents | Status |
+|---------|-------|----------|--------|
+| `data/raw/teams-3sp-collection/` | raw | 3 speakers, 17 utterances, diverse scenarios. Audio + events + ground truth. | **MISSING** — needs collection run |
+| `data/raw/teams-7sp-panel/` | raw | 7 speakers, 20 segments, panel discussion. Audio + events. | **MISSING** — needs collection run |
+| `data/raw/teams-5sp-stress/` | raw | 5 speakers, stress test. Audio + events. | **MISSING** — needs collection run |
+| `data/raw/teams-3sp-diverse/` | raw | 3 speakers, diverse scenario. Events + ground truth. | **MISSING** — needs collection run |
+| `data/raw/teams-meeting-328/` | raw | Live meeting 328 capture. Events + transcript. | **MISSING** — needs collection run |
+| `data/raw/teams-meeting-320/` | raw | Live meeting 320 capture. Events. | **MISSING** — needs collection run |
+| `data/raw/teams-realmeeting/` | raw | Real meeting. Events + ground truth. | **MISSING** — needs collection run |
+| `data/raw/reference/` | raw | Early 2-speaker reference data. Events + ground truth. | **MISSING** — needs collection run |
+| `data/raw/synthetic/` | raw | Generated test audio (not from live meetings). | present (long-monologue.wav only; run `make audio` for others) |
+| `data/core/teams-7sp-panel/` | core | Pipeline output: 43 confirmed segments. | **MISSING** — run replay to generate |
+| `data/core/teams-3sp-collection/` | core | Pipeline output for collection dataset. | **MISSING** — run replay to generate |
+| `data/rendered/teams-7sp-panel/` | rendered | REST/DB audit output. | **MISSING** — run replay to generate |
 
 **Caption boundary** patterns: [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md)
 **Replay** architecture: [real-world-replay.md](real-world-replay.md)

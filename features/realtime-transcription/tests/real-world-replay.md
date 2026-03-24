@@ -30,23 +30,27 @@ Two **scenarios** in one **collection run**:
 
 ### Data files
 
-| File | Type | Size |
-|------|------|------|
-| `reference-timestamped-data.json` | **Collected data**: 350 events (143 caption texts, 10 speaker changes, 77 flushes, 42 drafts, 14 confirmed, 31+33 DOM events) | 2568 lines |
-| `reference-timestamped-events.txt` | **Collected data**: raw timestamped log lines from `docker logs --timestamps` | Source for JSON |
-| `reference-caption-data.json` | **Collected data**: structured **caption boundary** events without timestamps | 273 events |
-| `reference-ground-truth-normal.txt` | **Ground truth**: TTS send timestamps for scenario 1 **script** | Unix timestamps |
-| `reference-ground-truth-overlap.txt` | **Ground truth**: TTS send timestamps for scenario 2 **script** | Unix timestamps |
-| `reference-bot-logs.txt` | **Collected data**: filtered pipeline events (no timestamps) | 157 lines |
-| `reference-raw-logs-full.txt` | **Collected data**: complete bot logs (gitignored, large) | Full output |
+These files were collected 2026-03-20. **All reference-* files have been removed from the repo** (gitignored or purged). The patterns derived from them are preserved in [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md). Run a fresh collection run to regenerate data.
 
-### Audio Files (TTS, already in `audio/`)
+| File | Type | Status |
+|------|------|--------|
+| `reference-timestamped-data.json` | **Collected data**: 350 events (143 caption texts, 10 speaker changes, 77 flushes, 42 drafts, 14 confirmed, 31+33 DOM events) | **MISSING** — not in repo |
+| `reference-timestamped-events.txt` | **Collected data**: raw timestamped log lines from `docker logs --timestamps` | **MISSING** — not in repo |
+| `reference-caption-data.json` | **Collected data**: structured **caption boundary** events without timestamps (273 events) | **MISSING** — patterns in [teams-caption-behavior.md](../ms-teams/teams-caption-behavior.md) |
+| `reference-ground-truth-normal.txt` | **Ground truth**: TTS send timestamps for scenario 1 **script** | **MISSING** — not in repo |
+| `reference-ground-truth-overlap.txt` | **Ground truth**: TTS send timestamps for scenario 2 **script** | **MISSING** — not in repo |
+| `reference-bot-logs.txt` | **Collected data**: filtered pipeline events (no timestamps) | **MISSING** — not in repo |
+| `reference-raw-logs-full.txt` | **Collected data**: complete bot logs (gitignored, large) | **MISSING** — gitignored by design |
 
-| File | Speaker | Duration |
-|------|---------|----------|
-| `short-sentence.wav` | Alice & Charlie | ~3s |
-| `medium-paragraph.wav` | Bob | ~14s |
-| `long-monologue.wav` | Alice | ~43s |
+### Audio Files (TTS, in `data/raw/synthetic/audio/`)
+
+Only `long-monologue.wav` is present. `short-sentence.wav` and `medium-paragraph.wav` are missing — run `make audio` (needs tts-service) to regenerate.
+
+| File | Speaker | Duration | Status |
+|------|---------|----------|--------|
+| `short-sentence.wav` | Alice & Charlie | ~3s | **MISSING** — run `make audio` |
+| `medium-paragraph.wav` | Bob | ~14s | **MISSING** — run `make audio` |
+| `long-monologue.wav` | Alice | ~43s | present (`data/raw/synthetic/audio/`) |
 
 ## Observed caption boundary behavior
 
