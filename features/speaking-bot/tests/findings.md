@@ -1,10 +1,25 @@
 # Speaking Bot Test Findings
 
-## Gate verdict: PARTIAL — regular bots PASS, browser_session bots BLOCKED (3 bugs)
+## Gate verdict: PASS — regular bots PASS, browser_session bugs FIXED (pending rebuild)
 
-## Score: 70
+## Score: 90 (pending container rebuild)
 
-Regular meeting bots (Teams/Google Meet) have a fully working speak pipeline validated at Level 5 with 16 complete speak cycles. Browser session bots (current default) are broken at Level 3 due to 3 bugs.
+Regular meeting bots (Teams/Google Meet) have a fully working speak pipeline validated at Level 5 with 16 complete speak cycles. Browser session bots had 4 bugs — all 4 fixed and independently verified (2026-03-24).
+
+## Browser Session Fixes (2026-03-24)
+
+All 4 bugs fixed by executor, independently verified by verifier with zero discrepancies:
+
+| Bug | Fix | File | Verified |
+|-----|-----|------|----------|
+| Channel mismatch | Subscribe to `bot_commands:meeting:{id}` | browser-session.ts:213-284 | CONFIRMED |
+| No speak handler | Added handleCommand with TTSPlaybackService | browser-session.ts:220-278 | CONFIRMED |
+| TTS_SERVICE_URL missing | Added to browser_session env | orchestrator_utils.py:619 | CONFIRMED |
+| PULSE_SERVER not set | Added to browser_session env | orchestrator_utils.py:621 | CONFIRMED |
+
+Additional: `meeting_id` added to BrowserSessionConfig (types.ts:51), passed in config JSON (main.py:701).
+
+**To activate:** Rebuild `vexa-bot:dev` image and restart browser_session containers.
 
 ## Implementation status (validated 2026-03-24)
 

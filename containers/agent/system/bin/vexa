@@ -331,14 +331,80 @@ print(f\"  status:     {d.get('status')}\")
       list)
         _curl "$BOT_MGR/bots/status" \
           -H "X-API-Key: $BOT_TOKEN" | python3 -c "
-import sys, json
+import sys, json, datetime
 d = json.load(sys.stdin)
 bots = d.get('running_bots', [])
 if not bots:
     print('[vexa] No active meeting bots.')
 else:
+    now = datetime.datetime.now(datetime.timezone.utc)
     for b in bots:
-        print(f\"  {b.get('meeting_id','')}  {b.get('platform','')}  {b.get('status','')}\")
+        elapsed = ''
+        st = b.get('start_time')
+        if st:
+            try:
+                started = datetime.datetime.fromisoformat(st.replace('Z', '+00:00'))
+                delta = int((now - started).total_seconds())
+                if delta >= 3600:
+                    elapsed = f'  {delta//3600}h {(delta%3600)//60}m ago'
+                else:
+                    elapsed = f'  {delta//60}m ago'
+            except Exception:
+                pass
+        print(f\"  {b.get('meeting_id','')}  {b.get('platform','')}  {b.get('status','')}{elapsed}\")
+"
+        ;;
+
+      status)
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting status --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        _curl "$BOT_MGR/bots/status" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json, datetime
+d = json.load(sys.stdin)
+bots = d.get('running_bots', [])
+target_platform = '$PLATFORM'
+target_id = '$NATIVE_ID'
+bot = next((b for b in bots if b.get('platform') == target_platform and b.get('native_meeting_id') == target_id), None)
+if not bot:
+    print(f'[vexa] ERROR: No bot found for {target_platform}/{target_id}')
+    sys.exit(1)
+now = datetime.datetime.now(datetime.timezone.utc)
+elapsed = 'N/A'
+st = bot.get('start_time')
+if st:
+    try:
+        started = datetime.datetime.fromisoformat(st.replace('Z', '+00:00'))
+        delta = int((now - started).total_seconds())
+        if delta >= 3600:
+            elapsed = f'{delta//3600}h {(delta%3600)//60}m'
+        else:
+            elapsed = f'{delta//60}m {delta%60}s'
+    except Exception:
+        elapsed = st
+print(f'[vexa] Meeting bot status:')
+print(f'  meeting_id:       {bot.get(\"meeting_id\", \"N/A\")}')
+print(f'  platform:         {bot.get(\"platform\", \"N/A\")}')
+print(f'  native_id:        {bot.get(\"native_meeting_id\", \"N/A\")}')
+print(f'  status:           {bot.get(\"status\", \"N/A\")}')
+print(f'  start_time:       {st or \"N/A\"}')
+print(f'  elapsed:          {elapsed}')
+data = bot.get('data', {})
+if data:
+    recording = data.get('recording_state') or data.get('recording_status')
+    if recording:
+        print(f'  recording_state:  {recording}')
 "
         ;;
 
@@ -363,6 +429,57 @@ else:
 "
         ;;
 
+      participants)
+        PLATFORM="" NATIVE_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting participants --platform <platform> --id <native_meeting_id>"
+          exit 1
+        fi
+        # Find meeting_id for the native_id first, then fetch transcript for speaker names
+        MEETING_ID=$(_curl "$BOT_MGR/bots/status" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+bots = d.get('running_bots', [])
+target_platform = '$PLATFORM'
+target_id = '$NATIVE_ID'
+bot = next((b for b in bots if b.get('platform') == target_platform and b.get('native_meeting_id') == target_id), None)
+if bot:
+    print(bot.get('meeting_id', ''))
+" 2>/dev/null) || true
+        if [ -z "$MEETING_ID" ]; then
+          echo "[vexa] ERROR: No active bot found for $PLATFORM/$NATIVE_ID"
+          exit 1
+        fi
+        _curl "$TC/internal/transcripts/$MEETING_ID" \
+          -H "X-API-Key: $BOT_TOKEN" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+segments = data if isinstance(data, list) else data.get('segments', data.get('transcriptions', []))
+speakers = []
+seen = set()
+for s in segments:
+    sp = s.get('speaker', '')
+    if sp and sp not in seen:
+        seen.add(sp)
+        speakers.append(sp)
+if not speakers:
+    print('[vexa] No participants detected yet (no transcript segments).')
+else:
+    print(f'[vexa] Participants ({len(speakers)}):')
+    for sp in speakers:
+        print(f'  {sp}')
+"
+        ;;
+
       stop)
         PLATFORM="" NATIVE_ID=""
         shift 2
@@ -380,6 +497,61 @@ else:
         _curl -X DELETE "$BOT_MGR/bots/$PLATFORM/$NATIVE_ID" \
           -H "X-API-Key: $BOT_TOKEN" > /dev/null && \
           echo "[vexa] Meeting bot stopped."
+        ;;
+
+      wait-active)
+        PLATFORM="" NATIVE_ID="" TIMEOUT="60"
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --platform) PLATFORM="$2"; shift 2 ;;
+            --id) NATIVE_ID="$2"; shift 2 ;;
+            --timeout) TIMEOUT="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$PLATFORM" ] || [ -z "$NATIVE_ID" ]; then
+          echo "Usage: vexa meeting wait-active --platform <platform> --id <native_meeting_id> [--timeout 60]"
+          exit 1
+        fi
+        DEADLINE=$(( $(date +%s) + TIMEOUT ))
+        while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+          STATUS=$(_curl "$BOT_MGR/bots/status" \
+            -H "X-API-Key: $BOT_TOKEN" 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+bots = d.get('running_bots', [])
+target_platform = '$PLATFORM'
+target_id = '$NATIVE_ID'
+bot = next((b for b in bots if b.get('platform') == target_platform and b.get('native_meeting_id') == target_id), None)
+print(bot.get('status', '') if bot else '')
+" 2>/dev/null) || STATUS=""
+          if [ "$STATUS" = "active" ]; then
+            echo "[vexa] Bot is active in meeting."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "[vexa] ERROR: Timeout waiting for bot to become active."
+        exit 1
+        ;;
+
+      transcribe)
+        MEETING_ID=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --meeting-id) MEETING_ID="$2"; shift 2 ;;
+            *) shift ;;
+          esac
+        done
+        if [ -z "$MEETING_ID" ]; then
+          echo "Usage: vexa meeting transcribe --meeting-id <meeting_id>"
+          exit 1
+        fi
+        _curl -X POST "$BOT_MGR/meetings/$MEETING_ID/transcribe" \
+          -H "X-API-Key: $BOT_TOKEN" > /dev/null && \
+          echo "[vexa] Transcription triggered for meeting $MEETING_ID."
         ;;
 
       speak)
@@ -628,12 +800,16 @@ else:
         ;;
 
       *)
-        echo "Usage: vexa meeting {join|list|transcript|stop|speak|speak-stop|chat|chat-read|screen|screen-stop|avatar|avatar-reset|config|events}"
+        echo "Usage: vexa meeting {join|list|status|participants|wait-active|transcript|transcribe|stop|speak|speak-stop|chat|chat-read|screen|screen-stop|avatar|avatar-reset|config|events}"
         echo ""
         echo "Bot lifecycle:"
         echo "  vexa meeting join --platform {teams|google_meet|zoom} --url {url}"
         echo "  vexa meeting list"
+        echo "  vexa meeting status --platform {p} --id {id}"
+        echo "  vexa meeting participants --platform {p} --id {id}"
+        echo "  vexa meeting wait-active --platform {p} --id {id} [--timeout 60]"
         echo "  vexa meeting transcript {meeting_id}"
+        echo "  vexa meeting transcribe --meeting-id {id}"
         echo "  vexa meeting stop --platform {p} --id {id}"
         echo "  vexa meeting config --platform {p} --id {id} [--language en] [--task transcribe]"
         echo ""
@@ -791,8 +967,12 @@ print(f\"  capture_modes: {data.get('capture_modes')}\")
     echo "  browser connect <name>          Get CDP URL for a browser container"
     echo ""
     echo "  meeting join --platform X --url Y  Send bot to join a meeting"
-    echo "  meeting list                       List active meeting bots"
+    echo "  meeting list                       List active meeting bots (with elapsed time)"
+    echo "  meeting status --platform X --id Y Detailed status for a specific bot"
+    echo "  meeting participants ...           Speakers seen in meeting"
+    echo "  meeting wait-active ...            Poll until bot is active"
     echo "  meeting transcript <id>            Fetch meeting transcript"
+    echo "  meeting transcribe --meeting-id X  Trigger post-meeting transcription"
     echo "  meeting stop --platform X --id Y   Stop a meeting bot"
     echo "  meeting config ...                 Update bot language/task"
     echo "  meeting speak ...                  Bot speaks via TTS"

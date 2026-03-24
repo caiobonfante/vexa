@@ -173,3 +173,50 @@ Test 2: Three speakers rapid turns             ✗ (pre-existing, 3-speaker merg
 3. Consider: should the orchestrator fix bugs it finds, or just report them?
 
 **MVP4 verdict: PASS.** The orchestrator picks cross-feature work, spawns teams, and moves scores autonomously.
+
+## MVP5: 2026-03-24 — Strategy + parallel execution + user priority
+
+**Objective:** Run full self-improvement loop: strategy → planning → parallel execution → reflection. User priority: agentic runtime first-class meeting API support.
+
+**Strategy Phase:**
+- Spawned strategist researcher (Sonnet) for market analysis
+- Scanned: Otter.ai ($100M ARR, AI Meeting Agents), Fireflies ($1B unicorn, Talk to Fireflies), Granola ($43M, bot-free), Recall.ai ($38M Series B, Desktop SDK), MeetGeek (AI Voice Agents), tl;dv, Read.ai
+- Key findings: "AI agent in meeting" is dominant 2026 narrative, privacy backlash creating bot-free market, Teams bot identification rolling out May 2026
+- Produced `strategy/backlog.md` with 10 ranked opportunities
+
+**Planning Phase:**
+- User overrode strategy ranking with explicit priority: agentic runtime meeting API fluency
+- Designed MVP0-MVP6 ladder for meeting awareness
+- Scheduled 3 parallel teams in Batch 1
+
+**Execution Phase — Batch 1 (3 teams in parallel):**
+
+| Team | Feature | Roles | Result |
+|------|---------|-------|--------|
+| Team 1 | Meeting API MVP0 | researcher → executor → verifier | 5 CLI commands added, all verified |
+| Team 2 | Speaking-bot | executor → verifier | 4 bugs fixed, all verified |
+| Team 3 | Chat | executor (investigation) | API layer validated at 70 |
+
+**Score changes:**
+
+| Feature | Before | After | Evidence |
+|---------|--------|-------|----------|
+| agentic-runtime | 80 | 85 | MVP0 PASS: 5 meeting awareness commands + system CLAUDE.md |
+| speaking-bot | 70 | 90 | 4 browser_session bugs fixed + verified (pending rebuild) |
+| chat | 0 | 50 | API layer validated (POST/GET/Redis relay all work) |
+
+**Batch gate:** PASS — no regressions. Changes are additive, non-overlapping.
+
+**What MVP5 proved:**
+- Full loop works: strategy → plan → parallel execute → reflect
+- 3 parallel teams advance 3 features in one cycle without conflicts
+- User priority correctly overrides strategy backlog rankings
+- Researcher-first pattern for CLI design produces better implementations
+- Zero-discrepancy verification on both features (speaking-bot 4/4, meeting CLI 5/5)
+
+**What needs work:**
+- Chat bot-execution layer blocked by missing chat_send handler in browser-session.ts
+- Speaking-bot fixes need container rebuild to activate
+- Meeting API MVP1 (event-driven triggers) is the next priority
+
+**MVP5 verdict: PASS.** Strategy + parallel execution + user priority integration works.

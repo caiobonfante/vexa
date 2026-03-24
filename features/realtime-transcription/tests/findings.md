@@ -239,6 +239,39 @@ None of the deployed changes address the primary issues (A, B, C, D) which requi
 6. **Investigate confirmation failure on GMeet long monologues** — why does `confirmThreshold=2` never trigger for speaker-2?
 7. **Fix speaker identity locking speed for GMeet** — 8+ minutes to lock is unacceptable
 8. **Handle multi-track deduplication** — same person's audio on multiple `<audio>` elements
+9. **CRITICAL: Teams caption activation reliability** — entire Teams pipeline depends on clicking the CC button. If `enableTeamsLiveCaptions()` fails (menu not found, button moved, new Teams UI), the pipeline falls back to voice-level mutations (blue boxes) which are noisier — they detect mic activity, not actual speech. Need: (a) retry logic with multiple selector strategies, (b) explicit degraded-mode flag, (c) validate mutation-only mode produces usable output.
+10. **Teams mutation fallback validation** — voice-level-stream-outline ("blue boxes") are always present and provide speaker-is-talking signals. But they react to mic noise, not speech. Need to validate: when captions are unavailable, does mutation-only mode still produce correct speaker attribution? What's the quality delta vs captions?
+
+## Teams Caption Dependency (CRITICAL — 2026-03-24)
+
+The MS Teams realtime transcription pipeline has a **hard dependency on live captions**:
+
+```
+enableTeamsLiveCaptions() clicks: More → Language and speech → Show live captions
+  → If SUCCESS: caption DOM appears → MutationObserver watches → speaker + text available
+  → If FAIL: logged as "non-fatal", but NO captions = NO speaker-attributed text
+```
+
+**Primary signal (captions):** Teams ASR provides speaker name + text. Only fires on real speech. High quality.
+
+**Fallback signal (mutations/blue boxes):** `voice-level-stream-outline` elements always present. MutationObserver detects speaking state changes. BUT: reacts to mic activity (any sound), not actual speech. Noisier — false activations from background noise, keyboard clicks, etc.
+
+**Current code behavior:**
+- `meetingFlow.ts:172` — caption failure is `.catch()` silently (non-fatal)
+- `recording.ts:1110-1124` — polls for caption wrapper every 2s + body MutationObserver, but if button was never clicked, captions never appear
+- Voice-level observers (`recording.ts:591-685`) run regardless — this IS the fallback, but it's implicit not explicit
+
+**Failure modes:**
+1. Teams UI changes menu structure → button not found → captions never enabled
+2. Meeting policy disables captions → button exists but toggle rejected
+3. Localized Teams UI → menu text doesn't match English selectors
+4. New Teams experience (React-based) → completely different DOM
+
+**Fixes needed:**
+1. **Retry with escalating strategies:** Try guest path, then host path, then keyboard shortcut (Ctrl+Shift+U), then Settings panel
+2. **Explicit degraded-mode flag:** If captions fail after 3 retries, set `window.__vexaCaptionsDegraded = true` and log prominently
+3. **Mutation-only validation:** Run a test meeting with captions deliberately disabled, measure speaker attribution quality
+4. **Health check:** Periodic check that caption wrapper still exists — Teams may disable captions mid-meeting
 
 ### Delivery Iteration (2026-03-21): Right-side pipeline fixes
 

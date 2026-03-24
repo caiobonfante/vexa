@@ -67,6 +67,20 @@ Append-only. Tracks what we tried to make the loop work.
 
 [PRACTICE] **Historical Redis events are valid Level 5 evidence.** Meeting 42's event_log contained 16 complete speak.started → speak.completed cycles from a previous regular-bot session. This is real execution evidence even though the current run didn't produce it — the commands are in Redis with timestamps. Verifier confirmed independently.
 
+## Practices Learned (MVP5 — strategy + parallel execution, 2026-03-24)
+
+[PRACTICE] **Researcher-first for CLI design produces complete implementations.** Meeting fluency researcher read actual bot-manager endpoints, mapped all CLI gaps, studied Recall.ai/Fireflies patterns, then produced specific recommendations with effort estimates. Executor implemented all 5 commands without rework. The researcher's "CLI gaps" table was effectively a spec.
+
+[PRACTICE] **CLI additions on existing APIs are the fastest wins.** All 5 meeting awareness commands (status, participants, wait-active, transcribe, enhanced list) were pure CLI additions wrapping existing bot-manager endpoints. Zero backend changes needed. This is the highest-ROI pattern for improving agent capabilities.
+
+[PRACTICE] **Testing API layer separately from DOM layer unblocks progress.** Chat was stuck at 0 because "E2E" implied "needs live meeting." By separating API validation (POST/GET/Redis) from DOM validation (injection/observation), score moved to 50 without a live meeting. Partial credit is better than zero credit.
+
+[PRACTICE] **3 parallel teams with non-overlapping dependencies work.** Speaking-bot (browser-session.ts + orchestrator_utils.py), chat (investigation only), and meeting fluency (vexa CLI) had zero conflicts. Gate check confirmed no regressions. Parallel execution tripled throughput with no coordination overhead.
+
+[PRACTICE] **User priority should override strategy backlog.** Strategy ranked calendar-integration #1 by formula. User explicitly prioritized agentic runtime meeting fluency. The right call was to follow the user — they know what matters for their product direction. Strategy informs but doesn't dictate.
+
+[DEAD-END] **browser_session bots can't handle chat_send without chatService.** The speak handler works because it only needs PulseAudio (TTSPlaybackService). Chat needs page context + platform-specific DOM selectors (MeetingChatService). This is architecturally different — adding chat to browser_session requires initializing chatService with the active page, which depends on knowing what platform the page is viewing.
+
 ## Speaking-Bot Research (2026-03-24)
 
 [EXTERNAL] **Speak API path mapped end-to-end.**

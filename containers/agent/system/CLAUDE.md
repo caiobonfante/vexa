@@ -36,9 +36,13 @@ vexa schedule cancel {job_id}                # cancel job
 
 # Meetings — bot lifecycle
 vexa meeting join --platform {teams|google_meet|zoom} --url {url}
-vexa meeting list                            # active bots
-vexa meeting transcript {meeting_id}         # fetch transcript
-vexa meeting stop --platform {p} --id {id}   # remove bot
+vexa meeting list                                     # active bots (with elapsed time)
+vexa meeting status --platform {p} --id {id}          # detailed status for one bot
+vexa meeting participants --platform {p} --id {id}    # speakers seen in meeting
+vexa meeting wait-active --platform {p} --id {id} [--timeout 60]  # poll until active
+vexa meeting transcript {meeting_id}                  # fetch live transcript
+vexa meeting transcribe --meeting-id {id}             # trigger post-meeting transcription
+vexa meeting stop --platform {p} --id {id}            # remove bot
 vexa meeting config --platform {p} --id {id} [--language en] [--task transcribe]
 
 # Meetings — voice (TTS via Piper)
@@ -220,6 +224,69 @@ with sync_playwright() as p:
 # 4. When done (optional — idle timeout reclaims after 10min)
 # Run: vexa container stop {container-name}
 ```
+
+## Meeting Awareness
+
+Use these commands to understand the current state of a meeting before acting in it.
+
+### Pattern: joining and waiting
+
+After `vexa meeting join`, the bot is launching but may not be in the meeting yet. Always wait before speaking or sending chat:
+
+```bash
+# 1. Join the meeting
+vexa meeting join --platform google_meet --url https://meet.google.com/xxx-yyy-zzz
+
+# 2. Wait until the bot is active (default 60s timeout)
+vexa meeting wait-active --platform google_meet --id xxx-yyy-zzz
+
+# 3. Now safe to speak or chat
+vexa meeting speak --platform google_meet --id xxx-yyy-zzz --text "Hello everyone"
+```
+
+### Pattern: checking meeting state
+
+```bash
+# What meetings are active right now?
+vexa meeting list
+
+# Detailed state for a specific meeting
+vexa meeting status --platform google_meet --id xxx-yyy-zzz
+
+# Who has spoken so far?
+vexa meeting participants --platform google_meet --id xxx-yyy-zzz
+
+# What has been said? (live transcript)
+vexa meeting transcript {meeting_id}
+```
+
+### Pattern: post-meeting transcription
+
+After a meeting ends, trigger full transcription processing:
+
+```bash
+vexa meeting transcribe --meeting-id {meeting_id}
+```
+
+### When to use each command
+
+| Command | When to use |
+|---------|-------------|
+| `meeting list` | Check if any meetings are currently active before joining or scheduling |
+| `meeting status` | Verify bot state before sending commands (speaking, chat) |
+| `meeting wait-active` | After `join` — always wait before speaking/chatting |
+| `meeting participants` | Know who is present before addressing specific people |
+| `meeting transcript` | Read what has been said, check if a question was asked |
+| `meeting transcribe` | After meeting ends, trigger full processing |
+
+## Meeting Events (automatic)
+
+You will receive messages when meetings start and end — no polling needed.
+
+- **"Meeting X just started"** — the bot has joined and is transcribing. You can check status, read live transcript, speak in the meeting, or send chat messages.
+- **"Meeting X just ended"** — fetch the transcript, summarize key points, extract action items, save to workspace.
+
+These messages arrive automatically via the agent-api meeting subscriber. You don't need to poll `vexa meeting list` — just act when you receive the notification.
 
 ## Rules
 - Always `vexa workspace save` before you expect to be stopped

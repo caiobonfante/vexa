@@ -48,6 +48,7 @@ export type BotConfig = {
 
 export type BrowserSessionConfig = {
   mode: "browser_session";
+  meeting_id?: number;
   redisUrl: string;
   container_name?: string;
   botManagerCallbackUrl?: string;

@@ -123,6 +123,11 @@ async def startup():
 
     await cm.startup()
     set_container_manager(cm)
+
+    # Subscribe to bot-manager meeting status events via Redis Pub/Sub
+    app.state.meeting_subscriber_task = asyncio.create_task(_meeting_status_subscriber())
+    logger.info("Meeting status subscriber started")
+
     logger.info(f"Agent API ready on port {config.CHAT_API_PORT}")
 
 
@@ -130,8 +135,95 @@ async def startup():
 async def shutdown():
     from shared_models.scheduler_worker import stop_executor
     await stop_executor()
+    if hasattr(app.state, "meeting_subscriber_task"):
+        app.state.meeting_subscriber_task.cancel()
+        try:
+            await app.state.meeting_subscriber_task
+        except asyncio.CancelledError:
+            pass
     await cm.shutdown()
     await app.state.redis.close()
+
+
+# --- Redis Pub/Sub: meeting status events from bot-manager ---
+
+async def _meeting_status_subscriber():
+    """Subscribe to bm:meeting:*:status channel pattern from bot-manager.
+
+    bot-manager publishes ALL meeting status transitions there. We wake the
+    user's agent on 'active' (meeting started) and 'completed' (meeting ended).
+    Other statuses (joining, awaiting_admission, failed) are logged but ignored
+    to avoid noisy agent interruptions.
+    """
+    # Use a dedicated Redis connection for blocking pubsub — don't share with main client
+    pubsub_redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+    pubsub = pubsub_redis.pubsub()
+    await pubsub.psubscribe("bm:meeting:*:status")
+    logger.info("Subscribed to bm:meeting:*:status pattern")
+
+    try:
+        async for message in pubsub.listen():
+            if message["type"] not in ("pmessage", "message"):
+                continue
+
+            try:
+                data = json.loads(message["data"])
+            except (json.JSONDecodeError, TypeError):
+                logger.debug(f"Non-JSON meeting status message: {message['data']!r}")
+                continue
+
+            status = data.get("status", "")
+            meeting_id = data.get("meeting_id") or data.get("id")
+            user_id = str(data.get("user_id", ""))
+            platform = data.get("platform", "unknown")
+            duration_seconds = data.get("duration_seconds", 0)
+
+            logger.info(f"Meeting status event: meeting={meeting_id} user={user_id} status={status} platform={platform}")
+
+            if status == "active":
+                message_text = (
+                    f"Meeting {meeting_id} ({platform}) just started. "
+                    f"You've joined and are transcribing. "
+                    f"Use `vexa meeting status --platform {platform} --id {meeting_id}` to check state, "
+                    f"`vexa meeting transcript {meeting_id}` to read what's been said."
+                )
+            elif status == "completed":
+                mins = duration_seconds // 60
+                secs = duration_seconds % 60
+                duration_str = f"{mins}m{secs}s" if mins else f"{secs}s"
+                message_text = (
+                    f"Meeting {meeting_id} ({platform}) just ended (duration: {duration_str}). "
+                    f"Fetch the transcript with `vexa meeting transcript {meeting_id}` and summarize the key points."
+                )
+            else:
+                # joining, awaiting_admission, failed — too noisy, skip
+                logger.debug(f"Ignoring status={status} for meeting {meeting_id}")
+                continue
+
+            if not user_id or not meeting_id:
+                logger.warning(f"Meeting status event missing user_id or meeting_id: {data}")
+                continue
+
+            # Fire-and-forget: wake the agent in the background
+            asyncio.create_task(_wake_agent(user_id, meeting_id, message_text))
+
+    except asyncio.CancelledError:
+        logger.info("Meeting status subscriber cancelled")
+    except Exception as e:
+        logger.error(f"Meeting status subscriber crashed: {e}", exc_info=True)
+    finally:
+        await pubsub.punsubscribe("bm:meeting:*:status")
+        await pubsub_redis.close()
+
+
+async def _wake_agent(user_id: str, meeting_id: str, message: str):
+    """Wake user's agent with the given message. Silently no-ops if no container exists."""
+    try:
+        async for _ in _run_chat_turn(user_id, message):
+            pass  # consume the stream; we don't forward it
+        logger.info(f"Agent woken for user={user_id} meeting={meeting_id}")
+    except Exception as e:
+        logger.warning(f"Agent wakeup failed for user={user_id} meeting={meeting_id}: {e}")
 
 
 # --- Models ---
@@ -371,6 +463,45 @@ async def on_meeting_completed(event: dict, background_tasks: BackgroundTasks):
         try:
             async for _ in _run_chat_turn(user_id, message):
                 pass  # consume the stream, we don't need to deliver it
+        except Exception as e:
+            logger.error(f"Post-meeting processing failed for meeting {meeting_id}: {e}")
+
+    background_tasks.add_task(_process)
+    return {"status": "accepted", "meeting_id": meeting_id}
+
+
+@app.post("/internal/webhooks/meeting-completed")
+async def on_meeting_completed_internal(event: dict, background_tasks: BackgroundTasks):
+    """Internal (no-auth) meeting-completed webhook for bot-manager post_meeting_hooks.
+
+    post_meeting_hooks.py delivers without X-API-Key (it's internal traffic).
+    This endpoint accepts the same payload as the authenticated version without
+    requiring the header, since all callers are internal services on the Docker
+    network and cannot reach this endpoint from outside.
+    """
+    data = event.get("data", {}).get("meeting", {})
+    user_id = str(data.get("user_id", ""))
+    meeting_id = data.get("id")
+    platform = data.get("platform", "unknown")
+    duration = data.get("duration_seconds", 0)
+
+    if not user_id or not meeting_id:
+        raise HTTPException(400, "Missing user_id or meeting id in event")
+
+    message = (
+        f"Meeting {meeting_id} ({platform}) just ended after {duration // 60}m{duration % 60}s. "
+        f"Process this meeting: fetch the transcript with `vexa meeting transcript {meeting_id}`, "
+        f"summarize it, extract action items and decisions, save to knowledge/meetings/, "
+        f"and update timeline.md with any dates or deadlines mentioned. "
+        f"Send me a brief summary when done."
+    )
+
+    logger.info(f"Internal meeting-completed webhook: meeting {meeting_id} for user {user_id}")
+
+    async def _process():
+        try:
+            async for _ in _run_chat_turn(user_id, message):
+                pass
         except Exception as e:
             logger.error(f"Post-meeting processing failed for meeting {meeting_id}: {e}")
 

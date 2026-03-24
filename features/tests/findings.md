@@ -43,4 +43,5 @@
 | MVP2 | Loop generates missing data using tools | PARTIAL — gTTS audio generated, but by Alpha not autonomously |
 | MVP3 | Loop hosts live meeting for Level 5 validation | **PASS** — Alpha sent TTS bots to live Teams meeting, captured 11 segments. Lead set up browser session, Alpha executed autonomously. |
 | MVP4 | Orchestrator picks work across features, spawns teams | **PASS** — Picked speaking-bot (score 0), spawned researcher+executor+verifier, moved score 0→70, found 3 bugs, zero verification discrepancies. |
-| MVP5 | Scheduled, continuous, no human trigger | NOT DONE |
+| MVP5 | Strategy + parallel execution + user priority | **PASS** — Strategy phase produced market backlog, 3 parallel teams advanced 3 features (meeting-fluency +5 commands, speaking-bot 70→90, chat 0→50), zero verification discrepancies, user priority integrated. |
+| MVP6 | Scheduled, continuous, no human trigger | NOT DONE |

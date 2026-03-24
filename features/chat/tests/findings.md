@@ -1,13 +1,15 @@
 # Chat Test Findings
 
-## Gate verdict: UNTESTED
+## Gate verdict: PARTIAL — API layer PASS, bot execution BLOCKED
 
-## Implementation status (audit 2026-03-23)
+## Score: 50
 
-Implementation is **code-complete across the full stack** but never validated end-to-end:
+## Implementation status (audit 2026-03-23, validated 2026-03-24)
+
+Implementation is **code-complete across the full stack**:
 - `services/vexa-bot/core/src/services/chat.ts` (~700 lines) — MeetingChatService with DOM observation (MutationObserver), message injection, Redis pub/sub relay
 - `services/bot-manager/app/main.py` (lines 2968-3030) — chat endpoints, Redis list persistence
-- `services/api-gateway/main.py` — POST/GET proxy routes (route existence verified in tests)
+- `services/api-gateway/main.py` — POST/GET proxy routes
 - `services/dashboard/src/components/meetings/chat-panel.tsx` — renders messages with auto-scroll
 - `libs/shared-models` — ChatSendRequest, ChatMessage, ChatMessagesResponse schemas
 
@@ -15,15 +17,52 @@ Notable: chat-to-transcript injection code exists but is **disabled** (`if (fals
 
 Platform selectors may be stale — Google Meet (~150 lines of DOM selectors), Teams (minimal coverage). Zoom chat is **not implemented**.
 
+## E2E Validation (2026-03-24)
+
+### API Layer — PASS
+
+| Test | Result | Evidence |
+|------|--------|----------|
+| GET /chat with active meeting | PASS | `{"messages":[],"meeting_id":39}` via gateway :8066 |
+| POST /chat to active meeting | PASS | `{"message":"Chat message sent","meeting_id":39}` |
+| Redis pub/sub relay | PASS | Subscribed to `bot_commands:meeting:39`, received `{"action":"chat_send","meeting_id":39,"text":"..."}` |
+| Redis list storage + retrieval | PASS | Seeded `meeting:39:chat_messages`, GET returned message correctly |
+| Schemas match | PASS | ChatSendRequest.text, ChatMessage.{sender,text,timestamp,is_from_bot} all correct |
+
+### Bot Execution — BLOCKED
+
+- browser_session bots don't handle `chat_send` action (falls through to "Unhandled command")
+- The speaking-bot fix added speak/speak_stop/leave handlers to browser-session.ts but not chat_send
+- Regular google_meet/teams bots DO handle chat_send (index.ts:488-496) via chatService
+- No active google_meet/teams bots to test against
+
+### DOM Layer — UNTESTED
+
+- Requires live google_meet or teams meeting
+- Google Meet selectors (`.RLrADb`, `.jO4O1`, `.poVWob`, `.aops0b`) may have drifted
+- No mock/replay path for DOM interaction
+
 ## Certainty Table
 
 | Check | Score | Evidence | Last checked | To reach 90+ |
 |-------|-------|----------|-------------|--------------|
-| Send message via API | 0 | Code exists, route test passes, no E2E | 2026-03-23 (audit) | POST /bots/{id}/chat in live meeting, verify 200 + DOM |
-| Message appears in meeting | 0 | DOM injection code exists for GMeet/Teams | 2026-03-23 (audit) | Verify selectors still match current platform DOM |
-| Read messages from participants | 0 | MutationObserver + Redis relay code exists | 2026-03-23 (audit) | GET /bots/{id}/chat returns messages from other participants |
-| Bidirectional flow | 0 | Full data flow implemented | 2026-03-23 (audit) | Send + receive in same session, verify both directions |
-| Message relay via Redis | 0 | pub/sub channel `va:meeting:{id}:chat` + list storage | 2026-03-23 (audit) | Check Redis for chat message events during test |
+| Send message via API | 70 | POST returns 200, Redis relay confirmed | 2026-03-24 (E2E) | Verify DOM injection in live meeting |
+| Message relay via Redis | 70 | pub/sub confirmed, list storage works | 2026-03-24 (E2E) | — |
+| Message appears in meeting | 0 | browser_session doesn't handle chat_send; needs live gmeet/teams bot | 2026-03-24 (E2E) | Add chat_send to browser-session.ts OR test with gmeet/teams bot |
+| Read messages from participants | 0 | MutationObserver code exists, not tested live | 2026-03-23 (audit) | Live meeting with human participant sending chat |
+| Bidirectional flow | 0 | Full data flow implemented, not tested E2E | 2026-03-23 (audit) | Send + receive in same live session |
+
+## Blockers
+
+1. **browser-session.ts missing chat_send handler** — needs chatService integration or page context
+2. **No active google_meet/teams bots** — all such meetings are completed
+3. **DOM selector staleness unknown** — cannot validate without live meeting
+4. **Silent failure on send** — POST returns 200 even if bot never processes command
+
+## Path to 90
+
+- **Score 70**: Add chat_send handler to browser-session.ts, rebuild image, test command relay
+- **Score 90**: Live google_meet or teams meeting, verify DOM injection + MutationObserver capture
 
 ## Risks
 - Platform DOM selectors (especially Google Meet) may have drifted since implementation

@@ -615,6 +615,10 @@ async def start_browser_session_container(
         f"BOT_CONFIG={bot_config_json}",
         f"BOT_MODE=browser_session",
         f"LOG_LEVEL={os.getenv('LOG_LEVEL', 'INFO').upper()}",
+        # Bug 3 fix: pass TTS service URL so synthesizeAndPlay() works in browser_session
+        f"TTS_SERVICE_URL={os.getenv('TTS_SERVICE_URL', 'http://tts-service:8002')}",
+        # Bug 4 fix: set PULSE_SERVER so pactl commands work inside the container
+        f"PULSE_SERVER={os.getenv('PULSE_SERVER', 'unix:/run/pulse/native')}",
     ]
 
     host_config = {
