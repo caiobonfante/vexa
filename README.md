@@ -459,7 +459,7 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 **Agent runtime:**
 - **Ephemeral containers** — browser/agent/worker profiles, zero idle cost, ~5s spin-up
 - **System layer fluency** — agents wake up knowing Vexa (CLI + instructions baked into image)
-- **Persistent workspaces** — files, memory, scripts survive across sessions (MinIO/Git)
+- **Knowledge workspaces** — file-based knowledge OS: entities, streams, timeline, wiki-links — auto-populated from meetings
 - **Container chaining** — `on_success`/`on_failure` callbacks orchestrate multi-step pipelines
 - **Scheduler** — cron + relative delays + event-triggered jobs, backed by Redis sorted sets
 - **Remote browser** — VNC for human control + CDP for agent automation, persistent auth
@@ -511,6 +511,7 @@ Each feature has its own README with business context, competitive positioning, 
 | [chat](./features/chat/) | 0 | Code complete (~700 LOC), **not E2E tested** | Everything — needs live meeting test | E2E validation, Teams bug [#133](https://github.com/Vexa-ai/vexa/issues/133) |
 | [remote-browser](./features/remote-browser/) | 30 | Container builds, VNC accessible | Persistence, authenticated bot flow | MinIO sync, authenticated meeting join |
 | [calendar-integration](./features/calendar-integration/) | 0 | Research complete, **not built** | Everything — new feature | Google OAuth flow, calendar-service (2-3 week project) |
+| [knowledge-workspace](./features/knowledge-workspace/) | 60 | Template + persistence + agent chat working | Entity extraction, git backing, index injection | Entity extraction from transcripts, git-backed workspaces |
 
 **Blockers affecting all features:** 7 open bot join/leave bugs block live testing. See [features/README.md](./features/README.md) for the full issue matrix.
 

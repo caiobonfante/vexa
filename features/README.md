@@ -1,8 +1,30 @@
 # Features
 
-Features are **jobs to be done** — not code, not services, not infrastructure. A feature has a purpose you can explain, develop against, and validate. Features use the codebase; they don't own it.
+Features are **self-describing manifests** — not code, not services, not infrastructure. Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't.
 
-## Status (2026-03-23)
+## Contribute with AI Agents
+
+Every feature is designed to be picked up by an AI agent (Claude Code, Cursor, or any coding agent) with zero human handoff:
+
+1. **Read `.claude/CLAUDE.md`** → mission, scope, gate, current development stage
+2. **Read `tests/findings.md`** → certainty scores with evidence, lowest blocker, next action
+3. **Read `tests/feature-log.md`** → what was tried, what worked, what failed (prevents dead-end retries)
+4. **Determine stage** → ENV SETUP / COLLECTION / ITERATION / EXPAND (for validation features) or RESEARCH / SPEC / BUILD & TEST (for spec-driven features)
+5. **Act** → follow stage-specific constraints, update findings, log decisions
+
+The feature describes itself completely. Point an agent at any `features/{name}/` directory and it knows what to do.
+
+### Feature completeness checklist
+
+Every feature should have:
+
+- [ ] `README.md` — business narrative, competitive positioning, status box with confidence score
+- [ ] `.claude/CLAUDE.md` — agent instructions: mission, scope, gate, edges, development cycle
+- [ ] `tests/findings.md` — certainty table with scores, evidence, last-checked dates
+- [ ] `tests/feature-log.md` — append-only activity log (observations, decisions, results, dead ends)
+- [ ] Transparent confidence scores updated after every test run
+
+## Status (2026-03-24)
 
 | Feature | Status | Certainty | Key Gap |
 |---------|--------|-----------|---------|
@@ -17,6 +39,8 @@ Features are **jobs to be done** — not code, not services, not infrastructure.
 | [post-meeting-transcription](post-meeting-transcription/) | Partial | 85 | Pipeline works, 100% speaker accuracy (2sp); dashboard playback untested |
 | [scheduler](scheduler/) | Core library done | 90 (unit) | 16/16 unit tests pass; executor not wired; REST API not built |
 | [calendar-integration](calendar-integration/) | Research complete | 0 | New feature — Google Calendar auto-join; calendar-service not built |
+| [agentic-runtime](agentic-runtime/) | MVP3+ Hardening | 85 | MVP0-3 done; BOT_API_TOKEN wiring, post-meeting webhook |
+| [knowledge-workspace](knowledge-workspace/) | Template done, pipeline missing | 60 | Template + persistence working; entity extraction, git backing not built |
 
 **Blockers affecting all features:** 7 open bot join/leave bugs (#171, #166, #189, #190, #115, #123, #124) block live testing. Bot resource waste (#167, #168, #170) adds 81% unnecessary CPU load.
 

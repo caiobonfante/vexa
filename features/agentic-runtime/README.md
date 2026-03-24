@@ -3,7 +3,7 @@
 > **Confidence: 85** — MVP0-3 complete (32 gate checks pass). All CLI commands verified. Dashboard integration working.
 > **Tested:** Agent chat (SSE streaming, session resume), meeting join/transcribe/speak/chat/screen, browser sessions (VNC/CDP), scheduler (16/16 unit tests), workspace persistence (MinIO).
 > **Not tested:** BOT_API_TOKEN wiring (blocks container spawning from agent), post-meeting auto-trigger webhook, server-side chat history.
-> **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list), workspace templates beyond "knowledge."
+> **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list). For workspace/knowledge features, see [knowledge-workspace](../knowledge-workspace/).
 
 An agent runtime where meetings are a native primitive — not an external API to call, but something agents understand from birth. Agents join meetings, process transcripts, speak to participants, and chain post-meeting automation, all in isolated containers that scale to zero when idle.
 
@@ -167,9 +167,9 @@ case "$1" in
 esac
 ```
 
-### User workspace layer (`/workspace/`) — see [workspaces/README.md](workspaces/README.md)
+### User workspace layer (`/workspace/`) — see [knowledge-workspace](../knowledge-workspace/)
 
-User-owned, persistent via Git (preferred) or MinIO. This is where project files, custom CLAUDE.md, and domain knowledge live. Synced on container start and on `vexa workspace save`.
+User-owned, persistent via Git (preferred) or MinIO. This is where project files, custom CLAUDE.md, and domain knowledge live. Synced on container start and on `vexa workspace save`. The [knowledge workspace](../knowledge-workspace/) feature defines templates that give agents structured memory — entities, streams, timeline, wiki-links — all fed automatically by meetings.
 
 The user's `/workspace/.claude/CLAUDE.md` layers on top of the system CLAUDE.md -- Claude Code merges instructions from both. The user can customize agent behavior without touching the system layer.
 
