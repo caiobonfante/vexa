@@ -7,20 +7,9 @@
 
 ## Why
 
-Token scoping is what makes Vexa safe to deploy as a **multi-tenant service**. When you serve multiple users, teams, or customers from one Vexa instance, you need guarantees that a bot-only integration can't access admin endpoints and a read-only dashboard can't spawn bots.
+Least-privilege API tokens for multi-tenant deployments. A bot-only token can't manage users; a read-only token can't start bots. Required for safe multi-user deployments where different integrations need different access levels.
 
-This is the security foundation that separates Vexa from single-user agent tools. OpenClaw explicitly states it's "not a hostile multi-tenant security boundary." Vexa is — token scoping is how.
-
-**Practical examples:**
-
-| Token scope | Who gets it | What they can do | What they can't |
-|------------|-------------|-----------------|-----------------|
-| `bot` | CI/CD integration, scheduling service | Start/stop bots, read bot status | Manage users, read transcripts |
-| `tx` | Dashboard, analytics tools | Read transcripts, search meetings | Start bots, manage users |
-| `admin` | Platform operators | Everything | — |
-| `user` | End users | User-level operations | Admin operations |
-
-**For SaaS builders:** If you're embedding Vexa into your product for your customers, token scoping ensures each customer's integration token is limited to exactly the operations they need. No accidental cross-tenant access.
+**Scopes:** `bot` (bot operations), `tx` (transcripts), `admin` (everything), `user` (user-level). Enforced at gateway. Legacy unscoped tokens get full access for backward compatibility.
 
 ## What
 

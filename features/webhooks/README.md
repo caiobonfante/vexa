@@ -7,13 +7,7 @@
 
 ## Why
 
-Webhooks are how meetings trigger action. Without them, transcripts sit in a database and someone has to remember to read them. With webhooks, meetings **do things** when they end:
-
-- `meeting.completed` → agent wakes up, summarizes, posts to Slack
-- `transcript.ready` → worker pushes structured data to your CRM
-- `bot.error` → alert fires in PagerDuty
-
-Webhooks are the bridge between "we recorded a meeting" and "the meeting produced business outcomes." Combined with the scheduler's `on_success`/`on_failure` callbacks and the agentic runtime's ephemeral containers, webhooks become the trigger layer for fully autonomous post-meeting pipelines.
+Push event notifications to external endpoints without polling. Events: `meeting.completed`, `transcript.ready`, `bot.error`, bot status changes. Combined with the scheduler's `on_success`/`on_failure` callbacks, webhooks are the trigger layer for post-meeting automation pipelines.
 
 ## What
 

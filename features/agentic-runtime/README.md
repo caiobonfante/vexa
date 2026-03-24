@@ -5,33 +5,17 @@
 > **Not tested:** BOT_API_TOKEN wiring (blocks container spawning from agent), post-meeting auto-trigger webhook, server-side chat history.
 > **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list). For workspace/knowledge features, see [knowledge-workspace](../knowledge-workspace/).
 
-An agent runtime where meetings are a native primitive — not an external API to call, but something agents understand from birth. Agents join meetings, process transcripts, speak to participants, and chain post-meeting automation, all in isolated containers that scale to zero when idle.
+Agent runtime where meetings are a native primitive. Agents join meetings, process transcripts, speak to participants, and chain post-meeting automation — all in isolated containers that scale to zero when idle.
 
-## Why not just use E2B + Recall.ai?
+## Design decisions
 
-You could glue a generic sandbox (E2B, Daytona, Koyeb) to a meeting bot API (Recall.ai, Skribby). But then:
+**Why not E2B + Recall.ai?** Generic sandboxes (E2B, Daytona) + meeting APIs (Recall.ai) require glue code between separate webhook systems. Here, meetings are a built-in tool (`vexa meeting join`), and the scheduler chains containers via `on_success`/`on_failure` callbacks — no plumbing.
 
-- Your agent calls an **external API** to join a meeting. In Vexa, it runs `vexa meeting join` — meetings are a built-in tool.
-- Your agent wakes up in a **blank VM**. Vexa agents wake up with `/system/CLAUDE.md` and the `vexa` CLI baked in — fluent from birth, no prompt engineering needed.
-- Your pipeline needs **glue code** between sandbox webhooks and meeting API webhooks. Vexa's scheduler chains meeting → transcription → agent → webhook in one pipeline with `on_success`/`on_failure` callbacks.
-- You pay for **two services**. Vexa is one platform, open-source, self-hostable.
+**Why not single-process agents (OpenClaw)?** OpenClaw is single-user by design ("not a hostile multi-tenant security boundary"). Vexa runs as a multi-user service with container isolation and scoped API tokens (14/14 tests pass).
 
-## Why not Otter/Fireflies "agents"?
+**System layer fluency:** Agents wake up with `/system/CLAUDE.md` + `/system/bin/vexa` baked into the image. No prompt engineering to explain available tools.
 
-Otter's "Sales Agent" drafts follow-up emails. Fireflies pushes to CRM via Zapier. These are narrow workflow automations — not general-purpose compute. Vexa agents are full containers that can run arbitrary code, control browsers via CDP, call any API, and chain into any downstream system. And they're self-hosted — your data never leaves your infrastructure.
-
-## Multi-tenant by design
-
-Unlike single-user agent tools (OpenClaw requires one VPS per user, "not a hostile multi-tenant security boundary"), Vexa is built as a multi-user service:
-
-- **User isolation** — each agent runs in its own container with its own workspace and session
-- **Token scoping** — `bot`, `tx`, `admin` scopes enforced at the gateway (14/14 tests pass)
-- **Team-ready** — user management, API keys, org-level config via Admin API
-- **Deploy once, serve your team** — or your customer base. No per-user infrastructure.
-
-## Cost model: pay for work, not idle
-
-Three specialist container profiles — each sized for exactly the job, then gone:
+## Container profiles
 
 | Profile | Contents | RAM | Lives for | Cost when idle |
 |---------|----------|-----|-----------|---------------|

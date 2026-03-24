@@ -7,11 +7,7 @@
 
 ## Why
 
-Your users don't think about platforms. They think about meetings. When someone says "record my meetings," they mean all of them — the Monday standup on Teams, the customer call on Zoom, the quick sync on Google Meet.
-
-One API, all platforms. Same `POST /bots` call, same response shape, same webhook events, same transcript format — regardless of whether the meeting is on Google Meet, Microsoft Teams, or Zoom. No platform-specific code on your side. No "works on Zoom but not Teams." No conditional logic.
-
-This is table stakes for any meeting API — Recall.ai, Skribby, MeetingBaaS all do it. The difference: Vexa does it open-source and self-hosted.
+Unified bot API across Google Meet, Microsoft Teams, and Zoom. Same `POST /bots` call, same response shape, same webhook events, same transcript format. Platform auto-detected from meeting URL — no platform-specific client code needed.
 
 ## What
 

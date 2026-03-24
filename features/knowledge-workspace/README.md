@@ -7,23 +7,12 @@
 
 ## Why
 
-Otter gives you a transcript. Fireflies gives you a summary. Clay gives you a CRM. Obsidian gives you a knowledge graph. None of them connect.
+File-based persistent memory for agents, where meetings automatically feed a structured knowledge graph. Inspired by OpenClaw's SOUL.md + MEMORY.md system — extended with entity extraction from meeting transcripts, wiki-link graphs, and scheduled workspace audits.
 
-Vexa gives agents a **file-based knowledge OS where meetings automatically feed a structured knowledge graph.** After every meeting, the agent wakes up, reads the transcript, extracts contacts and decisions into linked markdown files, updates the timeline, and tracks action items — like Obsidian + a CRM + a meeting assistant, but the agent does the work.
-
-This is what Andrej Karpathy describes as the "claw-like entity with persistence" — an agent that keeps looping, has its own sandbox, does stuff on your behalf even when you're not looking, with sophisticated memory systems. OpenClaw pioneered this with SOUL.md and MEMORY.md. Vexa takes it further by connecting the memory to meetings — the richest source of unstructured business knowledge.
-
-### How this compares
-
-| Platform | Memory model | Meetings feed it? | Entity graph | Scheduling | Self-hosted |
-|----------|-------------|-------------------|-------------|-----------|-------------|
-| **OpenClaw** | MEMORY.md + SOUL.md + daily logs | No | No | Heartbeats | Yes |
-| **Mem0** (48K stars) | Vector + graph + KV store | No | API-based graph | No | No (SaaS) |
-| **Zep** | Temporal knowledge graph | No | Yes (graph DB) | No | Partial |
-| **Letta** | Virtual context management | No | No | No | Yes |
-| **Obsidian + AI** | Markdown + wiki-links + templates | Manual note-taking | Manual | No | Yes (local) |
-| **Clay/Attio** | CRM with AI enrichment | Via integrations | Yes | No | No |
-| **Vexa Knowledge Workspace** | Markdown + wiki-links + entities + streams + timeline + soul + scripts | **Yes — automatic** | **Yes — contacts, companies, products** | **Yes — vexa schedule** | **Yes** |
+**Design decisions:**
+- **Files over databases** — markdown files are the source of truth, not conversation history. Readable by humans and agents alike. Git-backed for version history.
+- **Wiki-links over vector search** — `[[Entity Name]]` connections are explicit and inspectable. No embedding drift, no retrieval hallucinations.
+- **Meeting-fed** — unlike OpenClaw/Mem0/Obsidian where memory is manually populated, the post-meeting pipeline auto-extracts entities, contacts, and action items from transcripts.
 
 ### The post-meeting knowledge pipeline
 
@@ -95,19 +84,11 @@ scripts/                       # User automation, scheduled via vexa schedule
 
 **Scripts** — automation code in `scripts/`, executed in sandboxed worker containers via `vexa schedule --cron`. Agent writes the scripts, scheduler runs them. Output delivered to workspace.
 
-### Inspired by
+### Prior art
 
-- **OpenClaw** (Peter Steinberg) — pioneered SOUL.md, memory compaction, WhatsApp portal, personality. Karpathy: "He innovated simultaneously in like five different ways."
-- **Quorum** — the predecessor workspace system, ported and adapted for Vexa's container architecture
-- **Obsidian** — wiki-link knowledge graph, markdown-first, local-first
-
-### What we add
-
-- **Meetings as knowledge source** — no other memory system auto-populates from meetings
-- **Multi-tenant** — OpenClaw is single-user. Vexa serves teams from one deployment.
-- **Container isolation** — each user's workspace runs in its own ephemeral container
-- **Scheduling** — crash-safe Redis-backed scheduler, not in-process asyncio timers
-- **Agent fluency** — workspace CLAUDE.md + system CLAUDE.md merge. Agent knows both Vexa tools and workspace rules from birth.
+- **OpenClaw** — SOUL.md, memory compaction, WhatsApp portal (Vexa workspace system is inspired by this)
+- **Quorum** — predecessor workspace system, ported for Vexa's container architecture
+- **Obsidian** — wiki-link knowledge graph pattern
 
 ## Implementation status
 

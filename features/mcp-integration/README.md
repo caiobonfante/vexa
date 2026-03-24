@@ -7,22 +7,9 @@
 
 ## Why
 
-Give any AI agent meeting superpowers in one connection. Connect Claude, Cursor, Windsurf, or any MCP client to Vexa — your agent gains 17 meeting tools: join calls, read transcripts, speak in meetings, control bots, search across all meetings.
+MCP server exposing 17 meeting tools to AI agents (Claude, Cursor, Windsurf). Unlike other meeting MCP servers (Otter, Fireflies, Read.ai — all read-only SaaS), this provides full read + write + control (join, speak, chat, screen share) and is self-hosted.
 
-**What makes this different from other meeting MCP servers:**
-
-| Platform | Tools | Read | Write/Control | Self-hosted |
-|----------|-------|------|--------------|-------------|
-| **Otter.ai MCP** | Read-only transcripts | Yes | No | No |
-| **Fireflies MCP** | 21 tools, read-heavy | Yes | Limited | No |
-| **Read.ai MCP** | Transcripts + summaries | Yes | No | No |
-| **HappyScribe MCP** | Transcription library | Yes | No | No |
-| **MeetingBaaS MCP** | Bot + transcript CRUD | Yes | Yes | No |
-| **Vexa MCP** | 17 tools — full read + write + control | Yes | **Yes** — join, speak, chat, screen share | **Yes** |
-
-Vexa is the only MCP server where your AI agent can both **read meeting data** and **actively participate** — joining calls, speaking via TTS, sending chat messages, sharing screens — all self-hosted.
-
-**Hero use case:** Your customer success AI connects to Vexa via MCP. It joins every renewal call, pulls up usage data when pricing is discussed, whispers suggested responses via chat, and after the call, summarizes and updates Salesforce. One MCP connection, zero custom integration.
+**Design decision:** Other meeting MCP servers proxy read-only data. Vexa exposes interactive controls as tools — agents can actively participate in meetings, not just query transcripts.
 
 ## What
 

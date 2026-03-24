@@ -7,38 +7,22 @@
 
 ## Why
 
-Agents shouldn't wait to be asked. The scheduler makes Vexa agents **proactive** — they act on a schedule, chain work after events, and orchestrate multi-step pipelines without human intervention.
+Single backbone for all time-triggered actions. Today each is ad-hoc: webhook retry has its own Redis list, deferred transcription is manual, calendar auto-join doesn't exist. The scheduler unifies all of these: **"call this API at this time, reliably."**
 
-**The full pipeline no other platform can do:**
+**Design decisions:**
+- Redis sorted sets (not in-process timers like OpenClaw's asyncio approach) — crash-safe, persistent
+- `on_success`/`on_failure` callbacks enable container chaining without a DSL — meeting → agent → worker pipelines
+- HTTP-based execution — scheduler doesn't know what it's calling, just fires HTTP requests with retry
+
+**Example pipeline:**
 
 ```
 Schedule: "0 9 * * 1-5" (weekdays 9am)
-  → [T-5min] Spawn browser container, warm up authenticated session
-  → [T+0]   Join standup meeting, start transcription
-  → [During] Live transcripts stream to dashboard via WebSocket
-  → [T+end]  meeting.completed event fires
-  → on_success: spawn agent container
-       → Agent summarizes transcript, extracts action items
-       → Creates Linear tickets for anything tagged "TODO"
-       → Posts summary to #engineering Slack channel
-  → on_success: spawn worker container
-       → Worker sends webhook to CRM with meeting metadata
-  → All containers die. Zero cost until tomorrow 9am.
+  → Spawn browser → join standup → transcribe
+  → on_success: spawn agent → summarize → post to Slack
+  → on_success: spawn worker → webhook to CRM
+  → All containers die. Zero cost until tomorrow.
 ```
-
-No human triggered anything. No Zapier. No glue code. One scheduler, `on_success`/`on_failure` callbacks, container chaining.
-
-**How this compares to other agent scheduling:**
-
-| Platform | Scheduling | Container orchestration | Meeting awareness |
-|----------|-----------|------------------------|-------------------|
-| **OpenClaw** | "Heartbeats" — agent polls itself | No — single process | No |
-| **MindStudio** | Cron-like triggers | No — serverless functions | No |
-| **Lindy** | Event + time triggers | No — workflow steps | No |
-| **Trigger.dev** | Cron + queues + webhooks | Yes — but generic | No |
-| **Vexa Scheduler** | Cron + relative delays + event callbacks | **Yes** — spawns/chains containers | **Yes** — native meeting lifecycle |
-
-Vexa's scheduler doesn't just fire HTTP at time T. It **spawns containers, chains them via callbacks, and reclaims them on completion** — with native understanding of meeting lifecycle events (`meeting.completed`, `bot.joined`, `transcript.ready`).
 
 ## What
 

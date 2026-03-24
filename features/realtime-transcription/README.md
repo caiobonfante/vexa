@@ -7,11 +7,9 @@
 
 ## Why
 
-This is what replaces your $17-20/seat/month meeting SaaS. Otter.ai charges $17/seat. Fireflies charges $19/seat. Read.ai charges $20/seat. At 50 people, that's $10-12K/year — and your meeting audio lives on their servers.
+Core feature. A bot joins a meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients via WebSocket and REST API. Self-hosted alternative to Otter.ai ($17/seat), Fireflies ($19/seat), Read.ai ($20/seat) — at infrastructure cost, data stays on your network.
 
-Vexa gives you the same real-time transcription — sub-second delivery, speaker attribution, 100+ languages — self-hosted, at infrastructure cost. One API call sends a bot. WebSocket gives you live transcripts. Your data never leaves your network.
-
-**Core feature.** A bot joins a meeting, captures audio, transcribes it in real-time with auto-detected language, and delivers speaker-labeled segments to clients via WebSocket and REST API. This feature follows the [validation cycle](../README.md#validation-cycle) — see [glossary](../README.md#glossary) for terms.
+This feature follows the [validation cycle](../README.md#validation-cycle) — see [glossary](../README.md#glossary) for terms.
 
 ## What
 

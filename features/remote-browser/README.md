@@ -7,25 +7,15 @@
 
 ## Why
 
-Browserbase raised $40M at a $300M valuation selling headless browsers for AI agents. Their use case: web scraping, form filling, testing. Vexa's browser container does something they can't — **attend meetings with a persistent authenticated identity**.
+Meeting bots join as unauthenticated guests — org-restricted meetings reject them. Unlike generic headless browsers (Browserbase, Browserless) which are ephemeral and meeting-unaware, this provides:
 
-**How this differs from Browserbase/Browserless:**
+- **VNC** — human sees and controls the browser (for OAuth, MFA, CAPTCHAs)
+- **CDP/Playwright** — agent automates programmatically (for meeting joins, navigation)
+- **Both simultaneously** — human authenticates once, agent takes over for all future sessions
+- **Persistent auth** — cookies/localStorage sync to MinIO, restored on next spawn
+- **Meeting-capable** — audio capture, transcription, screen sharing built in
 
-| Capability | Browserbase | Browserless | Vexa Browser |
-|-----------|-------------|-------------|--------------|
-| Headless browser for agents | Yes | Yes | Yes |
-| CDP/Playwright control | Yes | Yes | Yes |
-| VNC (human sees what agent sees) | No | No | **Yes** |
-| Human + agent control simultaneously | No | No | **Yes** |
-| Persistent auth across sessions | No (ephemeral) | No | **Yes** (MinIO sync) |
-| Meeting attendance | No | No | **Yes** |
-| Audio capture + transcription | No | No | **Yes** |
-| Self-hosted | No | Partial | **Yes** |
-| Cost | $0.10-0.12/hr | $0.05-0.10/hr | **Your infra** |
-
-The unique capability: **human authenticates once via VNC (OAuth, MFA, CAPTCHAs), agent takes over via CDP for all future sessions**. Browser state (cookies, localStorage, IndexedDB) persists to MinIO and restores on next spawn. No re-authentication.
-
-This solves the hardest problem in meeting bots: org-restricted meetings that reject unauthenticated guests. Human logs into Teams/Google once → agent joins all future meetings as an authenticated user.
+This solves the hardest problem in meeting bots: org-restricted meetings. Human logs into Teams/Google once → agent joins all future meetings as an authenticated user.
 
 ---
 
