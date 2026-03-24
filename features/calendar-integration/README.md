@@ -2,9 +2,21 @@
 
 ## Why
 
-Users manually call `POST /bots` with a meeting URL every time they want a bot in a meeting. No auto-join, no scheduling, no awareness of upcoming meetings. Every competitor (Recall.ai, Fireflies, Otter, Meeting-BaaS) offers calendar integration as a core feature.
+This is what makes Vexa agents **proactive**. Without calendar integration, someone has to call `POST /bots` for every meeting. With it, the agent watches your calendar, decides which meetings matter, joins automatically, and acts on what it hears — all without being asked.
 
-Calendar integration turns Vexa from "manual meeting recorder" into "automatic meeting assistant."
+The calendar is the trigger. The agent is the actor. The pipeline is:
+
+```
+Google Calendar event (has Teams/Meet/Zoom URL)
+  → calendar-service detects it, schedules bot via Scheduler
+  → [T-1min] browser container spawns, warms authenticated session
+  → [T+0] bot joins meeting, transcribes
+  → [T+end] meeting.completed → agent summarizes → posts to Slack → containers die
+```
+
+Nobody triggered anything. The agent saw a meeting on the calendar and handled everything — join, transcribe, summarize, deliver. This is what Otter, Fireflies, and Recall.ai offer as a core feature. It's table stakes for "automatic meeting assistant" and the foundation for proactive agent workflows.
+
+Every competitor (Recall.ai, Fireflies, Otter, Meeting-BaaS) offers calendar integration as a core feature.
 
 ## What
 

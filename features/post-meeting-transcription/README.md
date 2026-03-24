@@ -6,6 +6,23 @@ Not all users want realtime transcription. Some just want recording + speaker ev
 
 This is a basic use case for meeting bots — record, then transcribe.
 
+**But transcription is just step one.** Post-meeting transcription is the entry point to the automation pipeline:
+
+```
+Meeting ends → recording in MinIO, speaker events in Postgres
+  → POST /meetings/{id}/transcribe (user or webhook trigger)
+  → Whisper transcribes full recording with speaker mapping
+  → Segments written to Postgres
+  → transcript.ready webhook fires
+  → Agent container wakes up (via scheduler on_success callback)
+     → Summarizes transcript, extracts action items
+     → Posts to Slack, creates Linear tickets, updates CRM
+  → Worker container sends webhook to external systems
+  → All containers die. Zero cost until next meeting.
+```
+
+This end-to-end pipeline — from meeting end to business action — is what Otter charges $17/seat/month for. Vexa does it self-hosted, with full customization of what happens after transcription.
+
 ## What
 
 User triggers transcription after a completed meeting. The system downloads the recording from storage, runs Whisper on the full audio, maps speakers using speaker events collected during the meeting, and writes segments to the database. The dashboard shows the result with click-to-play (segment click seeks the recording to that timestamp).

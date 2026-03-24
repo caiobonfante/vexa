@@ -5,11 +5,11 @@
 <h1 align="center" style="margin-top: 0.25em; margin-bottom: 0.5em; font-size: 2.5em; font-weight: 700; letter-spacing: -0.02em;">Vexa</h1>
 
 <p align="center" style="font-size: 1.75em; margin-top: 0.5em; margin-bottom: 0.75em; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em;">
-  <strong>Self-hosted meeting intelligence platform</strong>
+  <strong>Open-source meeting transcription API & agent runtime</strong>
 </p>
 
 <p align="center" style="font-size: 1em; color: #a0a0a0; margin-top: 0.5em; margin-bottom: 1.5em; letter-spacing: 0.01em;">
-  bots • real-time transcription • storage • API • user interface
+  meeting bots • real-time transcription • interactive agents • MCP server • self-hosted
 </p>
 
 <p align="center" style="margin: 1.5em 0; font-size: 1em;">
@@ -31,6 +31,7 @@
 <p align="center">
   <a href="#whats-new">What’s new</a> •
   <a href="#quickstart">Quickstart</a> •
+  <a href="#agent-runtime">Agent Runtime</a> •
   <a href="#2-get-transcripts">API</a> •
   <a href="https://docs.vexa.ai">Docs</a> •
   <a href="#roadmap">Roadmap</a> •
@@ -41,7 +42,7 @@
 
 ## What is Vexa?
 
-**Vexa** is an open-source, self-hostable API for real-time meeting transcription. It automatically joins Google Meet, Microsoft Teams, and Zoom meetings, captures audio, and provides real-time transcriptions via REST API and WebSocket.
+**Vexa** is an open-source, self-hostable API for real-time meeting transcription — with an agent runtime built in. It automatically joins Google Meet, Microsoft Teams, and Zoom meetings, captures audio, provides real-time transcriptions, and lets AI agents actively participate in and act on meetings.
 
 ### At a glance
 
@@ -50,28 +51,30 @@
 | **Meeting bots** | Automatically joins Google Meet, Microsoft Teams, and Zoom meetings |
 | **Real-time transcription** | Sub-second transcript delivery during the call |
 | **Interactive bots** | Make bots speak, send/read chat, share screen content, and set avatar in live meetings |
+| **Agent runtime** | Ephemeral containers for AI agents — browser, agent, worker profiles. Zero cost when idle |
+| **Post-meeting automation** | Meetings trigger action: summarize, create tickets, push to Slack/CRM — no human needed |
+| **Proactive agents** | Scheduler + calendar integration: agents join meetings on schedule, act without being asked |
+| **MCP server** | 17 tools for Claude/Cursor/Windsurf — join calls, read transcripts, speak in meetings |
 | **Multilingual** | 100+ languages via Whisper (transcription + translation) |
-| **API-first** | REST API + WebSocket streaming for integrations |
-| **MCP-ready** | Connect AI agents (Claude/Cursor/etc.) through the MCP server |
-| **Storage** | Persist transcripts + meeting metadata in your database |
-| **Multi-user** | Team-ready: users, API keys/tokens, admin operations |
+| **Multi-tenant** | Users, scoped API tokens, isolated containers — deploy once, serve your team |
 | **Self-hostable** | Run on your infra for complete data sovereignty |
-| **User interfaces** | Open-source frontends (currently: **[Vexa Dashboard](./services/dashboard)**) |
+| **Accessible anywhere** | Same agent via web dashboard, Telegram, meeting chat, or any chat client |
 
 ### Who it's for
 
 | You are... | You want... |
 |---|---|
-| **Enterprises** | Self-hosted transcription with strict privacy requirements |
-| **Small & medium teams** | Simple deployment (Vexa Lite) with an open-source UI |
-| **Developers** | Build meeting products (assistants, automations, analytics) on top of the API |
-| **Automation builders** | Integrate with tools like n8n via webhooks / APIs |
+| **Enterprises** | Self-hosted transcription with strict privacy — replace $17-20/seat SaaS |
+| **AI product builders** | Give your agents meeting superpowers via MCP or API |
+| **SaaS developers** | Multi-tenant meeting API to embed in your product |
+| **Platform teams** | Deploy one service for your org — isolated agents, scoped tokens, no per-user infra |
+| **Automation builders** | Post-meeting pipelines: meeting ends → agent summarizes → Slack/CRM/Linear |
 
 ---
 
 ## Build on Top. In Hours, Not Months
 
-**Build powerful meeting assistants (like Otter.ai, Fireflies.ai, Fathom) for your startup, internal use, or custom integrations.**
+**Build powerful meeting assistants (like Otter.ai, Fireflies.ai, Fathom) for your startup, internal use, or custom integrations.** Or go further — build AI agents that don't just transcribe, but actively participate in and act on meetings.
 
 The Vexa API provides powerful abstractions and a clear separation of concerns, enabling you to build sophisticated applications on top with a safe and enjoyable coding experience.
 
@@ -102,14 +105,23 @@ Run everything including your own GPU transcription service.
 
 <a id="whats-new"></a>
 
-## 🎉 What's new in v0.9 (pre-release)
+## What's new
 
+**Agent Runtime (preview)**
+- **Ephemeral agent containers** — browser, agent, worker profiles with zero idle cost
+- **Chat API** — stream Claude CLI responses, session persistence, workspace sync
+- **Scheduler** — cron, relative delays, `on_success`/`on_failure` container chaining
+- **Remote browser** — VNC + CDP, persistent auth across sessions
+- **Telegram bot** — interact with your agent from mobile
+- **Dashboard agent chat** — talk to your agent from the web UI
+
+**v0.9 (pre-release)**
 - **Zoom:** initial Zoom Meeting SDK support (requires Zoom app setup/approval; see docs)
 - **Recordings:** persist recording artifacts to S3-compatible storage (or local)
 - **Post-meeting playback:** stream recordings via `/recordings/.../raw` with `Range` seeking (`206`) + `Content-Disposition: inline`
 - **Delete semantics:** deleting a meeting also purges recording objects/artifacts (best-effort) before anonymizing the meeting
 - **Interactive Bots API:** live controls for speak/chat/screen/avatar during active meetings
-- **MCP integration docs:** end-to-end guide for connecting AI agents to Vexa tools
+- **MCP server:** 17 tools for AI agents — join, transcribe, speak, chat, share screen
 
 ---
 
@@ -178,6 +190,83 @@ For Kubernetes production deployments. See [deploy/helm/README.md](deploy/helm/R
 
 Recording supports local filesystem, MinIO, and cloud S3-compatible backends.
 See [Recording Storage](https://docs.vexa.ai/recording-storage) for configuration details.
+
+<a id="agent-runtime"></a>
+
+## Agent Runtime
+
+Vexa isn't just a meeting API — it's a runtime where AI agents natively understand meetings. No gluing together E2B sandboxes with Recall.ai webhooks. Meetings are a built-in primitive.
+
+### What agents can do
+
+| Capability | How |
+|-----------|-----|
+| **Join meetings** | `vexa meeting join --platform teams --url {url}` |
+| **Transcribe live** | `vexa meeting transcript {id}` — streams segments in real-time |
+| **Speak in meetings** | `vexa meeting speak --text "Here's the summary"` — TTS to meeting audio |
+| **Read/write chat** | `vexa meeting chat --text "Action items..."` — interact via meeting chat |
+| **Share screen** | `vexa meeting screen --type url --url {url}` — display content to participants |
+| **Control browsers** | `vexa container spawn --profile browser` + CDP/Playwright automation |
+| **Schedule pipelines** | `vexa schedule --cron "0 9 * * 1-5" chat "join standup, send notes"` |
+| **Persist memory** | `vexa workspace save` — workspace survives across sessions |
+
+### Specialist containers, not fat stacks
+
+| Profile | RAM | Purpose | Idle cost |
+|---------|-----|---------|-----------|
+| **browser** | ~1.5GB | Meeting attendance, authenticated sessions, VNC + CDP | Zero — killed on timeout |
+| **agent** | ~200MB | Claude CLI, summarization, automation, chat | Zero — killed on completion |
+| **worker** | ~50MB | Webhook delivery, file processing, notifications | Zero — fire and forget |
+
+The browser doesn't carry an agent. The agent doesn't carry Chromium. They connect via CDP over the network when needed, then die independently.
+
+### Agents that act without being asked
+
+```
+Every weekday at 9am:
+  → Browser container spawns, joins standup
+  → Transcribes the meeting live
+  → Meeting ends → agent container wakes up
+  → Summarizes, creates Linear tickets, posts to #engineering
+  → All containers die. Zero cost until tomorrow.
+```
+
+No human triggered anything. Calendar → scheduler → containers → business action.
+
+### Multi-tenant by design
+
+Unlike single-user agent tools (OpenClaw: "not a hostile multi-tenant security boundary," one VPS per user), Vexa runs as a multi-user service:
+
+- **Isolated containers** per user, per session
+- **Scoped API tokens** — `bot`, `tx`, `admin` enforced at gateway
+- **User/team management** via Admin API
+- **Deploy once**, serve your whole team — or your customer base
+
+### MCP server — 17 meeting tools for AI agents
+
+Connect Claude, Cursor, Windsurf, or any MCP client. Your agent gains meeting superpowers:
+
+```
+Tools: join_meeting, list_meetings, get_transcript, search_meetings,
+       bot_speak, send_chat, read_chat, share_screen, set_avatar,
+       start_recording, stop_recording, get_recording, list_bots,
+       create_bot, stop_bot, get_bot_status, schedule_meeting
+```
+
+Other meeting MCP servers (Otter, Fireflies, Read.ai) are read-only. Vexa's is read + write + control — and self-hosted.
+
+### Your agent, wherever you are
+
+Same agent, same memory, every surface:
+
+| Surface | Status |
+|---------|--------|
+| **Web dashboard** | Working — chat with your agent, see meetings, play recordings |
+| **Telegram** | Working — message your agent from your phone |
+| **Meeting chat** | Working — agent reads/responds in live meeting chat |
+| **Slack/Discord** | Planned — same Chat API backbone |
+
+---
 
 ## 1. Send bot to meeting:
 
@@ -255,9 +344,11 @@ Note: Meeting IDs are user-provided (Google Meet code like `xxx-xxxx-xxx` or Tea
 
 ## Who Vexa is for
 
-* **Enterprises (self-host):** Data sovereignty and control on your infra
-* **Teams using hosted API:** Fastest path from meeting to transcript
-* **n8n/indie builders:** Low-code automations powered by real-time transcripts
+* **Enterprises (self-host):** Replace $17-20/seat meeting SaaS — data sovereignty, no per-seat fees
+* **AI product builders:** Give your agents meeting superpowers via MCP — join calls, speak, act on transcripts
+* **SaaS developers:** Multi-tenant meeting API to embed in your product — scoped tokens, isolated containers
+* **Platform/DevOps teams:** Deploy once for your org — proactive agents, scheduled meetings, zero babysitting
+* **Automation builders:** Post-meeting pipelines with n8n, webhooks, and agent containers
   - Tutorial: https://vexa.ai/blog/google-meet-transcription-n8n-workflow
 
 ---
@@ -273,34 +364,75 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 
 ## Architecture
 
-- [api-gateway](./services/api-gateway): Routes API requests to appropriate services
-- [admin-api](./services/admin-api): User CRUD, API keys, meeting management
-- [bot-manager](./services/bot-manager): Handles bot lifecycle management
-- [vexa-bot](./services/vexa-bot): The bot that joins meetings, captures per-speaker audio, and transcribes via direct HTTP to transcription-service
-- [dashboard](./services/dashboard): Open-source Next.js web UI
-- [mcp](./services/mcp): Provides MCP-capable agents with Vexa as a toolkit
-- [WhisperLive](./services/WhisperLive): Optional real-time WebSocket transcription bridge for external clients (not required by bots)
-- [transcription-service](./services/transcription-service): GPU inference service -- OpenAI-compatible Whisper API
-- [transcription-collector](./services/transcription-collector): Consumes transcription segments from Redis, persists to PostgreSQL, serves transcript API
-- [tts-service](./services/tts-service): Text-to-speech for interactive bot voice
-- [Database models](./libs/shared-models/shared_models/models.py): Data structures for storing meeting information
+**Core API services** (always running):
+
+| Service | Purpose |
+|---------|---------|
+| [api-gateway](./services/api-gateway) | Reverse proxy — routes REST, WebSocket, VNC, CDP to backends |
+| [admin-api](./services/admin-api) | User/org CRUD, scoped API tokens, team management |
+| [bot-manager](./services/bot-manager) | Bot lifecycle, meeting CRUD, recordings, interactive bot controls |
+| [chat-api](./services/chat-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
+| [runtime-api](./services/runtime-api) | Container CRUD — spawn/stop/exec, port mapping, idle timeout |
+| [transcription-collector](./services/transcription-collector) | Persists segments from Redis to Postgres, serves transcript API |
+
+**Meeting & AI services:**
+
+| Service | Purpose |
+|---------|---------|
+| [vexa-bot](./services/vexa-bot) | Joins meetings, captures per-speaker audio, transcribes, interactive controls |
+| [transcription-service](./services/transcription-service) | GPU inference — OpenAI-compatible Whisper API |
+| [tts-service](./services/tts-service) | Text-to-speech for bot voice |
+| [mcp](./services/mcp) | 17-tool MCP server for AI agents (Claude, Cursor, etc.) |
+
+**Frontends & clients:**
+
+| Service | Purpose |
+|---------|---------|
+| [dashboard](./services/dashboard) | Open-source Next.js web UI — meetings, transcripts, agent chat, browser sessions |
+| [telegram-bot](./services/telegram-bot) | Telegram client for agent interaction on mobile |
+
+**Ephemeral containers** (spawned on demand, auto-reclaimed):
+
+| Profile | RAM | Use case |
+|---------|-----|----------|
+| **browser** | ~1.5GB | Meeting attendance, authenticated browser sessions (VNC + CDP) |
+| **agent** | ~200MB | Claude CLI, post-meeting processing, automation |
+| **worker** | ~50MB | Webhook delivery, file processing |
+
+- [Database models](./libs/shared-models/shared_models/models.py): Shared ORM models, schemas, migrations
 
 > 💫 If you're building with Vexa, we'd love your support! [Star our repo](https://github.com/Vexa-ai/vexa/stargazers) to help us reach 2000 stars.
 
-### Features:
+### Features
 
-- **Real-time multilingual transcription** supporting **100 languages** with **Whisper**
-- **Real-time translation** across all 100 supported languages
-- **Google Meet integration** - Automatically join and transcribe Google Meet calls
-- **Microsoft Teams integration** - Automatically join and transcribe Teams meetings
-- **Zoom integration** - Automatically join and transcribe Zoom meetings
-- **REST API** - Complete API for managing bots, users, and transcripts
-- **Interactive meeting controls** - Bot speak/chat/screen/avatar endpoints for active meetings
-- **WebSocket streaming** - Sub-second transcript delivery via WebSocket
-- **MCP server** - Expose Vexa APIs as agent tools for MCP-compatible clients
-- **Multiuser support** - User management, API tokens, and team features
-- **Self-hostable** - Full control over your data and infrastructure
-- **Open-source frontends** - Choose from user interfaces like [Vexa Dashboard](./services/dashboard)
+**Meeting transcription:**
+- **Real-time multilingual transcription** supporting **100 languages** with **Whisper** — replace $17-20/seat SaaS
+- **Post-meeting transcription** — record during meeting, transcribe on demand with full-audio context
+- **Per-speaker audio** — no diarization needed, speaker labels from the platform itself
+- **WebSocket streaming** — sub-second transcript delivery via WebSocket
+- **Google Meet, Microsoft Teams, Zoom** — one API, all platforms, auto-detected from URL
+
+**Interactive bots:**
+- **Speaking bot** — TTS voice in meetings (like Recall.ai's Output Media API, but open-source)
+- **Chat** — read/write meeting chat for AI-powered in-meeting interaction
+- **Screen sharing** — display content to meeting participants programmatically
+- **Avatar** — set bot avatar/display name per meeting
+
+**Agent runtime:**
+- **Ephemeral containers** — browser/agent/worker profiles, zero idle cost, ~5s spin-up
+- **System layer fluency** — agents wake up knowing Vexa (CLI + instructions baked into image)
+- **Persistent workspaces** — files, memory, scripts survive across sessions (MinIO/Git)
+- **Container chaining** — `on_success`/`on_failure` callbacks orchestrate multi-step pipelines
+- **Scheduler** — cron + relative delays + event-triggered jobs, backed by Redis sorted sets
+- **Remote browser** — VNC for human control + CDP for agent automation, persistent auth
+
+**Platform:**
+- **Multi-tenant** — users, orgs, scoped API tokens, container isolation
+- **MCP server** — 17 tools for Claude, Cursor, Windsurf — read + write + control meetings
+- **Webhooks** — push events for post-meeting automation pipelines
+- **REST API** — complete API for bots, users, transcripts, recordings, agents
+- **Self-hostable** — full data sovereignty, Apache-2.0 licensed
+- **Open-source frontends** — [Vexa Dashboard](./services/dashboard), Telegram bot
 
 **Deployment & Management Guides:**
 - [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment) - Single container deployment
@@ -308,13 +440,31 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 - [Self-Hosted Management Guide](https://docs.vexa.ai/self-hosted-management) - Managing users and API tokens
 - [Recording Storage](https://docs.vexa.ai/recording-storage) - S3, MinIO, and local storage configuration
 
+## Features Directory
+
+Each feature has its own README with business context, competitive positioning, architecture, and validation status:
+
+| Feature | What it does | Status |
+|---------|-------------|--------|
+| [realtime-transcription](./features/realtime-transcription/) | Live speaker-attributed transcription via WebSocket | Production |
+| [multi-platform](./features/multi-platform/) | One API for Google Meet, Teams, Zoom | GMeet/Teams working, Zoom WIP |
+| [agentic-runtime](./features/agentic-runtime/) | Ephemeral containers, agent chat, workspace persistence | MVP3 complete |
+| [mcp-integration](./features/mcp-integration/) | 17-tool MCP server for AI agents | Validated (10/10 tests) |
+| [speaking-bot](./features/speaking-bot/) | TTS voice in meetings | Code complete |
+| [chat](./features/chat/) | Read/write meeting chat via API | Code complete |
+| [post-meeting-transcription](./features/post-meeting-transcription/) | Record → transcribe on demand with speaker mapping | Working |
+| [webhooks](./features/webhooks/) | Push events for post-meeting automation | P0 complete |
+| [scheduler](./features/scheduler/) | Cron + event-driven job execution with container chaining | Core library done (16/16 tests) |
+| [remote-browser](./features/remote-browser/) | VNC + CDP browser with persistent auth | PoC proven |
+| [calendar-integration](./features/calendar-integration/) | Auto-join meetings from Google Calendar | Research complete |
+| [token-scoping](./features/token-scoping/) | Per-token permission scopes for multi-tenant security | Validated (14/14 tests) |
+
 ## Related Projects
 
 Vexa is part of an ecosystem of open-source tools:
 
-
-### 🎨 [Vexa Dashboard](./services/dashboard)
-100% open-source web interface for Vexa, included in this monorepo at `services/dashboard/`. Join meetings, view transcripts, manage users, and more. Self-host everything with no cloud dependencies.
+### [Vexa Dashboard](./services/dashboard)
+100% open-source web interface for Vexa, included in this monorepo at `services/dashboard/`. Join meetings, view transcripts, chat with agents, manage browser sessions, and more. Self-host everything with no cloud dependencies.
 
 ## Contributing
 

@@ -1,18 +1,40 @@
 # Agentic Runtime
 
-An agentic runtime with first-class support for meeting attendance and transcription. Users can chain containers and scale them with near-zero idle resources and any amount of resources available on demand.
+An agent runtime where meetings are a native primitive — not an external API to call, but something agents understand from birth. Agents join meetings, process transcripts, speak to participants, and chain post-meeting automation, all in isolated containers that scale to zero when idle.
 
-## Concept
+## Why not just use E2B + Recall.ai?
 
-One universal container image, three profiles activated by config:
+You could glue a generic sandbox (E2B, Daytona, Koyeb) to a meeting bot API (Recall.ai, Skribby). But then:
 
-| Profile | Contents | RAM | Use case |
-|---------|----------|-----|----------|
-| **browser** | Chromium, Playwright, VNC, SSH, audio | ~1.5GB | Meeting attendance, browser sessions |
-| **agent** | Claude Code CLI, workspace, Python/Node | ~200MB | Summarization, automation, chat |
-| **worker** | Python/Node, Anthropic SDK, minimal | ~50MB | Webhook delivery, file processing |
+- Your agent calls an **external API** to join a meeting. In Vexa, it runs `vexa meeting join` — meetings are a built-in tool.
+- Your agent wakes up in a **blank VM**. Vexa agents wake up with `/system/CLAUDE.md` and the `vexa` CLI baked in — fluent from birth, no prompt engineering needed.
+- Your pipeline needs **glue code** between sandbox webhooks and meeting API webhooks. Vexa's scheduler chains meeting → transcription → agent → webhook in one pipeline with `on_success`/`on_failure` callbacks.
+- You pay for **two services**. Vexa is one platform, open-source, self-hostable.
 
-Containers are ephemeral but state is persistent (MinIO/Git). Spin-up ~5s, idle cost zero.
+## Why not Otter/Fireflies "agents"?
+
+Otter's "Sales Agent" drafts follow-up emails. Fireflies pushes to CRM via Zapier. These are narrow workflow automations — not general-purpose compute. Vexa agents are full containers that can run arbitrary code, control browsers via CDP, call any API, and chain into any downstream system. And they're self-hosted — your data never leaves your infrastructure.
+
+## Multi-tenant by design
+
+Unlike single-user agent tools (OpenClaw requires one VPS per user, "not a hostile multi-tenant security boundary"), Vexa is built as a multi-user service:
+
+- **User isolation** — each agent runs in its own container with its own workspace and session
+- **Token scoping** — `bot`, `tx`, `admin` scopes enforced at the gateway (14/14 tests pass)
+- **Team-ready** — user management, API keys, org-level config via Admin API
+- **Deploy once, serve your team** — or your customer base. No per-user infrastructure.
+
+## Cost model: pay for work, not idle
+
+Three specialist container profiles — each sized for exactly the job, then gone:
+
+| Profile | Contents | RAM | Lives for | Cost when idle |
+|---------|----------|-----|-----------|---------------|
+| **browser** | Chromium, Playwright, VNC, SSH, audio | ~1.5GB | Meeting duration + grace period | **Zero** — killed on idle timeout |
+| **agent** | Claude Code CLI, workspace, Python/Node | ~200MB | Task duration (seconds to minutes) | **Zero** — killed on completion |
+| **worker** | Python/Node, Anthropic SDK, minimal | ~50MB | Job duration (seconds) | **Zero** — fire and forget |
+
+The browser doesn't carry an agent (1.5GB wasted). The agent doesn't carry Chromium (1.5GB wasted). They connect via CDP over the network when needed, then die independently. Containers are ephemeral but state is persistent (MinIO/Git). Spin-up ~5s.
 
 ## Architecture
 
@@ -140,7 +162,7 @@ case "$1" in
 esac
 ```
 
-### User workspace layer (`/workspace/`)
+### User workspace layer (`/workspace/`) — see [workspaces/README.md](workspaces/README.md)
 
 User-owned, persistent via Git (preferred) or MinIO. This is where project files, custom CLAUDE.md, and domain knowledge live. Synced on container start and on `vexa workspace save`.
 
@@ -335,9 +357,8 @@ Start with Claude Code subscription (free for development). Explore open-source 
 
 **Deliverables:**
 - `services/runtime-api/` -- FastAPI service (container CRUD)
-- `containers/browser/Dockerfile` -- Chromium + VNC + CDP image (extracted from vexa-bot)
+- `services/vexa-bot/` -- Chromium + VNC + CDP (reuses vexa-bot in browser_session mode)
 - System layer: `vexa container` and `vexa browser` commands now live
-- `features/agentic-runtime/tests/test-mvp1.sh` -- validation script
 - All 10 tests passing
 
 ---
@@ -509,7 +530,9 @@ npm install && npm run dev
 |----------|-------|---------|---------|
 | `CLAUDE_CREDENTIALS_PATH` | deploy/.env | `/home/user/.claude/.credentials.json` | Claude CLI auth for agent containers |
 | `CLAUDE_JSON_PATH` | deploy/.env | `/home/user/.claude.json` | Claude CLI config for agent containers |
+| `BOT_API_TOKEN` | deploy/.env | `vxa_bot_...` | Service-to-service auth token (chat-api, vexa CLI) |
 | `TRANSCRIPTION_SERVICE_URL` | deploy/.env | `http://172.17.0.1:8083` | Whisper service (external) |
+| `TRANSCRIPTION_SERVICE_TOKEN` | deploy/.env | *(empty)* | Auth token for transcription service |
 | `VEXA_ADMIN_API_URL` | dashboard/.env | `http://localhost:8067` | Admin API (NOT api-gateway) |
 | `VEXA_API_URL` | dashboard/.env | `http://localhost:8066` | API gateway |
 | `AGENT_API_URL` | dashboard/.env | `http://localhost:8100` | Chat API for agent sessions |

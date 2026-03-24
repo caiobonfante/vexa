@@ -2,7 +2,21 @@
 
 ## Why
 
-Bots need to speak in meetings — answering questions, providing summaries, or giving instructions. Text-to-speech enables voice interaction between the bot and meeting participants.
+Your AI agent doesn't just listen to meetings — it speaks in them. Text-to-speech turns the bot from a passive recorder into an active meeting participant that can answer questions, provide real-time translations, facilitate discussions, or whisper coaching to presenters.
+
+**Competitive context:** Recall.ai launched their Output Media API in 2025 — bots that talk in meetings. It's a closed, paid API. Vexa has the same capability, open-source, self-hosted, and controllable via MCP (so Claude can call `speak` during a live meeting).
+
+**Use cases beyond "read a summary":**
+
+| Use case | How it works |
+|----------|-------------|
+| **AI facilitator** | Bot tracks agenda, announces time checks, prompts quiet participants |
+| **Real-time translator** | Bot transcribes in English, speaks translation in Spanish for remote team |
+| **Sales coach** | Bot whispers objection responses to rep via earpiece/chat while customer speaks |
+| **Standup bot** | Bot reads yesterday's action items aloud, asks each person for updates |
+| **Accessibility** | Bot speaks visual content descriptions for blind participants |
+
+**MCP integration:** An AI agent connected via MCP can call `bot_speak` to respond verbally during a live meeting — no custom integration, just a tool call.
 
 ## What
 

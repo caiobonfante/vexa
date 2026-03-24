@@ -2,9 +2,38 @@
 
 ## Why
 
-Vexa needs to do things at specific times — send a bot 1 minute before a meeting, retry a failed webhook in 5 minutes, trigger deferred transcription 30 seconds after a meeting ends, clean up recordings after 90 days. Today each of these is ad-hoc: webhook retry has its own Redis list, deferred transcription is manual, calendar auto-join doesn't exist.
+Agents shouldn't wait to be asked. The scheduler makes Vexa agents **proactive** — they act on a schedule, chain work after events, and orchestrate multi-step pipelines without human intervention.
 
-The scheduler is the single answer: **"call this API at this time, reliably."** Every time-triggered action in Vexa flows through it.
+**The full pipeline no other platform can do:**
+
+```
+Schedule: "0 9 * * 1-5" (weekdays 9am)
+  → [T-5min] Spawn browser container, warm up authenticated session
+  → [T+0]   Join standup meeting, start transcription
+  → [During] Live transcripts stream to dashboard via WebSocket
+  → [T+end]  meeting.completed event fires
+  → on_success: spawn agent container
+       → Agent summarizes transcript, extracts action items
+       → Creates Linear tickets for anything tagged "TODO"
+       → Posts summary to #engineering Slack channel
+  → on_success: spawn worker container
+       → Worker sends webhook to CRM with meeting metadata
+  → All containers die. Zero cost until tomorrow 9am.
+```
+
+No human triggered anything. No Zapier. No glue code. One scheduler, `on_success`/`on_failure` callbacks, container chaining.
+
+**How this compares to other agent scheduling:**
+
+| Platform | Scheduling | Container orchestration | Meeting awareness |
+|----------|-----------|------------------------|-------------------|
+| **OpenClaw** | "Heartbeats" — agent polls itself | No — single process | No |
+| **MindStudio** | Cron-like triggers | No — serverless functions | No |
+| **Lindy** | Event + time triggers | No — workflow steps | No |
+| **Trigger.dev** | Cron + queues + webhooks | Yes — but generic | No |
+| **Vexa Scheduler** | Cron + relative delays + event callbacks | **Yes** — spawns/chains containers | **Yes** — native meeting lifecycle |
+
+Vexa's scheduler doesn't just fire HTTP at time T. It **spawns containers, chains them via callbacks, and reclaims them on completion** — with native understanding of meeting lifecycle events (`meeting.completed`, `bot.joined`, `transcript.ready`).
 
 ## What
 
