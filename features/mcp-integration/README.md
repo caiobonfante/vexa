@@ -1,5 +1,10 @@
 # MCP Integration
 
+> **Confidence: 90** — 10/10 tools discoverable. Auth enforced. Tool calls return valid data.
+> **Tested:** tools/list, all read tools (meetings, transcripts, recordings), auth rejection, gateway proxy.
+> **Not tested:** list_meetings pagination (returns all 211 meetings, 2.7MB unbounded), interactive tools (speak/chat not yet exposed as MCP tools), MCP Resources and Subscriptions.
+> **Contributions welcome:** Pagination fix, expose speak/chat/screen as MCP tools ([#127](https://github.com/Vexa-ai/vexa/issues/127)), MCP Resources for meetings.
+
 ## Why
 
 Give any AI agent meeting superpowers in one connection. Connect Claude, Cursor, Windsurf, or any MCP client to Vexa — your agent gains 17 meeting tools: join calls, read transcripts, speak in meetings, control bots, search across all meetings.

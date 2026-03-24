@@ -1,5 +1,10 @@
 # Realtime Transcription
 
+> **Confidence: Teams 90, GMeet 90, Zoom 0** — E2E validated on both platforms. 92.7% content accuracy. Human speaker identity still weak (40). Zoom not implemented.
+> **Tested:** Bot joins, audio capture, Whisper transcription, WebSocket delivery, REST consistency, VAD silence filtering.
+> **Not tested:** Zoom, human speaker locking (<585s), multi-track dedup, language locking in live meeting.
+> **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).
+
 ## Why
 
 This is what replaces your $17-20/seat/month meeting SaaS. Otter.ai charges $17/seat. Fireflies charges $19/seat. Read.ai charges $20/seat. At 50 people, that's $10-12K/year — and your meeting audio lives on their servers.

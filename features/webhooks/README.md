@@ -1,5 +1,10 @@
 # Webhooks
 
+> **Confidence: 85** — Envelope standardized (was 3 formats, now 1). Signing fixed. E2E delivery untested with public URLs.
+> **Tested:** Payload envelope consistency, event_id generation, signing (timestamp.payload HMAC), bot status events fire.
+> **Not tested:** Delivery to public URLs (tested only with localhost), retry mechanism (fire-and-forget today), transcript.ready event.
+> **Contributions welcome:** Retry via scheduler (migrate webhook_retry_worker), circuit breaker, dead letter alerting.
+
 ## Why
 
 Webhooks are how meetings trigger action. Without them, transcripts sit in a database and someone has to remember to read them. With webhooks, meetings **do things** when they end:

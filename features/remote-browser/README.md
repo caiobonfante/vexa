@@ -1,5 +1,10 @@
 # Remote Browser
 
+> **Confidence: 30** — PoC proven. Container builds, VNC accessible, CDP works. Not integrated into the feature workflow.
+> **Tested:** Container builds with VNC packages, browser starts in session mode, VNC accessible via URL, CDP connection works.
+> **Not tested:** MinIO persistence (save/restore browser state), authenticated bot flow, agent + human simultaneous control in production.
+> **Contributions welcome:** MinIO sync for browser profiles, authenticated meeting join flow, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).
+
 ## Why
 
 Browserbase raised $40M at a $300M valuation selling headless browsers for AI agents. Their use case: web scraping, form filling, testing. Vexa's browser container does something they can't — **attend meetings with a persistent authenticated identity**.

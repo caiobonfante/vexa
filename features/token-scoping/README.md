@@ -1,5 +1,10 @@
 # Token Scoping
 
+> **Confidence: 90** — 14/14 tests pass. All 4 scopes (`user`, `bot`, `tx`, `admin`) enforced at gateway. Legacy unscoped tokens backward-compatible.
+> **Tested:** Token creation with scope, prefix visibility, gateway enforcement (in-scope → 200, out-of-scope → 403), legacy token compatibility.
+> **Not tested:** Per-endpoint granularity (currently per-service), per-meeting RBAC.
+> **Contributions welcome:** Per-meeting RBAC ([#158](https://github.com/Vexa-ai/vexa/issues/158)), analytics token scope ([#160](https://github.com/Vexa-ai/vexa/issues/160)), finer-grained per-endpoint scoping.
+
 ## Why
 
 Token scoping is what makes Vexa safe to deploy as a **multi-tenant service**. When you serve multiple users, teams, or customers from one Vexa instance, you need guarantees that a bot-only integration can't access admin endpoints and a read-only dashboard can't spawn bots.

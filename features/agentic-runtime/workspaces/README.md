@@ -1,12 +1,36 @@
-# Workspaces
+# Workspaces — Knowledge That Builds Itself From Meetings
 
-Workspaces are the agent's persistent memory and working environment. Each workspace is a Git-backed directory with a predefined structure that teaches the agent what it's for.
+> **Confidence: 60** — Knowledge template complete and functional. MinIO persistence working. Git backing, workspace index injection, and multi-workspace support not yet implemented.
+> **Tested:** Template structure, agent CLAUDE.md instructions, MinIO workspace sync, vexa schedule integration.
+> **Not tested:** Git init on workspace creation, workspace index injection per chat turn, script execution via worker containers, multi-workspace API.
+> **Contributions welcome:** Git-backed workspace init, workspace index injection (scan filesystem → inject into prompt), additional templates (project, meeting-notes), script execution in worker containers.
+
+## Why
+
+Otter gives you a transcript. Fireflies gives you a summary. Neither remembers who [[Brian Steele]] is, that he's the VP of Engineering at [[Acme Corp]], that you discussed pricing in last Tuesday's call, or that you have a follow-up scheduled for Thursday.
+
+Vexa workspaces give agents a **file-based knowledge OS** where meetings automatically feed a structured knowledge graph. After every meeting, the agent extracts contacts, decisions, and action items into linked markdown files — like Obsidian, but populated automatically by your meetings.
+
+**How this compares to other agent memory systems:**
+
+| Platform | Memory model | Meetings feed it? | Entity graph | Self-hosted |
+|----------|-------------|-------------------|-------------|-------------|
+| **OpenClaw** | MEMORY.md + SOUL.md + daily logs | No | No | Yes |
+| **Mem0** (48K stars) | Vector + graph + KV store (API) | No | API-based graph | No (SaaS) |
+| **Zep** | Temporal knowledge graph | No | Yes (graph DB) | Partial |
+| **Letta** | Virtual context management | No | No | Yes |
+| **Fast.io** | File storage for agents (MCP) | No | No | No (SaaS) |
+| **Obsidian + AI** | Markdown + wiki-links + templates | Manual note-taking | Manual | Yes (local) |
+| **Clay/Attio** | CRM with AI enrichment | Via integrations | Yes | No |
+| **Vexa Workspaces** | Markdown + wiki-links + entities + streams + timeline + soul + scripts | **Yes — automatic** | **Yes — contacts, companies, products** | **Yes** |
+
+The key difference: every other memory system is disconnected from meetings. You have to manually feed information in. Vexa's workspace is populated by the meeting pipeline — meeting ends → agent extracts entities, decisions, action items → knowledge graph grows automatically.
 
 ## Current state
 
-MVP0: bare `/workspace/` directory, MinIO sync, no structure, no Git.
+MVP0: bare `/workspace/` directory, MinIO sync, knowledge template deployed, no Git backing yet.
 
-## Where we're going
+## Architecture
 
 ### Templates
 

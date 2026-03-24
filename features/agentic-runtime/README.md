@@ -1,5 +1,10 @@
 # Agentic Runtime
 
+> **Confidence: 85** — MVP0-3 complete (32 gate checks pass). All CLI commands verified. Dashboard integration working.
+> **Tested:** Agent chat (SSE streaming, session resume), meeting join/transcribe/speak/chat/screen, browser sessions (VNC/CDP), scheduler (16/16 unit tests), workspace persistence (MinIO).
+> **Not tested:** BOT_API_TOKEN wiring (blocks container spawning from agent), post-meeting auto-trigger webhook, server-side chat history.
+> **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list), workspace templates beyond "knowledge."
+
 An agent runtime where meetings are a native primitive — not an external API to call, but something agents understand from birth. Agents join meetings, process transcripts, speak to participants, and chain post-meeting automation, all in isolated containers that scale to zero when idle.
 
 ## Why not just use E2B + Recall.ai?

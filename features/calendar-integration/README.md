@@ -1,5 +1,10 @@
 # Calendar Integration
 
+> **Confidence: 0** — Research complete. **Not built.** This is a new feature — calendar-service doesn't exist yet. Architecture designed, competitor analysis done, Google Calendar API researched.
+> **Tested:** Nothing — no code exists.
+> **Not tested:** Everything — OAuth flow, event sync, URL extraction, auto-schedule, dashboard UI.
+> **Contributions welcome:** This is a **greenfield 2-3 week project.** Google OAuth flow, calendar-service (Python/FastAPI), dashboard calendar connection UI. See the architecture below.
+
 ## Why
 
 This is what makes Vexa agents **proactive**. Without calendar integration, someone has to call `POST /bots` for every meeting. With it, the agent watches your calendar, decides which meetings matter, joins automatically, and acts on what it hears — all without being asked.

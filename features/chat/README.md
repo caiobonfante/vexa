@@ -1,5 +1,10 @@
 # Chat
 
+> **Confidence: 0** — Code complete (~700 LOC), **not E2E tested.** Full stack implementation exists but has never been validated in a live meeting.
+> **Tested:** Nothing end-to-end. Components exist: DOM observer, message injection, Redis relay, API endpoints.
+> **Not tested:** Send message → appears in meeting chat, read messages from other participants, cross-platform behavior.
+> **Contributions welcome:** E2E test in live meeting, Teams chat delivery bug ([#133](https://github.com/Vexa-ai/vexa/issues/133)).
+
 ## Why
 
 Meetings have two communication channels — voice and chat. The speaking bot covers voice. This feature covers chat: the bot reads what participants type and responds in the same chat window.

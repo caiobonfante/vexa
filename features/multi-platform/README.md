@@ -1,5 +1,10 @@
 # Multi-Platform
 
+> **Confidence: GMeet 75, Teams 65, Zoom 0 (weighted 50/100)** — Join flows work for Google Meet and Teams. Zoom SDK broken, not tested.
+> **Tested:** Google Meet standard + custom nickname URLs, Teams personal + enterprise URLs, platform auto-detection from URL.
+> **Not tested:** Zoom (SDK requires app approval), Teams legacy deep links, Teams US Gov/DoD, cross-platform transcript consistency.
+> **Contributions welcome:** Zoom browser-based implementation ([#150](https://github.com/Vexa-ai/vexa/issues/150), [#128](https://github.com/Vexa-ai/vexa/issues/128)), Teams admission bug ([#171](https://github.com/Vexa-ai/vexa/issues/171)), new meeting type coverage.
+
 ## Why
 
 Your users don't think about platforms. They think about meetings. When someone says "record my meetings," they mean all of them — the Monday standup on Teams, the customer call on Zoom, the quick sync on Google Meet.

@@ -1,5 +1,10 @@
 # Speaking Bot
 
+> **Confidence: 0** — Code complete, **not E2E tested.** TTS service + PulseAudio pipeline exist but have never been validated in a live meeting end-to-end.
+> **Tested:** Nothing end-to-end. Components exist: tts-service generates audio, bot-manager relays commands, PulseAudio virtual mic configured.
+> **Not tested:** Full pipeline (speak command → TTS → PulseAudio → participants hear it), audio quality, latency, voice selection.
+> **Contributions welcome:** E2E test in live meeting, local TTS model ([#130](https://github.com/Vexa-ai/vexa/issues/130)), Ultravox voice assistant ([#131](https://github.com/Vexa-ai/vexa/issues/131)).
+
 ## Why
 
 Your AI agent doesn't just listen to meetings — it speaks in them. Text-to-speech turns the bot from a passive recorder into an active meeting participant that can answer questions, provide real-time translations, facilitate discussions, or whisper coaching to presenters.

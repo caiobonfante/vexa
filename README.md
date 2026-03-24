@@ -255,6 +255,37 @@ Tools: join_meeting, list_meetings, get_transcript, search_meetings,
 
 Other meeting MCP servers (Otter, Fireflies, Read.ai) are read-only. Vexa's is read + write + control — and self-hosted.
 
+### Knowledge that builds itself from meetings
+
+Every meeting makes your agent smarter. The [workspace knowledge template](./features/agentic-runtime/workspaces/) gives agents a file-based knowledge OS:
+
+```
+timeline.md          — logarithmic self-journal (past, present, future)
+soul.md              — agent's understanding of you (what works, what doesn't)
+streams/             — active working topics (flat .md files, wiki-linked)
+notes.md             — inbox/scratchpad
+knowledge/
+  entities/
+    contacts/        — people profiles, auto-extracted from meetings
+    companies/       — org profiles
+    products/        — product/project profiles
+  meetings/          — meeting minutes, linked to entities
+  action-items/      — tracked per meeting
+scripts/             — automation scripts, scheduled via `vexa schedule`
+```
+
+After a meeting ends, the agent wakes up, reads the transcript, extracts entities into `knowledge/entities/`, creates meeting minutes with `[[wiki-links]]`, tracks action items, and updates the timeline. Like Obsidian + a CRM + a meeting assistant — but the agent does the work.
+
+**How this compares:**
+
+| Platform | Memory model | Meetings feed it? | Entity graph | Self-hosted |
+|----------|-------------|-------------------|-------------|-------------|
+| **OpenClaw** | MEMORY.md + SOUL.md (flat files) | No | No | Yes |
+| **Mem0** | Vector + graph + KV (48K stars) | No | API-based | No (SaaS) |
+| **Obsidian + AI** | Markdown + wiki-links | Manual | Manual | Yes (local) |
+| **Clay/Attio** | CRM with AI enrichment | Via integrations | Yes | No |
+| **Vexa Workspaces** | Markdown + wiki-links + entities + streams + timeline + soul | **Yes — automatic** | **Yes — contacts, companies, products** | **Yes** |
+
 ### Your agent, wherever you are
 
 Same agent, same memory, every surface:
@@ -440,24 +471,41 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 - [Self-Hosted Management Guide](https://docs.vexa.ai/self-hosted-management) - Managing users and API tokens
 - [Recording Storage](https://docs.vexa.ai/recording-storage) - S3, MinIO, and local storage configuration
 
-## Features Directory
+## Modular — Pick What You Need
 
-Each feature has its own README with business context, competitive positioning, architecture, and validation status:
+Vexa is a toolkit, not a monolith. Every feature works independently. Use one or all twelve — they compose when you need them to.
 
-| Feature | What it does | Status |
-|---------|-------------|--------|
-| [realtime-transcription](./features/realtime-transcription/) | Live speaker-attributed transcription via WebSocket | Production |
-| [multi-platform](./features/multi-platform/) | One API for Google Meet, Teams, Zoom | GMeet/Teams working, Zoom WIP |
-| [agentic-runtime](./features/agentic-runtime/) | Ephemeral containers, agent chat, workspace persistence | MVP3 complete |
-| [mcp-integration](./features/mcp-integration/) | 17-tool MCP server for AI agents | Validated (10/10 tests) |
-| [speaking-bot](./features/speaking-bot/) | TTS voice in meetings | Code complete |
-| [chat](./features/chat/) | Read/write meeting chat via API | Code complete |
-| [post-meeting-transcription](./features/post-meeting-transcription/) | Record → transcribe on demand with speaker mapping | Working |
-| [webhooks](./features/webhooks/) | Push events for post-meeting automation | P0 complete |
-| [scheduler](./features/scheduler/) | Cron + event-driven job execution with container chaining | Core library done (16/16 tests) |
-| [remote-browser](./features/remote-browser/) | VNC + CDP browser with persistent auth | PoC proven |
-| [calendar-integration](./features/calendar-integration/) | Auto-join meetings from Google Calendar | Research complete |
-| [token-scoping](./features/token-scoping/) | Per-token permission scopes for multi-tenant security | Validated (14/14 tests) |
+| You're building... | Features you need | Skip the rest |
+|-------------------|------------------|---------------|
+| **Self-hosted Otter replacement** | transcription + multi-platform + webhooks | agent runtime, scheduler, MCP |
+| **Meeting data pipeline** | transcription + webhooks + post-meeting | speaking-bot, chat, agent runtime |
+| **AI meeting assistant product** | transcription + MCP + speaking-bot + chat | remote-browser, scheduler |
+| **Proactive meeting agent** | scheduler + calendar + agentic-runtime + transcription | MCP, token-scoping |
+| **Personal AI assistant** | agentic-runtime + workspaces + scheduler + Telegram | multi-platform, webhooks |
+| **Meeting bot API (like Recall.ai)** | multi-platform + transcription + token-scoping | agent runtime, workspaces |
+
+You don't pay complexity tax for features you don't use. Each service is a separate container. Don't need agents? Don't run agent-api. Don't need TTS? Don't run tts-service. The architecture is modular by design — services communicate via REST and Redis, not tight coupling.
+
+## Features — Honest Status
+
+Each feature has its own README with business context, competitive positioning, architecture, and validation gates. **Confidence scores are evidence-based** — 0 means untested, 90+ means validated with real tests. We update these continuously.
+
+| Feature | Confidence | What's tested | What's not | Contributions welcome |
+|---------|-----------|--------------|-----------|----------------------|
+| [realtime-transcription](./features/realtime-transcription/) | Teams 90, GMeet 90, Zoom 0 | E2E both platforms, 92.7% accuracy | Zoom (not implemented), human speaker identity (40) | Zoom implementation, speaker locking for humans |
+| [multi-platform](./features/multi-platform/) | GMeet 75, Teams 65, Zoom 0 | Join flows for GMeet + Teams | Zoom SDK broken, Teams admission edge cases | Zoom browser-based impl, Teams bug [#171](https://github.com/Vexa-ai/vexa/issues/171) |
+| [agentic-runtime](./features/agentic-runtime/) | 85 | MVP0-3 validated (32 checks), all CLI commands | BOT_API_TOKEN wiring, post-meeting auto-trigger | Webhook receiver (~20 LOC), server-side chat history |
+| [mcp-integration](./features/mcp-integration/) | 90 | 10/10 tools discoverable, auth enforced | list_meetings pagination (returns 2.7MB unbounded) | Pagination fix, interactive bot tools [#127](https://github.com/Vexa-ai/vexa/issues/127) |
+| [post-meeting-transcription](./features/post-meeting-transcription/) | 85 | Pipeline works, 100% speaker accuracy (2 speakers) | Dashboard playback offset, re-transcription | Playback seek fix, multi-speaker accuracy testing |
+| [webhooks](./features/webhooks/) | 85 | Envelope standardized, signing fixed | E2E delivery with public URL, retry mechanism | Retry via scheduler, circuit breaker |
+| [token-scoping](./features/token-scoping/) | 90 | 14/14 tests pass, all 4 scopes enforced | Per-endpoint granularity (currently per-service) | Per-meeting RBAC [#158](https://github.com/Vexa-ai/vexa/issues/158) |
+| [scheduler](./features/scheduler/) | 90 (unit) | 16/16 unit tests, crash recovery, idempotency | Executor not wired to services, REST API not built | Wire executor, REST API endpoints |
+| [speaking-bot](./features/speaking-bot/) | 0 | Code complete, **not E2E tested** | Everything — needs live meeting test | E2E validation, voice selection |
+| [chat](./features/chat/) | 0 | Code complete (~700 LOC), **not E2E tested** | Everything — needs live meeting test | E2E validation, Teams bug [#133](https://github.com/Vexa-ai/vexa/issues/133) |
+| [remote-browser](./features/remote-browser/) | 30 | Container builds, VNC accessible | Persistence, authenticated bot flow | MinIO sync, authenticated meeting join |
+| [calendar-integration](./features/calendar-integration/) | 0 | Research complete, **not built** | Everything — new feature | Google OAuth flow, calendar-service (2-3 week project) |
+
+**Blockers affecting all features:** 7 open bot join/leave bugs block live testing. See [features/README.md](./features/README.md) for the full issue matrix.
 
 ## Related Projects
 

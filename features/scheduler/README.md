@@ -1,5 +1,10 @@
 # Scheduler
 
+> **Confidence: 90 (unit tests)** — 16/16 tests pass. Core library complete: scheduling, execution, retry, idempotency, crash recovery, callbacks.
+> **Tested:** Job scheduling, atomic execution (no duplicates), retry with backoff, crash recovery, cancellation, on_success/on_failure callbacks, idempotency keys.
+> **Not tested:** Executor not wired into running services. REST API not built. No E2E test through gateway.
+> **Contributions welcome:** Wire executor into bot-manager startup, REST API endpoints (POST/GET/DELETE /schedule), calendar-service integration.
+
 ## Why
 
 Agents shouldn't wait to be asked. The scheduler makes Vexa agents **proactive** — they act on a schedule, chain work after events, and orchestrate multi-step pipelines without human intervention.
