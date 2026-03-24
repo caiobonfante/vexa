@@ -14,12 +14,12 @@
 | WS delivery | 90 | Connected ws://localhost:8056/ws, subscribed to meeting 8798, received 22 live transcript messages. 3 speakers (Alice Johnson, Bob Smith, Carol Williams). Mutable→completed flow working. Meeting status event delivered. First segment ~3s after bot active. | 2026-03-17 10:29 | Test with real meeting, verify latency under load |
 | REST /transcripts | 90 | 7 segments with speaker names from mock meeting | 2026-03-16 20:27 | Verify with real meeting transcripts |
 | GC prevention | 95 | window.__vexaAudioStreams fix — 324 onSegmentReady calls confirmed | 2026-03-16 20:15 | — |
-| Confirmation logic | 80 | All emitted segments have non-trivial text (indirect) | 2026-03-16 | Feed known audio, verify exact text match |
+| Confirmation logic | 60 | Word-level prefix fix landed (LocalAgreement-2). Code analysis: prefix logic correctly handles growing buffers, re-segmentation, empty results, language switch, single-word edge case. 9/9 unit tests pass (full-text fallback path). Replay blocked — data/raw/ absent. No test exercises prefix path with actual segments yet. | 2026-03-24 | Run replay with teams-3sp-collection once data collected; add unit test passing segments to handleTranscriptionResult to cover prefix path directly |
 | VAD (Silero) loads and filters | 90 | Model loads from `/app/vexa-bot/core/node_modules/@jjhbw/silero-vad/weights/silero_vad.onnx` (2.3MB, confirmed in image). Log: `[VAD] Silero model loaded`. Mock meeting (bot 8806): 3 speakers transcribed with VAD active, segments in Redis. Silence filtering is silent (no log on skip), so cannot directly count filtered chunks. | 2026-03-17 11:07 | Add VAD filtering counters to logs; compare transcription request counts with/without VAD on identical audio |
 
-**Overall: 90/100** — All checks at 80+. Admission detection raised 80→90 with 3 real meeting tests. Bottleneck: transcription content on real meeting (80, mock-only evidence) and confirmation logic (80).
+**Overall: 88/100** — Confirmation logic raised 40→60 with LocalAgreement-2 prefix fix. Bottleneck: no replay data to validate at Level 2, no unit test covering the new prefix path directly.
 
-**To reach 95:** Test real meetings with active microphones (needs audio hardware or injected audio), locked meetings requiring host admission, and 5+ participant meetings. Transcription content (80) and confirmation logic (80) are the limiting factors.
+**To reach 95:** (1) Collect fresh data to enable replay tests — data/raw/ is empty. (2) Add unit test that passes `segments` to `handleTranscriptionResult` to directly exercise prefix path. (3) Fix pre-existing `__tests__/speaker-streams.test.ts` "fuzzy match" test (assumes behaviour that never existed). (4) Test real meeting with mic audio.
 
 ## Bugs found and fixed
 

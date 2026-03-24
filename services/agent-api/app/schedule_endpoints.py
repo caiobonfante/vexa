@@ -86,6 +86,8 @@ async def create_schedule(request: Request):
     if not user_id:
         raise HTTPException(400, "user_id is required")
 
+    cron_expr = raw_body.get("cron")
+
     # Resolve execute_at
     try:
         if at:
@@ -95,8 +97,12 @@ async def create_schedule(request: Request):
             execute_at = dt.timestamp()
         elif in_val:
             execute_at = _parse_relative(in_val)
+        elif cron_expr:
+            from croniter import croniter
+            cron = croniter(cron_expr, datetime.now(timezone.utc))
+            execute_at = cron.get_next(float)
         else:
-            raise ValueError("Either 'at' or 'in' is required")
+            raise ValueError("Either 'at', 'in', or 'cron' is required")
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -124,6 +130,10 @@ async def create_schedule(request: Request):
     else:
         raise HTTPException(400, f"Unknown action: {action}")
 
+    metadata = {"user_id": user_id, "action": action, "source": "vexa_schedule"}
+    if cron_expr:
+        metadata["cron"] = cron_expr
+
     redis = request.app.state.redis
     try:
         job = await schedule_job(redis, {
@@ -135,7 +145,7 @@ async def create_schedule(request: Request):
                 "body": body,
                 "timeout": 120,
             },
-            "metadata": {"user_id": user_id, "action": action, "source": "vexa_schedule"},
+            "metadata": metadata,
             "idempotency_key": idempotency_key,
         })
     except ValueError as e:

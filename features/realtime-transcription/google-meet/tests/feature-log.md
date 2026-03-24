@@ -91,6 +91,181 @@ windows are rare in the first minutes.
 4. Caption-based identity: GMeet may have closed captions with speaker names (like Teams) — check DOM
 Source: https://docs.speechmatics.com/speech-to-text/realtime/realtime-diarization
 
+## Adversarial Analysis: UFAL LocalAgreement Hypothesis (2026-03-24, researcher-2)
+
+### Challenge 1: Does word-level prefix work when Whisper changes WORDS too?
+
+**VERDICT: Partially vulnerable, but survivable.**
+
+Whisper is non-deterministic even at temperature=0 — the same audio can produce different words
+across runs (whisper.cpp #734, openai/whisper #81). When buffer length changes, the attention
+mechanism shifts, and not just segment boundaries move — actual WORDS can change. Example:
+"Everyone let me start" → "Everyone, let me begin" across two submissions with different buffer lengths.
+
+However, LocalAgreement-2 handles this by design: if the prefix doesn't match, it simply doesn't
+confirm. The unconfirmed buffer grows, and on the NEXT submission pair where words DO agree, the
+longest common prefix gets confirmed. The failure mode is increased latency, not wrong output.
+
+**Critical edge case: Whisper hallucination at buffer start.** When silence precedes speech in
+the buffer, Whisper can hallucinate different phantom words at the beginning each time
+(openai/whisper #679). This poisons the prefix — if word 0 is different, NO prefix matches,
+and confirmation never triggers. This is the SAME failure mode as our current system, just
+at word level instead of segment level.
+
+**Mitigation in UFAL:** Buffer scrolling + sentence trimming ensures the buffer always starts
+at a sentence boundary with actual speech. VAD pre-filtering removes leading silence. Our
+system already has Silero VAD, so this edge case is partially covered.
+
+**Risk: MEDIUM.** Word-level instability exists but is less severe than segment-level instability.
+Most word changes happen at the END of the transcript (where Whisper is uncertain), not at
+the confirmed prefix. The UFAL paper reports 3.3s average latency for English, suggesting
+prefix agreement happens frequently enough.
+
+### Challenge 2: Would simply capping buffer at 30s be sufficient?
+
+**VERDICT: Insufficient alone, but SHOULD be combined with any fix.**
+
+The UFAL paper itself notes: "to avoid unacceptably long spikes in latency, the audio buffer
+is limited to around 30 seconds." This is NOT the confirmation mechanism — it's a safety valve.
+
+Capping at 30s would help our system because:
+- Whisper is trained on 30s mel spectrograms. Buffers >30s force attention over padded/wrapped input.
+- Shorter buffers = more stable attention patterns = more stable segment boundaries.
+- Our current maxBufferDuration=120s is 4x what Whisper was trained for.
+
+But capping alone does NOT fix confirmation. Even with a 30s buffer, our per-segment comparison
+(line 194-248) will still fail because Whisper re-segments the SAME 30s differently as 2s of
+new audio is appended each cycle. The text at position [i] still shifts.
+
+**Recommendation: Cap buffer at 30s AND switch to prefix-based confirmation.**
+The cap prevents pathological buffer growth; prefix confirmation handles the re-segmentation.
+
+### Challenge 3: Would VAD-based chunking avoid the problem entirely?
+
+**VERDICT: Strong alternative for multi-speaker, but loses context for monologues.**
+
+VAD-based chunking (split on silence, submit each speech segment independently) is used by
+WhisperLiveKit and faster-whisper's batched mode. It works well when speakers pause between
+sentences (natural speech has 200-500ms pauses).
+
+**Advantages over LocalAgreement:**
+- Simpler implementation — no prefix comparison needed
+- Each chunk is independent — no growing buffer problem
+- Already have Silero VAD loaded and working
+
+**Disadvantages:**
+- Long monologues with no pauses: VAD finds no split points, buffer still grows
+- Cutting mid-sentence: Whisper loses cross-sentence context, accuracy drops
+- Short chunks (<3s): Whisper quality degrades significantly on very short audio
+- Our pipeline already submits every 2s regardless — VAD would need to REPLACE the
+  fixed-interval submission with event-driven "speech ended" submission
+
+**Risk assessment:** VAD chunking is complementary, not a replacement. It prevents buffer growth
+during natural speech but doesn't solve the confirmation problem for continuous speech.
+WhisperLiveKit uses BOTH VAD chunking AND LocalAgreement together.
+
+### Challenge 4: Edge cases where prefix comparison fails
+
+**Known failure modes from UFAL issues (whisper_streaming #102, #121):**
+
+1. **Hallucination cascade:** When Whisper hits compression_ratio_threshold failure at temp=0,
+   it retries at higher temperatures, producing wildly different output each time. Prefix
+   comparison fails indefinitely. The buffer grows until force-flush. UFAL #102 shows latency
+   jumping from 1.3s to 7.6s when this happens.
+
+2. **Language confusion:** With multilingual audio, Whisper may transcribe the same speech in
+   different languages across submissions. Prefix will never match. UFAL #121 reports constant
+   hallucinations with Greek audio producing Japanese/Chinese characters.
+
+3. **"Not enough segments to chunk":** When the buffer grows large but Whisper returns only 1
+   segment (no sentence boundaries found), the sentence-trimming strategy can't trim, and the
+   buffer keeps growing. This is documented in UFAL #102.
+
+4. **Our specific risk — per-speaker audio quality:** GMeet's "3 loudest" architecture means
+   audio quality on a track can degrade when Meet is transitioning speakers between SSRCs.
+   Brief audio artifacts during remapping could trigger hallucinations at the buffer boundary.
+
+### Conclusion: UFAL hypothesis HOLDS with caveats
+
+The UFAL LocalAgreement approach is **fundamentally sound** for our confirmation problem.
+I could not disprove it — the core insight (compare text prefixes, not segment positions) is
+correct and well-validated in production systems (UFAL, WhisperLiveKit).
+
+**However, it is NOT sufficient alone. Recommended layered fix:**
+
+1. **Replace per-segment confirmation with prefix-based (LocalAgreement-2)** — core fix
+2. **Cap buffer at 30s** (down from 120s) — safety valve, matches Whisper training
+3. **VAD-informed submission** — submit on speech-end events, not just fixed 2s interval
+4. **Hallucination filter on prefix** — if prefix starts with known hallucination phrases
+   (already have hallucination-filter.ts), skip that submission entirely
+
+Implementing only #1 without #2 risks the same pathological growth when hallucinations
+prevent prefix agreement. The 30s cap is the backstop.
+
+### Test Scenarios for Reproducing Confirmation Failure
+
+**Scenario A: 60s+ monologue from single TTS speaker**
+- One TTS bot speaks continuously for 90s without pauses (concatenated sentences, no gaps)
+- Expected: current system — confirmation never triggers, 1 monolithic segment at force-flush
+- Validates: prefix-based confirmation should emit ~3-4 sentence-level segments during the monologue
+- Measurement: count confirmed segments emitted BEFORE force-flush timeout
+
+**Scenario B: 3 speakers with deliberate 2-3s overlaps at transitions**
+- TTS bot A speaks 15s, bot B starts 2s before A ends, bot C starts 2s before B ends
+- Repeat cycle 3x (total ~2min)
+- Expected: current system — votes fail during overlaps, confirmation stalls during identity uncertainty
+- Validates: whether prefix confirmation works independently of speaker locking delays
+- Measurement: time-to-first-confirmed-segment per speaker, count of unnamed segments
+
+**Scenario C: Long monologue + short interjections**
+- TTS bot A speaks continuously for 60s
+- TTS bot B interjects 3-word phrases at 15s, 30s, 45s ("That's interesting", "I agree", "Good point")
+- Expected: current system — A's confirmation fails (growing buffer), B's interjections too short to confirm
+- Validates: prefix confirmation handles asymmetric speech patterns
+- Measurement: A's segment count (should be >1), B's segment count (should be 3), no cross-attribution
+
+## Fixes
+
+[FIX] **Replace per-segment confirmation with word-level prefix confirmation (LocalAgreement-2)** — 2026-03-24
+File: `services/vexa-bot/core/src/services/speaker-streams.ts`
+Root cause: Per-segment confirmation (`currentTexts[i] === prevTexts[i]`) fails because Whisper
+re-segments the same audio differently as the buffer grows by 2s each cycle. Text at position i
+is never identical across submissions → confirmation never triggers → monolithic 100-226s segments.
+Fix: Concatenate all Whisper segment texts into words, compare word-by-word with previous submission's
+words (longest common prefix). When prefix is stable across 2 consecutive submissions and doesn't cover
+ALL current words, map confirmed prefix back to full Whisper segments and emit them with correct timestamps.
+This is robust to segment boundary shifts — only leading WORDS need to be stable.
+Additionally capped `maxBufferDuration` from 120s to 30s (matches Whisper's 30s mel spectrogram training
+window) as a safety valve against pathological buffer growth when hallucinations prevent prefix agreement.
+Based on: UFAL whisper_streaming LocalAgreement-2 policy (arxiv 2307.14743).
+
+## Validation (2026-03-24)
+
+[RESULT] **Prefix-based confirmation (LocalAgreement-2) — Level 1 unit test PASS, replay BLOCKED**
+
+**What changed:** `speaker-streams.ts` — replaced per-segment position comparison (`lastSegmentTexts[i] === currentTexts[i]`) with word-level prefix comparison (`lastWords` common prefix). `maxBufferDuration` reduced 120s → 30s.
+
+**Level 1 — Code analysis + unit tests (score cap 60):**
+- 9/9 tests PASS in `speaker-streams.test.ts` (Makefile `make unit` target)
+- Code trace confirms fix is correct for target failure mode:
+  - Submission 1: words ["Hello", "everyone", "let", "me", "start", "with", "the", "update."] → prefixLen=0, no confirm
+  - Submission 2 (+2s audio, Whisper re-segments): words ["Hello", "everyone", "let", "me", "start", "with", "the", "update.", "The", "revenue"] → prefixLen=8, 8<10 → 2 segments confirmed ✓
+- Edge cases verified: empty result (returns early, no crash ✓), language switch (no prefix match, reset ✓), single-word (falls through to full-text path correctly ✓)
+- Pre-existing test failure in `__tests__/speaker-streams.test.ts`: "fuzzy match" test (1/16 FAIL). This test assumed fuzzy string matching that never existed — confirmed pre-existing by `git show HEAD`. NOT a regression.
+- **Gap:** No existing test passes `segments` to `handleTranscriptionResult` — the new prefix path has zero direct test coverage.
+
+**Level 2 — Replay: BLOCKED**
+- `features/realtime-transcription/data/raw/` does not exist
+- `teams-3sp-collection` and `teams-7sp-panel` datasets not found anywhere in repo
+- `make play-replay` cannot run without data
+
+**Level 3 — Overlap scenarios: NOT RUNNABLE**
+- Challenger scenarios A/B/C require live TTS collection runs (90s monologue, 3-speaker overlap, long+interjections)
+- No pre-captured data; need `/collect` run first
+
+**Score change:** Confirmation logic: 40 → 60 (Level 1 ceiling — code correct, unit tests pass, replay blocked)
+**Remaining gap to 90:** (1) Collect data to enable replay; (2) Add unit test covering prefix path with segments; (3) Run challenger overlap scenarios
+
 ## Current Blockers (2026-03-23)
 
 1. **Human speaker locking (score 40)** — 8+ minutes to lock with overlapping speech. Needs alternative identity mechanism or faster voting.

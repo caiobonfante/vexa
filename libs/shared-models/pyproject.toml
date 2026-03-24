@@ -23,7 +23,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "psycopg2-binary>=2.8", # Required by sqlalchemy/databases
     "databases[asyncpg]>=0.5.0", # Looks like 'databases' library is also used
-    "alembic>=1.10.0" # For database migrations
+    "alembic>=1.10.0", # For database migrations
+    "croniter>=1.0.0" # For cron expression parsing in scheduler
 ]
 
 [project.urls]

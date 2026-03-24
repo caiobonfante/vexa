@@ -30,10 +30,8 @@ interface SpeakerBuffer {
   confirmedSamples: number;
   lastTranscript: string;
   confirmCount: number;
-  /** Per-segment confirmation: texts of Whisper segments from previous submissions */
-  lastSegmentTexts: string[];
-  /** How many consecutive times each leading segment text has been stable */
-  segmentStabilityCounts: number[];
+  /** Word-level prefix confirmation: words from previous Whisper submission */
+  lastWords: string[];
   inFlight: boolean;
   /** Wall-clock time (ms) when the current unconfirmed window started */
   windowStartMs: number;
@@ -92,7 +90,7 @@ export class SpeakerStreamManager {
     this.minAudioDuration = config?.minAudioDuration ?? 2;
     this.submitInterval = config?.submitInterval ?? 2;
     this.confirmThreshold = config?.confirmThreshold ?? 2;
-    this.maxBufferDuration = config?.maxBufferDuration ?? 120;
+    this.maxBufferDuration = config?.maxBufferDuration ?? 30;
     this.idleTimeoutSec = config?.idleTimeoutSec ?? 15;
     this.sampleRate = config?.sampleRate ?? 16000;
   }
@@ -109,8 +107,7 @@ export class SpeakerStreamManager {
       confirmedSamples: 0,
       lastTranscript: '',
       confirmCount: 0,
-      lastSegmentTexts: [],
-      segmentStabilityCounts: [],
+      lastWords: [],
       inFlight: false,
       windowStartMs: now,
       bufferStartMs: now,
@@ -187,68 +184,67 @@ export class SpeakerStreamManager {
       return;
     }
 
-    // Per-segment incremental confirmation: if Whisper returned multiple
-    // segments, confirm leading segments that are stable across submissions.
-    // This allows long monologues to emit sentence-level segments without
-    // waiting for the entire text to stabilize.
-    if (segments && segments.length > 1) {
-      const currentTexts = segments.map(s => s.text.trim());
-      const prevTexts = buffer.lastSegmentTexts;
-      const prevCounts = buffer.segmentStabilityCounts;
+    // Word-level prefix confirmation (LocalAgreement-2, UFAL whisper_streaming).
+    // Instead of comparing segment texts by position (which fails because Whisper
+    // re-segments as the buffer grows), we concatenate all segments into words and
+    // find the longest common prefix across consecutive submissions. This is robust
+    // to segment boundary shifts — only the leading WORDS need to be stable.
+    if (segments && segments.length > 0) {
+      const currentWords = segments.flatMap(s => s.text.trim().split(/\s+/).filter(w => w.length > 0));
+      const prevWords = buffer.lastWords;
 
-      // Update per-segment stability counts: how many consecutive times
-      // each leading segment text has been identical across submissions.
-      const newCounts: number[] = [];
-      for (let i = 0; i < currentTexts.length; i++) {
-        if (i < prevTexts.length && currentTexts[i] === prevTexts[i]) {
-          newCounts.push((prevCounts[i] || 0) + 1);
-        } else {
-          newCounts.push(1); // first time seeing this text at position i
-        }
-      }
-
-      buffer.lastSegmentTexts = currentTexts;
-      buffer.segmentStabilityCounts = newCounts;
-
-      // Find how many leading segments have reached confirmThreshold
-      // (exclude the last segment — it's still growing)
-      let confirmedCount = 0;
-      for (let i = 0; i < currentTexts.length - 1; i++) {
-        if (newCounts[i] >= this.confirmThreshold) {
-          confirmedCount++;
+      // Find longest common word prefix between current and previous submission
+      let prefixLen = 0;
+      const maxLen = Math.min(currentWords.length, prevWords.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (currentWords[i] === prevWords[i]) {
+          prefixLen = i + 1;
         } else {
           break;
         }
       }
 
-      if (confirmedCount > 0) {
-        // Emit each confirmed leading segment individually.
-        // Use Whisper's segment timestamps for correct wall-clock timing.
-        const baseWindowMs = buffer.windowStartMs;
-        for (let i = 0; i < confirmedCount; i++) {
-          const seg = segments[i];
-          buffer.windowStartMs = baseWindowMs + Math.floor(seg.start * 1000);
-          const segEndMs = baseWindowMs + Math.floor(seg.end * 1000);
-          if (!seg.text.trim() || !this.onSegmentConfirmed) continue;
-          const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
-          this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
-          buffer.sequenceNumber++;
-          buffer.lastConfirmedText = seg.text.trim();
-        }
-        // Advance offset ONCE to the end of the last confirmed segment.
-        // seg.end is absolute within submitted audio — calling advanceOffset
-        // per segment would stack offsets and over-trim.
-        const lastConfirmedSeg = segments[confirmedCount - 1];
-        this.advanceOffset(buffer, lastConfirmedSeg.end);
-        buffer.windowStartMs = baseWindowMs + Math.floor(lastConfirmedSeg.end * 1000);
+      buffer.lastWords = currentWords;
 
-        // Shift stability counts past the confirmed segments
-        buffer.segmentStabilityCounts = newCounts.slice(confirmedCount);
-        buffer.lastSegmentTexts = currentTexts.slice(confirmedCount);
-        return;
+      // Confirm if prefix covers at least 1 word but NOT all current words
+      // (trailing words are still forming and may change next submission).
+      // With confirmThreshold=2, having a common prefix between 2 consecutive
+      // submissions already satisfies the threshold.
+      if (prefixLen > 0 && prefixLen < currentWords.length) {
+        // Map confirmed prefix words back to full Whisper segments for timestamps.
+        // Only emit segments whose words are entirely within the confirmed prefix.
+        let wordsRemaining = prefixLen;
+        let confirmedSegCount = 0;
+        for (const seg of segments) {
+          const segWordCount = seg.text.trim().split(/\s+/).filter(w => w.length > 0).length;
+          if (wordsRemaining >= segWordCount) {
+            wordsRemaining -= segWordCount;
+            confirmedSegCount++;
+          } else {
+            break; // Partial segment — don't emit partial
+          }
+        }
+
+        if (confirmedSegCount > 0) {
+          const baseWindowMs = buffer.windowStartMs;
+          for (let i = 0; i < confirmedSegCount; i++) {
+            const seg = segments[i];
+            buffer.windowStartMs = baseWindowMs + Math.floor(seg.start * 1000);
+            const segEndMs = baseWindowMs + Math.floor(seg.end * 1000);
+            if (!seg.text.trim() || !this.onSegmentConfirmed) continue;
+            const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
+            this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
+            buffer.sequenceNumber++;
+            buffer.lastConfirmedText = seg.text.trim();
+          }
+          const lastConfirmedSeg = segments[confirmedSegCount - 1];
+          this.advanceOffset(buffer, lastConfirmedSeg.end);
+          buffer.windowStartMs = baseWindowMs + Math.floor(lastConfirmedSeg.end * 1000);
+          return;
+        }
       }
 
-      // No segments reached confirmThreshold yet — fall through to full-text check
+      // No prefix confirmed yet — fall through to full-text check
     }
 
     // Full string match — same as WhisperLive's same_output_threshold.
@@ -483,8 +479,7 @@ export class SpeakerStreamManager {
     // Reset confirmation state for the next segment window
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
-    buffer.lastSegmentTexts = [];
-    buffer.segmentStabilityCounts = [];
+    buffer.lastWords = [];
     buffer.windowStartMs = Date.now();
 
     log(`[SpeakerStreams] Offset advanced for "${buffer.speakerName}" (confirmed=${buffer.confirmedSamples}, total=${buffer.totalSamples}, trimmed to ${buffer.chunks.length} chunks)`);
@@ -528,8 +523,7 @@ export class SpeakerStreamManager {
     buffer.confirmedSamples = 0;
     buffer.lastTranscript = '';
     buffer.confirmCount = 0;
-    buffer.lastSegmentTexts = [];
-    buffer.segmentStabilityCounts = [];
+    buffer.lastWords = [];
     buffer.inFlight = false;
     buffer.windowStartMs = Date.now();
     buffer.bufferStartMs = Date.now();

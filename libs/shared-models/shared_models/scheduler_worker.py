@@ -161,6 +161,27 @@ async def _process_job(redis: Any, job_data: str) -> None:
     await redis.hdel(EXECUTING_KEY, job_id)
     await redis.hset(HISTORY_KEY, job_id, json.dumps(job))
 
+    # Reschedule cron jobs
+    cron_expr = job.get("metadata", {}).get("cron")
+    if cron_expr and job["status"] == "completed":
+        try:
+            from croniter import croniter
+            from datetime import datetime, timezone
+            cron = croniter(cron_expr, datetime.now(timezone.utc))
+            next_time = cron.get_next(float)
+            next_job = {
+                "execute_at": next_time,
+                "request": job["request"],
+                "metadata": job["metadata"],
+            }
+            new_job = await schedule_job(redis, next_job)
+            logger.info(
+                f"Scheduler: cron job rescheduled as {new_job['job_id']} "
+                f"(next: {datetime.fromtimestamp(next_time, tz=timezone.utc).isoformat()})"
+            )
+        except Exception as e:
+            logger.error(f"Scheduler: failed to reschedule cron job {job_id}: {e}")
+
 
 async def _executor_loop(redis: Any) -> None:
     """Main executor loop — polls for due jobs and processes them."""

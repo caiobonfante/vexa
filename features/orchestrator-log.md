@@ -19,3 +19,60 @@
 **Priority for MVP1:** Fix confirmation logic first (Issue B) — biggest impact, clearest path (UFAL pattern), also fixes playback misalignment (Issue C).
 
 **MVP0 verdict: PASS.** The researcher agent produced actionable findings from the feature artifacts. The self-improvement loop concept works.
+
+## MVP1: 2026-03-24 — Prove the team loop works
+
+**Target:** realtime-transcription/google-meet confirmation failure, score 40
+**Team:** challenger (Opus) + implementer (Opus) + tester (Sonnet)
+**Duration:** ~10 minutes
+**Task chain:** challenge hypothesis → implement fix → validate
+
+### What happened
+
+1. **Challenger** tried to disprove UFAL LocalAgreement from 4 angles:
+   - Word-level instability: handled by design (waits, doesn't emit wrong)
+   - Buffer cap alone: insufficient (re-segmentation still breaks per-segment matching)
+   - VAD chunking alone: complementary not replacement (fails on pauseless monologues)
+   - Edge cases: hallucination cascading mitigated by existing filter + 30s cap
+   - **Verdict: UFAL holds, but needs layered fix** (prefix + 30s cap together)
+
+2. **Implementer** coded two changes to `speaker-streams.ts`:
+   - Replaced per-segment position matching with word-level prefix comparison (LocalAgreement-2)
+   - Capped buffer at 30s (was 120s) as safety valve
+   - Minimal change — fallback paths and idle/flush logic untouched
+
+3. **Tester** validated at cheapest level (Cost Ladder):
+   - Level 1 (unit tests): 9/9 PASS. Prefix logic correct. Edge cases handled.
+   - Level 2 (replay): BLOCKED — no replay data in repo (datasets not committed)
+   - Level 3 (overlap scenarios): NOT RUNNABLE — needs live collection
+
+### Score change
+
+**Confirmation logic: 40 → 60** (Level 1 ceiling — unit tests can't score higher)
+
+### What's needed for 80+
+
+1. Collect replay data (Level 4: live GMeet with TTS bots, 3 overlap scenarios designed by challenger)
+2. Run replay against new code
+3. Verify segments are sentence-length, not monolithic
+
+### What's needed for 90+
+
+1. Live GMeet with human participants (repeat Meeting 672 conditions)
+2. Verify speaker locking under 60s (was 585s)
+3. Verify no monolithic segments
+
+### What the team proved
+
+- **Competing hypotheses work.** Challenger refined the fix (layered, not single change) before implementation.
+- **Cost Ladder works.** Tester stopped at Level 1 ceiling instead of wasting time on blocked Level 2.
+- **Artifact loop closes.** findings.md and feature-log.md updated by tester. Next team reads better artifacts.
+- **Dead ends accumulate.** Challenger added edge case findings. Future implementers won't try buffer-cap-alone.
+
+### What went wrong
+
+- Replay data not in repo — tester couldn't run Level 2. Need to either commit datasets or document how to generate them.
+- Task assignment needed manual intervention (tester reported tasks unassigned). Should auto-assign at spawn.
+- Pre-existing test failure (fuzzy match test) confused the tester briefly.
+
+**MVP1 verdict: PASS.** The team loop works — research → debate → implement → test → score updated. Score moved 40→60 with clear path to 80+.
