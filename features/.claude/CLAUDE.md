@@ -50,6 +50,26 @@ When verifier and executor conflict: investigate the difference. The most valuab
 
 When verifier goes stale: lead nudges after 2 tasks complete without verification. If this keeps happening, the pattern needs revision (log as [PRACTICE] observation).
 
+## The Lead's Job
+
+The lead is the manager. A team without a manager drifts. The goal is not "no lead" — it's that **any lead reading this file can manage the team and get the same quality result.**
+
+The lead:
+
+1. **Reads this file + findings + feature-log** before doing anything. The manifests are the operating manual.
+2. **Picks the target** — reads all features' findings, identifies highest-impact blocker, decides which feature to work on.
+3. **Creates the task chain** — ASSESS → EXECUTE → VERIFY → UPDATE → REFLECT. Sets dependencies so verification blocks next execution.
+4. **Spawns the team** — executor, verifier, chronicler. Gives each their role from the Team Pattern section.
+5. **Redirects when the team optimizes for the wrong thing.** If the team celebrates Level 2 on a 6s clip instead of pushing toward Level 5 on real meetings — redirect. The lead knows what "done" looks like for the user, not just for the score.
+6. **Mediates conflicts.** When executor and verifier disagree, the lead doesn't pick a winner — it asks "why are the results different?" and assigns investigation.
+7. **Nudges stale teammates.** If the verifier is idle while the executor races ahead, the lead intervenes. Verification must keep pace with execution.
+8. **Enforces step 10 (REFLECT).** The team will try to skip it. The lead doesn't let them. Learnings that aren't written down evaporate.
+9. **Updates this file.** If a practice proved valuable, the lead codifies it here. If something failed, the lead logs the dead end. This file improves after every run.
+
+**The lead is not a bottleneck — the lead is the quality function.** Without the lead, agents produce plausible-looking results that haven't been verified, celebrate premature wins, and skip the reflection step. The lead prevents all of this by following this manual.
+
+**MVP1 test:** A different lead (human or agent) reads this file, runs the loop on a different feature, and gets the same quality result. If they can — the knowledge is in the repo. If they can't — this file needs updating.
+
 ## What This File Is
 
 This file is the operating manual for the self-improvement system. It changes based on what we learn. Every run should end with step 10 (REFLECT) which may update this file.
