@@ -1,28 +1,132 @@
 # Features
 
-Features are **self-describing manifests** — not code, not services, not infrastructure. Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't.
+Features are **self-describing, self-improving manifests.** Each feature has a purpose you can explain, a gate you can validate, and transparent confidence scores so you know exactly what works and what doesn't. Six concepts make this work.
 
-## Contribute with AI Agents
+## Core Concepts
 
-Every feature is designed to be picked up by an AI agent (Claude Code, Cursor, or any coding agent) with zero human handoff:
+### 1. Confidence Gate
 
-1. **Read `.claude/CLAUDE.md`** → mission, scope, gate, current development stage
-2. **Read `tests/findings.md`** → certainty scores with evidence, lowest blocker, next action
-3. **Read `tests/feature-log.md`** → what was tried, what worked, what failed (prevents dead-end retries)
-4. **Determine stage** → ENV SETUP / COLLECTION / ITERATION / EXPAND (for validation features) or RESEARCH / SPEC / BUILD & TEST (for spec-driven features)
-5. **Act** → follow stage-specific constraints, update findings, log decisions
+A table of checks, each scored 0-95 with **mandatory evidence.** No evidence = 0.
 
-The feature describes itself completely. Point an agent at any `features/{name}/` directory and it knows what to do.
+```
+ 0  untested — no evidence exists
+30  indirect — "logs suggest it works"
+60  validated once — code may have changed since
+80  validated recently — minor caveats
+90  real conditions — tested against live infrastructure
+95  production — real users, verified by human
+```
 
-### Feature completeness checklist
+**Rules:**
+- Gate passes when **ALL** checks ≥ 80. One zero blocks the feature.
+- Evidence is specific: "HTTP 200, 7 segments, meeting_id=8791, checked 2026-03-16" — not "it works."
+- Scores decay when code changes. A 90 from last week becomes 60 if that code path was touched.
+- Mock caps at 90. Only real-world validation reaches 95.
 
-Every feature should have:
+**File:** `tests/findings.md`
 
-- [ ] `README.md` — business narrative, competitive positioning, status box with confidence score
-- [ ] `.claude/CLAUDE.md` — agent instructions: mission, scope, gate, edges, development cycle
-- [ ] `tests/findings.md` — certainty table with scores, evidence, last-checked dates
-- [ ] `tests/feature-log.md` — append-only activity log (observations, decisions, results, dead ends)
-- [ ] Transparent confidence scores updated after every test run
+### 2. Autonomous Loop
+
+Two cycles depending on feature type:
+
+**Validation cycle** — for features with data flowing through a pipeline:
+```
+COLLECT → ITERATE → EXPAND → COLLECT
+```
+- **COLLECT:** Get real-world data with known ground truth (you control the input, so you know what "correct" looks like). Expensive — minutes, real infrastructure.
+- **ITERATE:** Replay data through pipeline, score against truth, fix, repeat. Cheap — seconds per cycle, no live infrastructure.
+- **EXPAND:** Scoring plateaued (same score 3+ runs)? Data doesn't cover the failing scenario. Design new collection with hypothesis. Back to COLLECT.
+
+Requires: ground truth, replay mechanism, scoring function.
+
+**Spec cycle** — for features with API contracts:
+```
+RESEARCH → SPEC → BUILD & TEST
+```
+- **RESEARCH:** Understand domain, competitors, gaps. Produce RESEARCH.md.
+- **SPEC:** Write testable assertions that fail first. The spec IS the test.
+- **BUILD & TEST:** Implement until assertions pass.
+
+Requires: clear contract, test assertions.
+
+**File:** `.claude/CLAUDE.md` (defines which cycle and transition rules)
+
+### 3. Dead-End Record
+
+Append-only log of what was tried and failed:
+```
+[DEAD-END] minAudioDuration=0.5s — introduced garbage segments. Reverted.
+[DEAD-END] Full-text match for confirmation — never confirms mid-stream.
+[RESULT]   Per-segment stability tracking: works. Fixes confirmation.
+```
+
+Without this, the next agent retries the same failed approach. The ms-teams findings show 5 debug runs — each building on the last. Run 4's aggressive caption flush (lost 8/18 utterances) prevents future agents from trying the same thing.
+
+**File:** `tests/feature-log.md`
+
+### 4. Edge Contracts
+
+Declaration of where data crosses between features or services:
+
+```
+| Edge | From | To | Data format | Failure mode |
+| Audio | Browser ScriptProcessor | Node.js handler | (index, number[]) | GC collects AudioContext |
+| Transcription | TranscriptionClient | transcription-service | HTTP POST WAV | 502 timeout |
+```
+
+When something breaks, check edges first. If audio reaches the transcription service but segments don't appear in Redis, the bug is between those two edges.
+
+**File:** `.claude/CLAUDE.md` (edges section)
+
+### 5. Agent Manifest
+
+The set of files that lets an agent (human or AI) pick up a feature with zero handoff:
+
+| File | Read order | What it tells you |
+|------|-----------|-------------------|
+| `.claude/CLAUDE.md` | First (2 min) | Mission, scope, gate criteria, edges, which cycle |
+| `tests/findings.md` | Second (2 min) | Every check with score + evidence. Lowest score = the blocker. |
+| `tests/feature-log.md` | Third (5 min) | What was tried, what failed, dead ends to avoid |
+| `README.md` | As needed | Architecture, data flow, components, config |
+
+After 10 minutes of reading, the agent knows the mission, knows what's broken, knows what not to retry, and knows the architecture.
+
+### 6. Stage Determination
+
+On entry, the agent determines its stage from artifacts — no human tells it what to do:
+
+**Validation cycle:**
+```
+1. .env exists and infra verified?           NO → ENV SETUP
+2. Collected data with ground truth exists?   NO → COLLECT
+3. Scoring improving?                        YES → ITERATE
+4. Scoring stuck (plateau)?                  YES → EXPAND
+```
+
+**Spec cycle:**
+```
+1. RESEARCH.md exists?                       NO → RESEARCH
+2. Test assertions exist and fail?           NO → SPEC
+3. Some tests pass, some fail?              YES → BUILD & TEST
+4. All tests pass?                          YES → next batch or GATE
+```
+
+The artifacts tell the agent where it is. Findings show the scores. Feature log shows the trajectory. The agent acts accordingly.
+
+---
+
+## Feature Completeness
+
+Every feature should implement all 6 concepts:
+
+| Concept | File | Required |
+|---------|------|----------|
+| Confidence Gate | `tests/findings.md` | Yes — certainty table with scores, evidence, last-checked |
+| Autonomous Loop | `.claude/CLAUDE.md` | Yes — defines cycle type and transition rules |
+| Dead-End Record | `tests/feature-log.md` | Yes — append-only, [DEAD-END] and [RESULT] entries |
+| Edge Contracts | `.claude/CLAUDE.md` | Yes — edges section with from/to/format/failure |
+| Agent Manifest | All 4 files above + `README.md` | Yes — complete set for zero-handoff onboarding |
+| Stage Determination | `.claude/CLAUDE.md` | Yes — "on entry" section with stage checks |
 
 ## Status (2026-03-24)
 
