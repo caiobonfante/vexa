@@ -38,6 +38,7 @@ logger = logging.getLogger("vexa_tg_bot")
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_API_URL = os.getenv("CHAT_API_URL", "http://agent-api:8100")
+BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 DEFAULT_USER_ID = os.getenv("CHAT_DEFAULT_USER_ID", "")
 
 # JSON map: {"telegram_chat_id": "vexa_user_id", ...}
@@ -159,7 +160,8 @@ async def _stream_response(
     current_activity = ""
 
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
+        _headers = {"X-API-Key": BOT_API_TOKEN} if BOT_API_TOKEN else {}
+        async with httpx.AsyncClient(timeout=None, headers=_headers) as client:
             async with client.stream("POST", f"{CHAT_API_URL}/api/chat", json=payload) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -296,7 +298,8 @@ async def _start_stream(
 
 async def _interrupt(state: ChatState):
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        _headers = {"X-API-Key": BOT_API_TOKEN} if BOT_API_TOKEN else {}
+        async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             await client.request(
                 "DELETE", f"{CHAT_API_URL}/api/chat",
                 json={"user_id": state.user_id},
