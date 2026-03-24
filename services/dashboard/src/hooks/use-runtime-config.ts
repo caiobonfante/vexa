@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 interface RuntimeConfig {
   wsUrl: string;
   apiUrl: string;
+  decisionListenerUrl: string;
   defaultBotName: string | null;
 }
 
@@ -55,6 +56,18 @@ export function useRuntimeConfig() {
   }, []);
 
   return { config, isLoading, error };
+}
+
+/**
+ * Get the decision listener URL synchronously (returns cached value or fallback)
+ * For use in non-hook contexts or when you need immediate access
+ */
+export function getDecisionListenerUrl(): string {
+  if (cachedConfig?.decisionListenerUrl) {
+    return cachedConfig.decisionListenerUrl;
+  }
+  // Fallback to default
+  return "http://localhost:8765";
 }
 
 /**
