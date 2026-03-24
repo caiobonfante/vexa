@@ -36,6 +36,9 @@ Open-source blog articles for [vexa.ai/blog](https://vexa.ai/blog). Published fr
 | [Open-source speaking bot API](open-source-speaking-bot-api-recall-alternative.md) | "meeting bot speak API open source" | speaking-bot |
 | [Post-meeting automation pipeline](post-meeting-automation-pipeline-agent-summarize-slack.md) | "post-meeting automation API" | webhooks, scheduler, agentic-runtime |
 | [Authenticated browser sessions for bots](authenticated-browser-sessions-meeting-bots.md) | "authenticated meeting bot persistent browser" | remote-browser |
+| [Karpathy's agent psychosis — what it demands](karpathy-agent-psychosis-what-vexa-builds.md) | "AI agent infrastructure", "coding agents parallel" | agentic-runtime (all) |
+| [Dobby for meetings](dobby-for-meetings-personal-ai-agent-that-handles-your-calls.md) | "personal AI meeting agent", "meeting assistant bot" | knowledge-workspace, agentic-runtime |
+| [AGENTS.md on steroids](agents-md-on-steroids-how-vexa-features-enable-agent-contribution.md) | "AGENTS.md", "AI agent open source contribution" | features system (meta) |
 
 ## For agents updating articles
 
