@@ -5,7 +5,7 @@ services:
     build:
       context: .
     ports:
-      - "3003:3000"
+      - "3000:3000"
     environment:
       # Vexa API Connection (runtime configuration)
       - VEXA_API_URL=${VEXA_API_URL:-http://vexa-api:18056}
