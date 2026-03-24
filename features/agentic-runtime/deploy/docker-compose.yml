@@ -185,6 +185,7 @@ services:
       - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
       - MINIO_SECURE=false
       - RECORDING_ENABLED=true
+      - ZOOM_WEB=true
       - CAPTURE_MODES=audio
       - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
       - POST_MEETING_HOOKS=http://agent-api:8100/internal/webhooks/meeting-completed

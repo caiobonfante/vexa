@@ -1,8 +1,8 @@
 # Zoom Web — Findings
 
-## Gate verdict: NOT MERGED (PR #181 pending evaluation)
+## Gate verdict: INFRASTRUCTURE READY — bot-manager routes to web path
 
-## Score: 0
+## Score: 25
 
 ## Implementation status (2026-03-24)
 
@@ -55,6 +55,48 @@ Same pattern as Teams:
 - DOM selectors will drift as Zoom updates their web client
 - No fallback if captions unavailable (same gap as Teams)
 - Zoom may block browser automation (bot detection)
+
+## Executor validation (2026-03-24)
+
+### Step 1: ZOOM_WEB=true added to docker-compose.yml
+Added to bot-manager environment section alongside existing RECORDING_ENABLED=true.
+
+### Step 2: bot-manager restarted and env vars confirmed
+```
+docker exec vexa-agentic-bot-manager-1 env | grep -E "ZOOM_WEB|RECORDING"
+RECORDING_ENABLED=true
+ZOOM_WEB=true
+```
+
+### Step 3: zoom/web/ compiled code verified in image
+```
+docker run --rm vexa-bot:dev ls /app/vexa-bot/core/dist/platforms/zoom/web/
+admission.js  index.js  join.js  leave.js  prepare.js  recording.js  removal.js  selectors.js
+```
+All 8 modules present. ffmpeg at /usr/bin/ffmpeg.
+
+### Step 4: API acceptance test — PASS
+```
+POST http://localhost:8066/bots
+{"platform":"zoom","native_meeting_id":"12345678901","meeting_url":"https://zoom.us/j/12345678901",...}
+
+Response: {"id":52,"status":"requested","bot_container_id":"11ce3bddba579dc51b9a4355c39bc3b71750c157229a109e110058dafc825574",...}
+```
+No SDK credential error. Meeting created successfully.
+
+### Step 5: bot-manager log confirms web path
+```
+INFO - Received bot request for platform 'zoom' with native ID '12345678901' from user 2
+WARNING - Zoom OAuth is not connected for user 2; starting meeting 52 without OBF token.
+INFO - ZOOM_WEB=true: using Playwright web client for Zoom (no SDK credentials needed)
+```
+Critical: last line confirms ZOOM_WEB routing is active.
+
+### What still needs testing
+- Real Zoom meeting join (requires actual Zoom meeting URL)
+- Caption-based transcription (requires host to enable captions)
+- Waiting room handling
+- Leave/removal detection
 
 ## Path to merge
 
