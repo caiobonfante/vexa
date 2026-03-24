@@ -406,17 +406,39 @@ Before attempting a fix, the executor checks the ledger:
 
 **MANDATORY before any human-facing asset is handed to the user.** This includes dashboard pages, web UIs, API endpoints the user will hit directly, and any "it's ready to test" claim.
 
-### Rule: Never say "ready" without browser verification
+### Rule 0: Environment validation before ANY work
+
+Every agent — before executing, before testing, before saying anything works — MUST read the environment source of truth:
+
+```bash
+# Read the port map and env reference
+cat features/agentic-runtime/deploy/PORT-MAP.md
+# Run the env check script
+bash features/agentic-runtime/deploy/check-env.sh
+```
+
+If `check-env.sh` fails, fix the environment FIRST. Do not proceed with feature work on broken infrastructure.
+
+**Why this exists:** Every delivery failure in this project traces to wrong ports or missing env vars. Agents guess ports (6379 vs 6389), miss required tokens (AGENT_API_TOKEN), or assume services are on default ports. The PORT-MAP.md and check-env.sh are the ONLY source of truth.
+
+**Rules for env vars:**
+- NEVER hardcode a port number — read it from PORT-MAP.md or the compose file
+- NEVER assume a default port — check what's actually mapped
+- NEVER assume an env var is set — verify with `docker exec {container} env | grep {VAR}`
+- When adding a new env var, update PORT-MAP.md AND check-env.sh
+
+### Rule 1: Never say "ready" without browser verification
 
 An agent team that modifies dashboard code or web-facing services MUST:
 
-1. **Build clean:** `npx next build` with ZERO errors
-2. **Browser verify:** Open every affected page in a real browser (Playwright headless), check for:
+1. **Env check passes:** `bash features/agentic-runtime/deploy/check-env.sh` returns all green
+2. **Build clean:** `npx next build` with ZERO errors
+3. **Browser verify:** Open every affected page in a real browser (Playwright headless), check for:
    - Zero JS console errors
    - No error boundaries or blank screens
    - Interactive elements render and respond
-3. **Leave the server running:** The human's first click must work. If the dev server dies when the agent exits, the delivery failed.
-4. **Fix before reporting:** If validation finds issues, fix them. DO NOT report failures to the human — fix them first.
+4. **Leave the server running:** The human's first click must work. If the dev server dies when the agent exits, the delivery failed.
+5. **Fix before reporting:** If validation finds issues, fix them. DO NOT report failures to the human — fix them first.
 
 ### How to run
 
