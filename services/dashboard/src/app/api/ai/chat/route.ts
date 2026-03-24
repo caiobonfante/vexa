@@ -25,9 +25,39 @@ function getModel() {
 
   const apiKey = process.env.AI_API_KEY;
   const baseUrl = process.env.AI_BASE_URL;
+  const apiVersion = process.env.AI_API_VERSION;
   const { provider, model } = config;
 
   switch (provider) {
+    case "azure": {
+      if (!apiKey) throw new Error("AI_API_KEY is required for Azure OpenAI");
+      if (!baseUrl) throw new Error("AI_BASE_URL is required for Azure OpenAI");
+      const azureBaseUrl = baseUrl.replace(/\/$/, "");
+
+      const azure = createOpenAI({
+        apiKey,
+        baseURL: azureBaseUrl,
+        fetch: (url, options) => {
+          const requestUrl = url instanceof Request ? new URL(url.url) : new URL(url);
+          if (apiVersion && !requestUrl.searchParams.has("api-version")) {
+            requestUrl.searchParams.set("api-version", apiVersion);
+          }
+          const headers = new Headers((url instanceof Request ? url.headers : options?.headers) || {});
+          if (!headers.has("api-key")) {
+            headers.set("api-key", apiKey);
+          }
+          if (headers.has("authorization")) {
+            headers.delete("authorization");
+          }
+          if (url instanceof Request) {
+            return fetch(new Request(requestUrl.toString(), { ...url, headers }));
+          }
+          return fetch(requestUrl.toString(), { ...options, headers });
+        },
+      });
+      return azure(model);
+    }
+
     case "openai": {
       if (!apiKey) throw new Error("AI_API_KEY is required for OpenAI");
       const openai = createOpenAI({
