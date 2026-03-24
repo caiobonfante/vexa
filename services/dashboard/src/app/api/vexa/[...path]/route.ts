@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function proxyRequest(
   request: NextRequest,
   params: Promise<{ path: string[] }>,
@@ -118,7 +121,7 @@ async function proxyRequest(
       }
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(url, { ...fetchOptions, cache: "no-store" });
     clearTimeout(timeoutId);
 
     const contentType = response.headers.get("content-type") || "";
@@ -142,11 +145,14 @@ async function proxyRequest(
 
     const data = await response.text();
     try {
-      return NextResponse.json(JSON.parse(data), { status: response.status });
+      return NextResponse.json(JSON.parse(data), {
+        status: response.status,
+        headers: { "Cache-Control": "no-store" },
+      });
     } catch {
       return new NextResponse(data, {
         status: response.status,
-        headers: { "Content-Type": contentType },
+        headers: { "Content-Type": contentType, "Cache-Control": "no-store" },
       });
     }
   } catch (error) {
