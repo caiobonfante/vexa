@@ -169,7 +169,7 @@ async def create(req: CreateContainerRequest, user=Depends(get_current_user)):
 
     elif req.profile == "agent":
         env["VEXA_AGENT_API"] = user_config.get("env", {}).get(
-            "VEXA_AGENT_API", "http://chat-api:8100"
+            "VEXA_AGENT_API", "http://agent-api:8100"
         )
         env["AWS_ACCESS_KEY_ID"] = config.MINIO_ACCESS_KEY
         env["AWS_SECRET_ACCESS_KEY"] = config.MINIO_SECRET_KEY

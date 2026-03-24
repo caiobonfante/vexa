@@ -1144,7 +1144,7 @@ async def request_bot(
             detail={"status": "error", "message": f"An unexpected error occurred during bot startup: {str(e)}", "meeting_id": meeting_id}
         )
 
-# --- Agent Chat API (Quorum-style Claude CLI streaming) ---
+# --- Agent API (Quorum-style Claude CLI streaming) ---
 
 from app.agent_chat import agent_chat_manager
 

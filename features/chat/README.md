@@ -6,14 +6,14 @@ Meetings have two communication channels — voice and chat. The speaking bot co
 
 **In-meeting AI interaction:** A participant types "What were the action items from last week?" in the Teams chat. The bot reads it, the agent processes it against stored transcripts, and the bot responds in chat — all during the live meeting, no app-switching.
 
-**Same backbone, every surface:** In-meeting chat, Telegram, web dashboard, and future Slack/Discord all flow through the same Chat API. The agent doesn't know or care which surface the message came from — it processes and responds the same way. A message from Telegram ("join my 2pm meeting") and a message from the meeting chat ("summarize what we discussed") hit the same agent, same workspace, same memory.
+**Same backbone, every surface:** In-meeting chat, Telegram, web dashboard, and future Slack/Discord all flow through the same Agent API. The agent doesn't know or care which surface the message came from — it processes and responds the same way. A message from Telegram ("join my 2pm meeting") and a message from the meeting chat ("summarize what we discussed") hit the same agent, same workspace, same memory.
 
 | Surface | How it reaches the agent | Status |
 |---------|------------------------|--------|
-| **Meeting chat** (this feature) | Bot DOM observer → Redis → Chat API | Code complete |
-| **Web dashboard** | WebSocket → Chat API | Working |
-| **Telegram** | Telegram Bot → Chat API | Working |
-| **Slack/Discord** (future) | Bot → Chat API | Planned |
+| **Meeting chat** (this feature) | Bot DOM observer → Redis → Agent API | Code complete |
+| **Web dashboard** | WebSocket → Agent API | Working |
+| **Telegram** | Telegram Bot → Agent API | Working |
+| **Slack/Discord** (future) | Bot → Agent API | Planned |
 
 **Your agent, wherever you are:** Message it from your phone on Telegram while commuting. Message it from the meeting chat during a call. Message it from the dashboard at your desk. Same agent, same memory, same context.
 

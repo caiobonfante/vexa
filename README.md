@@ -109,7 +109,7 @@ Run everything including your own GPU transcription service.
 
 **Agent Runtime (preview)**
 - **Ephemeral agent containers** — browser, agent, worker profiles with zero idle cost
-- **Chat API** — stream Claude CLI responses, session persistence, workspace sync
+- **Agent API** — agent sessions, Claude CLI streaming, workspace sync, scheduling
 - **Scheduler** — cron, relative delays, `on_success`/`on_failure` container chaining
 - **Remote browser** — VNC + CDP, persistent auth across sessions
 - **Telegram bot** — interact with your agent from mobile
@@ -264,7 +264,7 @@ Same agent, same memory, every surface:
 | **Web dashboard** | Working — chat with your agent, see meetings, play recordings |
 | **Telegram** | Working — message your agent from your phone |
 | **Meeting chat** | Working — agent reads/responds in live meeting chat |
-| **Slack/Discord** | Planned — same Chat API backbone |
+| **Slack/Discord** | Planned — same Agent API backbone |
 
 ---
 
@@ -371,7 +371,7 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | [api-gateway](./services/api-gateway) | Reverse proxy — routes REST, WebSocket, VNC, CDP to backends |
 | [admin-api](./services/admin-api) | User/org CRUD, scoped API tokens, team management |
 | [bot-manager](./services/bot-manager) | Bot lifecycle, meeting CRUD, recordings, interactive bot controls |
-| [chat-api](./services/chat-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
+| [agent-api](./services/agent-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
 | [runtime-api](./services/runtime-api) | Container CRUD — spawn/stop/exec, port mapping, idle timeout |
 | [transcription-collector](./services/transcription-collector) | Persists segments from Redis to Postgres, serves transcript API |
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 # vexa CLI -- thin wrapper over Vexa APIs
-# Available inside agent containers. Uses VEXA_USER_ID and VEXA_CHAT_API env vars.
+# Available inside agent containers. Uses VEXA_USER_ID and VEXA_AGENT_API env vars.
 set -euo pipefail
 
-CHAT_API="${VEXA_CHAT_API:-http://chat-api:8100}"
+AGENT_API="${VEXA_AGENT_API:-http://agent-api:8100}"
 USER_ID="${VEXA_USER_ID:-unknown}"
 
 # Override bot token from file if dashboard user injected one
@@ -109,13 +109,13 @@ case "${1:-}" in
   workspace)
     case "${2:-}" in
       save)
-        _curl -X POST "$CHAT_API/internal/workspace/save" \
+        _curl -X POST "$AGENT_API/internal/workspace/save" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\"}" > /dev/null && \
           echo "[vexa] Workspace saved."
         ;;
       status)
-        _curl "$CHAT_API/internal/workspace/status?user_id=$USER_ID"
+        _curl "$AGENT_API/internal/workspace/status?user_id=$USER_ID"
         ;;
       *)
         echo "Usage: vexa workspace {save|status}"
@@ -131,7 +131,7 @@ case "${1:-}" in
         ACTION="${1:-chat}"; shift || true
         MSG="$*"
         ESCAPED_MSG=$(_json_escape "$MSG")
-        _curl -X POST "$CHAT_API/api/schedule" \
+        _curl -X POST "$AGENT_API/api/schedule" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"at\":\"$AT\",\"message\":$ESCAPED_MSG}" > /dev/null && \
           echo "[vexa] Job scheduled."
@@ -141,7 +141,7 @@ case "${1:-}" in
         ACTION="${1:-chat}"; shift || true
         MSG="$*"
         ESCAPED_MSG=$(_json_escape "$MSG")
-        _curl -X POST "$CHAT_API/api/schedule" \
+        _curl -X POST "$AGENT_API/api/schedule" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"in\":\"$DELAY\",\"message\":$ESCAPED_MSG}" > /dev/null && \
           echo "[vexa] Job scheduled."
@@ -150,7 +150,7 @@ case "${1:-}" in
         EXPR="$3"; shift 3
         ACTION="${1:-run-script}"; shift || true
         TARGET="$*"
-        _curl -X POST "$CHAT_API/api/schedule" \
+        _curl -X POST "$AGENT_API/api/schedule" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"cron\":\"$EXPR\",\"script_id\":\"$TARGET\"}" > /dev/null && \
           echo "[vexa] Cron job scheduled."
@@ -160,13 +160,13 @@ case "${1:-}" in
         ACTION="${1:-chat}"; shift || true
         MSG="$*"
         ESCAPED_MSG=$(_json_escape "$MSG")
-        _curl -X POST "$CHAT_API/api/schedule" \
+        _curl -X POST "$AGENT_API/api/schedule" \
           -H 'Content-Type: application/json' \
           -d "{\"user_id\":\"$USER_ID\",\"action\":\"$ACTION\",\"in\":\"$INTERVAL\",\"message\":$ESCAPED_MSG}" > /dev/null && \
           echo "[vexa] Job scheduled (one-shot, recurring not yet supported)."
         ;;
       list)
-        _curl "$CHAT_API/api/schedule?user_id=$USER_ID" | python3 -c "
+        _curl "$AGENT_API/api/schedule?user_id=$USER_ID" | python3 -c "
 import sys, json
 jobs = json.load(sys.stdin)
 if not jobs:
@@ -184,7 +184,7 @@ else:
           echo "Usage: vexa schedule cancel <job_id>"
           exit 1
         fi
-        _curl -X DELETE "$CHAT_API/api/schedule/$JOB_ID" > /dev/null && \
+        _curl -X DELETE "$AGENT_API/api/schedule/$JOB_ID" > /dev/null && \
           echo "[vexa] Job $JOB_ID cancelled."
         ;;
       *)

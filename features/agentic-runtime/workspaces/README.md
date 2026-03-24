@@ -36,11 +36,11 @@ Every workspace is a Git repo:
 Users can have multiple workspaces:
 - `POST /api/workspaces` — create workspace from template
 - `GET /api/workspaces` — list user's workspaces
-- Chat API's `user_id` becomes `workspace_id` (or user_id + workspace name)
+- Agent API's `user_id` becomes `workspace_id` (or user_id + workspace name)
 
 ### Workspace index injection
 
-Each chat turn, the Chat API scans the workspace filesystem and injects a compact summary into the prompt (from Quorum's `build_chat_system_prompt()`):
+Each chat turn, the Agent API scans the workspace filesystem and injects a compact summary into the prompt (from Quorum's `build_chat_system_prompt()`):
 - Active streams count and names
 - Knowledge file counts by subdirectory
 - Compliance warnings (oversized files, stale streams)
@@ -162,8 +162,8 @@ See `templates/knowledge/.claude/CLAUDE.md` — full agent instructions ported f
 | 1 | Knowledge template files (CLAUDE.md, structure, .gitignore) | Done |
 | 2 | Git init on workspace creation (instead of bare MinIO) | Not started |
 | 3 | Workspace index injection per chat turn | Not started |
-| 4 | `vexa schedule` CLI + scheduler API integration | Not started |
-| 5 | Internal chat messages (scheduled jobs fire as agent prompts) | Not started |
+| 4 | `vexa schedule` CLI + scheduler API integration | Done |
+| 5 | Internal chat messages (scheduled jobs fire as agent prompts) | Done |
 | 6 | Script execution via worker containers | Not started |
 | 7 | Multi-workspace support (workspace CRUD API) | Not started |
 | 8 | Additional templates (project, meeting-notes, blank) | Not started |

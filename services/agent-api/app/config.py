@@ -1,4 +1,4 @@
-"""Chat API configuration from environment variables."""
+"""Agent API configuration from environment variables."""
 
 import os
 

@@ -1,7 +1,7 @@
-"""Vexa Telegram Bot — thin client on the Chat API.
+"""Vexa Telegram Bot — thin client on the Agent API.
 
 Adapted from Quorum's bot.py. Receives Telegram messages,
-streams them through the Chat API, progressively edits responses.
+streams them through the Agent API, progressively edits responses.
 """
 
 import asyncio
@@ -37,7 +37,7 @@ logger = logging.getLogger("vexa_tg_bot")
 # --- Config ---
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_API_URL = os.getenv("CHAT_API_URL", "http://chat-api:8100")
+CHAT_API_URL = os.getenv("CHAT_API_URL", "http://agent-api:8100")
 DEFAULT_USER_ID = os.getenv("CHAT_DEFAULT_USER_ID", "")
 
 # JSON map: {"telegram_chat_id": "vexa_user_id", ...}

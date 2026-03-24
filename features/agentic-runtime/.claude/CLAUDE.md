@@ -5,7 +5,7 @@
 
 ## Mission
 
-Build the universal container runtime for Vexa. Every "do X with a container" flows through Runtime API. Every "talk to an agent" flows through Chat API. Meeting API owns platform logic. Scheduler orchestrates time-triggered work. Containers scale to zero when idle. Agents have native Vexa fluency via the system layer.
+Build the universal container runtime for Vexa. Every "do X with a container" flows through Runtime API. Every "talk to an agent" flows through Agent API. Meeting API owns platform logic. Scheduler orchestrates time-triggered work. Containers scale to zero when idle. Agents have native Vexa fluency via the system layer.
 
 ## Development cycle
 
@@ -20,7 +20,7 @@ This is a **spec-driven feature**.
 
 | MVP | What it proves | Tests | Status |
 |-----|---------------|-------|--------|
-| MVP0 | Chat API + agent container + system layer + session + persistence | 9 | Done |
+| MVP0 | Agent API + agent container + system layer + session + persistence | 9 | Done |
 | MVP1 | Browser + agent cross-container via vexa CLI + CDP | 10 | Done |
 | MVP2 | Scheduled meeting pipeline + self-orchestration + Telegram | 13 | Done |
 | MVP3 | Meeting pipeline wired to agentic runtime + dashboard | - | Done |
@@ -28,7 +28,7 @@ This is a **spec-driven feature**.
 
 ## Scope
 
-You own the runtime infrastructure: container lifecycle, Chat API, system layer, and the integration between scheduler and containers. You don't own platform-specific meeting logic (Meeting API) or the transcription pipeline.
+You own the runtime infrastructure: container lifecycle, Agent API, system layer, and the integration between scheduler and containers. You don't own platform-specific meeting logic (Meeting API) or the transcription pipeline.
 
 ## Claude CLI strategy
 
@@ -124,7 +124,7 @@ The `vexa` CLI is a thin shell script wrapping curl calls to Runtime/Meeting API
 | Agent Dockerfile | `containers/agent/Dockerfile` | Done |
 | System CLAUDE.md | `containers/agent/system/CLAUDE.md` | Done |
 | Vexa CLI | `containers/agent/system/bin/vexa` | Done (full API coverage) |
-| Chat API | `services/chat-api/` | Done |
+| Agent API | `services/agent-api/` | Done |
 | Runtime API | `services/runtime-api/` | Done |
 | Browser container | `services/vexa-bot/` (browser_session mode) | Done (reuses vexa-bot) |
 | Bot Manager | `services/bot-manager/` | Done |

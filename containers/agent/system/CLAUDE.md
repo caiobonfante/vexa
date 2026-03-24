@@ -8,7 +8,7 @@ You have the `vexa` CLI in your PATH for common operations, AND direct HTTP acce
 
 ```
 VEXA_USER_ID          — your user ID
-VEXA_CHAT_API         — Agent API (http://chat-api:8100)
+VEXA_AGENT_API        — Agent API (http://agent-api:8100)
 VEXA_RUNTIME_API      — Runtime API (http://runtime-api:8090)
 VEXA_BOT_API_TOKEN    — API token for authenticated requests (X-API-Key header)
 ```
@@ -173,12 +173,12 @@ curl "$TC/internal/transcripts/{meeting_id}" -H "X-API-Key: $TOKEN"
 curl "$TC/health"
 ```
 
-### Agent API (chat-api:8100)
+### Agent API (agent-api:8100)
 
 Schedule jobs, manage workspace sync.
 
 ```bash
-AGENT="http://chat-api:8100"
+AGENT="http://agent-api:8100"
 
 # Schedule a job
 curl -X POST "$AGENT/api/schedule" -H "Content-Type: application/json" \

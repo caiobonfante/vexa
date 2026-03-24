@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && \
 COPY libs/shared-models /app/libs/shared-models
 RUN pip install --no-cache-dir /app/libs/shared-models
 
-COPY services/chat-api/requirements.txt .
+COPY services/agent-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/chat-api/app/ ./app/
+COPY services/agent-api/app/ ./app/
 
 EXPOSE 8100
 

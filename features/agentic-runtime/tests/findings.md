@@ -4,7 +4,7 @@
 
 ### Quorum analysis
 - **Pattern:** Single persistent Telegram bot, per-user Docker containers with Claude Code CLI injected
-- **Chat API:** `POST /api/chat` is the backbone -- message in, agent response streamed out via SSE
+- **Agent API:** `POST /api/chat` is the backbone -- message in, agent response streamed out via SSE
 - **Container injection:** Prompt written to file, `docker exec` runs Claude CLI with `--allowedTools` scoping
 - **Session resume:** Claude CLI `--resume {session_id}`, stored in workspace `.claude/.session`
 - **Scheduling:** Asyncio timers from JSON files (no Redis) -- lightweight but not crash-safe
@@ -18,7 +18,7 @@
 
 ### Architecture decisions
 - **Specialist containers > fat stacks:** Agent doesn't need Chromium, worker doesn't need Claude CLI
-- **Chat API as backbone:** All interfaces (Telegram, Web, Slack, MCP) are thin clients
+- **Agent API as backbone:** All interfaces (Telegram, Web, Slack, MCP) are thin clients
 - **Runtime API owns Docker:** Only service that touches container lifecycle
 - **Scheduler as orchestrator:** Container spawn/chain/reclaim via scheduled jobs with callbacks
 - **Certainty:** 80 (design validated against existing code, not yet implemented)

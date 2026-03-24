@@ -1,9 +1,9 @@
-"""Simple API key authentication for chat-api.
+"""Simple API key authentication for agent-api.
 
 Validates X-API-Key header against BOT_API_TOKEN env var.
-This avoids needing a database connection in chat-api while still
+This avoids needing a database connection in agent-api while still
 preventing unauthenticated access. The token is the same one used
-for service-to-service auth (chat-api -> runtime-api).
+for service-to-service auth (agent-api -> runtime-api).
 """
 
 import hmac

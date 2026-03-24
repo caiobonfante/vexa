@@ -45,7 +45,7 @@ Clients (stateless protocol bridges)
       | POST /api/chat    POST /api/meetings
       v
 Core APIs (the backbone)
-  Chat API                     Meeting API
+  Agent API                    Meeting API
   - ensure container           - meeting CRUD
   - inject prompt              - platform logic
   - stream Claude CLI          - transcription config
@@ -186,9 +186,9 @@ The agent doesn't need to BE in the browser -- it connects via CDP over the netw
 
 Agents don't discover Vexa via curl or documentation. The system CLAUDE.md and `vexa` CLI are built into the image. An agent can `vexa container spawn --profile browser` and `vexa browser connect {id}` as naturally as it reads files. User workspaces layer project context on top.
 
-### Chat API is the backbone
+### Agent API is the backbone
 
-Borrowed from Quorum: message in, agent response out, container lifecycle, session management. Telegram/Slack/Web are thin clients that translate their protocol into Chat API calls.
+Borrowed from Quorum: message in, agent response out, container lifecycle, session management. Telegram/Slack/Web are thin clients that translate their protocol into Agent API calls.
 
 ### Scheduler as orchestrator
 
@@ -275,7 +275,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 **Replaces / subsumes:**
 - bot-manager container orchestration -> Runtime API
 - scheduler HTTP executor -> Runtime API container spawn
-- quorum ContainerManager + ChatManager -> Chat API + Runtime API
+- quorum ContainerManager + ChatManager -> Agent API + Runtime API
 
 ---
 
@@ -288,7 +288,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 **What we build:**
 - Agent container Dockerfile (Claude Code CLI + system layer + workspace sync)
 - System layer: `/system/CLAUDE.md` + `/system/bin/vexa` CLI
-- Chat API (FastAPI): `POST /api/chat` with SSE streaming
+- Agent API (FastAPI): `POST /api/chat` with SSE streaming
 - Container manager: ensure/create/exec/idle-stop
 - Workspace persistence: Git or MinIO sync on start/stop (reuse browser-session.ts pattern)
 - Session resume: Claude CLI `--resume` with session file
@@ -317,7 +317,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 - `containers/agent/Dockerfile` -- Claude Code CLI image with system layer
 - `containers/agent/system/CLAUDE.md` -- system instructions
 - `containers/agent/system/bin/vexa` -- CLI wrapper
-- `services/chat-api/` -- FastAPI service
+- `services/agent-api/` -- FastAPI service
 - `features/agentic-runtime/tests/test-mvp0.sh` -- validation script
 - All 9 tests passing
 
@@ -375,7 +375,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 - Post-meeting worker: spawned by callback, summarizes transcript
 - Container chaining: `on_meeting_end` -> scheduler -> worker container
 - System layer fully live: all `vexa` commands functional including `vexa schedule` and `vexa meeting`
-- Telegram bot: thin client on Chat API (first real interface)
+- Telegram bot: thin client on Agent API (first real interface)
 
 **What we DON'T build:**
 - No calendar integration (manual schedule via API)
@@ -478,8 +478,8 @@ User: "Join my meeting"
 | Gap | What's needed | Impact |
 |-----|---------------|--------|
 | `BOT_API_TOKEN` empty | Create service token, set in deploy/.env | Agent can't spawn containers or call Runtime API |
-| `POST_MEETING_HOOKS` empty | Set to `http://chat-api:8100/api/webhooks/meeting-completed` | No auto-trigger of agent after meeting ends |
-| Webhook receiver endpoint | ~20 lines in chat-api: receive meeting.completed → POST /api/chat | Agent doesn't auto-wake on meeting end |
+| `POST_MEETING_HOOKS` empty | Set to `http://agent-api:8100/api/webhooks/meeting-completed` | No auto-trigger of agent after meeting ends |
+| Webhook receiver endpoint | ~20 lines in agent-api: receive meeting.completed → POST /api/chat | Agent doesn't auto-wake on meeting end |
 
 ### What's not built yet
 
@@ -530,12 +530,12 @@ npm install && npm run dev
 |----------|-------|---------|---------|
 | `CLAUDE_CREDENTIALS_PATH` | deploy/.env | `/home/user/.claude/.credentials.json` | Claude CLI auth for agent containers |
 | `CLAUDE_JSON_PATH` | deploy/.env | `/home/user/.claude.json` | Claude CLI config for agent containers |
-| `BOT_API_TOKEN` | deploy/.env | `vxa_bot_...` | Service-to-service auth token (chat-api, vexa CLI) |
+| `BOT_API_TOKEN` | deploy/.env | `vxa_bot_...` | Service-to-service auth token (agent-api, vexa CLI) |
 | `TRANSCRIPTION_SERVICE_URL` | deploy/.env | `http://172.17.0.1:8083` | Whisper service (external) |
 | `TRANSCRIPTION_SERVICE_TOKEN` | deploy/.env | *(empty)* | Auth token for transcription service |
 | `VEXA_ADMIN_API_URL` | dashboard/.env | `http://localhost:8067` | Admin API (NOT api-gateway) |
 | `VEXA_API_URL` | dashboard/.env | `http://localhost:8066` | API gateway |
-| `AGENT_API_URL` | dashboard/.env | `http://localhost:8100` | Chat API for agent sessions |
+| `AGENT_API_URL` | dashboard/.env | `http://localhost:8100` | Agent API for agent sessions |
 
 ### Port map
 
@@ -545,7 +545,7 @@ npm install && npm run dev
 | Admin API | 8001 | 8067 |
 | Bot Manager | 8080 | 8070 |
 | Runtime API | 8090 | 8090 |
-| Chat API | 8100 | 8100 |
+| Agent API | 8100 | 8100 |
 | Transcription Collector | 8000 | 8060 |
 | PostgreSQL | 5432 | 5458 |
 | Redis | 6379 | 6389 |
