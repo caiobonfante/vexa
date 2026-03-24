@@ -21,11 +21,11 @@ type LoginState = "onboarding" | "email" | "sent";
 
 interface HealthStatus {
   status: "ok" | "degraded" | "error";
-  authMode: "direct" | "magic-link" | "google" | "oauth";
+  authMode: "direct" | "magic-link" | "google" | "entra-id" | "oauth";
   checks: {
     smtp: { configured: boolean; optional?: boolean; error?: string };
     googleOAuth: { configured: boolean; optional?: boolean; error?: string };
-    microsoftOAuth?: { configured: boolean; optional?: boolean; error?: string };
+    azureAdOAuth?: { configured: boolean; optional?: boolean; error?: string };
     adminApi: { configured: boolean; reachable: boolean; error?: string };
     vexaApi: { configured: boolean; reachable: boolean; error?: string };
   };
@@ -188,7 +188,7 @@ export default function LoginPage() {
   const hasWarnings = healthStatus?.status === "degraded";
   const isDirectMode = healthStatus?.authMode === "direct";
   const isGoogleAuthEnabled = healthStatus?.checks.googleOAuth.configured === true;
-  const isMicrosoftAuthEnabled = healthStatus?.checks.microsoftOAuth?.configured === true;
+  const isMicrosoftAuthEnabled = healthStatus?.checks.azureAdOAuth?.configured === true;
   const isOAuthEnabled = isGoogleAuthEnabled || isMicrosoftAuthEnabled;
   const isEmailAuthEnabled = !isOAuthEnabled && (healthStatus?.authMode === "magic-link" || healthStatus?.authMode === "direct");
 
