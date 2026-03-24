@@ -263,11 +263,26 @@ Based on: UFAL whisper_streaming LocalAgreement-2 policy (arxiv 2307.14743).
 - Challenger scenarios A/B/C require live TTS collection runs (90s monologue, 3-speaker overlap, long+interjections)
 - No pre-captured data; need `/collect` run first
 
-**Score change:** Confirmation logic: 40 → 60 (Level 1 ceiling — code correct, unit tests pass, replay blocked)
+**Score change:** Confirmation logic: 40 → 50 (Level 1 ceiling — unit tests executed and passing, cap 50)
+**Execution evidence:** `npx ts-node src/services/speaker-streams.test.ts` → "Results: 9 passed, 0 failed"
 **Remaining gap to 90:** (1) Collect data to enable replay; (2) Add unit test covering prefix path with segments; (3) Run challenger overlap scenarios
 
-## Current Blockers (2026-03-23)
+## Current Blockers (2026-03-24)
 
-1. **Human speaker locking (score 40)** — 8+ minutes to lock with overlapping speech. Needs alternative identity mechanism or faster voting.
-2. **Confirmation failure on long monologues** — per-segment stability never triggers for some speakers. Buffer grows → 100-226s monolithic segments.
-3. **Multi-track duplication** — same participant audio on multiple `<audio>` elements. Needs track dedup/merge logic.
+1. **No replay data in repo** — `features/realtime-transcription/data/raw/` doesn't exist. Can't run Level 2-3 replay tests. Need to either commit datasets or document how to collect them. THIS BLOCKS ALL FURTHER VALIDATION.
+2. **Confirmation fix at Level 1 only (score 50)** — unit tests pass but no audio has gone through the changed code. Need replay data to validate Level 2-3, then live TTS meeting for Level 5.
+3. **Human speaker locking (score 40)** — 8+ minutes to lock with overlapping speech. Fix implemented but not tested beyond unit level.
+4. **Multi-track duplication** — same participant audio on multiple `<audio>` elements. Not addressed yet.
+
+## Test Infrastructure (for next agent)
+
+| What | Where | Command | Status |
+|------|-------|---------|--------|
+| Unit tests (speaker-streams) | `services/vexa-bot/core/` | `npx ts-node src/services/speaker-streams.test.ts` | 9/9 PASS |
+| Unit tests (speaker-mapper) | `services/vexa-bot/core/` | `npx ts-node src/services/speaker-mapper.test.ts` | Pre-existing failure on 3-speaker |
+| Replay (core) | `features/realtime-transcription/tests/` | `make play-replay DATASET=teams-3sp-collection` | BLOCKED — no data |
+| Replay (full system) | `features/realtime-transcription/tests/` | `make play-replay-full` | BLOCKED — no data |
+| WAV test | `services/vexa-bot/core/` | `npx ts-node src/services/speaker-streams.wav-test.ts <wav>` | Needs WAV file |
+| Delivery replay | `features/realtime-transcription/delivery/` | `node replay-delivery-test.js` | Has data (youtube-pipeline) |
+| Live TTS meeting (GMeet) | `features/realtime-transcription/scripts/` | `node gmeet-host-auto.js` + `node auto-admit.js` | Needs browser session |
+| Live TTS meeting (Teams) | `features/realtime-transcription/scripts/` | `node teams-host-auto.js` | Needs browser session |
