@@ -127,8 +127,8 @@ Improve confidence with **minimum cost.** Never go to a higher level until you'v
 | 5 Live meeting + TTS bots | Cheap, minutes | 80 | Works on real platform with real WebRTC, real DOM, controlled audio | Browser session, TTS bots, auto-admit, ground truth script |
 | 6 Live meeting + TTS bots + extensive edge cases | Medium, hours | 85 | Handles all known edge cases on real platform | Multiple collection runs covering all designed scenarios |
 | 7 Live meeting + human participants | Expensive, hours | 90 | Works with real human speech patterns, overlaps, mumbling | Real people in a real meeting |
-| 8 Multiple human meetings | Expensive, days | 95 | Consistent across different speakers, topics, meeting styles | Other developers or beta users testing independently |
-| 9 Production | Ongoing | 99 | Stable across N real meetings over time | Running in production, monitored, no regressions |
+| 8 Beta / other developers test | Expensive, days | 90 | Works for people other than the author | Independent testers, fresh eyes, different environments |
+| 9 Production with real users | Ongoing, weeks | 95 | Stable in production over time, validated by user behavior | Real users, real meetings, monitored, no regressions over N meetings |
 
 **Target: 80 without a human.** Levels 0-5 are fully automatable. An agent team can research, implement, test through unit → integration → replay → live TTS meeting — all without human involvement. Level 5 (score 80) is the autonomous ceiling.
 
