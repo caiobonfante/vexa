@@ -1,5 +1,5 @@
-import type {
 import { withBasePath } from "@/lib/base-path";
+import type {
   VexaUser,
   VexaUserWithTokens,
   CreateUserRequest,
