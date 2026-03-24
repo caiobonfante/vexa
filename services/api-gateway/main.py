@@ -140,6 +140,9 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     if origin.strip()
 ]
+from shared_models.security_headers import SecurityHeadersMiddleware
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -148,7 +151,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- HTTP Client --- 
+# --- HTTP Client ---
 # Use a single client instance for connection pooling
 @app.on_event("startup")
 async def startup_event():

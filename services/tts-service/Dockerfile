@@ -17,9 +17,9 @@ COPY services/tts-service/main.py .
 RUN mkdir -p /app/voices
 ENV PIPER_VOICES_DIR=/app/voices
 
-# Optionally pre-download default voices at build time (uncomment to bake in):
-# RUN python -c "from piper.download_voices import download_voice; from pathlib import Path; \
-#     [download_voice(v, Path('/app/voices')) for v in ['en_US-amy-medium', 'en_US-danny-low']]"
+# Run as non-root
+RUN useradd -r -s /bin/false appuser && chown -R appuser /app/voices
+USER appuser
 
 EXPOSE 8002
 

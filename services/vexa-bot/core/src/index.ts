@@ -84,6 +84,7 @@ let pipelineTelemetry: {
   vadChunksRejected: number;
   [key: string]: any;
 } | null = null;
+let pipelineTelemetryInterval: ReturnType<typeof setInterval> | null = null;
 let activeSpeakerStreamHandles: SpeakerStreamHandle[] = [];
 /** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
 let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
@@ -1070,11 +1071,13 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       vadChunksRejected: 0,      // chunks rejected as silence by entry VAD
     };
     pipelineTelemetry = telemetry; // expose to module-level for entry gate VAD
-    const telemetryInterval = setInterval(() => {
+    pipelineTelemetryInterval = setInterval(() => {
       const avgWhisper = telemetry.whisperCalls > 0 ? (telemetry.totalWhisperMs / telemetry.whisperCalls).toFixed(0) : 'n/a';
       const avgConfirmLatency = telemetry.segmentsConfirmed > 0 ? (telemetry.totalConfirmLatencyMs / telemetry.segmentsConfirmed / 1000).toFixed(1) : 'n/a';
       const avgWhisperSegs = telemetry.whisperSegmentCounts.length > 0 ? (telemetry.whisperSegmentCounts.reduce((a,b) => a+b, 0) / telemetry.whisperSegmentCounts.length).toFixed(1) : 'n/a';
       log(`[📊 TELEMETRY] whisper=${telemetry.whisperCalls} (${avgWhisper}ms avg, ${telemetry.whisperFailures} failed) | drafts=${telemetry.draftsEmitted} confirmed=${telemetry.segmentsConfirmed} discarded=${telemetry.segmentsDiscarded} | confirm_latency=${avgConfirmLatency}s | whisper_segs/call=${avgWhisperSegs} | reconfirm=${telemetry.reconfirmations} | vad=${telemetry.vadChunksProcessed}/${telemetry.vadChunksRejected} (checked/rejected)`);
+      // Flush arrays to prevent unbounded growth during long meetings
+      telemetry.whisperSegmentCounts = [];
     }, 30000);
 
     speakerManager.onSegmentReady = async (speakerId: string, speakerName: string, audioBuffer: Float32Array) => {
@@ -1436,6 +1439,12 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
  * Tear down the per-speaker transcription pipeline and release resources.
  */
 async function cleanupPerSpeakerPipeline(): Promise<void> {
+  // Clear telemetry interval
+  if (pipelineTelemetryInterval) {
+    clearInterval(pipelineTelemetryInterval);
+    pipelineTelemetryInterval = null;
+  }
+
   // Stop browser-side audio capture
   for (const handle of activeSpeakerStreamHandles) {
     try {
@@ -2057,17 +2066,35 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
   await performGracefulLeave(page, 0, "normal_completion");
 }
 
-// --- ADDED: Basic Signal Handling (for future Phase 5) ---
-// Setup signal handling to also trigger graceful leave
+// --- Signal Handling with shutdown timeout ---
+const SHUTDOWN_TIMEOUT_MS = 30_000; // 30 seconds max for graceful shutdown
+
 const gracefulShutdown = async (signal: string) => {
     log(`Received signal: ${signal}. Triggering graceful shutdown.`);
     if (!isShuttingDown) {
-        // Determine the correct page instance if multiple are possible, or use a global 'currentPage'
-        // For now, assuming 'page' (if defined globally/module-scoped) or null
         const pageToClose = typeof page !== 'undefined' ? page : null;
-        await performGracefulLeave(pageToClose, signal === 'SIGINT' ? 130 : 143, `signal_${signal.toLowerCase()}`);
+
+        // Race cleanup against a hard timeout to prevent zombie processes
+        const timeoutPromise = new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error("Shutdown timeout exceeded")), SHUTDOWN_TIMEOUT_MS)
+        );
+
+        try {
+            await Promise.race([
+                performGracefulLeave(pageToClose, signal === 'SIGINT' ? 130 : 143, `signal_${signal.toLowerCase()}`),
+                timeoutPromise,
+            ]);
+        } catch (err: any) {
+            log(`[Signal Shutdown] ${err.message} — forcing exit`);
+            process.exit(1);
+        }
     } else {
          log("[Signal Shutdown] Shutdown already in progress.");
+         // If already shutting down but signal received again, force exit after timeout
+         setTimeout(() => {
+             log("[Signal Shutdown] Second signal timeout — forcing exit");
+             process.exit(1);
+         }, SHUTDOWN_TIMEOUT_MS);
     }
 };
 

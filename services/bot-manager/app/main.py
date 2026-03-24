@@ -15,11 +15,6 @@ import httpx
 import hmac
 import uuid as uuid_lib
 
-# Local imports - Remove unused ones
-# from app.database.models import init_db # Using local init_db now
-# from app.database.service import TranscriptionService # Not used here
-# from app.tasks.monitoring import celery_app # Not used here
-
 from .config import BOT_IMAGE_NAME, REDIS_URL
 from app.orchestrators import (
     get_socket_session, close_docker_client, start_bot_container,
@@ -309,6 +304,8 @@ logging.basicConfig(
 logger = logging.getLogger("bot_manager")
 
 # Initialize the FastAPI app
+from shared_models.security_headers import SecurityHeadersMiddleware
+
 app = FastAPI(title="Vexa Bot Manager")
 
 # Add CORS middleware
@@ -317,6 +314,7 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     if origin.strip()
 ]
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -439,8 +437,6 @@ class BotStatusChangePayload(BaseModel):
 async def startup_event():
     global redis_client # <-- Add global reference
     logger.info("Starting up Bot Manager...")
-    # await init_db() # Removed - Admin API should handle this
-    # await init_redis() # Removed redis init if not used elsewhere
     _orch = os.getenv("ORCHESTRATOR", "docker").lower()
     if _orch not in ("kubernetes", "process"):
         try:
@@ -482,7 +478,6 @@ async def startup_event():
 async def shutdown_event():
     global redis_client # <-- Add global reference
     logger.info("Shutting down Bot Manager...")
-    # await close_redis() # Removed redis close if not used
 
     # Stop webhook retry worker before closing Redis
     await stop_retry_worker()

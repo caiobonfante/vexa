@@ -15,8 +15,10 @@ COPY ./services/admin-api/app /app/app
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port - Use a different port than bot-manager (8080)
+# Run as non-root
+RUN useradd -r -s /bin/false appuser
+USER appuser
+
 EXPOSE 8001
 
-# Command to run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

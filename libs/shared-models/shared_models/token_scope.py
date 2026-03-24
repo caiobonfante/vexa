@@ -13,10 +13,13 @@ Scopes:
 Tokens without the vxa_ prefix are legacy (full access).
 """
 
+import logging
 import re
 import secrets
 import string
 from typing import Optional, Set
+
+logger = logging.getLogger("shared_models.token_scope")
 
 TOKEN_PREFIX = "vxa"
 TOKEN_PATTERN = re.compile(r"^vxa_([a-z]+)_(.+)$")
@@ -48,5 +51,9 @@ def check_token_scope(token: str, allowed_scopes: Set[str]) -> bool:
     """
     scope = parse_token_scope(token)
     if scope is None:
-        return True  # Legacy token — full access
+        logger.warning(
+            "Legacy token without vxa_ prefix used — granting full access. "
+            "Migrate to scoped tokens (vxa_<scope>_<random>) to enforce least-privilege."
+        )
+        return True  # Legacy token — full access (deprecated)
     return scope in allowed_scopes

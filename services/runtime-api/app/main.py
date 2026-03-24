@@ -40,9 +40,14 @@ logger = logging.getLogger("runtime_api")
 
 app = FastAPI(title="Vexa Runtime API", version="0.1.0")
 
+from shared_models.security_headers import SecurityHeadersMiddleware
+
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in CORS_ORIGINS],
     allow_methods=["*"],
     allow_headers=["*"],
 )

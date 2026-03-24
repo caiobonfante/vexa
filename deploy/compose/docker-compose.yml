@@ -4,6 +4,7 @@ services:
     build:
       context: ../..
       dockerfile: services/api-gateway/Dockerfile
+    mem_limit: 1g
     ports:
       - "${API_GATEWAY_HOST_PORT:-8056}:8000"
     environment:
@@ -11,15 +12,21 @@ services:
       - BOT_MANAGER_URL=http://bot-manager:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://transcription-collector:8000
       - MCP_URL=http://mcp:18888
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
       - PUBLIC_BASE_URL=https://share.dev.vexa.ai
       - TRANSCRIPT_SHARE_TTL_SECONDS=900
       - LOG_LEVEL=DEBUG
       - CORS_ORIGINS=http://localhost:${DASHBOARD_HOST_PORT:-3001},http://localhost:3000,http://localhost:3001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     init: true
     depends_on:
       admin-api:
-        condition: service_started
+        condition: service_healthy
       bot-manager:
         condition: service_started
       transcription-collector:
@@ -32,8 +39,9 @@ services:
     build:
       context: ../..
       dockerfile: services/admin-api/Dockerfile
-    ports:
-      - "${ADMIN_API_HOST_PORT:-8057}:8001"
+    mem_limit: 512m
+    expose:
+      - "8001"
     environment:
       - DB_HOST=${DB_HOST:-postgres}
       - DB_PORT=${DB_PORT:-5432}
@@ -43,6 +51,12 @@ services:
       - DB_SSL_MODE=${DB_SSL_MODE:-disable}
       - ADMIN_API_TOKEN=${ADMIN_API_TOKEN}
       - LOG_LEVEL=DEBUG
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     init: true
     networks:
       - vexa_default
@@ -52,8 +66,9 @@ services:
     build:
       context: ../..
       dockerfile: services/bot-manager/Dockerfile
+    mem_limit: 2g
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
       - BOT_IMAGE_NAME=${BOT_IMAGE_NAME:-vexa-bot:dev}
       - TTS_SERVICE_URL=http://tts-service:8002
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa_default
@@ -110,8 +125,15 @@ services:
     build:
       context: ../..
       dockerfile: services/transcription-collector/Dockerfile
+    mem_limit: 1g
     ports:
       - "${TRANSCRIPTION_COLLECTOR_HOST_PORT:-8123}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - ../../alembic.ini:/app/alembic.ini
       - ../../libs/shared-models/alembic:/app/alembic
@@ -124,6 +146,7 @@ services:
       - DB_SSL_MODE=${DB_SSL_MODE:-disable}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-vexa-redis-dev}
       - REDIS_STREAM_NAME=transcription_segments
       - REDIS_CONSUMER_GROUP=collector_group
       - REDIS_STREAM_READ_COUNT=10
@@ -158,6 +181,7 @@ services:
     build:
       context: ../..
       dockerfile: services/mcp/Dockerfile
+    mem_limit: 512m
     ports:
       - "${MCP_HOST_PORT:-18888}:18888"
     environment:
@@ -175,6 +199,7 @@ services:
     build:
       context: ${DASHBOARD_PATH:?Set DASHBOARD_PATH in .env}/..
       dockerfile: dashboard/Dockerfile
+    mem_limit: 1g
     ports:
       - "${DASHBOARD_HOST_PORT:-3001}:3000"
     environment:
@@ -197,6 +222,7 @@ services:
     build:
       context: ../..
       dockerfile: services/tts-service/Dockerfile
+    mem_limit: 1g
     expose:
       - "8002"
     environment:
@@ -211,8 +237,15 @@ services:
 
   redis:
     image: redis:7.0-alpine
+    mem_limit: 512m
     command:
-      ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+      ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec",
+       "--requirepass", "${REDIS_PASSWORD:-vexa-redis-dev}"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-vexa-redis-dev}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     volumes:
       - redis-data:/data
     networks:
@@ -221,6 +254,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    mem_limit: 1g
     command: server /data --console-address ":9001"
     environment:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-vexa-access-key}

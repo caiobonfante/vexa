@@ -1,3 +1,4 @@
+import hmac
 import logging
 import secrets
 import string
@@ -30,8 +31,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("admin_api")
 
+from shared_models.security_headers import SecurityHeadersMiddleware
+
 # App initialization
 app = FastAPI(title="Vexa Admin API")
+app.add_middleware(SecurityHeadersMiddleware)
 
 # --- Pydantic Schemas for new endpoint ---
 class WebhookUpdate(BaseModel):
@@ -60,7 +64,7 @@ async def verify_admin_token(admin_api_key: str = Security(API_KEY_HEADER)):
             detail="Admin authentication is not configured on the server."
         )
     
-    if not admin_api_key or admin_api_key != ADMIN_API_TOKEN:
+    if not admin_api_key or not hmac.compare_digest(admin_api_key, ADMIN_API_TOKEN):
         logger.warning(f"Invalid admin token provided.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -78,11 +82,11 @@ async def verify_analytics_or_admin_token(api_key: str = Security(API_KEY_HEADER
         )
     
     # Check if it matches admin token
-    if ADMIN_API_TOKEN and api_key == ADMIN_API_TOKEN:
+    if ADMIN_API_TOKEN and hmac.compare_digest(api_key, ADMIN_API_TOKEN):
         return
-    
+
     # Check if it matches analytics token
-    if ANALYTICS_API_TOKEN and api_key == ANALYTICS_API_TOKEN:
+    if ANALYTICS_API_TOKEN and hmac.compare_digest(api_key, ANALYTICS_API_TOKEN):
         return
     
     logger.warning("Invalid token provided for analytics endpoint.")
@@ -399,8 +403,6 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
     Only provide the fields you want to change in the request body.
     Requires admin privileges.
     """
-    print(f"=== ADMIN PATCH USER {user_id} CALLED ===")
-    
     # Fetch the user to update
     result = await db.execute(select(User).where(User.id == user_id))
     db_user = result.scalars().first()
@@ -410,7 +412,6 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
 
     # Get the update data, excluding unset fields to only update provided values
     update_data = user_update.model_dump(exclude_unset=True)
-    print(f"=== Raw update_data: {update_data} ===")
     logger.info(f"Admin PATCH for user {user_id}. Raw update_data: {update_data}")
 
     # Prevent changing email via this endpoint (if desired)

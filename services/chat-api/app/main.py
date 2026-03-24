@@ -12,7 +12,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ from app.stream_parser import parse_event
 from app.workspace_context import build_workspace_context
 from app.schedule_endpoints import router as schedule_router
 from app.workspace_endpoints import router as workspace_router, set_container_manager
+from app.auth_simple import require_api_key
 from app import config
 
 logging.basicConfig(
@@ -34,9 +35,14 @@ logger = logging.getLogger("agent_api")
 
 app = FastAPI(title="Vexa Agent API", version="0.2.0")
 
+from shared_models.security_headers import SecurityHeadersMiddleware
+
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in CORS_ORIGINS],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -157,9 +163,10 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
     # If a user-specific bot token was provided, write it to the container
     # so vexa CLI reads it for bot-manager calls (meetings belong to this user)
     if bot_token:
-        await cm.exec_simple(container, [
-            "sh", "-c", f"echo '{bot_token}' > /tmp/.vexa-bot-token"
-        ])
+        await cm.exec_with_stdin(container,
+            ["sh", "-c", "cat > /tmp/.vexa-bot-token"],
+            stdin_data=bot_token.encode(),
+        )
 
     # Signal frontend if container was recreated (stale messages should be cleared)
     if cm._new_container:
@@ -185,9 +192,10 @@ async def _run_chat_turn(user_id: str, message: str, model: Optional[str] = None
     ws_context = await build_workspace_context(cm.exec_simple, container)
     full_prompt = f"{ws_context}\n\n---\n\n{message}"
     encoded = base64.b64encode(full_prompt.encode()).decode()
-    await cm.exec_simple(container, [
-        "sh", "-c", f"echo '{encoded}' | base64 -d > /tmp/.chat-prompt.txt"
-    ])
+    await cm.exec_with_stdin(container,
+        ["sh", "-c", "base64 -d > /tmp/.chat-prompt.txt"],
+        stdin_data=encoded.encode(),
+    )
 
     # Claude CLI command
     allowed_tools = "Read,Write,Edit,Bash,Glob,Grep"
@@ -256,7 +264,7 @@ async def health():
     return {"status": "ok", "containers": len(cm._containers)}
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Depends(require_api_key)])
 async def chat(req: ChatRequest):
     """Send a message to Claude inside an agent container. Returns SSE stream.
     If container dies mid-stream, retries once with a fresh container."""
@@ -288,13 +296,13 @@ async def chat(req: ChatRequest):
     )
 
 
-@app.delete("/api/chat")
+@app.delete("/api/chat", dependencies=[Depends(require_api_key)])
 async def interrupt_chat(req: UserIdRequest):
     await cm.interrupt(req.user_id)
     return {"status": "interrupted"}
 
 
-@app.post("/api/chat/reset")
+@app.post("/api/chat/reset", dependencies=[Depends(require_api_key)])
 async def reset_chat(req: UserIdRequest):
     await cm.reset_session(req.user_id)
     await clear_session(req.user_id)
@@ -303,14 +311,14 @@ async def reset_chat(req: UserIdRequest):
 
 # --- Session management endpoints ---
 
-@app.get("/api/sessions")
+@app.get("/api/sessions", dependencies=[Depends(require_api_key)])
 async def get_sessions(user_id: str):
     """List all sessions for a user."""
     sessions = await list_sessions(user_id)
     return {"sessions": sessions}
 
 
-@app.post("/api/sessions")
+@app.post("/api/sessions", dependencies=[Depends(require_api_key)])
 async def create_session(user_id: str, name: str = "New session"):
     """Create a new named session. Returns the session_id (UUID)."""
     import uuid
@@ -319,14 +327,14 @@ async def create_session(user_id: str, name: str = "New session"):
     return {"session_id": session_id, "name": name}
 
 
-@app.delete("/api/sessions/{session_id}")
+@app.delete("/api/sessions/{session_id}", dependencies=[Depends(require_api_key)])
 async def delete_session(session_id: str, user_id: str):
     """Delete a session from the index."""
     await delete_session_meta(user_id, session_id)
     return {"status": "deleted"}
 
 
-@app.put("/api/sessions/{session_id}")
+@app.put("/api/sessions/{session_id}", dependencies=[Depends(require_api_key)])
 async def rename_session(session_id: str, user_id: str, name: str):
     """Rename a session."""
     await save_session_meta(user_id, session_id, name)
@@ -335,7 +343,7 @@ async def rename_session(session_id: str, user_id: str, name: str):
 
 # --- Webhook receiver (called by bot-manager post-meeting hooks) ---
 
-@app.post("/api/webhooks/meeting-completed")
+@app.post("/api/webhooks/meeting-completed", dependencies=[Depends(require_api_key)])
 async def on_meeting_completed(event: dict, background_tasks: BackgroundTasks):
     """Receive meeting.completed webhook from bot-manager POST_MEETING_HOOKS.
     Wakes the user's agent with a message to process the meeting."""
@@ -372,7 +380,7 @@ async def on_meeting_completed(event: dict, background_tasks: BackgroundTasks):
 
 # --- Internal endpoints (called by vexa CLI inside containers) ---
 
-@app.post("/internal/workspace/save")
+@app.post("/internal/workspace/save", dependencies=[Depends(require_api_key)])
 async def workspace_save(req: UserIdRequest):
     from app import workspace_sync
     container = cm.get_container_name(req.user_id)
@@ -384,7 +392,7 @@ async def workspace_save(req: UserIdRequest):
     return {"status": "saved"}
 
 
-@app.get("/internal/workspace/status")
+@app.get("/internal/workspace/status", dependencies=[Depends(require_api_key)])
 async def workspace_status(user_id: str):
     from app import workspace_sync
     exists = await workspace_sync.workspace_exists(user_id)

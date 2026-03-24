@@ -12,14 +12,15 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from shared_models.scheduler import schedule_job, cancel_job, list_jobs, get_job
+from app.auth_simple import require_api_key
 
 logger = logging.getLogger("chat_api.schedule")
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 TRIGGER_URL = "http://telegram-bot:8200/internal/trigger"
 

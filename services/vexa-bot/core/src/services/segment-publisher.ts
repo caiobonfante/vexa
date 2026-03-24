@@ -98,14 +98,23 @@ export class SegmentPublisher {
     }
 
     try {
-      this.client = createClient({ url: this.redisUrl }) as RedisClientType;
+      this.client = createClient({
+        url: this.redisUrl,
+        socket: { connectTimeout: 5000 },
+      }) as RedisClientType;
 
       this.client.on('error', (err) => {
         log(`[SegmentPublisher] Redis client error: ${err.message}`);
         this.connected = false;
       });
 
-      await this.client.connect();
+      // Race connection against a 5s timeout
+      const connectPromise = this.client.connect();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Redis connect timeout (5s)')), 5000)
+      );
+      await Promise.race([connectPromise, timeoutPromise]);
+
       this.connected = true;
       log(`[SegmentPublisher] Connected to Redis at ${this.redisUrl}`);
       return this.client;

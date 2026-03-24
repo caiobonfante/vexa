@@ -153,6 +153,25 @@ class ContainerManager:
             logger.debug(f"exec_simple failed: {e}")
         return None
 
+    async def exec_with_stdin(self, container: str, cmd: list[str],
+                              stdin_data: bytes) -> Optional[str]:
+        """Run a command in the container with stdin piped. Returns stdout or None."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "exec", "-i", container, *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(input=stdin_data), timeout=30
+            )
+            if proc.returncode == 0 and stdout.strip():
+                return stdout.decode(errors="replace").strip()
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.debug(f"exec_with_stdin failed: {e}")
+        return None
+
     async def stop_container(self, user_id: str):
         """Sync workspace and stop via Runtime API."""
         info = self._containers.get(user_id)

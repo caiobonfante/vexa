@@ -29,8 +29,8 @@ async def get_api_key(api_key: str = Security(API_KEY_HEADER),
             detail="Token scope not authorized for bot management"
         )
 
-    # Log the API key received for debugging
-    logger.info(f"Received API key: {api_key[:5]}...")
+    # Log auth attempt without exposing key material
+    logger.debug("Validating API key")
 
     # Find the token in the database
     result = await db.execute(
@@ -41,7 +41,7 @@ async def get_api_key(api_key: str = Security(API_KEY_HEADER),
     token_user = result.first()
     
     if not token_user:
-        logger.warning(f"Invalid API token provided: {api_key[:5]}...")
+        logger.warning("Invalid API token provided")
         # Do NOT return mock user in any environment
         # if os.getenv("ENVIRONMENT", "development") == "production":
         raise HTTPException(
