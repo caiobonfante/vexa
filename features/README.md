@@ -115,20 +115,26 @@ The artifacts tell the agent where it is. Findings show the scores. Feature log 
 
 ### 7. Cost Ladder
 
-Improve confidence with **minimum cost.** Never go to a higher level until you've exhausted lower levels.
+Improve confidence with **minimum cost.** Never go to a higher level until you've exhausted lower levels. **Every level requires actual execution — code review alone is Level 0.**
 
-| Level | Cost | Score cap | What it proves | What it can't prove |
-|-------|------|-----------|---------------|-------------------|
-| 0 Read code | Free, seconds | 30 | Logic is correct | Timing, integration, real behavior |
-| 1 Unit test | Free, seconds | 60 | Function produces right output | Pipeline interactions, platform quirks |
-| 2 Replay existing data | Free, minutes | 80 | Pipeline works on known audio | Unseen scenarios, platform changes |
-| 3 Replay modified data | Free, minutes | 80 | Pipeline works under stress (overlaps, long monologues) | Real platform behavior |
-| 4 Live meeting + TTS bots | Cheap, minutes | 90 | Works on real platform with controlled audio | Human speech patterns |
-| 5 Live meeting + humans | Expensive, hours | 95 | Works with real human speech | Production scale |
+| Level | Cost | Score cap | What it proves | What it requires |
+|-------|------|-----------|---------------|-----------------|
+| 0 Read code | Free, seconds | 30 | Logic appears correct | Human or agent reads code |
+| 1 Unit test **executed** | Free, seconds | 50 | Function produces right output for known input | `npm test` / `pytest` actually runs and passes |
+| 2 Integration test **executed** | Free, minutes | 60 | Multiple components work together | Services running, test hits real APIs |
+| 3 Replay existing data | Cheap, minutes | 70 | Pipeline works on known audio end-to-end | Stack running, replay data exists, scoring runs |
+| 4 Replay with edge cases | Cheap, minutes | 75 | Pipeline handles stress: overlaps, long monologues, silence | Modified/synthetic datasets targeting known weaknesses |
+| 5 Live meeting + TTS bots | Cheap, minutes | 80 | Works on real platform with real WebRTC, real DOM, controlled audio | Browser session, TTS bots, auto-admit, ground truth script |
+| 6 Live meeting + TTS bots + extensive edge cases | Medium, hours | 85 | Handles all known edge cases on real platform | Multiple collection runs covering all designed scenarios |
+| 7 Live meeting + human participants | Expensive, hours | 90 | Works with real human speech patterns, overlaps, mumbling | Real people in a real meeting |
+| 8 Multiple human meetings | Expensive, days | 95 | Consistent across different speakers, topics, meeting styles | Other developers or beta users testing independently |
+| 9 Production | Ongoing | 99 | Stable across N real meetings over time | Running in production, monitored, no regressions |
 
-**Score caps are enforced.** A unit test proving the function works cannot give a score of 90 — it hasn't been tested in the pipeline. A TTS bot test cannot give 95 — it hasn't been tested with real speech. The cap prevents overclaiming.
+**Target: 80 without a human.** Levels 0-5 are fully automatable. An agent team can research, implement, test through unit → integration → replay → live TTS meeting — all without human involvement. Level 5 (score 80) is the autonomous ceiling.
 
-**The rule:** If a bug is in code logic → Level 0-1 fixes it. If it's in pipeline timing → Level 2-3. If it's in platform behavior → Level 4. If it's in human speech patterns → Level 5, but ONLY after 0-4 pass.
+**Score caps are hard.** Evidence must include **execution output** — test runner stdout, segment counts from replay, meeting IDs from live tests. "Code looks correct" is Level 0 (cap 30). "9/9 tests pass" with actual test runner output is Level 1 (cap 50). An agent claiming Level 1 evidence must show the command it ran and the output it got.
+
+**The rule:** Never claim a score above what your evidence level supports. If you ran unit tests, your score caps at 50 — doesn't matter how confident you are in the code.
 
 **The improvement cycle:**
 
@@ -137,16 +143,17 @@ Improve confidence with **minimum cost.** Never go to a higher level until you'v
 2. READ DEAD ENDS → what was tried, what failed?
 3. RESEARCH (if root cause unknown) → cheapest method first
 4. FIX → minimal change to root cause
-5. VALIDATE at cheapest sufficient level
-     Unit test proves it? → Level 1, done
-     Need pipeline timing? → Level 2-3
-     Need real platform? → Level 4
-     Need human speech? → Level 5
-6. UPDATE SCORE → findings.md with evidence + feature-log.md with what changed
+5. VALIDATE — EXECUTE at cheapest sufficient level
+     Run unit test → Level 1 (cap 50)
+     Run integration test → Level 2 (cap 60)
+     Run replay with scoring → Level 3-4 (cap 70-75)
+     Run live TTS meeting → Level 5 (cap 80)
+     MUST SHOW: command run + actual output
+6. UPDATE SCORE → findings.md with execution evidence + feature-log.md
 7. DECIDE → score ≥ 80? done. Didn't improve? log dead end, back to 3.
 ```
 
-Each step only happens if the previous passes. If the unit test fails, don't waste time on live meetings — the logic is wrong.
+Each step requires the previous to pass. If the unit test fails, don't run replay — the logic is wrong. **No skipping levels.**
 
 ---
 
