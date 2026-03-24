@@ -1,10 +1,10 @@
 "use client";
 
-import { AlertCircle, RefreshCw, WifiOff, ServerCrash, FileQuestion } from "lucide-react";
+import { AlertCircle, RefreshCw, WifiOff, ServerCrash, FileQuestion, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type ErrorType = "connection" | "server" | "not-found" | "generic";
+type ErrorType = "connection" | "server" | "not-found" | "generic" | "subscription";
 
 interface ErrorStateProps {
   title?: string;
@@ -12,6 +12,8 @@ interface ErrorStateProps {
   error?: string;
   type?: ErrorType;
   onRetry?: () => void;
+  onAction?: () => void;
+  actionLabel?: string;
   className?: string;
 }
 
@@ -36,6 +38,11 @@ const errorConfig: Record<ErrorType, { icon: typeof AlertCircle; defaultTitle: s
     defaultTitle: "Something went wrong",
     defaultMessage: "An unexpected error occurred. Please try again.",
   },
+  subscription: {
+    icon: CreditCard,
+    defaultTitle: "Subscription Required",
+    defaultMessage: "A subscription is required to access this feature.",
+  },
 };
 
 function getErrorType(error?: string): ErrorType {
@@ -59,6 +66,8 @@ export function ErrorState({
   error,
   type,
   onRetry,
+  onAction,
+  actionLabel,
   className,
 }: ErrorStateProps) {
   const errorType = type || getErrorType(error);
@@ -97,6 +106,17 @@ export function ErrorState({
           <p className="text-xs text-muted-foreground/60 font-mono bg-muted/50 px-3 py-1.5 rounded-md mb-6 max-w-md truncate">
             {error}
           </p>
+        )}
+
+        {/* Action button */}
+        {onAction && actionLabel && (
+          <Button
+            onClick={onAction}
+            variant="outline"
+            className="mt-4 border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50 transition-all"
+          >
+            {actionLabel}
+          </Button>
         )}
 
         {/* Retry button */}

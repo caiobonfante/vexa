@@ -357,7 +357,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </>
             )}
             <a
-              href={getDocsUrl()}
+              href={getDocsUrl("/")}
               target="_blank"
               rel="noopener noreferrer"
               onClick={onClose}

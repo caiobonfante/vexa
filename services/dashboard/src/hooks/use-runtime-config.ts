@@ -6,8 +6,12 @@ import { withBasePath } from "@/lib/base-path";
 interface RuntimeConfig {
   wsUrl: string;
   apiUrl: string;
+  publicApiUrl?: string;
   decisionListenerUrl: string;
   defaultBotName: string | null;
+  authToken?: string | null;
+  hostedMode?: boolean;
+  webappUrl?: string;
 }
 
 // Global cache to avoid refetching on every component mount
