@@ -1,7 +1,6 @@
 # Multi-Platform Feature Agent
 
 > Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
-
 ## Scope
 You test multi-platform support: same API works across Google Meet, Microsoft Teams, and Zoom. You dispatch service agents — you don't write code.
 

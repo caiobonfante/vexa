@@ -28,32 +28,51 @@ Take any product feature up the cost ladder autonomously, with execution evidenc
      first non-blocked level = target
 5. CHECK data requirements for target level
    if data missing → check if generator tool is available and confident
-6. EXECUTE validation at target level
-   one teammate executes, another verifies independently (same command, separate context)
+6. RESEARCH before execution
+   researcher investigates best practices for target level's blocker/challenge
+   share findings with executor BEFORE execution starts
+   researcher also checks cross-feature patterns (did another feature solve this?)
+7. EXECUTE validation at target level
+   executor runs commands with research context
+   verifier independently runs the SAME commands (same command, separate context)
    if outputs conflict → investigate WHY, don't pick a winner
    capture command + stdout from BOTH as evidence
-7. UPDATE findings.md with new score + evidence from both teammates
-8. BLOCKED? → either:
+8. UPDATE findings.md with new score + evidence from both teammates
+9. BLOCKED? → either:
    a. improve the blocking tool (recurse into tool's manifest)
    b. log blocker, move to next feature
-9. NOT BLOCKED? → continue to next level (back to step 4)
-10. REFLECT (mandatory, not optional):
+10. NOT BLOCKED? → continue to next level (back to step 4)
+11. REFLECT (mandatory, not optional):
     - What practices worked this session? → [PRACTICE] entries in feature-log.md
     - What failed or surprised us? → [DEAD-END] entries in feature-log.md
     - Did a practice prove valuable enough to codify? → update this CLAUDE.md
     - Update features/tests/findings.md with meta-feature scores
     - Chronicler writes narrative to blog_articles/ for knowledge persistence
     The loop doesn't close without this step. Knowledge that isn't written down evaporates.
-11. DONE with this feature? → back to step 1, pick next feature
+12. DONE with this feature? → back to step 1, pick next feature
 ```
 
 ## Team Pattern
 
-Every team has these roles:
+**This pattern is mandatory for all feature agents.** When the orchestrator spawns a feature agent, it MUST spawn three agents — not one. A solo feature agent cannot verify its own work.
+
+Every feature team has these roles:
 
 **Executor** — runs commands, improves tools, climbs the ladder.
 **Verifier** — independently runs the SAME commands, confirms or rejects. Verification BLOCKS next execution — executor cannot start Level N+1 until verifier confirms Level N.
+**Researcher** — brings external knowledge: best practices, competitor approaches, dead ends others hit, cross-feature patterns. Feeds findings to executor before each level attempt. Does NOT implement or test.
 **Chronicler** — writes narrative during the run (not after). Captures plot twists, conflicts, surprises. Output goes to blog_articles/ for knowledge persistence.
+
+### How to spawn a feature team
+
+```
+Agent(name="rt-executor", prompt="You are the EXECUTOR for {feature}. Read {feature}/.claude/CLAUDE.md. Run validation at level N. Report command + stdout.")
+Agent(name="rt-verifier", prompt="You are the VERIFIER for {feature}. Read {feature}/.claude/CLAUDE.md. Independently run the SAME commands as the executor. Confirm or reject with evidence.")
+Agent(name="rt-researcher", subagent_type="researcher", prompt="You are the RESEARCHER for {feature}. Read {feature}/.claude/CLAUDE.md. Research best practices for the current blocker. Share findings with the team before execution starts.")
+Agent(name="rt-chronicler", prompt="You are the CHRONICLER for {feature}. Observe executor and verifier progress. Write narrative to blog_articles/ capturing plot twists, conflicts, and surprises.")
+```
+
+The lead coordinates: spawns researcher first for the current blocker, waits for findings, then sends executor with research context, sends result to verifier, blocks next level until verified, nudges stale teammates.
 
 When verifier and executor conflict: investigate the difference. The most valuable findings come from understanding WHY two agents got different results on the same code.
 

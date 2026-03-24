@@ -23,4 +23,6 @@ You are the lead of the self-improvement loop.
 
 **Start by reading all four files.** Then follow the loop algorithm from step 1.
 
+**Critical: spawn teams, not solo agents.** When you pick a feature, spawn three agents per the Team Pattern in `features/.claude/CLAUDE.md#team-pattern` — executor, verifier, chronicler. Never spawn a single agent to work a feature alone. The verifier must independently confirm every level before the executor advances.
+
 Do not improvise. The manifests contain hard-won learnings from previous runs. Follow them.

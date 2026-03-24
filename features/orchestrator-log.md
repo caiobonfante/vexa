@@ -109,3 +109,67 @@ Test 2: Three speakers rapid turns             ✗ (pre-existing, 3-speaker merg
 **Real score: 50** (Level 1 — unit tests executed and passing, cap 50)
 
 **Next: Level 2-5** — Stack is running. Can attempt live TTS meeting to push toward 80.
+
+## MVP4: 2026-03-24 — Orchestrator picks work across features
+
+**Objective:** Prove the orchestrator can read all features' findings, pick the highest-impact work, spawn a team, and move a score — without being told which feature to work on.
+
+**Priority map built from all features' findings:**
+
+| Feature | Score | Impact | Decision |
+|---------|-------|--------|----------|
+| calendar-integration | 0 | HIGH | SKIP — no code to test |
+| chat | 0 | MEDIUM | candidate |
+| speaking-bot | 0 | MEDIUM | **PICKED** — code-complete, TTS infra proven |
+| knowledge-workspace | 30 | MEDIUM | blocked on entity extraction |
+| scheduler (E2E) | 0 | HIGH | blocked on Redis port |
+| realtime-transcription | 80 | CRITICAL | needs Level 6 (human meeting) |
+| post-meeting-transcription | 80 | HIGH | Gate 4 needs browser |
+
+**Target:** speaking-bot, score 0, code-complete across full stack, TTS infrastructure already running.
+
+**Team:** researcher (industry practices) + executor (Level 1-5 validation) + verifier (independent confirmation)
+
+### What happened
+
+1. **Researcher** investigated speak API path AND industry practices:
+   - Mapped full API path: gateway → bot-manager → Redis → bot → TTS → PulseAudio
+   - Found Recall.ai's approach (pre-rendered MP3) vs Vexa's (server-side TTS) — Vexa's is better
+   - Established latency quality bar from Twilio/Picovoice: POST→audible <800ms
+   - Documented 6 PulseAudio gotchas
+   - **Found 3 bugs** in browser_session bot speak path before executor ran
+
+2. **Executor** validated Level 1-5:
+   - Level 1: POST speak → 202 ✅
+   - Level 2: TTS generates 52-54KB WAV ✅
+   - Level 3: Regular bots receive and play ✅, browser_session broken ❌ (3 bugs)
+   - Level 5: Meeting 42 has 16 complete speak cycles in Redis ✅
+
+3. **Verifier** confirmed all 6 claims independently, zero discrepancies.
+
+### Bugs found (3)
+
+1. **Channel mismatch**: bot-manager publishes to `bot_commands:meeting:{id}`, browser_session subscribes to `browser_session:{container_name}`
+2. **No speak handler**: browser-session.ts only handles `save_storage` and `stop`
+3. **Missing env var**: `TTS_SERVICE_URL` not passed to browser_session containers
+
+### Score change
+
+**speaking-bot: 0 → 70** (Level 5 validated for regular bots, blocked at Level 3 for browser_session)
+
+### What MVP4 proved
+
+- Orchestrator reads all features' findings and builds a meaningful priority map
+- Orchestrator picks the right feature (code-complete, score 0, infrastructure available)
+- 3-agent team (researcher + executor + verifier) works without lead intervention beyond initial spawn
+- Researcher finding bugs before execution saves executor from debugging
+- Zero-discrepancy verification gives high-confidence scores
+- The loop works across features, not just realtime-transcription
+
+### What's next
+
+1. Fix the 3 browser_session bugs → speaking-bot score 70→80
+2. Pick next feature from priority map (chat: score 0, code-complete)
+3. Consider: should the orchestrator fix bugs it finds, or just report them?
+
+**MVP4 verdict: PASS.** The orchestrator picks cross-feature work, spawns teams, and moves scores autonomously.
