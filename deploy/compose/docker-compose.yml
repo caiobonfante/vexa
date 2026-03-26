@@ -9,7 +9,7 @@ services:
       - "${API_GATEWAY_HOST_PORT:-8056}:8000"
     environment:
       - ADMIN_API_URL=http://admin-api:8001
-      - BOT_MANAGER_URL=http://bot-manager:8080
+      - BOT_MANAGER_URL=http://meeting-api:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://transcription-collector:8000
       - MCP_URL=http://mcp:18888
       - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
@@ -27,7 +27,7 @@ services:
     depends_on:
       admin-api:
         condition: service_healthy
-      bot-manager:
+      meeting-api:
         condition: service_started
       transcription-collector:
         condition: service_started
@@ -62,13 +62,41 @@ services:
       - vexa_default
     restart: unless-stopped
 
-  bot-manager:
+  runtime-api:
     build:
       context: ../..
-      dockerfile: services/bot-manager/Dockerfile
-    mem_limit: 2g
+      dockerfile: packages/runtime-api/Dockerfile
+    mem_limit: 512m
+    expose:
+      - "8090"
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
+      - DOCKER_HOST=unix://var/run/docker.sock
+      - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa_default
+      - PROFILES_PATH=/app/profiles.yaml
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../services/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
+    init: true
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - vexa_default
+    restart: unless-stopped
+
+  meeting-api:
+    build:
+      context: ../..
+      dockerfile: services/meeting-api/Dockerfile
+    mem_limit: 1g
+    expose:
+      - "8080"
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
+      - RUNTIME_API_URL=http://runtime-api:8090
+      - MEETING_API_URL=http://meeting-api:8080
       - BOT_IMAGE_NAME=${BOT_IMAGE_NAME:-vexa-bot:dev}
       - TTS_SERVICE_URL=http://tts-service:8002
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa_default
@@ -79,7 +107,7 @@ services:
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_SSL_MODE=${DB_SSL_MODE:-disable}
-      - DOCKER_HOST=unix://var/run/docker.sock
+      - TRANSCRIPTION_COLLECTOR_URL=http://transcription-collector:8000
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
       - ADMIN_TOKEN=${ADMIN_API_TOKEN}
@@ -102,18 +130,19 @@ services:
       - LOCAL_STORAGE_FSYNC=${LOCAL_STORAGE_FSYNC:-true}
       - RECORDING_ENABLED=${RECORDING_ENABLED:-true}
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
-      # Deferred transcription — used by POST /meetings/{id}/transcribe
+      # Deferred transcription
       - TRANSCRIPTION_GATEWAY_URL=${TRANSCRIPTION_GATEWAY_URL:-}
-      # Post-meeting hooks — fires to webapp billing on meeting end
+      # Post-meeting hooks
       - POST_MEETING_HOOKS=${POST_MEETING_HOOKS:-}
       # Voice agent / TTS
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${LOCAL_STORAGE_VOLUME_SOURCE:-recordings-data}:/data/recordings
     init: true
     depends_on:
       redis:
+        condition: service_started
+      runtime-api:
         condition: service_started
       tts-service:
         condition: service_started
