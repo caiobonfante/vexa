@@ -22,10 +22,10 @@ ORM models, Pydantic schemas, database sessions, storage abstraction, webhook de
 
 ```bash
 # Install
-pip install -e libs/shared-models/
+pip install -e packages/shared-models/
 
 # Run existing tests
-cd libs/shared-models
+cd packages/shared-models
 pytest test_token_scope.py test_webhook_delivery_history.py test_webhook_retry.py -v
 
 # Check migration status

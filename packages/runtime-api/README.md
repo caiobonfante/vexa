@@ -1,0 +1,225 @@
+# Runtime API
+
+Open-source container lifecycle API. Create, manage, and orchestrate ephemeral containers through a simple REST interface — with idle management, lifecycle callbacks, and pluggable backends.
+
+**Think of it as self-hosted [Fly Machines](https://fly.io/docs/machines/) — a REST API for container CRUD, but running on your own infrastructure.**
+
+## Features
+
+- **REST API** for container lifecycle — create, inspect, stop, list, exec
+- **Profile system** — declarative YAML templates for container types
+- **Three backends** — Docker, Kubernetes, and local process
+- **Idle management** — automatic cleanup of inactive containers
+- **Lifecycle callbacks** — webhook notifications on container state changes
+- **Per-tenant concurrency** — configurable limits per user and profile
+- **Redis state** — fast queries with backend reconciliation on startup
+
+## Quickstart
+
+### Docker Compose (recommended)
+
+```bash
+curl -O https://raw.githubusercontent.com/vexa-ai/runtime-api/main/docker-compose.yml
+docker compose up -d
+```
+
+### From source
+
+```bash
+git clone https://github.com/vexa-ai/runtime-api.git
+cd runtime-api
+pip install -e .
+uvicorn runtime_api.main:app --host 0.0.0.0 --port 8090
+```
+
+Requires Redis (`redis://localhost:6379`) and Docker daemon access.
+
+### Create a container
+
+```bash
+# Create a container from a profile
+curl -X POST http://localhost:8090/containers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profile": "worker",
+    "user_id": "user-123",
+    "callback_url": "http://my-service:8080/hooks/container",
+    "metadata": {"job_id": "abc"}
+  }'
+```
+
+### List containers
+
+```bash
+curl http://localhost:8090/containers?profile=worker&user_id=user-123
+```
+
+### Stop a container
+
+```bash
+curl -X DELETE http://localhost:8090/containers/worker-abc123
+```
+
+### Heartbeat (reset idle timer)
+
+```bash
+curl -X POST http://localhost:8090/containers/worker-abc123/touch
+```
+
+## API Reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/containers` | Create and start a container |
+| `GET` | `/containers` | List containers (filter by `user_id`, `profile`) |
+| `GET` | `/containers/{name}` | Inspect container (status, ports, metadata) |
+| `DELETE` | `/containers/{name}` | Stop and remove container |
+| `POST` | `/containers/{name}/touch` | Heartbeat — reset idle timer |
+| `POST` | `/containers/{name}/exec` | Execute command inside container |
+| `GET` | `/containers/{name}/wait` | Long-poll until target state reached |
+| `GET` | `/health` | Health check with container counts |
+
+## Profiles
+
+Profiles are declarative container templates defined in YAML. Reference them by name when creating containers.
+
+```yaml
+# profiles.yaml
+worker:
+  image: my-worker:latest
+  resources:
+    cpu: "1"
+    memory: 2Gi
+  idle_timeout: 900        # stop after 15min idle
+  auto_remove: true
+  ports:
+    "8080": http
+
+browser:
+  image: chromium-cdp:latest
+  resources:
+    cpu: "1"
+    memory: 2Gi
+  idle_timeout: 600        # stop after 10min idle
+  ports:
+    "9223": cdp
+    "6080": vnc
+
+sandbox:
+  image: code-sandbox:latest
+  resources:
+    cpu: "0.5"
+    memory: 1Gi
+  idle_timeout: 1800       # 30min
+  one_per_user: true       # enforce single instance per user
+  mounts:
+    - /workspace
+```
+
+## Backends
+
+Runtime API supports three orchestration backends, selected via `ORCHESTRATOR_BACKEND` environment variable:
+
+| Backend | Env Value | Use Case |
+|---------|-----------|----------|
+| **Docker** | `docker` | Local development, single-host deployment |
+| **Kubernetes** | `kubernetes` | Production — pods, RBAC, resource limits, node selectors |
+| **Process** | `process` | Lightweight — child processes, no container runtime needed |
+
+### Backend interface
+
+All backends implement the same abstraction:
+
+```
+create(spec) → container_id
+start(id)
+stop(id)
+remove(id)
+inspect(id) → status, ports, metadata
+list(labels) → containers[]
+exec(id, cmd) → stream
+```
+
+## Lifecycle Callbacks
+
+Pass a `callback_url` when creating a container. Runtime API POSTs to it on state transitions:
+
+```json
+{
+  "name": "worker-abc123",
+  "profile": "worker",
+  "status": "exited",
+  "exit_code": 0,
+  "metadata": {"job_id": "abc"}
+}
+```
+
+Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
+
+## Comparison
+
+| | Runtime API | Fly Machines | K8s Jobs | Docker Compose | E2B |
+|---|---|---|---|---|---|
+| REST API | Yes | Yes | Via kubectl | No | Yes |
+| Container profiles | Yes | No | No | No | Templates |
+| Idle management | Yes | Yes (auto-stop) | No | No | Yes |
+| Lifecycle callbacks | Yes | No | Limited | No | No |
+| Per-tenant concurrency | Yes | No | No | No | Yes |
+| Self-hosted | Yes | No | Yes | Yes | No |
+| Open source | Yes | No | Yes | Yes | No |
+| No K8s required | Yes | Yes | No | Yes | Yes |
+| Multi-backend | Yes | No | K8s only | Docker only | No |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORCHESTRATOR_BACKEND` | `docker` | Backend: `docker`, `kubernetes`, or `process` |
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker daemon socket |
+| `DOCKER_NETWORK` | — | Docker network for containers |
+| `REDIS_URL` | `redis://redis:6379` | Redis connection URL |
+| `PROFILES_PATH` | `profiles.yaml` | Path to profiles config |
+| `IDLE_CHECK_INTERVAL` | `30` | Seconds between idle checks |
+| `CORS_ORIGINS` | `*` | Allowed CORS origins |
+| `LOG_LEVEL` | `INFO` | Log level |
+
+## Architecture
+
+```
+                    ┌──────────────┐
+                    │  Your App    │
+                    │              │
+                    │ POST /containers
+                    │ GET  /containers
+                    │ DELETE /containers/{name}
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Runtime API │
+                    │              │
+                    │ • profiles   │
+                    │ • state      │
+                    │ • idle mgmt  │
+                    │ • callbacks  │
+                    │ • concurrency│
+                    └──────┬───────┘
+                           │
+                  ┌────────┼────────┐
+                  │        │        │
+            ┌─────▼──┐ ┌──▼───┐ ┌──▼──────┐
+            │ Docker │ │ K8s  │ │ Process │
+            │ socket │ │ pods │ │ child   │
+            └────────┘ └──────┘ └─────────┘
+```
+
+## Use Cases
+
+- **AI agent sandboxes** — give agents their own containers with lifecycle management
+- **Browser automation farms** — manage browser pools with CDP access and idle cleanup
+- **Dev environments** — on-demand coding containers with workspace persistence
+- **CI/CD runners** — ephemeral build containers with per-tenant limits
+- **Meeting bots** — spawn browser-based bots that join and leave meetings
+
+## License
+
+Apache-2.0

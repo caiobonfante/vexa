@@ -99,8 +99,8 @@ Collector stores these in sorted set `speaker_events:{session_uid}` (score = tim
 - Stream consumer: [`services/transcription-collector/streaming/consumer.py`](transcription-collector/streaming/consumer.py) -- `XREADGROUP` loop
 - Pub/Sub producer: [`services/bot-manager/app/main.py`](bot-manager/app/main.py) -- `publish_meeting_status_change()`
 - Pub/Sub consumer: [`services/api-gateway/main.py`](api-gateway/main.py) -- `websocket_multiplex()` subscribes for real-time updates
-- Webhook retry: [`libs/shared-models/shared_models/webhook_retry_worker.py`](../libs/shared-models/shared_models/webhook_retry_worker.py) -- `BRPOP` loop with backoff
-- Webhook enqueue: [`libs/shared-models/shared_models/webhook_delivery.py`](../libs/shared-models/shared_models/webhook_delivery.py) -- `LPUSH` on failure
+- Webhook retry: [`packages/shared-models/shared_models/webhook_retry_worker.py`](../packages/shared-models/shared_models/webhook_retry_worker.py) -- `BRPOP` loop with backoff
+- Webhook enqueue: [`packages/shared-models/shared_models/webhook_delivery.py`](../packages/shared-models/shared_models/webhook_delivery.py) -- `LPUSH` on failure
 
 ## How
 
