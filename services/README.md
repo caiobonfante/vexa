@@ -20,34 +20,41 @@
    │ tokens)    │    │ status, wh) │    │ workspace)  │
    └────────────┘    └──────┬──────┘    └──────┬──────┘
                             │                  │
-                            └────────┬─────────┘
-                                     │
-                            ┌────────▼────────┐
-                            │   Runtime API   │
-                            │ (container CRUD,│
-                            │  profiles,      │
-                            │  state, health) │
-                            └────────┬────────┘
-                                     │
-                            ┌────────▼────────┐
-                            │   Bot Manager   │
-                            │ (Docker / K8s / │
-                            │  process)       │
-                            └───┬──────┬───┬──┘
-                                │      │   │
-                       ┌────────▼┐ ┌───▼─┐ ┌▼────────┐
-                       │vexa-bot │ │agent│ │ browser  │
-                       │(meeting)│ │(CLI)│ │(Chromium)│
-                       └────┬────┘ └─────┘ └─────────┘
+                   ═════════╪══════════════════╪═══════
+                    domain  │                  │
+                    ────────┼──────────────────┘
+                    infra   │
                             │
-                    ┌───────┴────────┐
-                    │  Redis streams  │
-                    ▼                 ▼
-         ┌──────────────┐  ┌─────────────────┐
-         │Transcription │  │ Transcription   │
-         │  Collector   │  │   Service       │
-         │  (→ DB)      │  │ (Whisper API)   │
-         └──────────────┘  └─────────────────┘
+                   ┌────────▼────────┐
+                   │  Runtime API    │  ← packages/runtime-api/
+                   │                 │
+                   │ • CRUD API      │
+                   │ • YAML profiles │
+                   │ • idle mgmt    │
+                   │ • callbacks     │
+                   │ • concurrency   │
+                   └────────┬────────┘
+                            │
+                   ┌────────┼────────┐
+                   │        │        │
+             ┌─────▼──┐ ┌──▼───┐ ┌──▼──────┐
+             │ Docker │ │ K8s  │ │ Process │
+             │ socket │ │ pods │ │ child   │
+             └───┬────┘ └──┬───┘ └────┬────┘
+                 │         │          │
+            ┌────▼───┐ ┌───▼──┐ ┌────▼─────┐
+            │vexa-bot│ │agent │ │ browser  │
+            │(meetng)│ │(CLI) │ │(Chromium)│
+            └────┬───┘ └──────┘ └──────────┘
+                 │
+         ┌───────┴────────┐
+         │  Redis streams  │
+         ▼                 ▼
+┌──────────────┐  ┌─────────────────┐
+│Transcription │  │ Transcription   │
+│  Collector   │  │   Service       │
+│  (→ DB)      │  │ (Whisper API)   │
+└──────────────┘  └─────────────────┘
 ```
 
 ## Publishable Packages
@@ -71,13 +78,13 @@ These live in `packages/` and are designed to be independently publishable with 
 | [api-gateway](api-gateway/) | 8000 | Entry point. Auth middleware, routing, CORS |
 | [admin-api](admin-api/) | 8001 | User management, API tokens, meeting CRUD |
 | [agent-api](agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces |
-| [runtime-api](runtime-api/) | 8090 | Container lifecycle, profiles, state, health |
+| [runtime-api](../packages/runtime-api/) | 8090 | Container lifecycle API — Docker, K8s, process backends. Lives in `packages/`. |
 
 ### Container Management
 
 | Service | Description |
 |---------|-------------|
-| [bot-manager](bot-manager/) | Ephemeral container orchestration (Docker, K8s, process backends) |
+| [bot-manager](bot-manager/) | Legacy orchestration — being superseded by Runtime API + Meeting API |
 | [vexa-bot](vexa-bot/) | Browser-based meeting bot (Zoom, Google Meet, MS Teams) |
 | vexa-agent | Claude Code agent container (currently at `containers/agent/`, moving here) |
 
@@ -102,7 +109,7 @@ These live in `packages/` and are designed to be independently publishable with 
 ## Data Flow
 
 ### Meeting Transcription
-1. **Meeting API** receives join request → **Runtime API** → **Bot Manager** spawns **vexa-bot**
+1. **Meeting API** receives join request → **Runtime API** spawns **vexa-bot** container
 2. **vexa-bot** joins meeting via browser, captures audio per speaker
 3. Audio sent via HTTP to **Transcription Service** (Whisper) → text returned
 4. Segments published to **Redis streams**
@@ -110,7 +117,7 @@ These live in `packages/` and are designed to be independently publishable with 
 6. **Dashboard** reads transcripts from DB via **API Gateway**
 
 ### Agent Chat
-1. **Agent API** receives chat request → **Runtime API** → **Bot Manager** spawns **vexa-agent**
+1. **Agent API** receives chat request → **Runtime API** spawns **vexa-agent** container
 2. **vexa-agent** runs Claude Code with workspace context
 3. Responses streamed back via SSE through **Agent API** → **Dashboard**
 

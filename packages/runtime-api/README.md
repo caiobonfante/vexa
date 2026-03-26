@@ -77,6 +77,7 @@ curl -X POST http://localhost:8090/containers/worker-abc123/touch
 | `POST` | `/containers/{name}/touch` | Heartbeat — reset idle timer |
 | `POST` | `/containers/{name}/exec` | Execute command inside container |
 | `GET` | `/containers/{name}/wait` | Long-poll until target state reached |
+| `GET` | `/profiles` | List available container profiles |
 | `GET` | `/health` | Health check with container counts |
 
 ## Profiles
@@ -128,12 +129,14 @@ All backends implement the same abstraction:
 
 ```
 create(spec) → container_id
-start(id)
-stop(id)
-remove(id)
-inspect(id) → status, ports, metadata
-list(labels) → containers[]
-exec(id, cmd) → stream
+stop(name, timeout) → bool
+remove(name) → bool
+inspect(name) → ContainerInfo | None
+list(labels) → ContainerInfo[]
+exec(name, cmd) → AsyncIterator[bytes]
+startup() → None
+shutdown() → None
+listen_events(on_exit) → None
 ```
 
 ## Lifecycle Callbacks
@@ -142,15 +145,16 @@ Pass a `callback_url` when creating a container. Runtime API POSTs to it on stat
 
 ```json
 {
+  "container_id": "abc123def",
   "name": "worker-abc123",
   "profile": "worker",
-  "status": "exited",
+  "status": "stopped",
   "exit_code": 0,
   "metadata": {"job_id": "abc"}
 }
 ```
 
-Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
+Callbacks fire on: `stopped` (clean exit or idle timeout), `failed` (non-zero exit code). Retries with exponential backoff (default: 1s, 5s, 30s).
 
 ## Comparison
 
@@ -171,9 +175,7 @@ Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ORCHESTRATOR_BACKEND` | `docker` | Backend: `docker`, `kubernetes`, or `process` |
-| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker daemon socket |
-| `DOCKER_NETWORK` | — | Docker network for containers |
-| `REDIS_URL` | `redis://redis:6379` | Redis connection URL |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
 | `PROFILES_PATH` | `profiles.yaml` | Path to profiles config |
 | `IDLE_CHECK_INTERVAL` | `30` | Seconds between idle checks |
 | `CALLBACK_RETRIES` | `3` | Max callback delivery attempts |
@@ -181,7 +183,31 @@ Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
 | `API_KEYS` | _(empty)_ | Comma-separated API keys (empty = no auth) |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `LOG_LEVEL` | `INFO` | Log level |
+| `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8090` | Server port |
+
+### Docker backend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker daemon socket |
+| `DOCKER_NETWORK` | `bridge` | Docker network for containers |
+
+### Kubernetes backend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K8S_NAMESPACE` | `default` | Kubernetes namespace (falls back to `POD_NAMESPACE`) |
+| `K8S_SERVICE_ACCOUNT` | _(empty)_ | Service account for pods |
+| `K8S_IMAGE_PULL_POLICY` | `IfNotPresent` | Image pull policy |
+| `K8S_IMAGE_PULL_SECRET` | _(empty)_ | Image pull secret name |
+
+### Process backend
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PROCESS_LOGS_DIR` | `/var/log/containers` | Directory for process logs |
+| `PROCESS_REAPER_INTERVAL` | `30` | Seconds between reaper checks |
 
 ## Architecture
 
