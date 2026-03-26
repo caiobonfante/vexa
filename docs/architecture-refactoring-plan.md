@@ -550,6 +550,86 @@ No big bang rewrite. Extract piece by piece while production keeps running.
 
 ---
 
+## Risk Assessment
+
+Three independent devil's advocate reviews (infrastructure, code, product) identified 13 risks. 5 are blockers that must be resolved before starting.
+
+### Blockers
+
+**1. Hardcoded callback URLs in bot containers**
+Bot containers have `http://bot-manager:8080/bots/internal/callback/exited` baked into BOT_CONFIG at spawn time. After refactoring, bot-manager is gone.
+**Fix:** Runtime API accepts `callback_url` as a parameter at container creation. Meeting API passes its own URL. No hardcoded service names in container config.
+
+**2. Dashboard depends on exact `/bots/status` response shape**
+Dashboard merges `/bots/status` (running_bots with container_name, meeting_id_from_name, etc.) with `/meetings`. The admin page also uses it. Auth verification calls it.
+**Fix:** Meeting API must return identical response shape. Write contract tests before Phase 2.
+
+**3. Calendar service hardcoded to `bot-manager:8080`**
+`services/calendar-service/app/sync.py` calls `POST {BOT_MANAGER_URL}/bots` directly, bypassing gateway. Default hostname is `bot-manager`. Fails silently when DNS name disappears.
+**Fix:** Route calendar-service through API gateway, or update env var. Add startup health check.
+
+**4. Redis channel names are frozen contracts**
+Three publishers use specific channel prefixes that gateway WebSocket handler subscribes to:
+- `bm:meeting:{id}:status` (bot-manager → must stay `bm:`)
+- `tc:meeting:{id}:mutable` (transcription-collector)
+- `va:meeting:{id}:chat` (vexa-bot)
+Agent API also subscribes to `bm:meeting:*:status` for agent wake-up.
+**Fix:** Document as frozen. Meeting API publishes to same `bm:` prefix with same payload shapes.
+
+**5. Phase 2 in-flight meetings span the cutover**
+Bots launched by bot-manager callback to `http://bot-manager:8080`. After gateway switches to meeting-api, bot-manager still receives callbacks but users query meeting-api (which has no record).
+**Fix:** Either drain all in-flight meetings before cutover, or make meeting-api handle bot-manager-originated callbacks (read same DB, accept same callback paths).
+
+### High Priority (design before Phase 1)
+
+**6. Callback delivery has no guarantees**
+Runtime API POSTs to callback_url on container exit. If Meeting API is down, callback is lost forever. No retry, no dead-letter queue.
+**Fix:** Use Docker event stream listener (`docker events`) instead of polling. Retry with exponential backoff (1s/5s/30s). Store pending callbacks in Redis with TTL.
+
+**7. Docker socket race: idle-stop during exec**
+Runtime API's idle loop stops containers. Agent API does `docker exec` directly. If stop fires mid-exec, user sees broken SSE stream.
+**Fix:** Agent API must call `POST /containers/{name}/touch` before every exec. Runtime API checks Docker state before stopping.
+
+**8. Process backend registry is in-memory only**
+If Runtime API crashes, all process tracking is lost. Orphaned Node.js bots run forever. Post-meeting hooks never fire.
+**Fix:** Redis-backed process registry. Periodic reaper loop. Resource limits via `setrlimit()`.
+
+**9. `bot_exit_callback` bridges both domains in one function**
+The callback reads Redis chat messages (orchestration), updates meeting status (domain), and triggers post-meeting tasks — all in one DB transaction.
+**Fix:** Redesign: Runtime API fires generic callback `{container_id, status, exit_code, metadata}`. Meeting API receives it and handles all domain logic (status update, chat persistence, post-meeting hooks, webhooks).
+
+### Medium Priority
+
+**10. Redis/Postgres split-brain**
+Container exits but callback fails → Redis says "stopped", Postgres says "active". Zombie meetings.
+**Fix:** Reconciliation loop in Meeting API: query Runtime API for active containers, mark missing ones as failed.
+
+**11. Webhook delivery timing shifts**
+Adding a network hop delays webhooks by callback latency. If callback fails, webhooks never fire.
+**Fix:** Callback retry queue (see #6). Reconciliation (see #10).
+
+**12. Voice agent latency +5-20ms**
+Additional Meeting API hop in speak/chat/screen commands.
+**Fix:** Benchmark. Likely acceptable. If not, colocate Meeting API with bot containers.
+
+**13. K8s profile abstraction bloat**
+Meeting profile needs `/dev/shm`, GPU, node selectors, tolerations. Generic profiles can't hold K8s-specific fields.
+**Fix:** Opaque `k8s_overrides` dict in profile system. Don't try to abstract away K8s specifics.
+
+### Pre-Phase-1 Checklist
+
+Before starting any refactoring:
+
+- [ ] Design callback delivery guarantee (event stream vs polling, retry queue, at-least-once semantics)
+- [ ] Make process registry durable (Redis-backed)
+- [ ] Define Phase 2 drain strategy (drain meetings or backward-compat callbacks)
+- [ ] Write contract tests for `/bots/status` response shape
+- [ ] Document frozen contracts: API paths, response shapes, Redis channel names, webhook HMAC format
+- [ ] Resolve calendar-service routing (gateway vs env var update)
+- [ ] Design generic callback contract: `{container_id, status, exit_code, metadata}`
+
+---
+
 ## Build vs Buy: Deep Validation
 
 ### Research Scope
