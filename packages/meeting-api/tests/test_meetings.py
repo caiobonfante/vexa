@@ -32,11 +32,9 @@ def _setup_create_meeting_db(mock_db):
 
     The endpoint makes several queries:
     1. Duplicate check (select existing meeting) → empty
-    2. User lock (select user with_for_update) → returns user
-    3. Count active meetings → 0
+    2. Count active meetings → 0
     After that: add, commit, refresh for the new meeting.
     """
-    test_user = make_user()
     call_count = 0
 
     async def multi_execute(*args, **kwargs):
@@ -46,9 +44,6 @@ def _setup_create_meeting_db(mock_db):
             # Duplicate check → no existing meeting
             return MockResult([])
         elif call_count == 2:
-            # User lock → return user
-            return MockResult([test_user])
-        elif call_count == 3:
             # Count active meetings → 0
             return MockResult(scalar_value=0)
         return MockResult()

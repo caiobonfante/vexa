@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
 from shared_models.database import get_db, async_session_local
-from shared_models.models import User, Meeting, MeetingSession
+from shared_models.models import Meeting, MeetingSession
 from shared_models.schemas import (
     MeetingCreate,
     MeetingResponse,
@@ -454,8 +454,9 @@ async def _find_active_meeting(
 )
 async def request_bot(
     req: MeetingCreate,
+    request: Request,
     background_tasks: BackgroundTasks,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     user_token, current_user = auth_data
@@ -585,12 +586,8 @@ async def request_bot(
             detail=f"An active or requested meeting already exists for this platform and meeting ID",
         )
 
-    # Concurrency limit (with row-level lock)
-    lock_stmt = select(User).where(User.id == current_user.id).with_for_update()
-    locked_user = (await db.execute(lock_stmt)).scalars().first()
-    if not locked_user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    user_limit = int(getattr(locked_user, "max_concurrent_bots", 0) or 0)
+    # Concurrency limit
+    user_limit = int(getattr(current_user, "max_concurrent_bots", 0) or 0)
     if user_limit > 0:
         count_stmt = select(func.count()).select_from(Meeting).where(
             and_(
@@ -619,6 +616,19 @@ async def request_bot(
         meeting_data["recording_enabled"] = bool(req.recording_enabled)
     else:
         meeting_data["recording_enabled"] = True
+
+    # Store webhook config in meeting.data (from gateway headers or user config)
+    webhook_url = request.headers.get("X-User-Webhook-URL", "")
+    if webhook_url:
+        meeting_data["webhook_url"] = webhook_url
+        webhook_secret = request.headers.get("X-User-Webhook-Secret", "")
+        if webhook_secret:
+            meeting_data["webhook_secret"] = webhook_secret
+        webhook_events_raw = request.headers.get("X-User-Webhook-Events", "")
+        if webhook_events_raw:
+            meeting_data["webhook_events"] = {
+                evt.strip(): True for evt in webhook_events_raw.split(",") if evt.strip()
+            }
 
     new_meeting = Meeting(
         user_id=current_user.id,
@@ -762,7 +772,7 @@ async def request_bot(
     dependencies=[Depends(get_user_and_token)],
 )
 async def get_user_bots_status(
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
 ):
     """Returns {running_bots: [...]} with exact same fields as bot-manager."""
     _, current_user = auth_data
@@ -784,7 +794,7 @@ async def update_bot_config(
     platform: Platform,
     native_meeting_id: str,
     req: MeetingConfigUpdate,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -839,7 +849,7 @@ async def stop_bot(
     platform: Platform,
     native_meeting_id: str,
     background_tasks: BackgroundTasks,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data

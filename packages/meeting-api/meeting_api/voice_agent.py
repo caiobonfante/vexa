@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared_models.database import get_db
-from shared_models.models import User
 from shared_models.schemas import Platform, MeetingStatus
 
 from .auth import get_user_and_token
@@ -37,7 +36,7 @@ async def bot_speak(
     platform: Platform,
     native_meeting_id: str,
     req: dict,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -81,7 +80,7 @@ async def bot_speak(
 async def bot_speak_stop(
     platform: Platform,
     native_meeting_id: str,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -109,7 +108,7 @@ async def bot_chat_send(
     platform: Platform,
     native_meeting_id: str,
     req: dict,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -135,7 +134,7 @@ async def bot_chat_send(
 async def bot_chat_read(
     platform: Platform,
     native_meeting_id: str,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -172,7 +171,7 @@ async def bot_screen_show(
     platform: Platform,
     native_meeting_id: str,
     req: dict,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -211,7 +210,7 @@ async def bot_screen_show(
 async def bot_screen_stop(
     platform: Platform,
     native_meeting_id: str,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -239,7 +238,7 @@ async def bot_avatar_set(
     platform: Platform,
     native_meeting_id: str,
     req: dict,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -270,7 +269,7 @@ async def bot_avatar_set(
 async def bot_avatar_reset(
     platform: Platform,
     native_meeting_id: str,
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data
@@ -297,7 +296,7 @@ async def bot_events(
     platform: Platform,
     native_meeting_id: str,
     limit: int = Query(default=20, ge=1, le=200),
-    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
     _, current_user = auth_data

@@ -9,7 +9,6 @@ import os
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from shared_models.models import Meeting
 from shared_models.database import async_session_local
@@ -74,10 +73,6 @@ async def fire_post_meeting_hooks(meeting: Meeting, db: AsyncSession):
     if not meeting.start_time or not meeting.end_time:
         return
 
-    user = meeting.user
-    if not user:
-        return
-
     duration_seconds = (meeting.end_time - meeting.start_time).total_seconds()
     meeting_data = meeting.data or {}
 
@@ -85,7 +80,7 @@ async def fire_post_meeting_hooks(meeting: Meeting, db: AsyncSession):
         "meeting": {
             "id": meeting.id,
             "user_id": meeting.user_id,
-            "user_email": user.email,
+            "user_email": f"user-{meeting.user_id}",
             "platform": meeting.platform,
             "status": meeting.status,
             "duration_seconds": duration_seconds,
@@ -114,7 +109,7 @@ async def run_all_tasks(meeting_id: int):
 
     async with async_session_local() as db:
         try:
-            meeting = await db.get(Meeting, meeting_id, options=[selectinload(Meeting.user)])
+            meeting = await db.get(Meeting, meeting_id)
             if not meeting:
                 logger.error(f"Meeting {meeting_id} not found for post-meeting tasks")
                 return
@@ -142,7 +137,7 @@ async def run_status_webhook_task(meeting_id: int, status_change_info: dict = No
 
     async with async_session_local() as db:
         try:
-            meeting = await db.get(Meeting, meeting_id, options=[selectinload(Meeting.user)])
+            meeting = await db.get(Meeting, meeting_id)
             if not meeting:
                 logger.error(f"Meeting {meeting_id} not found for status webhook")
                 return

@@ -5,9 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from shared_models.models import Meeting, User
-
-from .conftest import make_meeting, make_user, TEST_MEETING_ID, TEST_USER_ID
+from .conftest import make_meeting, TEST_MEETING_ID, TEST_USER_ID
 
 
 # ===================================================================
@@ -35,19 +33,19 @@ class TestWebhookHelpers:
         assert _is_event_enabled({}, "meeting.completed") is True
 
     def test_is_event_enabled_custom_config(self):
-        """User can enable/disable events via webhook_events config."""
+        """User can enable/disable events via webhook_events config in meeting.data."""
         from meeting_api.webhooks import _is_event_enabled
 
-        user_data = {
+        meeting_data = {
             "webhook_events": {
                 "meeting.completed": True,
                 "meeting.started": True,
                 "bot.failed": False,
             }
         }
-        assert _is_event_enabled(user_data, "meeting.completed") is True
-        assert _is_event_enabled(user_data, "meeting.started") is True
-        assert _is_event_enabled(user_data, "bot.failed") is False
+        assert _is_event_enabled(meeting_data, "meeting.completed") is True
+        assert _is_event_enabled(meeting_data, "meeting.started") is True
+        assert _is_event_enabled(meeting_data, "bot.failed") is False
 
     def test_build_meeting_event_data(self):
         """Event data includes frozen meeting fields."""
@@ -69,6 +67,27 @@ class TestWebhookHelpers:
         assert data["platform"] == "google_meet"
         assert data["status"] == "completed"
 
+    def test_get_webhook_config_from_meeting_data(self):
+        """Webhook config is read from meeting.data."""
+        from meeting_api.webhooks import _get_webhook_config
+
+        meeting = make_meeting(data={
+            "webhook_url": "https://example.com/hook",
+            "webhook_secret": "secret123",
+        })
+        url, secret = _get_webhook_config(meeting)
+        assert url == "https://example.com/hook"
+        assert secret == "secret123"
+
+    def test_get_webhook_config_empty(self):
+        """No webhook config → returns None, None."""
+        from meeting_api.webhooks import _get_webhook_config
+
+        meeting = make_meeting(data={})
+        url, secret = _get_webhook_config(meeting)
+        assert url is None
+        assert secret is None
+
 
 # ===================================================================
 # send_completion_webhook
@@ -78,42 +97,27 @@ class TestWebhookHelpers:
 class TestSendCompletionWebhook:
 
     @pytest.mark.asyncio
-    async def test_no_user_skips(self):
-        """No user on meeting → skip webhook."""
+    async def test_no_webhook_url_skips(self):
+        """Meeting with no webhook_url in data → skip webhook."""
         from meeting_api.webhooks import send_completion_webhook
 
-        meeting = make_meeting()
-        object.__setattr__(meeting, "user", None)
-
+        meeting = make_meeting(data={})
         db = AsyncMock()
         await send_completion_webhook(meeting, db)
         # Should not raise, just return
 
     @pytest.mark.asyncio
-    async def test_no_webhook_url_skips(self):
-        """User with no webhook_url → skip webhook."""
-        from meeting_api.webhooks import send_completion_webhook
-
-        user = make_user(data={})
-        meeting = make_meeting()
-        object.__setattr__(meeting, "user", user)
-
-        db = AsyncMock()
-        await send_completion_webhook(meeting, db)
-
-    @pytest.mark.asyncio
     async def test_webhook_calls_deliver(self):
-        """Webhook with valid URL → calls deliver()."""
+        """Webhook with valid URL in meeting.data → calls deliver()."""
         from meeting_api.webhooks import send_completion_webhook
 
-        user = make_user(data={"webhook_url": "https://example.com/webhook"})
         now = datetime.utcnow()
         meeting = make_meeting(
             status="completed",
             start_time=now,
             end_time=now,
+            data={"webhook_url": "https://example.com/webhook"},
         )
-        object.__setattr__(meeting, "user", user)
         object.__setattr__(meeting, "native_meeting_id", "abc-defg-hij")
         object.__setattr__(meeting, "constructed_meeting_url", "https://meet.google.com/abc")
 
@@ -137,16 +141,19 @@ class TestWebhookSigning:
 
     @pytest.mark.asyncio
     async def test_webhook_with_secret_uses_hmac(self):
-        """When user has webhook_secret, deliver is called with it."""
+        """When meeting.data has webhook_secret, deliver is called with it."""
         from meeting_api.webhooks import send_completion_webhook
 
-        user = make_user(data={
-            "webhook_url": "https://example.com/webhook",
-            "webhook_secret": "my-secret-key",
-        })
         now = datetime.utcnow()
-        meeting = make_meeting(status="completed", start_time=now, end_time=now)
-        object.__setattr__(meeting, "user", user)
+        meeting = make_meeting(
+            status="completed",
+            start_time=now,
+            end_time=now,
+            data={
+                "webhook_url": "https://example.com/webhook",
+                "webhook_secret": "my-secret-key",
+            },
+        )
         object.__setattr__(meeting, "native_meeting_id", "abc-defg-hij")
         object.__setattr__(meeting, "constructed_meeting_url", None)
 
@@ -165,15 +172,16 @@ class TestWebhookSigning:
 
     @pytest.mark.asyncio
     async def test_webhook_without_secret_no_signature(self):
-        """When no webhook_secret, deliver is called with None secret."""
+        """When no webhook_secret in meeting.data, deliver is called with None secret."""
         from meeting_api.webhooks import send_completion_webhook
 
-        user = make_user(data={
-            "webhook_url": "https://example.com/webhook",
-        })
         now = datetime.utcnow()
-        meeting = make_meeting(status="completed", start_time=now, end_time=now)
-        object.__setattr__(meeting, "user", user)
+        meeting = make_meeting(
+            status="completed",
+            start_time=now,
+            end_time=now,
+            data={"webhook_url": "https://example.com/webhook"},
+        )
         object.__setattr__(meeting, "native_meeting_id", "abc-defg-hij")
         object.__setattr__(meeting, "constructed_meeting_url", None)
 

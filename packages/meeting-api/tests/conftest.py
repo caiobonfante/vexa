@@ -24,8 +24,9 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from shared_models.models import User, Meeting, MeetingSession, APIToken
+from shared_models.models import Meeting, MeetingSession
 from shared_models.schemas import MeetingStatus
+from meeting_api.auth import UserProxy
 
 
 # ---------------------------------------------------------------------------
@@ -43,20 +44,16 @@ TEST_PLATFORM = "google_meet"
 TEST_NATIVE_MEETING_ID = "abc-defg-hij"
 
 
-def make_user(**overrides) -> MagicMock:
+def make_user(**overrides) -> UserProxy:
     defaults = dict(
-        id=TEST_USER_ID,
-        email=TEST_USER_EMAIL,
-        name="Test User",
-        max_concurrent_bots=5,
-        data={},
+        user_id=TEST_USER_ID,
+        max_concurrent=5,
+        scopes=["*"],
     )
     defaults.update(overrides)
-    user = MagicMock(spec=User)
-    for k, v in defaults.items():
-        setattr(user, k, v)
-    # Ensure isinstance check passes for User
-    user.__class__ = User
+    user = UserProxy(defaults["user_id"], defaults["max_concurrent"], defaults["scopes"])
+    user.email = overrides.get("email", TEST_USER_EMAIL)
+    user.data = overrides.get("data", {})
     return user
 
 
@@ -97,20 +94,6 @@ def make_session(**overrides) -> MagicMock:
     for k, v in defaults.items():
         setattr(s, k, v)
     return s
-
-
-def make_token(**overrides) -> MagicMock:
-    defaults = dict(
-        id=1,
-        token=TEST_API_KEY,
-        user_id=TEST_USER_ID,
-        created_at=datetime.utcnow(),
-    )
-    defaults.update(overrides)
-    t = MagicMock(spec=APIToken)
-    for k, v in defaults.items():
-        setattr(t, k, v)
-    return t
 
 
 # ---------------------------------------------------------------------------
@@ -225,9 +208,13 @@ async def client(mock_db, mock_redis) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def unauthed_client(mock_db, mock_redis) -> AsyncGenerator[AsyncClient, None]:
-    """AsyncClient with NO auth override — for testing auth rejection."""
+    """AsyncClient with NO auth override — for testing auth rejection.
+
+    Sets API_KEYS so that requests without a valid key are rejected (403).
+    """
     from meeting_api.main import app
     from meeting_api import meetings as meetings_mod
+    import meeting_api.auth as auth_mod
 
     async def override_get_db():
         yield mock_db
@@ -236,9 +223,14 @@ async def unauthed_client(mock_db, mock_redis) -> AsyncGenerator[AsyncClient, No
     app.dependency_overrides[get_db] = override_get_db
     meetings_mod.set_redis(mock_redis)
 
+    # Enable standalone auth so missing key → 403
+    original_keys = auth_mod.API_KEYS
+    auth_mod.API_KEYS = ["test-valid-key"]
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
     meetings_mod.set_redis(None)
+    auth_mod.API_KEYS = original_keys

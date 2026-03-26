@@ -2,6 +2,9 @@
 
 Preserves the exact HMAC signing algorithm, envelope format, and header
 contracts from bot-manager. See tests/contracts/test_webhook_contracts.py.
+
+Webhook config (webhook_url, webhook_secret, webhook_events) is now read
+from meeting.data, stored at creation time by the POST /bots endpoint.
 """
 
 import logging
@@ -11,7 +14,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from shared_models.models import Meeting, User
+from shared_models.models import Meeting
 from shared_models.webhook_url import validate_webhook_url
 from shared_models.webhook_delivery import (
     deliver,
@@ -34,9 +37,9 @@ def _resolve_event_type(meeting_status: str) -> str:
     return STATUS_TO_EVENT.get(meeting_status, "meeting.status_change")
 
 
-def _is_event_enabled(user_data: Optional[Dict], event_type: str) -> bool:
+def _is_event_enabled(meeting_data: Optional[Dict], event_type: str) -> bool:
     default_enabled = {"meeting.completed"}
-    events_config = (user_data or {}).get("webhook_events")
+    events_config = (meeting_data or {}).get("webhook_events")
     if not events_config or not isinstance(events_config, dict):
         return event_type in default_enabled
     enabled = events_config.get(event_type)
@@ -50,6 +53,14 @@ def _write_delivery_status(meeting: Meeting, status: dict):
     data["webhook_delivery"] = status
     meeting.data = data
     flag_modified(meeting, "data")
+
+
+def _get_webhook_config(meeting: Meeting) -> tuple[Optional[str], Optional[str]]:
+    """Extract webhook_url and webhook_secret from meeting.data."""
+    data = meeting.data if isinstance(meeting.data, dict) else {}
+    webhook_url = data.get("webhook_url")
+    webhook_secret = data.get("webhook_secret")
+    return webhook_url, webhook_secret
 
 
 def _build_meeting_event_data(meeting: Meeting) -> Dict[str, Any]:
@@ -72,11 +83,7 @@ def _build_meeting_event_data(meeting: Meeting) -> Dict[str, Any]:
 async def send_completion_webhook(meeting: Meeting, db: AsyncSession):
     """Post-meeting webhook — called from post_meeting tasks (same as bot_exit_tasks/send_webhook.py)."""
     try:
-        user = meeting.user
-        if not user:
-            return
-
-        webhook_url = user.data.get("webhook_url") if user.data and isinstance(user.data, dict) else None
+        webhook_url, webhook_secret = _get_webhook_config(meeting)
         if not webhook_url:
             return
 
@@ -84,8 +91,6 @@ async def send_completion_webhook(meeting: Meeting, db: AsyncSession):
             validate_webhook_url(webhook_url)
         except ValueError:
             return
-
-        webhook_secret = user.data.get("webhook_secret") if isinstance(user.data, dict) else None
 
         payload = build_envelope("meeting.completed", {"meeting": _build_meeting_event_data(meeting)})
         now = datetime.now(timezone.utc).isoformat()
@@ -95,7 +100,7 @@ async def send_completion_webhook(meeting: Meeting, db: AsyncSession):
             payload=payload,
             webhook_secret=webhook_secret,
             timeout=30.0,
-            label=f"client-webhook meeting={meeting.id} user={user.email}",
+            label=f"client-webhook meeting={meeting.id} user={meeting.user_id}",
             metadata={"meeting_id": meeting.id},
         )
 
@@ -134,24 +139,19 @@ async def send_status_webhook(
 ):
     """Status-change webhook — called on every transition (same as tasks/send_status_webhook.py)."""
     try:
-        user = meeting.user
-        if not user:
-            return
-
-        webhook_url = user.data.get("webhook_url") if user.data and isinstance(user.data, dict) else None
+        webhook_url, webhook_secret = _get_webhook_config(meeting)
         if not webhook_url:
             return
 
+        meeting_data = meeting.data if isinstance(meeting.data, dict) else {}
         event_type = _resolve_event_type(meeting.status)
-        if not _is_event_enabled(user.data, event_type):
+        if not _is_event_enabled(meeting_data, event_type):
             return
 
         try:
             validate_webhook_url(webhook_url)
         except ValueError:
             return
-
-        webhook_secret = user.data.get("webhook_secret") if isinstance(user.data, dict) else None
 
         event_data: Dict[str, Any] = {"meeting": _build_meeting_event_data(meeting)}
 
@@ -176,23 +176,22 @@ async def send_status_webhook(
         logger.error(f"Unexpected error sending status webhook for meeting {meeting.id}: {e}", exc_info=True)
 
 
-async def send_event_webhook(user_id: int, event_type: str, data: dict):
+async def send_event_webhook(meeting_id: int, event_type: str, data: dict):
     """Fire-and-forget webhook for recording/transcription events."""
     from shared_models.database import async_session_local
 
     try:
         async with async_session_local() as db:
-            user = await db.get(User, user_id)
-            if not user or not user.data or not isinstance(user.data, dict):
+            meeting = await db.get(Meeting, meeting_id)
+            if not meeting:
                 return
-            webhook_url = user.data.get("webhook_url")
+            webhook_url, webhook_secret = _get_webhook_config(meeting)
             if not webhook_url:
                 return
             try:
                 validate_webhook_url(webhook_url)
             except ValueError:
                 return
-            webhook_secret = user.data.get("webhook_secret")
 
         payload = build_envelope(event_type, data)
         await deliver(
@@ -200,7 +199,7 @@ async def send_event_webhook(user_id: int, event_type: str, data: dict):
             payload=payload,
             webhook_secret=webhook_secret,
             timeout=30.0,
-            label=f"event-webhook {event_type} user={user_id}",
+            label=f"event-webhook {event_type} meeting={meeting_id}",
         )
     except Exception as e:
-        logger.warning(f"Event webhook ({event_type}) failed for user {user_id}: {e}")
+        logger.warning(f"Event webhook ({event_type}) failed for meeting {meeting_id}: {e}")

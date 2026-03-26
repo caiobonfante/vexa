@@ -18,7 +18,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
 from shared_models.database import get_db
-from shared_models.models import User, Meeting, MeetingSession, Recording, MediaFile
+from shared_models.models import Meeting, MeetingSession, Recording, MediaFile
 from shared_models.schemas import (
     RecordingResponse,
     RecordingListResponse,
@@ -219,7 +219,7 @@ async def internal_upload_recording(
         attributes.flag_modified(meeting, "data")
         await db.commit()
         if is_final:
-            asyncio.create_task(send_event_webhook(user_id, "recording.completed", {"recording": rec_payload}))
+            asyncio.create_task(send_event_webhook(meeting.id, "recording.completed", {"recording": rec_payload}))
         return {"recording_id": rec_payload["id"], "media_file_id": media_file_id, "storage_path": storage_path, "status": rec_payload["status"]}
 
     # DB mode
@@ -243,7 +243,7 @@ async def internal_upload_recording(
     await db.refresh(recording)
     await db.refresh(media_file)
 
-    asyncio.create_task(send_event_webhook(user_id, "recording.completed", {
+    asyncio.create_task(send_event_webhook(meeting.id, "recording.completed", {
         "recording": {"id": recording.id, "meeting_id": recording.meeting_id, "session_uid": session_uid, "status": recording.status, "media_file_id": media_file.id, "file_size_bytes": file_size, "media_type": media_type, "media_format": media_format}
     }))
     return {"recording_id": recording.id, "media_file_id": media_file.id, "storage_path": storage_path, "status": recording.status}
