@@ -99,34 +99,9 @@ async def create_container(req: CreateContainerRequest, request: Request):
     if not profile_def:
         raise HTTPException(400, f"Unknown profile: {req.profile}")
 
-    # Per-user concurrency limit — caller can tighten (not loosen) the profile default
-    max_per_user = profile_def.get("max_per_user", 0)
-    caller_limit = req.config.get("max_per_user")
-    if caller_limit is not None:
-        caller_limit = int(caller_limit)
-        if max_per_user == 0 or (caller_limit > 0 and caller_limit < max_per_user):
-            max_per_user = caller_limit
-    if max_per_user > 0:
-        current = await state.count_user_containers(redis, req.user_id, profile=req.profile)
-        if current >= max_per_user:
-            raise HTTPException(
-                429,
-                f"User {req.user_id} has reached the limit of {max_per_user} "
-                f"concurrent '{req.profile}' containers",
-            )
-
     # Generate container name
     if req.name:
         name = req.name
-    elif max_per_user == 1:
-        # Single-instance profile: deterministic name
-        name = f"{req.profile}-{req.user_id}"
-        existing = await state.get_container(redis, name)
-        if existing and existing.get("status") == "running":
-            # Verify with backend
-            info = await backend.inspect(name)
-            if info and info.status == "running":
-                return _container_response(name, existing)
     else:
         suffix = uuid.uuid4().hex[:8]
         name = f"{req.profile}-{req.user_id}-{suffix}"

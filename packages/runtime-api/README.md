@@ -21,9 +21,6 @@ POST /containers { profile: "worker", user_id: "u-123", callback_url: "http://..
 profiles.py ── load profile from YAML ── merge with request config overrides
      │
      ▼
-state.py ── check per-user concurrency (max_per_user from profile)
-     │        └─ 429 if limit exceeded
-     ▼
 backends/ ── dispatch to configured backend:
      │
      ├── docker.py   ── docker create + start (via unix socket)
@@ -181,7 +178,6 @@ profiles:
       memory_limit: "2Gi"
     idle_timeout: 900        # stop after 15min idle
     auto_remove: true
-    max_per_user: 5
     ports:
       "8080/tcp": {}
 
@@ -193,7 +189,6 @@ profiles:
       memory_limit: "2Gi"
       shm_size: 2147483648   # 2GB
     idle_timeout: 600        # 10min
-    max_per_user: 1          # one sandbox per user
     ports:
       "8080/tcp": {}
 ```
@@ -251,7 +246,6 @@ Callbacks fire on: `stopped` (clean exit or idle timeout), `failed` (non-zero ex
 | Container profiles | Yes | No | No | No | Templates |
 | Idle management | Yes | Yes (auto-stop) | No | No | Yes |
 | Lifecycle callbacks | Yes | No | Limited | No | No |
-| Per-tenant concurrency | Yes | No | No | No | Yes |
 | Self-hosted | Yes | No | Yes | Yes | No |
 | Open source | Yes | No | Yes | Yes | No |
 | No K8s required | Yes | Yes | No | Yes | Yes |
