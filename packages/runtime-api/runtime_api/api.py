@@ -99,8 +99,13 @@ async def create_container(req: CreateContainerRequest, request: Request):
     if not profile_def:
         raise HTTPException(400, f"Unknown profile: {req.profile}")
 
-    # Per-user concurrency limit
+    # Per-user concurrency limit — caller can tighten (not loosen) the profile default
     max_per_user = profile_def.get("max_per_user", 0)
+    caller_limit = req.config.get("max_per_user")
+    if caller_limit is not None:
+        caller_limit = int(caller_limit)
+        if max_per_user == 0 or (caller_limit > 0 and caller_limit < max_per_user):
+            max_per_user = caller_limit
     if max_per_user > 0:
         current = await state.count_user_containers(redis, req.user_id, profile=req.profile)
         if current >= max_per_user:
