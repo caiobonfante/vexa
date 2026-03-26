@@ -3,22 +3,27 @@ set -euo pipefail
 
 # sync-clean.sh — Sync the 'clean' branch from the working branch
 #
-# Creates a squashed snapshot of the source branch on top of origin/main,
-# with dev-only paths (listed in .cleanignore) stripped out.
-# Result: clean branch stays slim (1 commit ahead of main per sync).
+# Merges source branch into clean (preserving commit history),
+# then strips dev-only paths listed in .cleanignore.
+#
+# First sync: brings full history. Subsequent syncs: incremental.
+# The PR to main can be squash-merged if you want a single commit there.
 #
 # Usage:
 #   ./scripts/sync-clean.sh                              # sync from current branch
 #   ./scripts/sync-clean.sh feature/agentic-runtime      # sync from specific branch
 #   ./scripts/sync-clean.sh --push                       # sync and push
-#   ./scripts/sync-clean.sh --push feature/agentic-runtime
+#   ./scripts/sync-clean.sh --reset                      # recreate clean from scratch
 
 SOURCE_BRANCH=""
 PUSH=false
+RESET=false
 
 for arg in "$@"; do
   case "$arg" in
     --push) PUSH=true ;;
+    --reset) RESET=true ;;
+    -*) echo "Unknown flag: $arg"; exit 1 ;;
     *) SOURCE_BRANCH="$arg" ;;
   esac
 done
@@ -65,25 +70,35 @@ fi
 # Fetch latest main
 git fetch origin main --quiet 2>/dev/null || true
 
-# Strategy: reset clean branch to origin/main, then overlay source files
-# This avoids merge commits and keeps history squashed.
+# Handle --reset: delete and recreate clean branch
+if [ "$RESET" = true ]; then
+  echo "Resetting clean branch..."
+  git branch -D clean 2>/dev/null || true
+fi
 
+# Switch to clean branch (or create from main)
 if git rev-parse --verify clean >/dev/null 2>&1; then
   git checkout clean
-  # Reset clean to origin/main (no history from source branch)
-  git reset --soft origin/main
 else
   echo "Creating clean branch from origin/main..."
   git checkout -b clean origin/main
 fi
 
-# Overlay all files from source branch
-git checkout "$SOURCE_BRANCH" -- . 2>/dev/null || true
+# Merge the source branch (preserves history)
+echo "Merging $SOURCE_BRANCH..."
+if ! git merge "$SOURCE_BRANCH" --no-edit -X theirs 2>/dev/null; then
+  # Resolve any remaining conflicts by accepting theirs
+  CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+  if [ -n "$CONFLICTED" ]; then
+    echo "Resolving $(echo "$CONFLICTED" | wc -l) conflicts (accepting source branch)..."
+    echo "$CONFLICTED" | while IFS= read -r f; do
+      git checkout --theirs "$f" 2>/dev/null && git add "$f" 2>/dev/null || git rm "$f" 2>/dev/null || true
+    done
+    git commit --no-edit 2>/dev/null || true
+  fi
+fi
 
-# Stage everything
-git add -A
-
-# Remove excluded paths (supports globs like **/.claude/ and **/tests/findings.md)
+# Strip excluded paths
 REMOVED=0
 for pattern in "${EXCLUDE_PATHS[@]}"; do
   MATCHES=$(git ls-files --cached "$pattern" 2>/dev/null || true)
@@ -95,31 +110,25 @@ for pattern in "${EXCLUDE_PATHS[@]}"; do
   fi
 done
 
-echo "Stripped $REMOVED excluded files"
-
-# Check if there's anything to commit
+# Commit the strip (if anything was removed)
 if git diff --cached --quiet; then
-  echo "No changes to commit (clean branch is up to date with $SOURCE_BRANCH)"
+  echo "Nothing to strip (clean branch is up to date)"
 else
-  CHANGED=$(git diff --cached --stat | tail -1)
-  git commit -m "$(cat <<EOF
-chore: sync clean from $SOURCE_BRANCH
-
-$CHANGED
-Stripped $REMOVED dev-only files via .cleanignore
-EOF
-)"
+  echo "Stripped $REMOVED dev-only files"
+  git commit -m "chore: strip dev artifacts via .cleanignore ($REMOVED files)"
 fi
 
 echo ""
 echo "=== Clean branch status ==="
-echo "Commits ahead of main: $(git log --oneline origin/main..clean | wc -l)"
-git log --oneline -5 clean
+AHEAD=$(git log --oneline origin/main..clean | wc -l)
+FIRST_PARENT=$(git log --oneline --first-parent origin/main..clean | wc -l)
+echo "Commits ahead of main: $AHEAD (first-parent: $FIRST_PARENT)"
+git log --oneline --first-parent -5 clean
 
 if [ "$PUSH" = true ]; then
   echo ""
   echo "Pushing clean to origin..."
-  git push origin clean --force-with-lease
+  git push origin clean
 fi
 
 # Return to source branch
