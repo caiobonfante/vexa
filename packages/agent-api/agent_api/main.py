@@ -32,7 +32,6 @@ from agent_api.chat import (
     save_session_meta,
 )
 from agent_api.container_manager import ContainerManager
-from agent_api import scheduler
 from agent_api import workspace
 
 logging.basicConfig(
@@ -78,14 +77,6 @@ class SessionRenameRequest(BaseModel):
     name: str
 
 
-class ScheduleRequest(BaseModel):
-    execute_at: Optional[str] = None  # ISO 8601 UTC
-    delay: Optional[str] = None  # relative: "5m", "2h", "1d"
-    request: dict  # {method, url, headers?, body?, timeout?}
-    metadata: Optional[dict] = None
-    idempotency_key: Optional[str] = None
-    cron: Optional[str] = None
-
 
 class FileWriteRequest(BaseModel):
     user_id: str
@@ -102,19 +93,12 @@ async def startup():
     await app.state.redis.ping()
     logger.info("Redis connected")
 
-    # Scheduler executor (recover_orphaned_jobs runs inside the executor loop)
-    app.state.executor_task = asyncio.create_task(
-        scheduler.start_executor(app.state.redis)
-    )
-    logger.info("Scheduler executor started")
-
     await cm.startup()
-    logger.info(f"Agent Runtime ready on port {config.PORT}")
+    logger.info(f"Agent API ready on port {config.PORT}")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    await scheduler.stop_executor()
     await cm.shutdown()
     await app.state.redis.close()
 
@@ -209,81 +193,6 @@ async def rename_session(session_id: str, req: SessionRenameRequest):
     """Rename a session."""
     await save_session_meta(app.state.redis, req.user_id, session_id, req.name)
     return {"status": "renamed", "name": req.name}
-
-
-# ── Scheduling ─────────────────────────────────────────────────────────────
-
-
-def _parse_relative_delay(delay: str) -> float:
-    """Parse relative delay like '5m', '2h', '1d' into seconds from now."""
-    match = re.match(r"^(\d+)\s*([smhd])$", delay.strip().lower())
-    if not match:
-        raise ValueError(f"Invalid relative time: {delay}. Use format like 5m, 2h, 1d, 30s")
-    value, unit = int(match.group(1)), match.group(2)
-    multipliers = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-    return time.time() + value * multipliers[unit]
-
-
-@app.post("/api/schedule", dependencies=[Depends(require_api_key)])
-async def create_schedule(req: ScheduleRequest):
-    """Schedule an HTTP request for future execution."""
-    try:
-        if req.execute_at:
-            dt = datetime.fromisoformat(req.execute_at)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            execute_at = dt.timestamp()
-        elif req.delay:
-            execute_at = _parse_relative_delay(req.delay)
-        elif req.cron:
-            from croniter import croniter
-            cron = croniter(req.cron, datetime.now(timezone.utc))
-            execute_at = cron.get_next(float)
-        else:
-            raise ValueError("Either 'execute_at', 'delay', or 'cron' is required")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    metadata = req.metadata or {}
-    if req.cron:
-        metadata["cron"] = req.cron
-
-    job = await scheduler.schedule_job(app.state.redis, {
-        "execute_at": execute_at,
-        "request": req.request,
-        "metadata": metadata,
-        "idempotency_key": req.idempotency_key,
-    })
-
-    return {
-        "job_id": job["job_id"],
-        "execute_at": job["execute_at"],
-        "status": job["status"],
-    }
-
-
-@app.get("/api/schedule", dependencies=[Depends(require_api_key)])
-async def list_schedule(source: Optional[str] = None):
-    """List scheduled jobs."""
-    jobs = await scheduler.list_jobs(app.state.redis, source=source)
-    return [
-        {
-            "job_id": j["job_id"],
-            "execute_at": j["execute_at"],
-            "status": j["status"],
-            "metadata": j.get("metadata", {}),
-        }
-        for j in jobs
-    ]
-
-
-@app.delete("/api/schedule/{job_id}", dependencies=[Depends(require_api_key)])
-async def cancel_schedule(job_id: str):
-    """Cancel a scheduled job."""
-    job = await scheduler.cancel_job(app.state.redis, job_id)
-    if not job:
-        raise HTTPException(404, f"Job {job_id} not found")
-    return {"job_id": job_id, "status": "cancelled"}
 
 
 # ── Workspace endpoints ────────────────────────────────────────────────────
