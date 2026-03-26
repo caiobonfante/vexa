@@ -12,17 +12,96 @@ Runtime API fills that gap. `POST /containers` with a profile name and a callbac
 
 ## What
 
-- **REST API** for container lifecycle — create, inspect, stop, list, exec
-- **Profile system** — declarative YAML templates for container types
-- **Three backends** — Docker, Kubernetes, and local process
-- **Idle management** — automatic cleanup of inactive containers
-- **Lifecycle callbacks** — webhook notifications on container state changes
-- **Per-tenant concurrency** — configurable limits per user and profile
-- **Redis state** — fast queries with backend reconciliation on startup
+### Container lifecycle — what happens when you POST /containers
+
+```
+POST /containers { profile: "worker", user_id: "u-123", callback_url: "http://..." }
+     │
+     ▼
+profiles.py ── load profile from YAML ── merge with request config overrides
+     │
+     ▼
+state.py ── check per-user concurrency (max_per_user from profile)
+     │        └─ 429 if limit exceeded
+     ▼
+backends/ ── dispatch to configured backend:
+     │
+     ├── docker.py   ── docker create + start (via unix socket)
+     ├── kubernetes.py ── kubectl apply Pod spec
+     └── process.py  ── subprocess.Popen with resource limits
+     │
+     ▼
+state.py ── register in Redis: name, profile, user_id, status, created_at, callback_url
+     │
+     ▼
+201 { name: "worker-u-123-a8f3", status: "running", ports: {...} }
+```
+
+### Idle management — how containers get cleaned up
+
+```
+idle_loop (runs every IDLE_CHECK_INTERVAL seconds):
+  for each registered container:
+    last_touch = Redis HGET container:{name} last_touch
+    idle_timeout = profile idle_timeout (from YAML)
+    if now - last_touch > idle_timeout:
+      backend.stop(name)        ← SIGTERM, then SIGKILL after 10s
+      fire callback(status=stopped, reason=idle_timeout)
+      state.remove(name)
+```
+
+`POST /containers/{name}/touch` resets `last_touch` in Redis. Clients call this as a heartbeat to keep their container alive. No touch + idle_timeout exceeded = container dies.
+
+### State reconciliation — surviving crashes
+
+On startup, `reconcile_state()` runs:
+
+```
+1. List all containers in Redis state store
+2. For each, ask the backend: "is this actually running?"
+3. Mismatch? Backend says dead but Redis says running → fire exit callback, remove from state
+4. Backend says running but not in Redis → register it (orphan recovery)
+```
+
+This means you can restart Runtime API and it reconstructs its view of the world from the backend. No containers leak.
+
+### Callback delivery — how your service gets notified
+
+When a container exits (clean, crash, or idle timeout):
+
+```
+lifecycle.py ── handle_container_exit(name, exit_code)
+     │
+     ▼
+state.py ── read callback_url + metadata from Redis
+     │
+     ▼
+httpx POST to callback_url:
+  { container_id, name, profile, status, exit_code, metadata }
+     │
+     ├── 2xx → done
+     └── fail → retry with backoff (1s, 5s, 30s)
+              └── all retries exhausted → log error, move on
+```
+
+Your `metadata` dict from creation time is passed back in the callback — use it to correlate containers with your domain objects (job IDs, meeting IDs, session IDs).
+
+### Module map
+
+| Module | What it does |
+|--------|-------------|
+| `main.py` | FastAPI app — startup (Redis, backend, reconcile, idle loop), shutdown |
+| `api.py` | REST endpoints — `/containers` CRUD, `/profiles`, `/health` |
+| `config.py` | All settings from environment variables |
+| `profiles.py` | YAML loader with SIGHUP hot-reload |
+| `state.py` | Redis-backed container registry — register, remove, list, touch |
+| `lifecycle.py` | Idle loop, exit handler, callback delivery with retry |
+| `backends/__init__.py` | `Backend` ABC + `ContainerSpec` + `ContainerInfo` |
+| `backends/docker.py` | Docker backend via unix socket (requests-unixsocket) |
+| `backends/kubernetes.py` | K8s backend via kubernetes Python client |
+| `backends/process.py` | Process backend — subprocess.Popen with Redis-backed registry |
 
 ## How
-
-### Quickstart
 
 ### Docker Compose (recommended)
 
