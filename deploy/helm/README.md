@@ -45,9 +45,9 @@ helm install vexa-lite ./deploy/helm/charts/vexa-lite \
 Key values in `charts/vexa/values.yaml`:
 
 - `secrets.adminApiToken`, `secrets.transcriberApiKey`: Required for auth and service communication.
-- `database.host`, `database.user`, `database.name`: Used by admin-api, bot-manager, transcription-collector.
+- `database.host`, `database.user`, `database.name`: Used by admin-api, meeting-api, transcription-collector.
 - `redisConfig.url` (or `redisConfig.host`/`port`): Required if `redis.enabled=false`.
-- `botManager.orchestrator`: `process` (default), `kubernetes` (PoC), or `docker`.
+- `meetingApi.orchestrator`: `process` (default), `kubernetes` (PoC), or `docker`.
 - `whisperLive.profile`: `cpu` or `gpu` (use with GPU resources and node selectors).
 - `ingress.*`: Optional ingress for `api-gateway`.
 

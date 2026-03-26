@@ -41,7 +41,7 @@ docker run -d \
 │                    Lite Container                         │
 │                                                                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────┐ │
-│  │ API Gateway │  │  Admin API  │  │ Bot Manager  │  │ MCP  │ │
+│  │ API Gateway │  │  Admin API  │  │ Meeting API  │  │ MCP  │ │
 │  │   :8056     │  │    :8057    │  │    :8080     │  │:18888│ │
 │  │  (external) │  │  (internal) │  │  (internal)  │  │(int.)│ │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └──┬───┘ │
@@ -299,7 +299,7 @@ docker logs -f vexa
 
 # Specific service logs (inside container)
 docker exec vexa cat /var/log/supervisor/api-gateway.log
-docker exec vexa cat /var/log/supervisor/bot-manager.log
+docker exec vexa cat /var/log/supervisor/meeting-api.log
 docker exec vexa cat /var/log/supervisor/whisperlive.log
 ```
 
@@ -313,7 +313,7 @@ Output:
 ```
 vexa-core:admin-api              RUNNING   pid 123, uptime 0:05:00
 vexa-core:api-gateway            RUNNING   pid 124, uptime 0:05:00
-vexa-core:bot-manager            RUNNING   pid 125, uptime 0:05:00
+vexa-core:meeting-api            RUNNING   pid 125, uptime 0:05:00
 vexa-core:transcription-collector RUNNING   pid 126, uptime 0:05:00
 vexa-core:whisperlive            RUNNING   pid 127, uptime 0:05:00
 vexa-core:xvfb                   RUNNING   pid 128, uptime 0:05:00
@@ -324,7 +324,7 @@ vexa-core:mcp                    RUNNING   pid 129, uptime 0:05:00
 
 ```bash
 docker exec vexa supervisorctl restart vexa-core:whisperlive
-docker exec vexa supervisorctl restart vexa-core:bot-manager
+docker exec vexa supervisorctl restart vexa-core:meeting-api
 ```
 
 ## Testing
@@ -445,8 +445,8 @@ The entrypoint checks reachability by requesting the transcription service's `/h
 ### Bot Fails to Start
 
 ```bash
-# Check bot manager logs
-docker logs vexa 2>&1 | grep -i "bot-manager"
+# Check meeting-api logs
+docker logs vexa 2>&1 | grep -i "meeting-api"
 
 # Verify Xvfb is running (required for browsers)
 docker exec vexa supervisorctl status vexa-core:xvfb
@@ -476,7 +476,7 @@ docker exec vexa env | grep REDIS
 | `supervisord.conf` | Supervisor configuration |
 | `entrypoint.sh` | Container initialization |
 | `requirements.txt` | Python dependencies |
-| `services/bot-manager/app/orchestrators/process.py` | Process orchestrator |
+| `services/meeting-api/app/orchestrators/process.py` | Process orchestrator |
 | `services/mcp/` | MCP service (Model Context Protocol) |
 
 ## Changes from Open Source Project
@@ -486,13 +486,13 @@ The Lite deployment adds the following without modifying core service code:
 **New Files:**
 - `deploy/lite/Dockerfile.lite` - All-in-one container build
 - `deploy/lite/*` - Configuration files
-- `services/bot-manager/app/orchestrators/process.py` - Process-based bot spawner
+- `services/meeting-api/app/orchestrators/process.py` - Process-based bot spawner
 
 **Included Services:**
 - MCP Service (`services/mcp/`) - Model Context Protocol service for Claude/Cursor integration
 
 **Minimal Modifications:**
-- `services/bot-manager/app/orchestrators/__init__.py` - Loads process orchestrator when `ORCHESTRATOR=process`
+- `services/meeting-api/app/orchestrators/__init__.py` - Loads process orchestrator when `ORCHESTRATOR=process`
 - `services/transcription-collector/config.py` - Added `REDIS_PASSWORD` support
 - `services/transcription-collector/main.py` - Password parameter in Redis connection
 

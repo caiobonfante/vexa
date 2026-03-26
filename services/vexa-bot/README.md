@@ -38,7 +38,7 @@ All platforms feed into the same shared transcription pipeline.
 - Speaker identity: one-time DOM name resolution per participant, cached.
   Google Meet uses participant tile DOM selectors. Teams uses
   RTCPeerConnection track metadata.
-- Recording: audio file capture + upload to storage via [bot-manager](../bot-manager/README.md).
+- Recording: audio file capture + upload to storage via [meeting-api](../meeting-api/README.md).
 
 ### Known limitations
 
@@ -76,11 +76,11 @@ All under `core/src/services/`:
 | `segment-publisher.ts`   | Redis XADD (persistence) + PUBLISH (real-time)     |
 | `vad.ts`                 | Silero VAD -- silence filtering per stream         |
 | `recording.ts`           | Audio file recording and upload                    |
-| `unified-callback.ts`    | HTTP status callbacks to bot-manager               |
+| `unified-callback.ts`    | HTTP status callbacks to meeting-api               |
 
 ### Run
 
-The bot is normally launched by bot-manager, which passes a `BOT_CONFIG` JSON
+The bot is normally launched by meeting-api (via Runtime API), which passes a `BOT_CONFIG` JSON
 environment variable. For standalone testing:
 
 ```bash
@@ -216,7 +216,7 @@ redis-cli PUBLISH bot_commands:meeting:123 '{"action":"leave"}'
 redis-cli PUBLISH bot_commands:meeting:123 '{"action":"reconfigure","language":"es"}'
 ```
 
-Status callbacks via HTTP POST to [bot-manager](../bot-manager/README.md): `joining`, `awaiting_admission`,
+Status callbacks via HTTP POST to [meeting-api](../meeting-api/README.md): `joining`, `awaiting_admission`,
 `active`, `completed`, `failed`.
 
 ## Project Structure
@@ -242,7 +242,7 @@ vexa-bot/
       segment-publisher.ts    -- Redis XADD + PUBLISH
       vad.ts                  -- Silero VAD
       recording.ts            -- audio file capture + upload
-      unified-callback.ts     -- HTTP callbacks to bot-manager
+      unified-callback.ts     -- HTTP callbacks to meeting-api
 
   tests/
     mock-meeting/             -- local multi-speaker test page

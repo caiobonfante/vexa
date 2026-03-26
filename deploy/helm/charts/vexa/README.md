@@ -15,7 +15,7 @@ Self-hosted deployment of the full Vexa stack: bot management, per-speaker trans
 └─────────────┘     └──────┬───────┘     └─────────────────────┘
                            │
                     ┌──────▼───────┐     ┌─────────────────────┐
-                    │ Bot Manager   │────>│  Transcription       │
+                    │ Meeting API   │────>│  Transcription       │
                     │ (FastAPI)     │     │  Collector (FastAPI)  │
                     └──────┬───────┘     └──────────┬──────────┘
                            │                        │
@@ -31,7 +31,7 @@ Self-hosted deployment of the full Vexa stack: bot management, per-speaker trans
 |---------|-------------|------|
 | api-gateway | HTTP + WebSocket API entry point | 8000 |
 | admin-api | User/token CRUD, meeting management | 8001 |
-| bot-manager | Spawns and manages meeting bots | 8080 |
+| meeting-api | Meeting domain — bot lifecycle, recordings, webhooks | 8080 |
 | transcription-collector | Redis stream -> Postgres persistence | 8000 |
 | transcription-service | GPU inference (Whisper) -- optional, can run externally | 8000 |
 | mcp | Model Context Protocol server | 18888 |
@@ -50,10 +50,10 @@ helm install vexa ./deploy/helm/charts/vexa \
 
 ## Bot Orchestration
 
-The bot-manager supports three orchestrator modes:
+The meeting-api delegates container lifecycle to Runtime API, which supports three orchestrator modes:
 
-- **process** (default): Bots run as child processes inside the bot-manager pod. Simple, no extra permissions. Recommended for small deployments.
-- **kubernetes**: Bots spawn as separate Pods. Requires RBAC (set `botManager.kubernetesOrchestrator.createRbac=true`). Best for scale.
+- **process** (default): Bots run as child processes. Simple, no extra permissions. Recommended for small deployments.
+- **kubernetes**: Bots spawn as separate Pods. Requires RBAC. Best for scale.
 - **docker**: Bots spawn as Docker containers. Requires Docker socket mount. Not recommended for K8s.
 
 ## Transcription Service

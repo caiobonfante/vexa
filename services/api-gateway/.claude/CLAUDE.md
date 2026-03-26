@@ -13,7 +13,7 @@ Your README links to your docs pages. Run the docs gate ([agents.md](../../../.c
 
 ## How to test
 Read the README — Why/What/How and Known Limitations are your test specs. Verify each claim.
-Integration points: proxies to bot-manager, admin-api, transcription-collector. Verify connections work but don't test their internals.
+Integration points: proxies to meeting-api, admin-api, transcription-collector. Verify connections work but don't test their internals.
 
 ## Critical findings
 Don't just report PASS/FAIL. Report:

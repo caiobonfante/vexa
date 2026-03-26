@@ -80,13 +80,13 @@ These live in `packages/` and are designed to be independently publishable with 
 | [agent-api](agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces |
 | [runtime-api](../packages/runtime-api/) | 8090 | Container lifecycle API — Docker, K8s, process backends. Lives in `packages/`. |
 
-### Container Management
+### Domain Services
 
 | Service | Description |
 |---------|-------------|
-| [bot-manager](bot-manager/) | Legacy orchestration — being superseded by Runtime API + Meeting API |
+| [meeting-api](meeting-api/) | Meeting domain — bot lifecycle, recordings, callbacks, webhooks |
 | [vexa-bot](vexa-bot/) | Browser-based meeting bot (Zoom, Google Meet, MS Teams) |
-| vexa-agent | Claude Code agent container (currently at `containers/agent/`, moving here) |
+| [vexa-agent](vexa-agent/) | Claude Code agent container |
 
 ### Transcription Pipeline
 

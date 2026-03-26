@@ -2,7 +2,7 @@
 
 ## Why
 
-Clients should not need to know the internal topology of Vexa services. The gateway provides a single entry point that routes requests to admin-api, bot-manager, transcription-collector, and MCP. It also handles concerns that span services: CORS, WebSocket fan-out for real-time meeting events, and public transcript share links. Without it, every client would need separate URLs and auth flows for each backend.
+Clients should not need to know the internal topology of Vexa services. The gateway provides a single entry point that routes requests to admin-api, meeting-api, transcription-collector, and MCP. It also handles concerns that span services: CORS, WebSocket fan-out for real-time meeting events, and public transcript share links. Without it, every client would need separate URLs and auth flows for each backend.
 
 ## What
 
@@ -24,7 +24,7 @@ Key responsibilities:
 
 ### Endpoints
 
-**Bot Management** (proxied to bot-manager)
+**Bot Management** (proxied to meeting-api)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -33,7 +33,7 @@ Key responsibilities:
 | PUT | `/bots/{platform}/{native_meeting_id}/config` | Update bot config (language, task) |
 | GET | `/bots/status` | List running bots for the user |
 
-**Voice Agent** (proxied to bot-manager)
+**Voice Agent** (proxied to meeting-api)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -42,7 +42,7 @@ Key responsibilities:
 | POST/DELETE | `/bots/{platform}/{id}/screen` | Show / stop screen share |
 | PUT/DELETE | `/bots/{platform}/{id}/avatar` | Set / reset bot avatar |
 
-**Recordings** (proxied to bot-manager)
+**Recordings** (proxied to meeting-api)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -71,7 +71,7 @@ Key responsibilities:
 | * | `/admin/{path}` | All admin/analytics endpoints |
 | PUT | `/user/webhook` | Set user webhook URL |
 
-**Remote Browser** (proxied to bot-manager, token-authenticated)
+**Remote Browser** (proxied to meeting-api, token-authenticated)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -97,7 +97,7 @@ Key responsibilities:
 ### Dependencies
 
 - **admin-api** -- user/token management
-- **bot-manager** -- bot lifecycle, recordings, voice agent
+- **meeting-api** -- bot lifecycle, recordings, voice agent
 - **transcription-collector** -- meetings and transcripts
 - **MCP service** -- Model Context Protocol
 - **Redis** -- WebSocket Pub/Sub, transcript share link storage
@@ -120,7 +120,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | Variable | Description |
 |----------|-------------|
 | `ADMIN_API_URL` | Internal URL of admin-api (required) |
-| `BOT_MANAGER_URL` | Internal URL of bot-manager (required) |
+| `BOT_MANAGER_URL` | Internal URL of meeting-api (required) |
 | `TRANSCRIPTION_COLLECTOR_URL` | Internal URL of transcription-collector (required) |
 | `MCP_URL` | Internal URL of MCP service (required) |
 | `REDIS_URL` | Redis URL for WebSocket Pub/Sub and share links |
@@ -130,7 +130,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | `CORS_ORIGINS` | Comma-separated allowed origins for CORS (default: `http://localhost:3000,http://localhost:3001`). Controls `Access-Control-Allow-Origin` for all endpoints. |
 | `LOG_LEVEL` | Logging level |
 
-The service fails to start if any of `ADMIN_API_URL`, `BOT_MANAGER_URL`, `TRANSCRIPTION_COLLECTOR_URL`, or `MCP_URL` are missing.
+The service fails to start if any of `ADMIN_API_URL`, `BOT_MANAGER_URL` (points to meeting-api), `TRANSCRIPTION_COLLECTOR_URL`, or `MCP_URL` are missing.
 
 ### Test
 
@@ -153,4 +153,4 @@ open http://localhost:8000/docs
 - All proxied requests log method, URL, and response status to stdout
 - Set `LOG_LEVEL=DEBUG` for header-level forwarding traces
 - 503 errors mean a downstream service is unreachable
-- WebSocket connections subscribe to Redis channels `bm:meeting:{id}:status`
+- WebSocket connections subscribe to Redis channels `meeting:{id}:status`

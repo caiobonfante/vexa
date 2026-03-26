@@ -1,7 +1,7 @@
 # Integration Tests — api-gateway
 
 ## What this tests
-- Gateway proxies requests to bot-manager correctly (bot lifecycle endpoints)
+- Gateway proxies requests to meeting-api correctly (bot lifecycle endpoints)
 - Gateway proxies requests to admin-api correctly (user/org/billing endpoints)
 - Gateway proxies requests to transcription-collector correctly (transcript endpoints)
 - WebSocket upgrade passes through to real-time transcript delivery
@@ -10,7 +10,7 @@
 
 ## Dependencies
 - api-gateway running
-- bot-manager, admin-api, transcription-collector reachable (real or mock)
+- meeting-api, admin-api, transcription-collector reachable (real or mock)
 - Postgres (for auth token validation)
 
 ## How to invoke

@@ -29,7 +29,7 @@ Different audio sources, different delivery mechanisms. No conflict.
 
 **Upload**: `performGracefulLeave()` calls `activeRecordingService.upload(recordingUploadUrl, token)` with multipart form + metadata (meeting_id, session_uid, format, duration, file_size).
 
-**Remaining risk (5%)**: If `botConfig.recordingUploadUrl` is not configured, upload silently skips. Verify bot-manager passes this field.
+**Remaining risk (5%)**: If `botConfig.recordingUploadUrl` is not configured, upload silently skips. Verify meeting-api passes this field.
 
 ### Speaker event collection — VERIFIED INTACT (confidence: 95%)
 
@@ -37,7 +37,7 @@ Different audio sources, different delivery mechanisms. No conflict.
 
 1. **Real-time (Redis):** `segment-publisher.ts:publishSpeakerEvent()` → XADD to `speaker_events_relative` stream → collector consumes via consumer group → stores in Redis Sorted Set `speaker_events:{session_uid}`
 
-2. **In-memory accumulation:** Browser accumulates `window.__vexaSpeakerEvents[]` throughout meeting → bot reads at exit via `page.evaluate(() => window.__vexaSpeakerEvents || [])` → included in unified callback payload → bot-manager persists to `meeting.data.speaker_events` JSONB
+2. **In-memory accumulation:** Browser accumulates `window.__vexaSpeakerEvents[]` throughout meeting → bot reads at exit via `page.evaluate(() => window.__vexaSpeakerEvents || [])` → included in unified callback payload → meeting-api persists to `meeting.data.speaker_events` JSONB
 
 **Exit flow** (`performGracefulLeave()` in `index.ts:619-631`):
 ```
@@ -49,7 +49,7 @@ Different audio sources, different delivery mechanisms. No conflict.
 6. Close connections & exit
 ```
 
-**Bot-manager persistence** (`main.py:1759-1767`): Receives `speaker_events` in `BotStatusChangePayload`, writes to `meeting.data['speaker_events']` with `flag_modified`.
+**Meeting-api persistence** (`main.py`): Receives `speaker_events` in `BotStatusChangePayload`, writes to `meeting.data['speaker_events']` with `flag_modified`.
 
 **All three platforms**: Google Meet, Teams (both via `window.__vexaSpeakerEvents`), Zoom (via `getZoomSpeakerEvents()` module function).
 

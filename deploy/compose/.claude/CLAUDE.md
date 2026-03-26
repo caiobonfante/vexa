@@ -61,7 +61,7 @@ You don't own any service — you own the edges between them. For each counterpa
 - **CLAUDE.md:** `services/api-gateway/.claude/CLAUDE.md`
 - **Requirements:**
   - Port :8056 — returns JSON at `/`, Swagger at `/docs`
-  - Proxies to admin-api, bot-manager, transcription-collector, mcp
+  - Proxies to admin-api, meeting-api, transcription-collector, mcp
   - `POST /admin/users` with admin token → 201
   - `POST /admin/users/{id}/tokens` → returns API token
   - `GET /meetings` with API token → returns list
@@ -75,11 +75,11 @@ You don't own any service — you own the edges between them. For each counterpa
   - Port :8057 — returns JSON at `/`, Swagger at `/docs`
   - CRUD users and tokens works via `X-Admin-API-Key` header
 
-#### bot-manager
-- **CLAUDE.md:** `services/bot-manager/.claude/CLAUDE.md`
+#### meeting-api
+- **CLAUDE.md:** `services/meeting-api/.claude/CLAUDE.md`
 - **Requirements:**
   - Port :8080 (internal) — health at `/health`
-  - Spawns bot containers on `POST /bots`, stops them on `DELETE`
+  - Receives bot requests on `POST /bots`, delegates to Runtime API
   - Connected to Redis
 
 #### transcription-collector
@@ -97,7 +97,7 @@ You don't own any service — you own the edges between them. For each counterpa
 - **CLAUDE.md:** `services/tts-service/.claude/CLAUDE.md`
 - **Requirements:**
   - Port :8002 (internal) — ready for TTS requests
-  - bot-manager → tts-service connected
+  - meeting-api → tts-service connected
 
 #### dashboard
 - **CLAUDE.md:** `services/dashboard/.claude/CLAUDE.md`
@@ -108,7 +108,7 @@ You don't own any service — you own the edges between them. For each counterpa
 - **CLAUDE.md:** `services/vexa-bot/.claude/CLAUDE.md`, `services/vexa-bot/core/src/platforms/googlemeet/.claude/CLAUDE.md`
 - **Requirements:**
   - Bot navigates to mock meeting URL, joins, captures audio, sends to transcription service
-  - Spawned by bot-manager, reports status back via callback
+  - Spawned by Runtime API, reports status back via callback to meeting-api
 
 #### transcription-service (external)
 - **CLAUDE.md:** `services/transcription-service/.claude/CLAUDE.md`
@@ -160,7 +160,7 @@ You are the root of the test tree. You do NOT write ad-hoc test scripts. You dis
 
 ### Specialist agents (20 total)
 
-**Services (9):** api-gateway, admin-api, bot-manager, dashboard, transcription-collector, transcription-service, mcp, tts-service, vexa-bot
+**Services (10):** api-gateway, admin-api, meeting-api, runtime-api, dashboard, transcription-collector, transcription-service, mcp, tts-service, vexa-bot
 **Deploy (3):** compose (this one), helm, lite
 **Infra/Libs (2):** infra, shared-models
 **Docs (2):** docs, experiments
@@ -174,7 +174,7 @@ Each agent has a CLAUDE.md at `{service}/.claude/CLAUDE.md`. Dispatch them — d
 2. Dispatch specialist agents in dependency order:
    - **Wave 1 (infra):** Redis, Postgres, MinIO — dispatch infra agent
    - **Wave 2 (foundation):** transcription-collector, admin-api — dispatch their agents
-   - **Wave 3 (dependent):** api-gateway, bot-manager, mcp, tts-service — dispatch their agents
+   - **Wave 3 (dependent):** api-gateway, meeting-api, runtime-api, mcp, tts-service — dispatch their agents
    - **Wave 4 (frontend):** dashboard — dispatch dashboard agent
    - **Wave 5 (gate):** dispatch googlemeet agent + bot-services agent to run the gate test
 3. Collect findings, aggregate report

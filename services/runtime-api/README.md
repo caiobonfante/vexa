@@ -46,7 +46,7 @@ Central authority for container lifecycle management. Creates, tracks, and manag
 | `MINIO_BUCKET` | `vexa-recordings` | MinIO bucket |
 | `CLAUDE_CREDENTIALS_PATH` | — | Host path to Claude credentials |
 | `CLAUDE_JSON_PATH` | — | Host path to claude.json |
-| `BOT_API_TOKEN` | — | Token passed to agent containers for bot-manager calls |
+| `BOT_API_TOKEN` | — | Token passed to agent containers for meeting-api calls |
 | `LOG_LEVEL` | `INFO` | Log level |
 
 ## Running Locally
