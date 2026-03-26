@@ -26,3 +26,6 @@
 - [research_symfony_laravel_file_level_extraction.md](research_symfony_laravel_file_level_extraction.md) — Exact file-by-file: monorepo component dir vs standalone split repo; verdict: ZERO standalone-only files, everything lives in monorepo
 - [research_helm_chart_repo_patterns.md](research_helm_chart_repo_patterns.md) — In-repo vs separate chart repo survey, OCI registry adoption, versioning, GH Actions workflow, Vexa recommendation
 - [research_oss_credibility_and_repo_structure.md](research_oss_credibility_and_repo_structure.md) — 15-project survey: minimum viable files, HN/Reddit reception patterns, Python infra layouts, testing standalone, Vexa gap analysis
+- [research_sqlalchemy_cross_package_models.md](research_sqlalchemy_cross_package_models.md) — ForeignKey vs relationship resolution across packages, shared Base/MetaData/registry, patterns for Vexa shared-models
+- [research_alembic_multi_directory_migrations.md](research_alembic_multi_directory_migrations.md) — Alembic multi-dir migrations: version_locations, branch_labels, stamping, separate version_table, Neutron expand/contract
+- [research_multi_app_model_splits.md](research_multi_app_model_splits.md) — Django/Rails/Sentry/SQLAlchemy patterns for multi-app model splits with cross-app FKs on shared DB

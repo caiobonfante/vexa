@@ -77,7 +77,7 @@ services:
       - LOG_LEVEL=DEBUG
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ../../services/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
+      - ../../packages/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
     init: true
     depends_on:
       redis:
@@ -89,7 +89,7 @@ services:
   meeting-api:
     build:
       context: ../..
-      dockerfile: services/meeting-api/Dockerfile
+      dockerfile: packages/meeting-api/Dockerfile
     mem_limit: 1g
     expose:
       - "8080"

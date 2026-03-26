@@ -14,6 +14,6 @@ COPY packages/shared-models /shared-models
 RUN pip install --no-cache-dir /shared-models
 
 # Copy app code
-COPY services/meeting-api .
+COPY packages/meeting-api .
 
 CMD ["uvicorn", "meeting_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
