@@ -85,36 +85,32 @@ Profiles are declarative container templates defined in YAML. Reference them by 
 
 ```yaml
 # profiles.yaml
-worker:
-  image: my-worker:latest
-  resources:
-    cpu: "1"
-    memory: 2Gi
-  idle_timeout: 900        # stop after 15min idle
-  auto_remove: true
-  ports:
-    "8080": http
+profiles:
+  worker:
+    image: my-worker:latest
+    resources:
+      cpu_limit: "1000m"
+      memory_limit: "2Gi"
+    idle_timeout: 900        # stop after 15min idle
+    auto_remove: true
+    max_per_user: 5
+    ports:
+      "8080/tcp": {}
 
-browser:
-  image: chromium-cdp:latest
-  resources:
-    cpu: "1"
-    memory: 2Gi
-  idle_timeout: 600        # stop after 10min idle
-  ports:
-    "9223": cdp
-    "6080": vnc
-
-sandbox:
-  image: code-sandbox:latest
-  resources:
-    cpu: "0.5"
-    memory: 1Gi
-  idle_timeout: 1800       # 30min
-  one_per_user: true       # enforce single instance per user
-  mounts:
-    - /workspace
+  sandbox:
+    image: code-sandbox:latest
+    command: ["sleep", "infinity"]
+    resources:
+      cpu_limit: "2000m"
+      memory_limit: "2Gi"
+      shm_size: 2147483648   # 2GB
+    idle_timeout: 600        # 10min
+    max_per_user: 1          # one sandbox per user
+    ports:
+      "8080/tcp": {}
 ```
+
+Hot-reload: `kill -HUP <pid>` to reload profiles without restart.
 
 ## Backends
 
@@ -180,8 +176,12 @@ Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
 | `REDIS_URL` | `redis://redis:6379` | Redis connection URL |
 | `PROFILES_PATH` | `profiles.yaml` | Path to profiles config |
 | `IDLE_CHECK_INTERVAL` | `30` | Seconds between idle checks |
+| `CALLBACK_RETRIES` | `3` | Max callback delivery attempts |
+| `CALLBACK_BACKOFF` | `1,5,30` | Backoff delays in seconds |
+| `API_KEYS` | _(empty)_ | Comma-separated API keys (empty = no auth) |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `LOG_LEVEL` | `INFO` | Log level |
+| `PORT` | `8090` | Server port |
 
 ## Architecture
 
@@ -218,7 +218,7 @@ Events: `started`, `exited`, `failed`, `stopped` (idle timeout).
 - **Browser automation farms** — manage browser pools with CDP access and idle cleanup
 - **Dev environments** — on-demand coding containers with workspace persistence
 - **CI/CD runners** — ephemeral build containers with per-tenant limits
-- **Meeting bots** — spawn browser-based bots that join and leave meetings
+- **Code execution** — sandboxed code runners with timeout enforcement
 
 ## License
 
