@@ -1,8 +1,16 @@
 # Agent API
 
+## Why
+
+An AI agent that can join meetings, read transcripts, and trigger automations needs somewhere to run — isolated from other users, persistent across conversations, and cheap when idle. You can't run Claude CLI directly in the API process (no isolation, no persistence, blocks the server). You can't use a generic sandbox (E2B, Daytona) because they don't know about meetings. Agent API bridges this gap: it manages one ephemeral container per user, routes chat messages to the agent inside it via SSE streaming, and handles session/workspace persistence so the agent remembers context across conversations.
+
+## What
+
 Chat gateway that routes user messages to Claude CLI running inside ephemeral Docker containers. Each user gets an isolated agent container with its own workspace. Sessions persist in Redis so containers can be recreated transparently.
 
-## Key Endpoints
+## What
+
+### Key Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -26,7 +34,9 @@ Chat gateway that routes user messages to Claude CLI running inside ephemeral Do
 - **Workspaces**: Persisted to MinIO. Injected as context before each chat turn.
 - **Meeting events**: Subscribes to Redis Pub/Sub (`bm:meeting:*:status`) to wake agents when meetings start or end.
 
-## Environment Variables
+## How
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -47,7 +57,7 @@ Chat gateway that routes user messages to Claude CLI running inside ephemeral Do
 | `DEFAULT_MODEL` | — | Default Claude model override |
 | `LOG_LEVEL` | `INFO` | Log level |
 
-## Running Locally
+### Run
 
 ```bash
 cd services/agent-api

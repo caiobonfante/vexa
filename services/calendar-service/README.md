@@ -1,8 +1,16 @@
 # Calendar Service
 
+## Why
+
+Users shouldn't have to manually send a bot to every meeting. Most meetings are already on their calendar with URLs attached. The calendar service watches for upcoming events and auto-schedules bots, turning Vexa from "tool you invoke" into "tool that acts on your behalf." Without it, every meeting requires a manual `POST /bots` call or a Telegram message.
+
+## What
+
 Syncs Google Calendar events and automatically schedules meeting bots to join upcoming calls. Runs a background sync loop that polls all connected users on a configurable interval.
 
-## Key Endpoints
+## What
+
+### Key Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -21,7 +29,9 @@ All endpoints accept `user_id` as a query parameter.
 2. A background loop syncs calendar events for all connected users at a regular interval.
 3. For events with meeting URLs (Zoom, Teams, Meet), bots are scheduled to join automatically based on user preferences (auto-join enabled, lead time in minutes).
 
-## Environment Variables
+## How
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -29,7 +39,7 @@ All endpoints accept `user_id` as a query parameter.
 | `SYNC_INTERVAL_SECONDS` | `300` | Seconds between calendar sync cycles |
 | `DATABASE_URL` | — | PostgreSQL connection string (via shared_models) |
 
-## Running Locally
+### Run
 
 ```bash
 cd services/calendar-service

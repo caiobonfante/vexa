@@ -1,15 +1,19 @@
 # Vexa Helm Charts
 
-Helm charts for deploying Vexa, the self-hosted real-time meeting transcription platform, including the Vexa Dashboard (https://github.com/Vexa-ai/Vexa-Dashboard).
+## Why
 
-Upstream app repo: https://github.com/Vexa-ai/vexa
+Docker Compose gets you running locally but doesn't scale, self-heal, or manage secrets properly. For production Kubernetes deployments, you need proper resource limits, RBAC for bot pod spawning, health probes, ingress routing, and secrets management. These Helm charts package all of that — two charts covering the full multi-service topology and the simpler single-pod Lite deployment.
 
-## Charts
+## What
+
+Helm charts for deploying Vexa on Kubernetes. Includes the Vexa Dashboard.
+
+## How
 
 - `vexa`: Full, multi-service deployment matching the upstream Docker Compose topology, with optional Vexa Dashboard deployment.
 - `vexa-lite`: Single-container deployment intended for simpler setups, with optional Vexa Dashboard deployment.
 
-## Prerequisites
+### Prerequisites
 
 - Kubernetes cluster (v1.22+ recommended)
 - Helm v3
@@ -17,7 +21,7 @@ Upstream app repo: https://github.com/Vexa-ai/vexa
 
 Note: The charts default to local image repos/tags for development. Override image repositories and tags for production.
 
-## Quickstart
+### Quickstart
 
 Install the full chart from this repo:
 
@@ -38,7 +42,7 @@ helm install vexa-lite ./deploy/helm/charts/vexa-lite \
   --set vexa.transcriberApiKey=CHANGE_ME
 ```
 
-## Configuration
+### Configuration
 
 ### vexa
 
@@ -64,7 +68,7 @@ Key values in `charts/vexa-lite/values.yaml`:
 - `dashboard.enabled`: Deploys a separate dashboard container.
 - `ingress.*`: Optional ingress for the lite API and dashboard.
 
-## Notes
+### Notes
 
 - For production, set explicit image repositories/tags and configure external Postgres/Redis and secrets management.
 

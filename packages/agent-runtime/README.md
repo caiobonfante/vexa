@@ -1,8 +1,12 @@
 # Agent Runtime
 
-AI agent runtime framework. Route user messages to LLM agents running inside ephemeral containers, with session management, workspace persistence, and job scheduling.
+## Why
 
-**A building block for AI-powered applications that need isolated, stateful agent environments.**
+Running an LLM agent inside a container is the easy part. The hard parts are everything around it: routing user messages to the right container, resuming sessions after container restarts, syncing workspace files so work survives reboots, and scheduling future jobs without a separate cron service. Every AI product that wants stateful agents in containers solves these problems from scratch. Agent Runtime packages the application layer — chat routing, sessions, workspace persistence, scheduling — so you wire it to [Runtime API](../runtime-api/) for container ops and get a complete agent backend.
+
+## What
+
+AI agent runtime framework. Route user messages to LLM agents running inside ephemeral containers, with session management, workspace persistence, and job scheduling.
 
 ## Features
 
@@ -13,7 +17,9 @@ AI agent runtime framework. Route user messages to LLM agents running inside eph
 - **Container lifecycle** — delegates to [Runtime API](../runtime-api/) for container orchestration
 - **One agent per user** — deterministic container naming with automatic reuse
 
-## Quickstart
+## How
+
+### Quickstart
 
 ### Docker Compose (recommended)
 

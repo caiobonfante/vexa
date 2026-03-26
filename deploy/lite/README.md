@@ -1,14 +1,20 @@
 # Vexa Lite Deployment
 
-Lite is the easiest way to self-host Vexa. Single Docker container, needs external Postgres and a transcription service.
+## Why
+
+The standard Docker Compose deployment requires Docker socket access, multiple containers, and DevOps knowledge. Most PaaS platforms (EasyPanel, Dokploy, Railway, Render) don't give you a Docker socket, and many teams just want `docker run` with a few env vars. Lite packs all Vexa services into a single container — API gateway, meeting API, transcription collector, MCP, and an internal Redis — so you can self-host Vexa anywhere you can run a container. The tradeoff: bots run as child processes instead of isolated containers, so you get ~3-5 concurrent bots instead of unlimited.
+
+## What
+
+Single Docker container that runs the full Vexa stack. Needs external Postgres and a transcription service.
 
 **Transcription service:** Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host [transcription-service](../../services/transcription-service/) on your own GPU for full data sovereignty.
 
-All-in-one Docker deployment for platforms without Docker socket access (EasyPanel, Dokploy, Railway, Render, etc.).
-
 **Note:** This deployment includes Redis server inside the container. Only PostgreSQL needs to be provided externally.
 
-## Quick Start
+## How
+
+### Quick Start
 
 ```bash
 # Build the image

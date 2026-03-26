@@ -1,10 +1,12 @@
 # Runtime API
 
-Open-source container lifecycle API. Create, manage, and orchestrate ephemeral containers through a simple REST interface — with idle management, lifecycle callbacks, and pluggable backends.
+## Why
 
-**Think of it as self-hosted [Fly Machines](https://fly.io/docs/machines/) — a REST API for container CRUD, but running on your own infrastructure.**
+Every service that spawns containers (meeting bots, agent sandboxes, browser sessions) needs the same operations: create, monitor, idle-timeout, and callback on exit. Without a shared API, each service reimplements Docker/K8s calls, leaks containers on crashes, and can't enforce per-user limits. Runtime API centralizes container lifecycle behind a single REST interface with pluggable backends (Docker, Kubernetes, plain processes), so services just POST a profile name and get a managed container back.
 
-## Features
+**Self-hosted [Fly Machines](https://fly.io/docs/machines/) — a REST API for container CRUD on your own infrastructure.**
+
+## What
 
 - **REST API** for container lifecycle — create, inspect, stop, list, exec
 - **Profile system** — declarative YAML templates for container types
@@ -14,7 +16,9 @@ Open-source container lifecycle API. Create, manage, and orchestrate ephemeral c
 - **Per-tenant concurrency** — configurable limits per user and profile
 - **Redis state** — fast queries with backend reconciliation on startup
 
-## Quickstart
+## How
+
+### Quickstart
 
 ### Docker Compose (recommended)
 

@@ -1,8 +1,16 @@
 # Telegram Bot
 
+## Why
+
+Agents are only useful if you can reach them where you already are. The dashboard requires a browser, and raw API calls require a terminal. Telegram puts your agent in your pocket — message it from your phone to join a meeting, ask about a transcript, or trigger automation. It's also the entry point for the scheduler: when a scheduled job completes, it sends results back through Telegram so you see them without checking a dashboard.
+
+## What
+
 Telegram interface for the Vexa Agent. Receives messages from Telegram users, forwards them to the Agent API, and streams responses back with progressive message editing. Also exposes an internal trigger API for scheduled messages.
 
-## Commands
+## What
+
+### Commands
 
 | Command | Description |
 |---------|-------------|
@@ -20,7 +28,9 @@ A FastAPI server runs alongside the Telegram bot for programmatic message inject
 | `POST` | `/internal/trigger` | Send a message to a user's agent via Telegram |
 | `GET` | `/health` | Health check |
 
-## Environment Variables
+## How
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -32,7 +42,7 @@ A FastAPI server runs alongside the Telegram bot for programmatic message inject
 | `TELEGRAM_BOT_PORT` | `8200` | Port for the internal trigger API |
 | `LOG_LEVEL` | `INFO` | Log level |
 
-## Running Locally
+### Run
 
 ```bash
 cd services/telegram-bot

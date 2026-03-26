@@ -1,7 +1,8 @@
 # Environment Variables
 
 ## Why
-Vexa needs a `.env` file at the repo root to configure services, ports, and credentials.
+
+Twelve services with different ports, database URLs, API tokens, and feature flags — getting one wrong means silent failures or services that can't find each other. A single env-example with comments is the fastest path from "I cloned the repo" to "everything is running." Without it, you're reading a dozen docker-compose entries and guessing which variables matter.
 
 ## What
 

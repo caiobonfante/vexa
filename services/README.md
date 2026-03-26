@@ -1,6 +1,12 @@
 # Services Architecture
 
-## System Diagram
+## Why
+
+Vexa is a dozen services, not a monolith. Each service owns one concern (transcription, bot lifecycle, user management, agent chat) and communicates via REST and Redis. This map exists because no single service tells you how the whole system works — you need the wiring diagram to understand data flow, port assignments, and which service calls which.
+
+## What
+
+### System Diagram
 
 ```
                       ┌─────────────┐
