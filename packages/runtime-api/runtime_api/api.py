@@ -153,8 +153,8 @@ async def create_container(req: CreateContainerRequest, request: Request):
 
     spec = ContainerSpec(
         name=name,
-        image=profile_def["image"],
-        command=profile_def.get("command") or req.config.get("command"),
+        image=req.config.get("image") or profile_def["image"],
+        command=req.config.get("command") or profile_def.get("command"),
         env=env,
         labels=labels,
         ports=ports,
@@ -188,7 +188,7 @@ async def create_container(req: CreateContainerRequest, request: Request):
         "status": "running",
         "profile": req.profile,
         "user_id": req.user_id,
-        "image": profile_def["image"],
+        "image": req.config.get("image") or profile_def["image"],
         "created_at": time.time(),
         "ports": result_ports,
         "container_id": container_id,
