@@ -2,9 +2,13 @@
 
 ## Why
 
-Every service that spawns containers (meeting bots, agent sandboxes, browser sessions) needs the same operations: create, monitor, idle-timeout, and callback on exit. Without a shared API, each service reimplements Docker/K8s calls, leaks containers on crashes, and can't enforce per-user limits. Runtime API centralizes container lifecycle behind a single REST interface with pluggable backends (Docker, Kubernetes, plain processes), so services just POST a profile name and get a managed container back.
+You need to spawn containers on demand — AI agent sandboxes, browser sessions, code runners, dev environments. The options are: Fly Machines (proprietary, not self-hosted), Kubernetes Jobs (requires K8s, no idle management, no callbacks), Docker Compose (no API, no per-user limits), or E2B (proprietary, not self-hosted).
 
-**Self-hosted [Fly Machines](https://fly.io/docs/machines/) — a REST API for container CRUD on your own infrastructure.**
+None of them give you a self-hosted REST API with idle management, lifecycle callbacks, and per-tenant concurrency that works across Docker, Kubernetes, and plain processes from the same interface.
+
+Runtime API fills that gap. `POST /containers` with a profile name and a callback URL. Get a managed container back. It idles out automatically, fires a webhook when it exits, and enforces per-user limits. Switch from Docker in dev to Kubernetes in prod by changing one environment variable.
+
+**Why not build it yourself?** Container lifecycle code is deceptively simple until you handle: orphaned containers after crashes (state reconciliation on startup), idle detection across restarts (Redis-backed timers), callback delivery with retry (exponential backoff), graceful shutdown that doesn't kill active work, and per-user concurrency enforcement across a distributed fleet. That's what the 2400 lines here do.
 
 ## What
 
