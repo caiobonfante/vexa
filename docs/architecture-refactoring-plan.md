@@ -13,6 +13,54 @@ Bot-manager is deleted. Its orchestration code merges into Runtime API. Its meet
 
 ---
 
+## Constraints
+
+These are non-negotiable. Every design decision must respect them.
+
+### 1. API contracts are frozen
+
+External API paths and request/response schemas **must not change**:
+
+```
+POST   /bots                    → stays as /bots (not /meetings)
+GET    /bots/{id}/status        → stays
+DELETE /bots/{platform}/{id}    → stays
+GET    /transcripts             → stays
+GET    /meetings                → stays
+GET    /recordings/{id}         → stays
+POST   /bots/{id}/speak         → stays
+POST   /bots/{id}/chat          → stays
+WS     /ws/subscribe            → stays
+```
+
+The refactoring is **internal wiring only**. API Gateway routes to different services behind the same paths. External clients, Dashboard, Telegram Bot, Calendar Service — nothing changes for them.
+
+### 2. Three deployment backends
+
+| Backend | Use Case | How |
+|---------|----------|-----|
+| **Process** | Vexa Lite (single container) | All services + bot as child processes. No Docker socket needed. |
+| **Docker** | Local dev, standard deployment | Docker socket, containers on same host |
+| **K8s** | Production | Pods, ServiceAccount RBAC, resource limits, node selectors |
+
+Runtime API must support all three through one backend interface. The backend is selected by config (`ORCHESTRATOR_BACKEND=process|docker|kubernetes`), not code changes.
+
+### 3. No new infrastructure requirements
+
+The refactoring must not add new infrastructure dependencies. Current stack:
+- PostgreSQL
+- Redis
+- S3/MinIO (optional)
+- Docker socket or K8s API (depending on backend)
+
+No Temporal, no Argo, no message queues, no new databases. These can be evaluated later but are not part of this refactoring.
+
+### 4. Incremental migration
+
+Every phase must be independently deployable. At no point should the system be in a broken state. Old and new paths coexist during migration via feature toggles, not big-bang switchover.
+
+---
+
 ## Target Architecture
 
 ```
@@ -212,43 +260,43 @@ profiles = {
 
 **Purpose:** Meeting lifecycle, voice agent control, recordings, webhooks. Uses Runtime API for all container operations.
 
-**Port:** 8080 (inherits from bot-manager for backward compatibility)
+**Port:** 8080 (inherits from bot-manager)
 
-**Public Endpoints:**
+**Constraint: all existing endpoint paths are preserved.** Gateway routes `/bots/*` to this service exactly as it routes to bot-manager today.
+
+**Public Endpoints (unchanged paths):**
 
 ```
 # Meeting lifecycle
-POST   /meetings                    Create meeting + spawn bot
-GET    /meetings                    List meetings
-GET    /meetings/{id}               Get meeting details + status
-DELETE /meetings/{id}               Stop meeting bot
-PUT    /meetings/{id}/config        Update bot config (language, etc.)
+POST   /bots                                    Create meeting + spawn bot
+GET    /bots                                     List active bots
+GET    /bots/{meeting_id}/status                 Get meeting status
+DELETE /bots/{platform}/{native_meeting_id}       Stop bot
+PUT    /bots/{platform}/{native_meeting_id}/config Update bot config
 
 # Voice agent control
-POST   /meetings/{id}/speak         TTS → play in meeting
-POST   /meetings/{id}/chat          Send chat message in meeting
-POST   /meetings/{id}/screen        Share screen content
-PUT    /meetings/{id}/avatar        Set bot avatar
+POST   /bots/{platform}/{native_meeting_id}/speak   TTS → play in meeting
+POST   /bots/{platform}/{native_meeting_id}/chat    Send chat message
+POST   /bots/{platform}/{native_meeting_id}/screen  Share screen content
 
 # Recordings
-GET    /meetings/{id}/recordings    List recordings for meeting
-GET    /recordings/{id}             Get recording
-GET    /recordings/{id}/raw         Stream recording file
-DELETE /recordings/{id}             Delete recording
+GET    /recordings                               List recordings
+GET    /recordings/{id}                           Get recording
+GET    /recordings/{id}/raw                       Stream recording file
+DELETE /recordings/{id}                           Delete recording
 
-# Webhooks
-GET    /webhooks                    List webhook configs
-POST   /webhooks                    Create webhook endpoint
-DELETE /webhooks/{id}               Delete webhook
+# Meetings (read-only, from transcription collector today)
+GET    /meetings                                 List meetings
+GET    /meetings/{id}                            Get meeting details
 ```
 
 **Internal Endpoints (from container callbacks):**
 
 ```
-POST   /internal/callback/status    Bot status change (joining, active, etc.)
-POST   /internal/callback/exited    Bot container exited
-POST   /internal/callback/admission Bot admission event (admitted, rejected)
-POST   /internal/recordings/upload  Recording upload from bot
+POST   /bots/internal/callback/status            Bot status change
+POST   /bots/internal/callback/exited            Bot container exited
+POST   /bots/internal/callback/admission         Bot admission event
+POST   /internal/recordings/upload               Recording upload from bot
 ```
 
 **What moves here from bot-manager:**
@@ -286,25 +334,19 @@ No changes. Already clean.
 
 **Port:** 8000 (unchanged)
 
-**Routing changes:**
+**Routing (all paths unchanged):**
 
 ```
-# New routes
-/meetings/*     → Meeting API (8080)
-/recordings/*   → Meeting API (8080)
-/webhooks/*     → Meeting API (8080)
-
-# Backward compat (during migration)
-/bots/*         → Meeting API (8080)  # old path, same service
-
-# Unchanged
-/admin/*        → Admin API (8001)
-/api/chat/*     → Agent API (8100)
-/transcripts/*  → Transcription Collector (8002)
-/calendar/*     → Calendar Service (8085)
+/bots/*         → Meeting API (8080)      # was bot-manager, now meeting-api
+/recordings/*   → Meeting API (8080)      # was bot-manager
+/admin/*        → Admin API (8001)        # unchanged
+/api/chat/*     → Agent API (8100)        # unchanged
+/transcripts/*  → Transcription Collector (8002)  # unchanged
+/meetings/*     → Transcription Collector (8002)  # unchanged (read-only)
+/calendar/*     → Calendar Service (8085) # unchanged
 ```
 
-**Runtime API is NOT routed through gateway.** It's internal infrastructure — only domain services call it directly.
+**Runtime API is NOT routed through gateway.** Internal only — domain services call it directly.
 
 ---
 
@@ -447,15 +489,15 @@ No big bang rewrite. Extract piece by piece while production keeps running.
 
 ### Phase 2: Create Meeting API
 
-**Goal:** New service owns all meeting domain logic.
+**Goal:** New service owns all meeting domain logic. Same endpoint paths.
 
 1. Create `services/meeting-api/`
-2. Move endpoints from bot-manager: meeting CRUD, voice agent, recordings, webhooks
+2. Move endpoints from bot-manager: `/bots/*`, recordings, webhooks, voice agent
 3. Meeting API calls Runtime API for container operations
-4. API Gateway routes `/meetings/*` to new service
-5. Keep `/bots/*` → Meeting API (backward compat alias)
+4. API Gateway changes one line: proxy `/bots/*` target from bot-manager:8080 → meeting-api:8080
+5. External clients see zero change
 
-**Validation:** Full meeting lifecycle works through Meeting API → Runtime API.
+**Validation:** Full meeting lifecycle works through Meeting API → Runtime API. Same curl commands, same responses.
 
 ### Phase 3: Delete Bot Manager
 
@@ -470,10 +512,11 @@ No big bang rewrite. Extract piece by piece while production keeps running.
 
 ### Phase 4: Clean Up
 
-1. Remove `/bots/*` backward-compat routes
-2. Remove stale references in docs, configs, tests
-3. Update `services/README.md` architecture diagram
+1. Remove stale references in docs, configs, tests
+2. Update `services/README.md` architecture diagram
+3. Move `containers/agent/` to `services/vexa-agent/`
 4. Run full integration tests
+5. No API route changes needed — paths were preserved throughout
 
 ---
 
