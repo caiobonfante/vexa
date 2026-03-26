@@ -2,287 +2,505 @@
 
 ## Executive Summary
 
-Unify Vexa's container orchestration into a clean layered architecture. Currently bot-manager mixes meeting domain logic with container orchestration, and runtime-api duplicates Docker management separately. The refactoring extracts Meeting API as a domain service, makes Runtime API the single container orchestration layer, and keeps bot-manager as the low-level execution engine.
+Refactor Vexa from a tangled monolith (bot-manager doing 5 jobs) into a clean layered architecture with two clear boundaries:
 
-**Decision: Build, not buy.** Research across 10 OSS/commercial alternatives (Nomad, Knative, Fly Machines, Temporal, Argo, KEDA, Modal, E2B, K8s Jobs, serverless platforms) confirms that domain-specific requirements (meeting lifecycle callbacks, activity-based idle, CDP tracking, per-user concurrency, platform-specific metadata) kill generic solutions. Recall.ai — the market leader processing 8M EC2 instances/month — built fully custom orchestration, validating this approach. Vexa's runtime-api is ~500 lines and already well-architected.
+- **Domain layer**: Meeting API, Agent API, Admin API — business logic, no container knowledge
+- **Infrastructure layer**: Runtime API — generic container orchestration, no meeting/agent knowledge
 
----
+Bot-manager is deleted. Its orchestration code merges into Runtime API. Its meeting domain code becomes Meeting API.
 
-## Current State
-
-### What Exists
-
-```
-API Gateway (8000) → proxies to all backends
-├── Admin API       → users, tokens, analytics
-├── Bot Manager     → TANGLED: meeting domain + container orchestration + recordings
-├── Agent API       → chat, scheduling, workspaces → calls Runtime API for containers
-├── Runtime API     → container lifecycle, profiles, idle management (Docker only)
-├── Transcription Collector → Redis streams → DB
-├── Transcription Service   → Whisper API (speech-to-text)
-├── TTS Service     → text-to-speech
-├── MCP Server      → AI tool integration
-├── Calendar Service → Google Calendar sync
-├── Telegram Bot    → mobile interface
-└── Dashboard       → Next.js web UI
-```
-
-### The Problem: Bot Manager is 5 Services in 1
-
-Bot manager (3600+ lines in main.py alone) tangles 5 distinct domains:
-
-| Domain | Endpoints | Should Be |
-|--------|-----------|-----------|
-| Meeting API | POST/DELETE /bots, GET /status, PUT /config | Separate Meeting API service |
-| Voice Agent | /speak, /chat, /screen, /avatar | Part of Meeting API |
-| Agent Chat | /bots/{id}/agent/chat (Claude CLI streaming) | Stay in bot-manager or agent-api |
-| Orchestration | start/stop containers, callbacks, post-meeting hooks | Runtime API (unified) |
-| Recording | /recordings/*, upload handlers, transcription triggers | Part of Meeting API or separate |
-
-### The Duplication: Two Container Managers
-
-| Capability | Runtime API | Bot Manager |
-|------------|-------------|-------------|
-| Docker create/start/stop | ✅ docker_ops.py | ✅ orchestrator_utils.py |
-| K8s support | ❌ | ✅ orchestrators/kubernetes.py |
-| Process support | ❌ | ✅ orchestrators/process.py |
-| Profile system | ✅ (agent, browser, meeting) | ❌ (hardcoded in start_bot_container) |
-| Idle management | ✅ (background loop + touch) | ❌ |
-| State reconciliation | ✅ (Redis + Docker sync) | ❌ (Docker API direct) |
-| Per-user concurrency | ❌ | ✅ (DB check) |
-| Meeting token minting | ❌ | ✅ (HS256 JWT) |
-| Lifecycle callbacks | ❌ | ✅ (exit, status, admission) |
-
-**Key finding:** Bot manager does NOT use runtime-api. They're completely parallel Docker management implementations.
+**Decision: Build, not buy.** Research across 10 alternatives (Nomad, Knative, Fly Machines, Temporal, Argo, KEDA, Modal, E2B, K8s Jobs, serverless) confirms domain-specific requirements kill generic solutions. Recall.ai (8M EC2 instances/month) built fully custom, validating this approach.
 
 ---
 
 ## Target Architecture
 
 ```
-                      ┌─────────────┐
-                      │   Dashboard  │
-                      └──────┬───────┘
-                             │
-                      ┌──────▼───────┐
-                      │ API Gateway  │
-                      └──────┬───────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-   ┌──────▼─────┐    ┌──────▼──────┐    ┌──────▼─────┐
-   │ Admin API  │    │ Meeting API │    │  Agent API  │
-   │(users,     │    │(join, stop, │    │(chat, tts,  │
-   │ tokens)    │    │ status, wh) │    │ workspace)  │
-   └────────────┘    └──────┬──────┘    └──────┬──────┘
-                            │                  │
-                            └────────┬─────────┘
-                                     │
-                            ┌────────▼────────┐
-                            │   Runtime API   │
-                            │ (container CRUD,│
-                            │  profiles,      │
-                            │  state, health) │
-                            └────────┬────────┘
-                                     │
-                            ┌────────▼────────┐
-                            │   Bot Manager   │
-                            │ (Docker / K8s / │
-                            │  process)       │
-                            └───┬──────┬───┬──┘
-                                │      │   │
-                       ┌────────▼┐ ┌───▼─┐ ┌▼────────┐
-                       │vexa-bot │ │agent│ │ browser  │
-                       │(meeting)│ │(CLI)│ │(Chromium)│
-                       └─────────┘ └─────┘ └─────────┘
+                         ┌─────────────┐
+                         │   Dashboard  │
+                         │   (Next.js)  │
+                         └──────┬───────┘
+                                │
+                         ┌──────▼───────┐
+                         │ API Gateway  │  ← public entry point
+                         └──────┬───────┘
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         │                      │                      │
+  ┌──────▼──────┐       ┌──────▼──────┐       ┌───────▼─────┐
+  │  Admin API  │       │ Meeting API │       │  Agent API   │
+  │             │       │             │       │              │
+  │ • users     │       │ • join/stop │       │ • chat (SSE) │
+  │ • tokens    │       │ • status    │       │ • workspaces │
+  │ • analytics │       │ • speak     │       │ • scheduling │
+  │             │       │ • chat      │       │ • TTS integ. │
+  │             │       │ • screen    │       │              │
+  │             │       │ • recordings│       │              │
+  │             │       │ • webhooks  │       │              │
+  └─────────────┘       └──────┬──────┘       └───────┬──────┘
+                               │                      │
+                   ════════════╪══════════════════════╪═══════════
+                    domain     │                      │
+                    ───────────┼──────────────────────┘
+                    infra      │
+                               │
+                        ┌──────▼──────┐
+                        │ Runtime API │  ← internal only (not in gateway)
+                        │             │
+                        │  Container  │
+                        │  as a       │
+                        │  Service    │
+                        │             │
+                        │ • CRUD      │
+                        │ • profiles  │
+                        │ • backends  │
+                        │ • lifecycle │
+                        │ • callbacks │
+                        │ • exec      │
+                        │ • idle mgmt │
+                        │ • concurr.  │
+                        └──────┬──────┘
+                               │
+                      ┌────────┼────────┐
+                      │        │        │
+                ┌─────▼──┐ ┌──▼───┐ ┌──▼──────┐
+                │vexa-bot│ │agent │ │ browser │
+                │        │ │      │ │         │
+                │Playwr. │ │Claude│ │Chromium │
+                │browser │ │Code +│ │CDP/VNC  │
+                │meeting │ │CLI   │ │         │
+                └────┬───┘ └──────┘ └─────────┘
+                     │
+             ┌───────┴────────┐
+             ▼                ▼
+  ┌──────────────┐  ┌─────────────────┐
+  │ Transcription│  │ Transcription   │
+  │  Collector   │  │   Service       │
+  │ (Redis → DB) │  │ (Whisper API)   │
+  └──────────────┘  └─────────────────┘
 ```
 
-### Design Principles
+### Supporting Services
 
-1. **Domain services don't know about containers** — Meeting API knows meetings, Agent API knows chats. They call Runtime API with a profile and config.
-2. **Runtime API is the single container authority** — All container lifecycle (create, stop, list, health, idle) goes through one service with pluggable backends.
-3. **Profiles replace hardcoded config** — Move bot-manager's env-var building, platform-specific config, port mapping into profile expansion in Runtime API.
-4. **Callbacks flow upward** — When a container exits, Runtime API notifies the domain service that created it via webhook.
-5. **The bot is not the resource, the meeting is** — API exposes `POST /meetings` (not `/bots`). The container is an implementation detail.
+```
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ TTS Service  │  │   Calendar   │  │   Telegram   │
+  │ (speech      │  │   Service    │  │     Bot      │
+  │  synthesis)  │  │ (Cal sync)   │  │ (mobile)     │
+  └──────────────┘  └──────────────┘  └──────────────┘
 
-### What Changes
+  ┌──────────────┐  ┌──────────────┐
+  │  MCP Server  │  │  Transcript  │
+  │ (AI tools)   │  │  Rendering   │
+  │              │  │  (TS lib)    │
+  └──────────────┘  └──────────────┘
+```
 
-| Component | Current | Target |
-|-----------|---------|--------|
-| **Meeting API** | Doesn't exist (tangled in bot-manager) | New service: meeting CRUD, voice agent control, recordings, webhooks |
-| **Runtime API** | Agent/browser containers only (Docker) | Unified container orchestration for ALL types (Docker, K8s, process) |
-| **Bot Manager** | 3600-line monolith | Thin execution engine: receive container spec → run it → report back |
-| **Agent API** | Calls runtime-api for containers | Unchanged (already correct pattern) |
-| **containers/agent/** | Top-level dir | Moves to services/vexa-agent/ |
+### Infrastructure
 
-### What Stays the Same
-
-- API Gateway routing
-- Admin API
-- Transcription pipeline (collector + service)
-- TTS Service
-- MCP Server
-- Calendar Service
-- Telegram Bot
-- Dashboard
-- All container images (vexa-bot, agent, browser)
+```
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │  PostgreSQL  │  │    Redis     │  │   S3/MinIO   │
+  │              │  │              │  │              │
+  │ • meetings   │  │ • streams    │  │ • recordings │
+  │ • users      │  │ • pub/sub    │  │ • audio      │
+  │ • transcripts│  │ • state      │  │ • video      │
+  │ • tokens     │  │ • scheduler  │  │              │
+  │ • recordings │  │ • bot cmds   │  │              │
+  └──────────────┘  └──────────────┘  └──────────────┘
+```
 
 ---
 
-## Migration Strategy: Strangler Fig + Branch by Abstraction
+## Service Specifications
 
-Don't rewrite bot-manager. Extract piece by piece while keeping production running.
+### Runtime API — Container-as-a-Service
 
-### Phase 1: Unify Container Backends in Runtime API
-**Goal:** Runtime API gains K8s and process backends from bot-manager.
+**Purpose:** Generic container orchestration. Knows nothing about meetings, agents, or any domain concept. Its vocabulary is containers, profiles, and backends.
 
-1. Extract `orchestrators/` interfaces from bot-manager into a shared backend abstraction
-2. Add K8s and process backends to runtime-api (port from bot-manager)
-3. Enrich profile system to handle meeting-specific config (BOT_CONFIG, meeting tokens, GPU passthrough)
-4. Add container exit callbacks (webhook to caller)
-5. Add per-user concurrency limits to runtime-api
+**Endpoints:**
 
-**Validation:** Runtime API can spawn a meeting bot container with full config via `POST /containers {profile: "meeting", config: {...}}`.
+```
+POST   /containers              Create and start a container
+GET    /containers              List containers (?profile=&user_id=)
+GET    /containers/{name}       Inspect container (status, ports, metadata)
+DELETE /containers/{name}       Stop and remove container
+POST   /containers/{name}/touch Heartbeat (resets idle timer)
+POST   /containers/{name}/exec  Execute command inside container
+GET    /containers/{name}/wait  Long-poll until target state reached
+```
 
-**Risk mitigation:** Feature toggle in bot-manager to switch between direct-Docker and runtime-api calls. Run both paths, compare results.
+**Profile System:**
 
-### Phase 2: Extract Meeting API
-**Goal:** New service owns meeting domain logic.
+Profiles are declarative container templates. Domain services reference by name.
 
-1. Create `services/meeting-api/` with meeting CRUD endpoints
-2. Move from bot-manager: `POST /bots` → `POST /meetings`, status management, webhook delivery, voice agent control (/speak, /chat, /screen)
+```python
+profiles = {
+    "meeting": {
+        "image": "vexa-bot:latest",
+        "resources": {"cpu": "1", "memory": "2Gi"},
+        "idle_timeout": 0,          # meetings don't auto-stop
+        "auto_remove": True,
+        "ports": {"9223": "cdp"},
+        "gpu": True,                # optional hardware accel
+    },
+    "agent": {
+        "image": "vexa-agent:latest",
+        "resources": {"cpu": "0.5", "memory": "1Gi"},
+        "idle_timeout": 900,        # 15min
+        "auto_remove": False,       # reuse across sessions
+        "mounts": ["/workspace"],
+        "one_per_user": True,
+    },
+    "browser": {
+        "image": "chromium-cdp:latest",
+        "resources": {"cpu": "1", "memory": "2Gi"},
+        "idle_timeout": 600,        # 10min
+        "ports": {"9223": "cdp", "6080": "vnc"},
+    },
+}
+```
+
+**Backend Abstraction:**
+
+```
+┌─────────────────────────────────────┐
+│           Backend Interface          │
+│                                      │
+│  create(spec) → container_id         │
+│  start(id)                           │
+│  stop(id)                            │
+│  remove(id)                          │
+│  inspect(id) → status, ports, meta   │
+│  list(labels) → containers[]         │
+│  exec(id, cmd) → stream              │
+└──────┬──────────┬───────────┬────────┘
+       │          │           │
+  ┌────▼───┐ ┌───▼────┐ ┌────▼─────┐
+  │ Docker │ │  K8s   │ │ Process  │
+  │ socket │ │  pods  │ │ child    │
+  └────────┘ └────────┘ └──────────┘
+```
+
+**State Management:**
+- Redis for fast queries (container status, ports, metadata, idle timers)
+- Reconciliation loop syncs Redis with backend reality on startup
+- TTL on stopped entries (24h)
+
+**Lifecycle Callbacks:**
+- Caller provides `callback_url` at container creation
+- Runtime API POSTs to callback when container exits, fails, or starts
+- Payload: `{name, profile, status, exit_code, metadata}`
+
+**Concurrency:**
+- Per-user, per-profile limits (configurable)
+- Checked at creation time, rejected with 429 if exceeded
+
+**What merges in from bot-manager:**
+- `orchestrators/kubernetes.py` → K8s backend
+- `orchestrators/process.py` → process backend
+- GPU passthrough logic from `orchestrator_utils.py`
+- Port allocation logic (CDP, VNC)
+
+**What merges in from current runtime-api:**
+- Profile system
+- Idle management loop
+- Redis state + reconciliation
+- Docker backend (`docker_ops.py`)
+
+### Meeting API — Meeting Domain
+
+**Purpose:** Meeting lifecycle, voice agent control, recordings, webhooks. Uses Runtime API for all container operations.
+
+**Port:** 8080 (inherits from bot-manager for backward compatibility)
+
+**Public Endpoints:**
+
+```
+# Meeting lifecycle
+POST   /meetings                    Create meeting + spawn bot
+GET    /meetings                    List meetings
+GET    /meetings/{id}               Get meeting details + status
+DELETE /meetings/{id}               Stop meeting bot
+PUT    /meetings/{id}/config        Update bot config (language, etc.)
+
+# Voice agent control
+POST   /meetings/{id}/speak         TTS → play in meeting
+POST   /meetings/{id}/chat          Send chat message in meeting
+POST   /meetings/{id}/screen        Share screen content
+PUT    /meetings/{id}/avatar        Set bot avatar
+
+# Recordings
+GET    /meetings/{id}/recordings    List recordings for meeting
+GET    /recordings/{id}             Get recording
+GET    /recordings/{id}/raw         Stream recording file
+DELETE /recordings/{id}             Delete recording
+
+# Webhooks
+GET    /webhooks                    List webhook configs
+POST   /webhooks                    Create webhook endpoint
+DELETE /webhooks/{id}               Delete webhook
+```
+
+**Internal Endpoints (from container callbacks):**
+
+```
+POST   /internal/callback/status    Bot status change (joining, active, etc.)
+POST   /internal/callback/exited    Bot container exited
+POST   /internal/callback/admission Bot admission event (admitted, rejected)
+POST   /internal/recordings/upload  Recording upload from bot
+```
+
+**What moves here from bot-manager:**
+- Meeting CRUD (`POST /bots` → `POST /meetings`)
+- Status state machine (requested → joining → awaiting_admission → active → completed)
+- Voice agent endpoints (/speak, /chat, /screen, /avatar)
+- Recording management
+- Webhook delivery (HMAC signing, retry, delivery history)
+- Post-meeting hooks (aggregate transcription, send webhook)
+- Meeting token minting (HS256 JWT for bot auth)
+- Concurrency check delegation to Runtime API
+
+**What it does NOT do:**
+- No Docker/K8s operations (delegates to Runtime API)
+- No container lifecycle management
+- No knowledge of how containers work
+
+### Agent API — Agent Domain
+
+**Purpose:** AI agent chat sessions, workspace management, scheduling. Uses Runtime API for containers.
+
+**Port:** 8100 (unchanged)
+
+**Already clean.** Agent API already delegates container lifecycle to Runtime API and does local `docker exec` for streaming. Minimal changes needed.
+
+**Key design:** `docker exec` stays local (not through Runtime API). Streaming CLI output over an HTTP hop adds latency for no benefit. Agent API needs Docker socket access for exec only.
+
+### Admin API — Identity & Access
+
+**Port:** 8001 (unchanged)
+
+No changes. Already clean.
+
+### API Gateway — Entry Point
+
+**Port:** 8000 (unchanged)
+
+**Routing changes:**
+
+```
+# New routes
+/meetings/*     → Meeting API (8080)
+/recordings/*   → Meeting API (8080)
+/webhooks/*     → Meeting API (8080)
+
+# Backward compat (during migration)
+/bots/*         → Meeting API (8080)  # old path, same service
+
+# Unchanged
+/admin/*        → Admin API (8001)
+/api/chat/*     → Agent API (8100)
+/transcripts/*  → Transcription Collector (8002)
+/calendar/*     → Calendar Service (8085)
+```
+
+**Runtime API is NOT routed through gateway.** It's internal infrastructure — only domain services call it directly.
+
+---
+
+## Data Flows
+
+### Meeting Transcription
+
+```
+User → Gateway → Meeting API: POST /meetings {meeting_url}
+                 Meeting API → Runtime API: POST /containers {profile: "meeting"}
+                               Runtime API → Docker/K8s: create vexa-bot
+                               Runtime API → Meeting API: callback_url confirmed
+
+vexa-bot: joins meeting → captures audio per speaker
+vexa-bot → Transcription Service: HTTP audio → text
+vexa-bot → Redis streams: publish segments
+Transcription Collector → Redis: consume streams → PostgreSQL
+
+vexa-bot: exits meeting
+Runtime API: detects exit → POST callback_url
+Meeting API: receives callback → post-meeting hooks
+Meeting API → webhook: notify user
+```
+
+### Agent Chat
+
+```
+User → Gateway → Agent API: POST /chat {message}
+                 Agent API → Runtime API: POST /containers {profile: "agent"}
+                              (if not already running)
+                 Agent API → docker exec: run Claude CLI
+                 Claude: processes with workspace context
+                 Agent API → User: SSE stream response
+```
+
+### Scheduled Join
+
+```
+Calendar Service: syncs Google Calendar → finds upcoming meeting
+Calendar Service → Agent API: POST /schedule {execute_at, request: POST /meetings}
+... time passes ...
+Scheduler worker fires → Gateway → Meeting API: POST /meetings
+Meeting API → Runtime API → vexa-bot (same as above)
+```
+
+### Voice Agent
+
+```
+User → Gateway → Meeting API: POST /meetings/{id}/speak {text}
+                 Meeting API → TTS Service: text → audio
+                 Meeting API → Redis pub/sub: send audio to bot
+                 vexa-bot: plays audio via virtual microphone
+```
+
+---
+
+## Directory Structure (Target)
+
+```
+services/
+├── api-gateway/              # Entry point, routing, CORS
+├── admin-api/                # Users, tokens, analytics
+├── meeting-api/              # NEW — meetings, recordings, webhooks, voice agent
+├── agent-api/                # Chat, workspaces, scheduling
+├── runtime-api/              # EXPANDED — generic CaaS (absorbs bot-manager orchestration)
+├── transcription-service/    # Whisper API
+├── transcription-collector/  # Redis → DB pipeline
+├── tts-service/              # Text-to-speech
+├── mcp/                      # MCP server
+├── calendar-service/         # Google Calendar sync
+├── telegram-bot/             # Telegram interface
+├── dashboard/                # Next.js web UI
+├── vexa-bot/                 # Meeting bot container image
+├── vexa-agent/               # Agent container image (moved from containers/agent/)
+└── transcript-rendering/     # TypeScript library
+
+DELETED:
+├── bot-manager/              # Split into meeting-api + runtime-api
+└── containers/               # Moved to services/vexa-agent/
+```
+
+### Shared Libraries
+
+```
+libs/
+└── shared-models/
+    ├── models.py              # SQLAlchemy: User, Meeting, Recording, etc.
+    ├── schemas.py             # Pydantic: MeetingCreate, Platform, MeetingStatus
+    ├── token_scope.py         # Token validation (vxa_user_*, vxa_bot_*, etc.)
+    ├── scheduler.py           # Redis sorted set scheduler
+    ├── scheduler_worker.py    # In-process executor loop
+    ├── security_headers.py    # Shared middleware
+    ├── webhook_delivery.py    # Webhook HMAC signing + delivery
+    ├── webhook_url.py         # Webhook URL model
+    └── webhook_retry_worker.py
+```
+
+---
+
+## Auth Model
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Token Scopes                      │
+├──────────────┬──────────────────────────────────────┤
+│ vxa_user_*   │ User API tokens → Gateway → all APIs │
+│ vxa_bot_*    │ Bot containers → Meeting API callbacks│
+│ vxa_tx_*     │ Bot → Transcription Collector         │
+│ vxa_admin_*  │ Admin operations                      │
+├──────────────┴──────────────────────────────────────┤
+│ Meeting JWT  │ Minted by Meeting API, used by bot   │
+│              │ for callback auth (HS256, 1hr TTL)   │
+├──────────────┴──────────────────────────────────────┤
+│ Internal     │ Runtime API accepts only service      │
+│              │ tokens — not exposed via Gateway      │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Migration Strategy
+
+### Approach: Strangler Fig + Branch by Abstraction
+
+No big bang rewrite. Extract piece by piece while production keeps running.
+
+### Phase 1: Unify Backends in Runtime API
+
+**Goal:** Runtime API gains K8s and process backends. Can spawn meeting bots.
+
+1. Port `orchestrators/kubernetes.py` and `orchestrators/process.py` into runtime-api
+2. Enrich meeting profile with full BOT_CONFIG expansion (env vars, platform config, GPU)
+3. Add lifecycle callbacks (POST to callback_url on exit/fail)
+4. Add per-user concurrency limits
+5. Add `/wait` endpoint (long-poll for state)
+
+**Validation:** `POST /containers {profile: "meeting", config: {...}}` spawns a working meeting bot.
+
+**Safety:** Feature toggle in bot-manager. Both paths run, compare results.
+
+### Phase 2: Create Meeting API
+
+**Goal:** New service owns all meeting domain logic.
+
+1. Create `services/meeting-api/`
+2. Move endpoints from bot-manager: meeting CRUD, voice agent, recordings, webhooks
 3. Meeting API calls Runtime API for container operations
-4. API Gateway routes `/meetings/*` to new service, keeps `/bots/*` to bot-manager (backward compat)
+4. API Gateway routes `/meetings/*` to new service
+5. Keep `/bots/*` → Meeting API (backward compat alias)
 
-**Validation:** Full meeting lifecycle works through Meeting API → Runtime API → container.
+**Validation:** Full meeting lifecycle works through Meeting API → Runtime API.
 
-### Phase 3: Slim Down Bot Manager
-**Goal:** Bot manager becomes a thin container execution engine.
+### Phase 3: Delete Bot Manager
 
-1. Remove meeting domain logic (now in Meeting API)
-2. Remove direct Docker operations (now in Runtime API)
-3. Bot manager receives container specs from Runtime API, executes them
-4. Handles only: low-level container lifecycle callbacks, post-meeting task execution
+**Goal:** Bot-manager is empty and removed.
 
-**Validation:** Bot manager has no meeting/user/recording knowledge. It only knows containers.
+1. Verify all traffic routes through Meeting API
+2. Remove bot-manager service, Dockerfile, deploy configs
+3. Move `containers/agent/` to `services/vexa-agent/`
+4. Update docker-compose, Helm charts, docs
+
+**Validation:** `docker-compose up` works without bot-manager.
 
 ### Phase 4: Clean Up
-**Goal:** Remove legacy paths and duplication.
 
-1. Remove `/bots/*` backward-compat routes from API Gateway
-2. Remove duplicate Docker code from bot-manager
-3. Move `containers/agent/` to `services/vexa-agent/`
-4. Update all documentation and deployment configs
-
----
-
-## API Schema Evolution
-
-### Approach: Expand and Contract
-
-1. **Expand**: Add new `/meetings/*` endpoints alongside existing `/bots/*`
-2. **Migrate**: Update Dashboard, Telegram Bot, Calendar Service to use new endpoints
-3. **Contract**: Remove `/bots/*` endpoints
-
-### Key Schema Changes
-
-```
-# Current (bot-manager)
-POST /bots
-  body: {meeting_url, bot_name, language, ...}
-  response: {meeting_id, platform, status, ...}
-
-# Target (meeting-api)
-POST /meetings
-  body: {meeting_url, bot_name, language, ...}
-  response: {meeting_id, platform, status, ...}
-
-# Internal (runtime-api)
-POST /containers
-  body: {profile: "meeting", config: {meeting_id, platform, ...}, user_id: "..."}
-  response: {name, status, ports, metadata}
-```
-
-### Backward Compatibility
-
-- `/bots/*` routes continue working during migration (API Gateway proxies to both)
-- New fields added alongside old ones, never removed until Phase 4
-- Webhook payloads: additive only (new fields OK, no removals)
-- Token scopes unchanged (`vxa_user_*`, `vxa_bot_*`, etc.)
-
----
-
-## Industry Validation
-
-### Recall.ai (Direct Competitor)
-- 8M EC2 instances/month, 3 TB/s raw video
-- Fully custom container orchestration (no K8s, no Nomad)
-- Single `POST /bots` API abstracts all platforms
-- **Validates:** Build > buy for meeting bot orchestration
-
-### Fly Machines API (Closest API Pattern)
-- `POST /machines` with config object (image, resources, metadata)
-- Explicit lifecycle: `/start`, `/stop`, `DELETE`
-- Lease-based concurrency, `/wait` for state polling
-- **Inspiration:** Runtime API's profile system mirrors this pattern
-
-### Selenium Grid 4 (Architectural Parallel)
-- Router → Distributor → Node = Meeting API → Runtime API → Bot Manager
-- Distributor selects node by "desired capabilities" = selecting container profile
-- Session Map tracks active sessions = Redis state
-
-### Stripe API Versioning (Schema Migration Pattern)
-- Date-based versions, per-request override
-- Version change modules transform responses backward
-- **For Vexa:** Overkill for internal refactoring. Use expand-and-contract instead.
+1. Remove `/bots/*` backward-compat routes
+2. Remove stale references in docs, configs, tests
+3. Update `services/README.md` architecture diagram
+4. Run full integration tests
 
 ---
 
 ## Build vs Buy Decision
 
-### Why Build (Keep Current Approach)
+### Why Build
 
-1. **Domain logic is the hard part** — Meeting lifecycle callbacks, activity-based idle, CDP tracking, per-user concurrency, platform-specific metadata. No external tool handles these. You'd build them on top of whatever you adopt.
-2. **Runtime API is already 80% there** — ~500 lines of Python, clean profile system, Redis state, Docker reconciliation. Needs K8s backend and richer profiles, not replacement.
-3. **Small codebase, low maintenance** — This isn't a distributed system problem. It's a well-defined container lifecycle manager.
-4. **Market leader validates** — Recall.ai built fully custom at massive scale.
+1. **Domain logic is the hard part** — lifecycle callbacks, activity-based idle, CDP tracking, per-user concurrency, platform-specific metadata. No external tool handles these.
+2. **Runtime API is already 80% there** — ~500 lines, clean profile system, Redis state. Needs K8s backend and richer profiles, not replacement.
+3. **Recall.ai validates** — Market leader built fully custom at 8M instances/month.
+4. **Small codebase** — This isn't distributed systems complexity. It's a well-defined container manager.
 
-### What to Adopt Later (If Complexity Grows)
+### Adopt Later (If Complexity Grows)
 
-| Tool | When | Why |
-|------|------|-----|
-| **Temporal** | Meeting lifecycle becomes complex (retries, compensation, sagas) | Durable workflow above Runtime API |
-| **Argo Workflows** | Post-meeting pipeline grows (transcribe → analyze → enrich → webhook) | DAG-based processing chain |
-| **K8s Operator (CRD)** | K8s becomes primary production backend | Declarative state, kubectl visibility, native health checks |
-| **Pre-warm pool** | Startup latency becomes critical (<5s) | Maintain warm container pool like Fly's pre-provisioning |
-
----
-
-## Effort Estimation
-
-| Phase | Scope | Complexity |
-|-------|-------|------------|
-| Phase 1: Unify backends in Runtime API | Port K8s/process backends, enrich profiles, add callbacks | Medium — most code exists, needs integration |
-| Phase 2: Extract Meeting API | New service, move endpoints, update gateway | Medium — straightforward extraction |
-| Phase 3: Slim bot-manager | Remove migrated code, simplify | Low — deletion is easy |
-| Phase 4: Clean up | Remove legacy routes, move dirs, update docs | Low |
-
-**Recommended order:** Phase 1 → 2 → 3 → 4, with feature toggles for safe rollback at each step.
+| Tool | When | For What |
+|------|------|----------|
+| Temporal | Meeting lifecycle becomes complex (retries, sagas) | Durable workflow above Runtime API |
+| Argo Workflows | Post-meeting pipeline grows | DAG-based processing chain |
+| K8s Operator (CRD) | K8s becomes primary backend | Declarative state, kubectl visibility |
+| Pre-warm pool | Startup latency critical (<5s) | Warm container inventory |
 
 ---
 
-## Files Referenced
+## Industry References
 
-- `services/bot-manager/app/main.py` — 3600+ lines, 35+ endpoints, 5 tangled domains
-- `services/bot-manager/app/orchestrator_utils.py` — Docker/container operations
-- `services/bot-manager/app/orchestrators/` — K8s, process, Docker backends
-- `services/bot-manager/app/tasks/` — post-meeting hooks, webhooks
-- `services/bot-manager/app/agent_chat.py` — Claude CLI streaming
-- `services/runtime-api/app/main.py` — container CRUD endpoints
-- `services/runtime-api/app/docker_ops.py` — Docker socket operations
-- `services/runtime-api/app/profiles.py` — agent, browser, meeting profiles
-- `services/runtime-api/app/state.py` — Redis state management
-- `services/agent-api/app/container_manager.py` — delegates to runtime-api
-- `libs/shared-models/shared_models/models.py` — DB models
-- `libs/shared-models/shared_models/schemas.py` — Pydantic schemas
-- `libs/shared-models/shared_models/scheduler.py` — Redis sorted set scheduler
+- **Recall.ai** — Direct competitor. 8M EC2/month, fully custom orchestration. Single `POST /bots` abstracts all platforms. Validates build approach.
+- **Fly Machines API** — Closest API pattern. `POST /machines` with config, explicit lifecycle, lease-based concurrency. Inspiration for Runtime API contract.
+- **Selenium Grid 4** — Architectural parallel. Router → Distributor → Node = Gateway → Runtime API → backends. Capability-based selection = profile system.
+- **E2B** — Template system (Dockerfile → snapshot → fast start) mirrors profile concept.
+- **Stripe API versioning** — Expand-and-contract for schema migration. Date-based versions overkill for internal refactoring.
