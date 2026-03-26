@@ -1,0 +1,905 @@
+"""Meeting CRUD — POST /bots, DELETE, GET /bots/status, PUT config.
+
+All container operations delegate to Runtime API.
+All endpoint paths and response shapes are frozen (see tests/contracts/).
+Redis channels use the frozen bm: prefix.
+"""
+
+import asyncio
+import base64
+import hmac
+import json
+import logging
+import os
+import secrets
+import uuid as uuid_lib
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import httpx
+import redis.asyncio as aioredis
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, desc, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import attributes
+
+from shared_models.database import get_db, async_session_local
+from shared_models.models import User, Meeting, MeetingSession
+from shared_models.schemas import (
+    MeetingCreate,
+    MeetingResponse,
+    Platform,
+    BotStatusResponse,
+    MeetingConfigUpdate,
+    MeetingStatus,
+    MeetingCompletionReason,
+    MeetingFailureStage,
+    is_valid_status_transition,
+    get_status_source,
+)
+
+from .auth import get_user_and_token
+from .config import (
+    REDIS_URL,
+    RUNTIME_API_URL,
+    MEETING_API_URL,
+    BOT_STOP_DELAY_SECONDS,
+)
+from .post_meeting import run_all_tasks, run_status_webhook_task
+
+logger = logging.getLogger("meeting_api.meetings")
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Globals (set during startup)
+# ---------------------------------------------------------------------------
+redis_client: Optional[aioredis.Redis] = None
+
+
+def set_redis(client: Optional[aioredis.Redis]):
+    global redis_client
+    redis_client = client
+
+
+def get_redis() -> Optional[aioredis.Redis]:
+    return redis_client
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def mint_meeting_token(
+    meeting_id: int,
+    user_id: int,
+    platform: str,
+    native_meeting_id: str,
+    ttl_seconds: int = 3600,
+) -> str:
+    """Mint a MeetingToken (HS256 JWT) using ADMIN_TOKEN."""
+    secret = os.environ.get("ADMIN_TOKEN")
+    if not secret:
+        raise ValueError("ADMIN_TOKEN not configured; cannot mint MeetingToken")
+
+    now = int(datetime.utcnow().timestamp())
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "meeting_id": meeting_id,
+        "user_id": user_id,
+        "platform": platform,
+        "native_meeting_id": native_meeting_id,
+        "scope": "transcribe:write",
+        "iss": "meeting-api",
+        "aud": "transcription-collector",
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "jti": str(uuid_lib.uuid4()),
+    }
+
+    header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), signing_input, digestmod="sha256").digest()
+    signature_b64 = _b64url_encode(signature)
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+async def update_meeting_status(
+    meeting: Meeting,
+    new_status: MeetingStatus,
+    db: AsyncSession,
+    completion_reason: Optional[MeetingCompletionReason] = None,
+    failure_stage: Optional[MeetingFailureStage] = None,
+    error_details: Optional[str] = None,
+    transition_reason: Optional[str] = None,
+    transition_metadata: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Update meeting status with validation and transition tracking."""
+    try:
+        current_status = MeetingStatus(meeting.status)
+    except ValueError:
+        logger.warning(f"Invalid meeting status '{meeting.status}' for meeting {meeting.id}, normalizing to 'failed'")
+        current_status = MeetingStatus.FAILED
+        meeting.status = MeetingStatus.FAILED.value
+        await db.commit()
+
+    if not is_valid_status_transition(current_status, new_status):
+        logger.warning(f"Invalid status transition '{current_status.value}' -> '{new_status.value}' for meeting {meeting.id}")
+        return False
+
+    old_status = meeting.status
+    meeting.status = new_status.value
+
+    current_data: Dict[str, Any] = {}
+    if meeting.data:
+        try:
+            current_data = dict(meeting.data)
+        except Exception:
+            current_data = {}
+
+    if new_status == MeetingStatus.COMPLETED:
+        if completion_reason:
+            current_data["completion_reason"] = completion_reason.value
+        meeting.end_time = datetime.utcnow()
+    elif new_status == MeetingStatus.FAILED:
+        if failure_stage:
+            current_data["failure_stage"] = failure_stage.value
+        if error_details:
+            current_data["error_details"] = error_details
+        meeting.end_time = datetime.utcnow()
+
+    transition_entry: Dict[str, Any] = {
+        "from": old_status,
+        "to": new_status.value,
+        "timestamp": datetime.utcnow().isoformat(),
+        "source": get_status_source(current_status, new_status),
+    }
+    if transition_reason:
+        transition_entry["reason"] = transition_reason
+    if completion_reason:
+        transition_entry["completion_reason"] = completion_reason.value
+    if failure_stage:
+        transition_entry["failure_stage"] = failure_stage.value
+    if error_details:
+        transition_entry["error_details"] = error_details
+    if isinstance(transition_metadata, dict) and transition_metadata:
+        for k, v in transition_metadata.items():
+            if k not in transition_entry:
+                transition_entry[k] = v
+
+    existing = current_data.get("status_transition")
+    if isinstance(existing, dict):
+        transitions_list = [existing]
+    elif isinstance(existing, list):
+        transitions_list = existing
+    else:
+        transitions_list = []
+    transitions_list = list(transitions_list) + [transition_entry]
+    current_data["status_transition"] = transitions_list
+    current_data.pop("status_transitions", None)
+
+    meeting.data = current_data
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    await db.refresh(meeting)
+    logger.info(f"Meeting {meeting.id} status: '{old_status}' -> '{new_status.value}'")
+    return True
+
+
+async def publish_meeting_status_change(
+    meeting_id: int,
+    new_status: str,
+    redis: Optional[aioredis.Redis],
+    platform: str,
+    native_meeting_id: str,
+    user_id: int,
+    extra_data: Optional[Dict[str, Any]] = None,
+):
+    """Publish to bm:meeting:{id}:status — frozen channel prefix."""
+    if not redis:
+        return
+    try:
+        status_payload: Dict[str, Any] = {"status": new_status}
+        if extra_data:
+            status_payload["data"] = extra_data
+        payload = {
+            "type": "meeting.status",
+            "meeting": {"id": meeting_id, "platform": platform, "native_id": native_meeting_id},
+            "payload": status_payload,
+            "user_id": user_id,
+            "ts": datetime.utcnow().isoformat(),
+        }
+        channel = f"bm:meeting:{meeting_id}:status"
+        await redis.publish(channel, json.dumps(payload))
+        logger.info(f"Published status '{new_status}' to '{channel}'")
+    except Exception as e:
+        logger.error(f"Failed to publish status for meeting {meeting_id}: {e}")
+
+
+async def schedule_status_webhook_task(
+    meeting: Meeting,
+    background_tasks: BackgroundTasks,
+    old_status: str,
+    new_status: str,
+    reason: Optional[str] = None,
+    transition_source: Optional[str] = None,
+):
+    background_tasks.add_task(
+        run_status_webhook_task,
+        meeting.id,
+        {
+            "old_status": old_status,
+            "new_status": new_status,
+            "reason": reason,
+            "timestamp": datetime.utcnow().isoformat(),
+            "transition_source": transition_source,
+        },
+    )
+
+
+async def _spawn_via_runtime_api(
+    profile: str,
+    config: Dict[str, Any],
+    user_id: int,
+    callback_url: str,
+    metadata: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Create a container via Runtime API POST /containers."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{RUNTIME_API_URL}/containers",
+                json={
+                    "profile": profile,
+                    "config": config,
+                    "user_id": str(user_id),
+                    "callback_url": callback_url,
+                    "metadata": metadata,
+                },
+                timeout=30.0,
+            )
+            if resp.status_code == 201:
+                return resp.json()
+            elif resp.status_code == 429:
+                raise HTTPException(status_code=429, detail=resp.json().get("detail", "Concurrency limit reached"))
+            else:
+                logger.error(f"Runtime API returned {resp.status_code}: {resp.text}")
+                return None
+    except httpx.RequestError as e:
+        logger.error(f"Runtime API request failed: {e}")
+        return None
+
+
+async def _stop_via_runtime_api(container_name: str) -> bool:
+    """Stop a container via Runtime API DELETE /containers/{name}."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.delete(
+                f"{RUNTIME_API_URL}/containers/{container_name}",
+                timeout=30.0,
+            )
+            return resp.status_code in (200, 404)
+    except httpx.RequestError as e:
+        logger.error(f"Runtime API stop failed for {container_name}: {e}")
+        return False
+
+
+async def _get_running_bots_from_runtime(user_id: int) -> list:
+    """Get running containers for a user from Runtime API + enrich with DB data."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{RUNTIME_API_URL}/containers",
+                params={"user_id": str(user_id), "profile": "meeting"},
+                timeout=15.0,
+            )
+            if resp.status_code != 200:
+                return []
+            containers = resp.json()
+    except httpx.RequestError as e:
+        logger.error(f"Runtime API list failed for user {user_id}: {e}")
+        return []
+
+    bots_status = []
+    async with async_session_local() as db:
+        for c in containers:
+            if c.get("status") != "running":
+                continue
+
+            name = c.get("name", "")
+            meeting_id_from_name = "unknown"
+            meeting_id_int = None
+            try:
+                parts = name.split("-")
+                if len(parts) > 2 and parts[0] == "meeting":
+                    meeting_id_from_name = parts[2]
+                    meeting_id_int = int(meeting_id_from_name)
+                elif len(parts) > 2 and parts[0] == "vexa" and parts[1] == "bot":
+                    meeting_id_from_name = parts[2]
+                    meeting_id_int = int(meeting_id_from_name)
+            except (ValueError, IndexError):
+                # Try metadata
+                meta = c.get("metadata", {})
+                if meta.get("meeting_id"):
+                    try:
+                        meeting_id_int = int(meta["meeting_id"])
+                        meeting_id_from_name = str(meeting_id_int)
+                    except (ValueError, TypeError):
+                        pass
+
+            platform = None
+            native_meeting_id = None
+            meeting_data = {}
+            meeting_start_time = None
+
+            if meeting_id_int is not None:
+                try:
+                    meeting = await db.get(Meeting, meeting_id_int)
+                    if meeting:
+                        platform = meeting.platform
+                        native_meeting_id = meeting.platform_specific_id
+                        meeting_data = meeting.data or {}
+                        meeting_start_time = meeting.start_time.isoformat() if meeting.start_time else None
+                except Exception as e:
+                    logger.error(f"DB error fetching meeting {meeting_id_int}: {e}")
+
+            created_at = None
+            if c.get("created_at"):
+                try:
+                    created_at = datetime.fromtimestamp(c["created_at"], timezone.utc).isoformat()
+                except Exception:
+                    pass
+
+            bots_status.append({
+                "container_id": c.get("container_id"),
+                "container_name": name,
+                "platform": platform,
+                "native_meeting_id": native_meeting_id,
+                "status": "running",
+                "normalized_status": "Up",
+                "created_at": created_at,
+                "start_time": meeting_start_time,
+                "labels": {},
+                "meeting_id_from_name": meeting_id_from_name,
+                "data": meeting_data,
+            })
+
+    return bots_status
+
+
+async def _delayed_container_stop(container_name: str, meeting_id: int, delay_seconds: int = BOT_STOP_DELAY_SECONDS):
+    """Wait, then stop container via Runtime API. Finalize meeting if still non-terminal."""
+    logger.info(f"[Delayed Stop] Waiting {delay_seconds}s for container {container_name} (meeting {meeting_id})")
+    await asyncio.sleep(delay_seconds)
+
+    await _stop_via_runtime_api(container_name)
+    logger.info(f"[Delayed Stop] Stopped container {container_name}")
+
+    # Safety finalizer
+    await asyncio.sleep(1)
+    try:
+        async with async_session_local() as db:
+            meeting = await db.get(Meeting, meeting_id)
+            if not meeting:
+                return
+
+            terminal_states = [MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value]
+            if meeting.status not in terminal_states:
+                logger.warning(f"[Delayed Stop] Meeting {meeting_id} still '{meeting.status}' after stop. Finalizing.")
+                success = await update_meeting_status(
+                    meeting,
+                    MeetingStatus.COMPLETED,
+                    db,
+                    completion_reason=MeetingCompletionReason.STOPPED,
+                    transition_reason="delayed_stop_finalizer",
+                    transition_metadata={"container_name": container_name, "finalized_by": "delayed_stop"},
+                )
+                if success:
+                    await publish_meeting_status_change(
+                        meeting.id, MeetingStatus.COMPLETED.value, redis_client,
+                        meeting.platform, meeting.platform_specific_id, meeting.user_id,
+                    )
+                    asyncio.create_task(run_all_tasks(meeting.id))
+    except Exception as e:
+        logger.error(f"[Delayed Stop] Finalizer error for meeting {meeting_id}: {e}", exc_info=True)
+
+
+async def _find_active_meeting(
+    db: AsyncSession, user_id: int, platform_value: str, native_meeting_id: str,
+) -> Meeting:
+    stmt = (
+        select(Meeting)
+        .where(
+            Meeting.user_id == user_id,
+            Meeting.platform == platform_value,
+            Meeting.platform_specific_id == native_meeting_id,
+            Meeting.status == MeetingStatus.ACTIVE.value,
+        )
+        .order_by(desc(Meeting.created_at))
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No active meeting found for {platform_value}/{native_meeting_id}",
+        )
+    return meeting
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/bots",
+    response_model=MeetingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Request a new bot instance to join a meeting",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def request_bot(
+    req: MeetingCreate,
+    background_tasks: BackgroundTasks,
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    user_token, current_user = auth_data
+
+    # --- Agent-only mode ---
+    if req.agent_enabled and req.platform is None:
+        new_meeting = Meeting(
+            user_id=current_user.id,
+            platform="agent",
+            platform_specific_id=f"agent-{uuid_lib.uuid4().hex[:8]}",
+            status=MeetingStatus.REQUESTED.value,
+            data={"agent_enabled": True},
+        )
+        db.add(new_meeting)
+        await db.commit()
+        await db.refresh(new_meeting)
+
+        result = await _spawn_via_runtime_api(
+            profile="meeting",
+            config={"env": {"BOT_MODE": "agent"}},
+            user_id=current_user.id,
+            callback_url=f"{MEETING_API_URL}/bots/internal/callback/exited",
+            metadata={"meeting_id": new_meeting.id},
+        )
+        if not result:
+            new_meeting.status = MeetingStatus.FAILED.value
+            await db.commit()
+            raise HTTPException(status_code=500, detail="Failed to start agent container")
+
+        new_meeting.bot_container_id = result.get("container_id") or result.get("name")
+        new_meeting.status = MeetingStatus.ACTIVE.value
+        await db.commit()
+        await db.refresh(new_meeting)
+        return MeetingResponse.model_validate(new_meeting)
+
+    # --- Browser session mode ---
+    if req.mode == "browser_session":
+        # Concurrency check
+        user_limit = int(getattr(current_user, "max_concurrent_bots", 0) or 0)
+        if user_limit > 0:
+            count_stmt = select(func.count()).select_from(Meeting).where(
+                and_(
+                    Meeting.user_id == current_user.id,
+                    Meeting.status.in_([s.value for s in (MeetingStatus.REQUESTED, MeetingStatus.JOINING, MeetingStatus.AWAITING_ADMISSION, MeetingStatus.ACTIVE)]),
+                )
+            )
+            active_count = int((await db.execute(count_stmt)).scalar() or 0)
+            if active_count >= user_limit:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Concurrent bot limit reached ({active_count}/{user_limit})")
+
+        session_token = secrets.token_urlsafe(24)
+        new_meeting = Meeting(
+            user_id=current_user.id,
+            platform="browser_session",
+            platform_specific_id=f"bs-{uuid_lib.uuid4().hex[:8]}",
+            status=MeetingStatus.ACTIVE.value,
+            start_time=datetime.utcnow(),
+            data={"mode": "browser_session", "session_token": session_token},
+        )
+        db.add(new_meeting)
+        await db.commit()
+        await db.refresh(new_meeting)
+
+        bot_config = {
+            "mode": "browser_session",
+            "meeting_id": new_meeting.id,
+            "session_token": session_token,
+            "redisUrl": REDIS_URL,
+            "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
+        }
+
+        result = await _spawn_via_runtime_api(
+            profile="meeting",
+            config={"env": {"BOT_CONFIG": json.dumps(bot_config), "BOT_MODE": "browser_session"}},
+            user_id=current_user.id,
+            callback_url=f"{MEETING_API_URL}/bots/internal/callback/exited",
+            metadata={"meeting_id": new_meeting.id},
+        )
+        if not result:
+            new_meeting.status = MeetingStatus.FAILED.value
+            await db.commit()
+            raise HTTPException(status_code=500, detail="Failed to start browser session container")
+
+        new_meeting.bot_container_id = result.get("container_id") or result.get("name")
+        await db.commit()
+        await db.refresh(new_meeting)
+
+        # Store session token in Redis
+        if redis_client:
+            await redis_client.set(
+                f"browser_session:{session_token}",
+                json.dumps({"container_name": result.get("name"), "meeting_id": new_meeting.id, "user_id": current_user.id}),
+                ex=86400,
+            )
+
+        return MeetingResponse.model_validate(new_meeting)
+
+    # --- Standard meeting bot ---
+    native_meeting_id = req.native_meeting_id
+
+    # Construct meeting URL
+    if req.meeting_url:
+        constructed_url = req.meeting_url
+    else:
+        constructed_url = Platform.construct_meeting_url(
+            req.platform.value, native_meeting_id, req.passcode, base_host=req.teams_base_host,
+        )
+        if not constructed_url:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot construct meeting URL")
+
+    # Check for duplicate active meeting
+    existing_stmt = (
+        select(Meeting)
+        .where(
+            Meeting.user_id == current_user.id,
+            Meeting.platform == req.platform.value,
+            Meeting.platform_specific_id == native_meeting_id,
+            Meeting.status.in_(["requested", "joining", "awaiting_admission", "active"]),
+        )
+        .order_by(desc(Meeting.created_at))
+        .limit(1)
+    )
+    existing = (await db.execute(existing_stmt)).scalars().first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"An active or requested meeting already exists for this platform and meeting ID",
+        )
+
+    # Concurrency limit (with row-level lock)
+    lock_stmt = select(User).where(User.id == current_user.id).with_for_update()
+    locked_user = (await db.execute(lock_stmt)).scalars().first()
+    if not locked_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    user_limit = int(getattr(locked_user, "max_concurrent_bots", 0) or 0)
+    if user_limit > 0:
+        count_stmt = select(func.count()).select_from(Meeting).where(
+            and_(
+                Meeting.user_id == current_user.id,
+                Meeting.status.in_([s.value for s in (MeetingStatus.REQUESTED, MeetingStatus.JOINING, MeetingStatus.AWAITING_ADMISSION, MeetingStatus.ACTIVE)]),
+            )
+        )
+        active_count = int((await db.execute(count_stmt)).scalar() or 0)
+        if active_count >= user_limit:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"User has reached the maximum concurrent bot limit ({user_limit}).")
+
+    # Create meeting record
+    meeting_data: Dict[str, Any] = {}
+    if req.passcode:
+        meeting_data["passcode"] = req.passcode
+    if req.meeting_url:
+        meeting_data["meeting_url"] = req.meeting_url
+    if req.teams_base_host:
+        meeting_data["teams_base_host"] = req.teams_base_host
+    transcribe = True if req.transcribe_enabled is None else bool(req.transcribe_enabled)
+    meeting_data["transcribe_enabled"] = transcribe
+    if req.video:
+        meeting_data["recording_enabled"] = True
+        meeting_data["capture_modes"] = ["audio", "video"]
+    elif req.recording_enabled is not None:
+        meeting_data["recording_enabled"] = bool(req.recording_enabled)
+    else:
+        meeting_data["recording_enabled"] = True
+
+    new_meeting = Meeting(
+        user_id=current_user.id,
+        platform=req.platform.value,
+        platform_specific_id=native_meeting_id,
+        status=MeetingStatus.REQUESTED.value,
+        data=meeting_data,
+    )
+    db.add(new_meeting)
+    await db.commit()
+    await db.refresh(new_meeting)
+    meeting_id = new_meeting.id
+
+    # Publish initial status
+    try:
+        await publish_meeting_status_change(meeting_id, "requested", redis_client, req.platform.value, native_meeting_id, current_user.id)
+    except Exception:
+        pass
+
+    # Mint meeting token
+    try:
+        meeting_token = mint_meeting_token(meeting_id, current_user.id, req.platform.value, native_meeting_id, ttl_seconds=7200)
+    except Exception as e:
+        logger.error(f"Failed to mint MeetingToken for meeting {meeting_id}: {e}")
+        new_meeting.status = MeetingStatus.FAILED.value
+        await db.commit()
+        raise HTTPException(status_code=500, detail="Failed to mint meeting token")
+
+    # Build BOT_CONFIG
+    user_recording_config = {}
+    try:
+        if current_user.data and isinstance(current_user.data, dict):
+            user_recording_config = current_user.data.get("recording_config", {})
+    except Exception:
+        pass
+
+    connection_id = str(uuid_lib.uuid4())
+    bot_config = {
+        "meeting_id": meeting_id,
+        "platform": req.platform.value,
+        "meetingUrl": constructed_url,
+        "botName": req.bot_name or f"VexaBot-{uuid_lib.uuid4().hex[:6]}",
+        "token": meeting_token,
+        "nativeMeetingId": native_meeting_id,
+        "connectionId": connection_id,
+        "language": req.language,
+        "task": req.task,
+        "transcriptionTier": req.transcription_tier or "realtime",
+        "redisUrl": REDIS_URL,
+        "automaticLeave": {
+            "waitingRoomTimeout": 300000,
+            "noOneJoinedTimeout": 120000,
+            "everyoneLeftTimeout": 60000,
+        },
+        "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
+        "recordingEnabled": user_recording_config.get("enabled", os.getenv("RECORDING_ENABLED", "false").lower() == "true"),
+        "transcribeEnabled": transcribe,
+        "captureModes": user_recording_config.get("capture_modes", os.getenv("CAPTURE_MODES", "audio").split(",")),
+        "recordingUploadUrl": f"{MEETING_API_URL}/internal/recordings/upload",
+        "transcriptionServiceUrl": os.getenv("TRANSCRIPTION_SERVICE_URL"),
+        "transcriptionServiceToken": os.getenv("TRANSCRIPTION_SERVICE_TOKEN"),
+    }
+    if req.recording_enabled is not None:
+        bot_config["recordingEnabled"] = bool(req.recording_enabled)
+    if req.voice_agent_enabled is not None:
+        bot_config["voiceAgentEnabled"] = bool(req.voice_agent_enabled)
+    if req.default_avatar_url:
+        bot_config["defaultAvatarUrl"] = req.default_avatar_url
+    if os.getenv("SHOW_AVATAR", "true").lower() == "false":
+        bot_config["showAvatar"] = False
+    if meeting_data.get("capture_modes"):
+        bot_config["captureModes"] = meeting_data["capture_modes"]
+    # Remove None values
+    bot_config = {k: v for k, v in bot_config.items() if v is not None}
+
+    # Build env for Runtime API
+    env_vars = {
+        "BOT_CONFIG": json.dumps(bot_config),
+        "LOG_LEVEL": os.getenv("LOG_LEVEL", "INFO").upper(),
+        "VIDEO_HWACCEL": os.getenv("VIDEO_HWACCEL", "none").lower(),
+    }
+    tts_url = os.getenv("TTS_SERVICE_URL", "").strip()
+    if tts_url:
+        env_vars["TTS_SERVICE_URL"] = tts_url
+    raw_capture = os.getenv("RAW_CAPTURE", "").strip()
+    if raw_capture:
+        env_vars["RAW_CAPTURE"] = raw_capture
+
+    # Zoom credentials
+    if req.platform.value == "zoom":
+        if os.getenv("ZOOM_WEB", "").strip() == "true":
+            env_vars["ZOOM_WEB"] = "true"
+        else:
+            zoom_cid = os.getenv("ZOOM_CLIENT_ID")
+            zoom_csec = os.getenv("ZOOM_CLIENT_SECRET")
+            if zoom_cid and zoom_csec:
+                env_vars["ZOOM_CLIENT_ID"] = zoom_cid
+                env_vars["ZOOM_CLIENT_SECRET"] = zoom_csec
+
+    # Spawn via Runtime API
+    result = await _spawn_via_runtime_api(
+        profile="meeting",
+        config={"env": env_vars},
+        user_id=current_user.id,
+        callback_url=f"{MEETING_API_URL}/bots/internal/callback/exited",
+        metadata={"meeting_id": meeting_id},
+    )
+
+    if not result:
+        new_meeting.status = MeetingStatus.FAILED.value
+        await db.commit()
+        await publish_meeting_status_change(meeting_id, MeetingStatus.FAILED.value, redis_client, req.platform.value, native_meeting_id, current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to start bot container")
+
+    # Record session start
+    try:
+        async with async_session_local() as session_db:
+            new_session = MeetingSession(
+                meeting_id=meeting_id,
+                session_uid=connection_id,
+                session_start_time=datetime.now(timezone.utc),
+            )
+            session_db.add(new_session)
+            await session_db.commit()
+    except Exception as e:
+        logger.error(f"Failed to record session start for meeting {meeting_id}: {e}")
+
+    # Update meeting with container info
+    container_name = result.get("name", "")
+    new_meeting.bot_container_id = result.get("container_id") or container_name
+    await db.commit()
+    await db.refresh(new_meeting)
+
+    return MeetingResponse.model_validate(new_meeting)
+
+
+@router.get(
+    "/bots/status",
+    response_model=BotStatusResponse,
+    summary="Get status of running bot containers for the authenticated user",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def get_user_bots_status(
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+):
+    """Returns {running_bots: [...]} with exact same fields as bot-manager."""
+    _, current_user = auth_data
+    try:
+        running_bots = await _get_running_bots_from_runtime(current_user.id)
+        return BotStatusResponse(running_bots=running_bots)
+    except Exception as e:
+        logger.error(f"Error fetching bot status for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve bot status")
+
+
+@router.put(
+    "/bots/{platform}/{native_meeting_id}/config",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Update configuration for an active bot",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def update_bot_config(
+    platform: Platform,
+    native_meeting_id: str,
+    req: MeetingConfigUpdate,
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+
+    stmt = (
+        select(Meeting)
+        .where(
+            Meeting.user_id == current_user.id,
+            Meeting.platform == platform.value,
+            Meeting.platform_specific_id == native_meeting_id,
+            Meeting.status == MeetingStatus.ACTIVE.value,
+        )
+        .order_by(Meeting.created_at.desc())
+    )
+    active_meeting = (await db.execute(stmt)).scalars().first()
+
+    if not active_meeting:
+        existing_stmt = (
+            select(Meeting.status)
+            .where(Meeting.user_id == current_user.id, Meeting.platform == platform.value, Meeting.platform_specific_id == native_meeting_id)
+            .order_by(Meeting.created_at.desc())
+            .limit(1)
+        )
+        existing_status = (await db.execute(existing_stmt)).scalars().first()
+        if existing_status:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Meeting found but not active (status: '{existing_status}')")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active meeting found")
+
+    if not redis_client:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Redis unavailable")
+
+    command = {
+        "action": "reconfigure",
+        "meeting_id": active_meeting.id,
+        "language": req.language,
+        "task": req.task,
+        "allowed_languages": req.allowed_languages,
+    }
+    channel = f"bot_commands:meeting:{active_meeting.id}"
+    await redis_client.publish(channel, json.dumps(command))
+
+    return {"message": "Reconfiguration request accepted and sent to the bot."}
+
+
+@router.delete(
+    "/bots/{platform}/{native_meeting_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request stop for a bot",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def stop_bot(
+    platform: Platform,
+    native_meeting_id: str,
+    background_tasks: BackgroundTasks,
+    auth_data: tuple[str, User] = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+    platform_value = platform.value
+
+    stmt = (
+        select(Meeting)
+        .where(Meeting.user_id == current_user.id, Meeting.platform == platform_value, Meeting.platform_specific_id == native_meeting_id)
+        .order_by(desc(Meeting.created_at))
+    )
+    all_meetings = (await db.execute(stmt)).scalars().all()
+
+    if not all_meetings:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No meeting found to stop.")
+
+    non_terminal = [m for m in all_meetings if m.status not in [MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value]]
+    if not non_terminal:
+        return {"message": f"Meeting already {all_meetings[0].status}."}
+
+    for meeting in non_terminal:
+        if not meeting.bot_container_id:
+            success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=MeetingCompletionReason.STOPPED)
+            if success:
+                await publish_meeting_status_change(meeting.id, MeetingStatus.COMPLETED.value, redis_client, platform_value, native_meeting_id, meeting.user_id)
+            background_tasks.add_task(run_all_tasks, meeting.id)
+            continue
+
+        # Fast-path for very recent pre-active meetings
+        try:
+            seconds_since_created = (datetime.utcnow() - meeting.created_at).total_seconds() if meeting.created_at else None
+        except Exception:
+            seconds_since_created = None
+
+        if meeting.status in [MeetingStatus.REQUESTED.value, MeetingStatus.JOINING.value, MeetingStatus.AWAITING_ADMISSION.value] and seconds_since_created is not None and seconds_since_created < 5:
+            if meeting.data is None:
+                meeting.data = {}
+            meeting.data["stop_requested"] = True
+            await db.commit()
+            background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, 0)
+            success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=MeetingCompletionReason.STOPPED)
+            if success:
+                await publish_meeting_status_change(meeting.id, MeetingStatus.COMPLETED.value, redis_client, platform_value, native_meeting_id, meeting.user_id)
+            background_tasks.add_task(run_all_tasks, meeting.id)
+            continue
+
+        # Send leave command via Redis
+        if redis_client:
+            try:
+                command_channel = f"bot_commands:meeting:{meeting.id}"
+                await redis_client.publish(command_channel, json.dumps({"action": "leave", "meeting_id": meeting.id}))
+            except Exception as e:
+                logger.error(f"Failed to publish leave command: {e}")
+
+        # Schedule delayed stop
+        stop_delay = 0 if platform_value == "browser_session" else BOT_STOP_DELAY_SECONDS
+        background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, stop_delay)
+
+        # Update to STOPPING
+        old_status = meeting.status
+        await update_meeting_status(meeting, MeetingStatus.STOPPING, db, transition_reason="User requested stop")
+        await publish_meeting_status_change(meeting.id, "stopping", redis_client, platform_value, native_meeting_id, meeting.user_id)
+
+    return {"message": "Stop request accepted and is being processed."}
