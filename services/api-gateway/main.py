@@ -7,7 +7,7 @@ from fastapi.security import APIKeyHeader
 import httpx
 import os
 from dotenv import load_dotenv
-import json # For request body processing
+import json # For request body processing and token cacheing
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional, Set, Tuple
 import asyncio
@@ -169,56 +169,89 @@ async def shutdown_event():
     except Exception:
         pass
 
-# --- Helper for Forwarding --- 
+logger = logging.getLogger("api_gateway")
+
+
+# --- Helper for Forwarding ---
 async def forward_request(client: httpx.AsyncClient, method: str, url: str, request: Request) -> Response:
     # Copy original headers, converting to a standard dict
     # Exclude host, content-length, transfer-encoding as they are handled by httpx/server
     excluded_headers = {"host", "content-length", "transfer-encoding"}
     headers = {k.lower(): v for k, v in request.headers.items() if k.lower() not in excluded_headers}
-    
-    # Debug logging for original request headers
-    print(f"DEBUG: Original request headers: {dict(request.headers)}")
-    print(f"DEBUG: Original query params: {dict(request.query_params)}")
-    
+
+    # Security: strip any client-supplied identity headers (prevent spoofing)
+    for h in ["x-user-id", "x-user-scopes", "x-user-limits"]:
+        headers.pop(h, None)
+
     # Determine target service based on URL path prefix
     is_admin_request = url.startswith(f"{ADMIN_API_URL}/admin")
-    
+
     # Forward appropriate auth header if present
     if is_admin_request:
         admin_key = request.headers.get("x-admin-api-key")
         if admin_key:
             headers["x-admin-api-key"] = admin_key
-            print(f"DEBUG: Forwarding x-admin-api-key header")
-        else:
-            print(f"DEBUG: No x-admin-api-key header found in request")
     else:
         # Forward client API key for bot-manager and transcription-collector
         client_key = request.headers.get("x-api-key")
         if client_key:
             headers["x-api-key"] = client_key
-            print(f"DEBUG: Forwarding x-api-key header: {client_key[:5]}...")
-        else:
-            print(f"DEBUG: No x-api-key header found in request. Headers: {dict(request.headers)}")
-    
-    # Debug logging for forwarded headers
-    print(f"DEBUG: Forwarded headers: {headers}")
-    
+
+            # Validate token via admin-api and inject identity headers
+            user_data = await _resolve_token(client, client_key)
+            if user_data:
+                headers["x-user-id"] = str(user_data["user_id"])
+                headers["x-user-scopes"] = ",".join(user_data.get("scopes", []))
+                headers["x-user-limits"] = str(user_data.get("max_concurrent", 1))
+
     # Forward query parameters
     forwarded_params = dict(request.query_params)
-    if forwarded_params:
-        print(f"DEBUG: Forwarding query params: {forwarded_params}")
-    
+
     content = await request.body()
-    
+
     try:
-        print(f"DEBUG: Forwarding {method} request to {url}")
         resp = await client.request(method, url, headers=headers, params=forwarded_params or None, content=content)
-        print(f"DEBUG: Response from {url}: status={resp.status_code}")
         # Return downstream response directly (including headers, status code)
         return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
     except httpx.RequestError as exc:
-        print(f"DEBUG: Request error: {exc}")
         raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}")
+
+
+async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[dict]:
+    """Validate a token via admin-api, with Redis cache (60s TTL)."""
+    cache_key = f"gateway:token:{api_key[:16]}"
+    redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
+
+    # Check cache first
+    if redis_client:
+        try:
+            cached = await redis_client.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass  # Redis down — fall through to admin-api
+
+    # Validate via admin-api
+    try:
+        validate_resp = await client.post(
+            f"{ADMIN_API_URL}/internal/validate",
+            json={"token": api_key},
+            timeout=5.0,
+        )
+        if validate_resp.status_code == 200:
+            user_data = validate_resp.json()
+            # Cache the result
+            if redis_client:
+                try:
+                    await redis_client.set(cache_key, json.dumps(user_data), ex=60)
+                except Exception:
+                    pass  # Redis write failure is non-fatal
+            return user_data
+    except Exception as e:
+        logger.warning(f"Token validation failed: {e}")
+
+    # Fall through — downstream will get X-API-Key only (backward compat)
+    return None
 
 # --- Root Endpoint --- 
 @app.get("/", tags=["General"], summary="API Gateway Root")

@@ -135,7 +135,7 @@ user_router = APIRouter(
 )
 
 # --- Helper Functions ---
-from shared_models.token_scope import generate_prefixed_token, check_token_scope
+from shared_models.token_scope import generate_prefixed_token, check_token_scope, parse_token_scope
 
 def generate_secure_token(length=40, scope: str = "user"):
     return generate_prefixed_token(scope, length)
@@ -766,6 +766,35 @@ async def get_user_details(
         usage_patterns=usage_patterns,
         api_tokens=[TokenResponse.model_validate(t) for t in user.api_tokens] if include_tokens else None
     )
+
+# --- Internal Endpoints (service-to-service, not in OpenAPI docs) ---
+@app.post("/internal/validate", include_in_schema=False)
+async def validate_token(payload: dict, db: AsyncSession = Depends(get_db)):
+    """Validate an API token and return user identity info.
+    Called by api-gateway to inject X-User-ID headers."""
+    token = payload.get("token", "")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+
+    result = await db.execute(
+        select(APIToken, User)
+        .join(User, APIToken.user_id == User.id)
+        .where(APIToken.token == token)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    api_token, user = row
+    scope = parse_token_scope(token)
+
+    return {
+        "user_id": user.id,
+        "scopes": [scope] if scope else ["admin"],
+        "max_concurrent": user.max_concurrent_bots,
+        "email": user.email,
+    }
+
 
 # App events
 @app.on_event("startup")
