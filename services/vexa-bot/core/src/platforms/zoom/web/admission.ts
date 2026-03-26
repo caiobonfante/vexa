@@ -2,6 +2,7 @@ import { Page } from 'playwright';
 import { BotConfig } from '../../../types';
 import { AdmissionDecision } from '../../shared/meetingFlow';
 import { log, callAwaitingAdmissionCallback } from '../../../utils';
+import { checkEscalation, triggerEscalation, getEscalationExtensionMs } from '../../shared/escalation';
 import {
   zoomLeaveButtonSelector,
   zoomMeetingAppSelector,
@@ -91,8 +92,10 @@ export async function waitForZoomWebAdmission(
   // Poll loop
   const startTime = Date.now();
   const pollInterval = 2000;
+  let unknownStateDuration = 0;
+  const effectiveTimeout = () => timeoutMs + getEscalationExtensionMs();
 
-  while (Date.now() - startTime < timeoutMs) {
+  while (Date.now() - startTime < effectiveTimeout()) {
     await page.waitForTimeout(pollInterval);
 
     if (await isRejectedOrEnded(page)) {
@@ -105,14 +108,37 @@ export async function waitForZoomWebAdmission(
       return true;
     }
 
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    // Track unknown state (neither admitted, nor waiting room, nor rejected)
+    const inWaitingNow = await isInWaitingRoom(page);
+    if (!inWaitingNow) {
+      unknownStateDuration += pollInterval;
+    } else {
+      unknownStateDuration = 0;
+    }
+
+    // Escalation check
+    const elapsedMs = Date.now() - startTime;
+    const escalation = checkEscalation(elapsedMs, timeoutMs, unknownStateDuration);
+    if (escalation) {
+      await triggerEscalation(botConfig, escalation.reason);
+    }
+
+    const elapsed = Math.round(elapsedMs / 1000);
     log(`[Zoom Web] Still waiting for admission... ${elapsed}s elapsed`);
   }
 
-  throw new Error(`[Zoom Web] Bot not admitted within ${timeoutMs}ms timeout`);
+  throw new Error(`[Zoom Web] Bot not admitted within ${effectiveTimeout()}ms timeout`);
 }
 
 export async function checkZoomWebAdmissionSilent(page: Page | null): Promise<boolean> {
   if (!page) return false;
-  return isAdmitted(page);
+  // Retry up to 3 times with 1s delay — Zoom UI may briefly hide elements
+  // during popup dismissals, tooltips, or layout transitions after admission.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (await isAdmitted(page)) return true;
+    if (attempt < 2) {
+      await page.waitForTimeout(1000);
+    }
+  }
+  return false;
 }

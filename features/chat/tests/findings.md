@@ -1,8 +1,8 @@
 # Chat Test Findings
 
-## Gate verdict: PARTIAL — API layer PASS, bot execution BLOCKED
+## Gate verdict: PARTIAL — API layer PASS, Zoom chat PASS, browser_session BLOCKED
 
-## Score: 50
+## Score: 60
 
 ## Implementation status (audit 2026-03-23, validated 2026-03-24)
 
@@ -29,12 +29,18 @@ Platform selectors may be stale — Google Meet (~150 lines of DOM selectors), T
 | Redis list storage + retrieval | PASS | Seeded `meeting:39:chat_messages`, GET returned message correctly |
 | Schemas match | PASS | ChatSendRequest.text, ChatMessage.{sender,text,timestamp,is_from_bot} all correct |
 
-### Bot Execution — BLOCKED
+### Zoom Chat — PASS (2026-03-25)
+
+Meeting 72 (live Zoom):
+- POST /bots/zoom/84455790331/chat → `{"message":"Chat message sent","meeting_id":72}`
+- GET /bots/zoom/84455790331/chat → `{"messages":[{"sender":"Vexa Recorder","text":"Hello from Vexa bot!","timestamp":1774424191372,"is_from_bot":true}],"meeting_id":72}`
+- Both send and read endpoints work. Chat relay via Redis confirmed.
+
+### Bot Execution — PARTIAL
 
 - browser_session bots don't handle `chat_send` action (falls through to "Unhandled command")
-- The speaking-bot fix added speak/speak_stop/leave handlers to browser-session.ts but not chat_send
-- Regular google_meet/teams bots DO handle chat_send (index.ts:488-496) via chatService
-- No active google_meet/teams bots to test against
+- Regular zoom/google_meet/teams bots DO handle chat_send (index.ts:488-496) via chatService — validated in Zoom meeting 72
+- Zoom chat DOM injection untested (API layer works but DOM selectors for Zoom not implemented)
 
 ### DOM Layer — UNTESTED
 

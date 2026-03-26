@@ -5,7 +5,7 @@ import { chromium } from "playwright-extra";
 import { handleGoogleMeet, leaveGoogleMeet } from "./platforms/googlemeet";
 import { handleMicrosoftTeams, leaveMicrosoftTeams } from "./platforms/msteams";
 import { handleZoom, leaveZoom, leaveZoomWeb } from "./platforms/zoom";
-import { reconfigureZoomWebRecording } from "./platforms/zoom/web/recording";
+import { reconfigureZoomWebRecording, getLastActiveSpeaker } from "./platforms/zoom/web/recording";
 import { getZoomSpeakerEvents } from "./platforms/zoom/strategies/recording";
 import { browserArgs, getBrowserArgs, userAgent } from "./constans";
 import { BotConfig } from "./types";
@@ -17,18 +17,20 @@ import { MeetingChatService, ChatTranscriptConfig } from "./services/chat";
 import { ScreenContentService, getVirtualCameraInitScript, getVideoBlockInitScript } from "./services/screen-content";
 import { ScreenShareService } from "./services/screen-share"; // kept for Teams; unused for Google Meet camera-feed approach
 import { createClient, RedisClientType } from 'redis';
-import { Page, Browser } from 'playwright-core';
+import { Page, Browser, BrowserContext } from 'playwright-core';
 import { execSync } from 'child_process';
+import { ensureBrowserDataDir, syncBrowserDataFromS3, cleanStaleLocks, BROWSER_DATA_DIR } from './s3-sync';
 // HTTP imports removed - using unified callback service instead
 
 // Per-speaker transcription pipeline
 import { TranscriptionClient } from './services/transcription-client';
 import { SegmentPublisher } from './services/segment-publisher';
 import { SpeakerStreamManager } from './services/speaker-streams';
-import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken } from './services/speaker-identity';
+import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken, reportTrackAudio } from './services/speaker-identity';
 import { SileroVAD } from './services/vad';
 import { isHallucination } from './services/hallucination-filter';
 import { SpeakerStreamHandle } from './services/audio';
+import { RawCaptureService } from './services/raw-capture';
 
 // Module-level variables to store current configuration
 let currentLanguage: string | null | undefined = null;
@@ -58,6 +60,29 @@ let botPaSinkModuleId: string | null = null; // PulseAudio module ID for per-bot
 let currentBotConfig: BotConfig | null = null;
 export function setActiveRecordingService(svc: RecordingService | null): void {
   activeRecordingService = svc;
+}
+
+/**
+ * Feed mixed PulseAudio audio into the per-speaker transcription pipeline.
+ * Used by Zoom Web: single mixed stream + DOM speaker polling for attribution.
+ * Mirrors handleTeamsAudioData but called from Node.js (not browser).
+ */
+export async function feedZoomAudio(speakerName: string, audioData: Float32Array): Promise<void> {
+  if (!speakerManager || !segmentPublisher) return;
+
+  const speakerId = `zoom-${speakerName.replace(/\s+/g, '_')}`;
+
+  if (!speakerManager.hasSpeaker(speakerId)) {
+    log(`[🎙️ ZOOM SPEAKER] "${speakerName}" — first audio received`);
+    speakerManager.addSpeaker(speakerId, speakerName);
+    await segmentPublisher.publishSpeakerEvent({
+      speaker: speakerName,
+      type: 'joined',
+      timestamp: Date.now(),
+    });
+  }
+
+  speakerManager.feedAudio(speakerId, audioData);
 }
 
 /**
@@ -135,6 +160,9 @@ let pipelineTelemetry: {
 } | null = null;
 let pipelineTelemetryInterval: ReturnType<typeof setInterval> | null = null;
 let activeSpeakerStreamHandles: SpeakerStreamHandle[] = [];
+/** Raw capture service — dumps per-speaker WAVs + events for offline replay (RAW_CAPTURE=true) */
+let rawCaptureService: RawCaptureService | null = null;
+export function getRawCaptureService(): RawCaptureService | null { return rawCaptureService; }
 /** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
 let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
 // ------------------------------------------
@@ -1146,6 +1174,12 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       vadModel = null;
     }
 
+    // Raw capture: dump per-speaker WAVs + events for offline replay
+    if (process.env.RAW_CAPTURE === 'true') {
+      rawCaptureService = new RawCaptureService(meetingId);
+      log(`[PerSpeaker] Raw capture enabled → ${rawCaptureService.outputPath}`);
+    }
+
     const isGoogleMeet = botConfig.platform === 'google_meet';
     speakerManager = new SpeakerStreamManager({
       sampleRate: 16000,
@@ -1358,6 +1392,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       telemetry.segmentsConfirmed++;
       telemetry.totalConfirmLatencyMs += confirmLatencyMs;
       log(`[📝 CONFIRMED] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s (${segDurationSec.toFixed(1)}s, ${wordCount}w, latency=${(confirmLatencyMs/1000).toFixed(1)}s) | ${fullSegmentId} | "${transcript}"`);
+      if (rawCaptureService) rawCaptureService.logSegmentConfirmed(speakerName, transcript);
 
       if (!confirmedBatches.has(speakerId)) confirmedBatches.set(speakerId, []);
       confirmedBatches.get(speakerId)!.push({
@@ -1402,6 +1437,9 @@ function isDuplicateSpeakerName(name: string, excludeSpeakerId: string): boolean
 async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: number[]): Promise<void> {
   if (!speakerManager || !segmentPublisher || !page || page.isClosed()) return;
 
+  // Report audio activity for Zoom active-speaker disambiguation
+  reportTrackAudio(speakerIndex);
+
   const speakerId = `speaker-${speakerIndex}`;
   const audioData = new Float32Array(audioDataArray);
 
@@ -1409,10 +1447,45 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     : currentPlatform === 'teams' ? 'msteams'
     : currentPlatform || 'unknown';
 
-  // Speaker name resolution: discover via voting, lock permanently.
-  // Locked tracks return instantly. Unlocked tracks re-resolve every 2s.
-  // Invariant: one name per track, one track per name — always.
-  if (!speakerManager.hasSpeaker(speakerId)) {
+  // ─── Zoom: DOM active speaker is the source of truth ───────────────────────
+  // Zoom SFU reuses ~3 audio tracks. Track ownership does NOT map to speakers —
+  // when Alice speaks, her audio may arrive on a track previously used by Bob.
+  // The DOM polling (getLastActiveSpeaker) correctly identifies who is speaking.
+  // We skip voting/locking entirely and always use the DOM-polled name.
+  if (platformKey === 'zoom') {
+    const domSpeaker = getLastActiveSpeaker() || '';
+
+    if (!speakerManager.hasSpeaker(speakerId)) {
+      log(`[🔊 NEW SPEAKER] Track ${speakerIndex} — first audio, DOM speaker: "${domSpeaker || '(none)'}"`);
+      speakerManager.addSpeaker(speakerId, domSpeaker);
+      lastReResolveTime.set(speakerId, Date.now());
+      if (domSpeaker) {
+        await segmentPublisher.publishSpeakerEvent({
+          speaker: domSpeaker,
+          type: 'joined',
+          timestamp: Date.now(),
+        });
+        log(`[📡 SPEAKER EVENT] "${domSpeaker}" joined → Redis`);
+      }
+    } else {
+      const currentName = speakerManager.getSpeakerName(speakerId) || '';
+      // Always update to current DOM speaker — tracks are NOT stable on Zoom
+      if (domSpeaker && domSpeaker !== currentName) {
+        log(`[🔄 ZOOM SPEAKER] Track ${speakerIndex}: "${currentName}" → "${domSpeaker}" (DOM active speaker)`);
+        speakerManager.updateSpeakerName(speakerId, domSpeaker);
+        if (!currentName) {
+          await segmentPublisher.publishSpeakerEvent({
+            speaker: domSpeaker,
+            type: 'joined',
+            timestamp: Date.now(),
+          });
+          log(`[📡 SPEAKER EVENT] "${domSpeaker}" joined → Redis`);
+        }
+      }
+    }
+  }
+  // ─── GMeet / Teams: voting + locking (tracks ARE stable) ───────────────────
+  else if (!speakerManager.hasSpeaker(speakerId)) {
     log(`[🔊 NEW SPEAKER] Track ${speakerIndex} — first audio received, resolving name...`);
     const name = await resolveSpeakerName(page, speakerIndex, platformKey, currentBotConfig?.botName);
     // Start unmapped — only assign if name is genuinely unique
@@ -1537,6 +1610,12 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
   }
   speakerLastAudioMs.set(speakerId, nowMs);
 
+  // Raw capture: dump audio for offline replay
+  if (rawCaptureService) {
+    const resolvedName = speakerManager.getSpeakerName(speakerId) || '';
+    rawCaptureService.feedAudio(speakerIndex, audioData, resolvedName);
+  }
+
   speakerManager.feedAudio(speakerId, audioData);
 }
 
@@ -1570,6 +1649,13 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
         (window as any).__vexaPerSpeakerIntervals = [];
       });
     } catch {}
+  }
+
+  // Finalize raw capture — flush all tracks to WAV files
+  if (rawCaptureService) {
+    const outputPath = rawCaptureService.finalize();
+    log(`[PerSpeaker] Raw capture finalized → ${outputPath}`);
+    rawCaptureService = null;
   }
 
   // Flush remaining speaker buffers
@@ -1940,8 +2026,50 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     }
   }
 
+  // --- Authenticated bot: use persistent context with userdata from S3 ---
+  if (botConfig.authenticated && botConfig.userdataS3Path) {
+    log('[Bot] Authenticated mode: downloading userdata from S3...');
+    ensureBrowserDataDir();
+    syncBrowserDataFromS3(botConfig);
+    cleanStaleLocks(BROWSER_DATA_DIR);
+
+    const authArgs = getBrowserArgs(!!botConfig.voiceAgentEnabled);
+    const context: BrowserContext = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
+      headless: false,
+      ignoreDefaultArgs: ['--enable-automation'],
+      args: authArgs,
+      viewport: null,
+    });
+
+    log('[Bot] Authenticated persistent context launched');
+
+    // Apply init scripts to the persistent context
+    const isVoiceAgent = !!botConfig.voiceAgentEnabled;
+    await context.addInitScript(`window.__vexa_voice_agent_enabled = ${isVoiceAgent};`);
+
+    if (botConfig.cameraEnabled) {
+      try {
+        await context.addInitScript(getVirtualCameraInitScript());
+        log('[Bot] Video OUT: virtual camera init script injected (authenticated)');
+      } catch (e: any) {
+        log(`[Bot] Warning: virtual camera addInitScript failed (authenticated): ${e.message}`);
+      }
+    }
+
+    if (!botConfig.videoReceiveEnabled) {
+      try {
+        await context.addInitScript(getVideoBlockInitScript());
+        log('[Bot] Video IN: blocked (authenticated, saving CPU)');
+      } catch (e: any) {
+        log(`[Bot] Warning: video block addInitScript failed (authenticated): ${e.message}`);
+      }
+    }
+
+    const pages = context.pages();
+    page = pages.length > 0 ? pages[0] : await context.newPage();
+  }
   // Simple browser setup like simple-bot.js
-  if (botConfig.platform === "teams") {
+  else if (botConfig.platform === "teams") {
     // Use shared browser args so Teams gets the same fake-device flags as Google Meet.
     // This ensures Chromium creates a fake video device that enumerateDevices can see,
     // allowing Teams to enable the camera button and our getUserMedia patch to intercept.

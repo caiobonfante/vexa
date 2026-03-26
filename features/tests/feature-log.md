@@ -79,7 +79,33 @@ Append-only. Tracks what we tried to make the loop work.
 
 [PRACTICE] **User priority should override strategy backlog.** Strategy ranked calendar-integration #1 by formula. User explicitly prioritized agentic runtime meeting fluency. The right call was to follow the user — they know what matters for their product direction. Strategy informs but doesn't dictate.
 
-[DEAD-END] **browser_session bots can't handle chat_send without chatService.** The speak handler works because it only needs PulseAudio (TTSPlaybackService). Chat needs page context + platform-specific DOM selectors (MeetingChatService). This is architecturally different — adding chat to browser_session requires initializing chatService with the active page, which depends on knowing what platform the page is viewing.
+[DEAD-END] ~~**browser_session bots can't handle chat_send without chatService.**~~ **OUTDATED** — chat_send handler was added to browser-session.ts with lazy MeetingChatService initialization. Discovered 2026-03-25 that this handler exists (lines 221-248). The dead-end was based on stale findings.
+
+## Practices Learned (MVP6 cycle 1 — agent teams, 2026-03-25)
+
+[PRACTICE] **Agent teams with researcher→executor→verifier pipeline is the most effective pattern so far.** 6 teammates across 3 features, zero conflicts. Researchers produce actionable findings with file paths and line numbers. Executors implement with full context. Researchers switch to verifier role efficiently (they already know the codebase). One blocking auth bug caught by verification that would have been silent in production.
+
+[PRACTICE] **Researchers switching to verifier role saves spawning a separate verifier.** The researcher already read all the relevant code during research. When they verify, they know exactly what to look for. Calendar researcher caught the `X-User-Id` vs `X-API-Key` auth bug because they had specified `BOT_API_TOKEN` in their spec — they knew what was expected.
+
+[PRACTICE] **Shutting down completed teams while others continue saves tokens.** Zoom team finished first, was shut down immediately. Calendar team finished second. Video team continued working. No wasted context windows.
+
+[PRACTICE] **One docker rebuild unlocks multiple features (keystone action).** The vexa-bot:dev rebuild unlocks: Zoom speaker fixes, speaking bot activation, video recording ffmpeg, chat_send in browser-session. Identifying and prioritizing keystone actions multiplies throughput.
+
+[PRACTICE] **Stale findings mislead agents.** Scheduler findings said "Redis not exposed on host" but port 6389 was mapped in compose all along. Chat findings said "browser-session missing chat_send" but the handler existed. Always verify current state before acting on findings.
+
+[PRACTICE] **Calendar service copied Zoom OAuth pattern exactly — fastest path to working auth.** The researcher identified the Zoom OAuth flow as the template. Executor copied it with minimal changes (scope, redirect path, storage key). Verifier confirmed 5/6 checks. Pattern copying is faster and more reliable than designing from scratch.
+
+[DEAD-END] **Scheduler E2E test script has wrong Redis data type.** `test-scheduler-e2e.sh` uses `lrange` on `scheduler:history` which is a hash, not a list. The core scheduler works fine — the test script is broken. Inline Python E2E test (6 checks) works correctly.
+
+## Practices Learned (MVP6 cycle 2 — TeamCreate, 2026-03-25)
+
+[PRACTICE] **TeamCreate with researcher shutdown is the most token-efficient pattern.** Spawn researchers in parallel, shut them down after they produce findings, then spawn executors with research context. 3 researchers finished in ~2min, were shut down, freeing tokens for executors. No verifier needed when lead verifies directly (git diff).
+
+[PRACTICE] **"No new code needed" is the best researcher finding.** Knowledge researcher discovered the webhook trigger already existed — only needed a better message and a format spec. Two-file edit instead of a new service. Researchers should always check existing code paths before proposing new ones.
+
+[PRACTICE] **WhisperLive stub is the Zoom transcription blocker.** Per-speaker audio pipeline initializes but WhisperLive is a no-op class (`whisperlive.ts`). Speaker detection works (DOM polling), TTS works, chat works. The transcription gap is architectural, not a bug in the 3 Zoom fixes.
+
+[PRACTICE] **Environment validation (check-env.sh) should run at cycle start, not per-feature.** Running it once at the top confirmed 56 PASS, saving each team from re-discovering environment state.
 
 ## Speaking-Bot Research (2026-03-24)
 

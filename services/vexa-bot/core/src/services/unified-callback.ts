@@ -1,9 +1,10 @@
 import { log } from "../utils";
 
-export type MeetingStatus = 
+export type MeetingStatus =
   | "joining"
-  | "awaiting_admission" 
+  | "awaiting_admission"
   | "active"
+  | "needs_human_help"
   | "completed"
   | "failed";
 

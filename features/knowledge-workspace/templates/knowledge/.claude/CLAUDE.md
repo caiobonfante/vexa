@@ -293,3 +293,54 @@ Topics (in order):
 4. `images` — photo analysis supported
 5. `reset` — /reset starts fresh conversation, keeps files
 6. `knowledge` — structured info accumulates over time
+
+## Knowledge Extraction — Entity File Formats
+
+When processing a meeting transcript, create/update entity files using these formats.
+
+**Contact** (`knowledge/entities/contacts/{first-last}.md`):
+```markdown
+# {First Last}
+Role: {role}
+Company: [[{Company Name}]]
+## Key Points
+- {what they care about, decisions they made}
+## Meetings
+- [[{YYYY-MM-DD}-{meeting_id}]] — {one-line summary}
+```
+
+**Company** (`knowledge/entities/companies/{name}.md`):
+```markdown
+# {Company Name}
+Type: {client/partner/vendor/competitor}
+## Key People
+- [[{First Last}]] — {role}
+## Context
+{relationship, what we discussed}
+```
+
+**Meeting minutes** (`knowledge/meetings/{YYYY-MM-DD}-{meeting_id}.md`):
+```markdown
+# Meeting {YYYY-MM-DD}
+Attendees: [[First Last]], [[First Last]]
+## Summary
+{2-3 sentence summary}
+## Decisions
+- {decision made}
+## Action Items
+- [ ] {task} — [[Owner]] — due {date}
+```
+
+**Action items** (`knowledge/action-items/{YYYY-MM-DD}-{meeting_id}.md`):
+```markdown
+# Action Items — {YYYY-MM-DD}
+Source: [[{YYYY-MM-DD}-{meeting_id}]]
+- [ ] {task} — [[Owner]] — due {date}
+```
+
+**Rules:**
+- Only create entity files for people with a clear role (not every name mentioned)
+- Check existing files before creating duplicates — update if the entity already exists
+- Wiki-link `[[Name]]` on first occurrence only per section
+- Filenames: lowercase-with-hyphens (e.g. `john-doe.md`, `acme-corp.md`)
+- Entity directories: `contacts/`, `companies/`, `products/`, `meetings/`, `action-items/`

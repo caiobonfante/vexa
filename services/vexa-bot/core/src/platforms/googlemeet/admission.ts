@@ -1,6 +1,7 @@
 import { Page } from "playwright";
 import { log, callAwaitingAdmissionCallback } from "../../utils";
 import { BotConfig } from "../../types";
+import { checkEscalation, triggerEscalation, getEscalationExtensionMs } from "../shared/escalation";
 import {
   googleInitialAdmissionIndicators,
   googleWaitingRoomIndicators,
@@ -140,35 +141,47 @@ export async function waitForGoogleMeetingAdmission(
     // If we're in waiting room, wait for the full timeout period for admission
     if (stillInWaitingRoom) {
       log(`Bot is in Google Meet waiting room. Waiting for ${timeout}ms for admission...`);
-      
+
       const checkInterval = 2000; // Check every 2 seconds for faster detection
       const startTime = Date.now();
-      
-      while (Date.now() - startTime < timeout) {
+      let unknownStateDuration = 0;
+      const effectiveTimeout = () => timeout + getEscalationExtensionMs();
+
+      while (Date.now() - startTime < effectiveTimeout()) {
         // Check if we're still in waiting room using visibility
         const stillWaiting = await checkForWaitingRoomIndicators(page);
-        
+
         if (!stillWaiting) {
           log("Google Meet waiting room indicator disappeared - checking if bot was admitted or rejected...");
-          
+          unknownStateDuration += checkInterval;
+
           // CRITICAL: Check for rejection first since that's a definitive outcome
           const isRejected = await checkForGoogleRejection(page);
           if (isRejected) {
             log("🚨 Bot was rejected from the Google Meet meeting by admin");
             throw new Error("Bot admission was rejected by meeting admin");
           }
-          
+
           // Check for admission indicators since waiting room disappeared and no rejection found
           const admissionFound = await checkForGoogleAdmissionIndicators(page);
-          
+
           if (admissionFound) {
             log(`✅ Bot was admitted to the Google Meet meeting: meeting controls confirmed`);
             return true;
           }
-          
+
           // Keep waiting if neither admitted nor rejected
+        } else {
+          unknownStateDuration = 0;
         }
-        
+
+        // Escalation check
+        const elapsedMs = Date.now() - startTime;
+        const escalation = checkEscalation(elapsedMs, timeout, unknownStateDuration);
+        if (escalation) {
+          await triggerEscalation(botConfig, escalation.reason);
+        }
+
         // Wait before next check
         await page.waitForTimeout(checkInterval);
         log(`Still in Google Meet waiting room... ${Math.round((Date.now() - startTime) / 1000)}s elapsed`);
@@ -185,7 +198,9 @@ export async function waitForGoogleMeetingAdmission(
       log(`No waiting room detected. Polling for admission for up to ${timeout}ms...`);
       const checkInterval = 2000;
       const startTime = Date.now();
-      while (Date.now() - startTime < timeout) {
+      let unknownStateDuration2 = 0;
+      const effectiveTimeout2 = () => timeout + getEscalationExtensionMs();
+      while (Date.now() - startTime < effectiveTimeout2()) {
         // Rejection check first
         const isRejected = await checkForGoogleRejection(page);
         if (isRejected) {
@@ -204,7 +219,7 @@ export async function waitForGoogleMeetingAdmission(
         // If lobby appears later, switch to waiting-room handling by breaking
         if (lobbyVisible) {
           log("ℹ️ Waiting room appeared during polling. Switching to waiting-room monitoring...");
-          
+
           // --- Call awaiting admission callback when waiting room appears during polling ---
           try {
             await callAwaitingAdmissionCallback(botConfig);
@@ -212,9 +227,18 @@ export async function waitForGoogleMeetingAdmission(
           } catch (callbackError: any) {
             log(`Warning: Failed to send awaiting admission callback: ${callbackError.message}. Continuing...`);
           }
-          
+
           stillInWaitingRoom = true;
+          unknownStateDuration2 = 0;
           break;
+        }
+
+        // Track unknown state for escalation
+        unknownStateDuration2 += checkInterval;
+        const elapsedMs = Date.now() - startTime;
+        const escalation = checkEscalation(elapsedMs, timeout, unknownStateDuration2);
+        if (escalation) {
+          await triggerEscalation(botConfig, escalation.reason);
         }
 
         await page.waitForTimeout(checkInterval);

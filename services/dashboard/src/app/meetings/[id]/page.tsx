@@ -33,8 +33,12 @@ import {
   Volume2,
   Send,
   Bot,
+  AlertTriangle,
+  Monitor,
+  Save,
 } from "lucide-react";
 import { AudioPlayer, type AudioPlayerHandle, type AudioFragment } from "@/components/recording/audio-player";
+import { VideoPlayer, type VideoPlayerHandle } from "@/components/recording/video-player";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -170,6 +174,7 @@ export default function MeetingDetailPage() {
 
   // Audio playback state
   const audioPlayerRef = useRef<AudioPlayerHandle>(null);
+  const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const [playbackTime, setPlaybackTime] = useState<number | null>(null);
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
   const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
@@ -197,6 +202,18 @@ export default function MeetingDetailPage() {
   }, [recordings]);
 
   const hasRecordingAudio = recordingFragments.length > 0;
+
+  // Find the first video media file across all recordings for the VideoPlayer.
+  const videoSrc = useMemo(() => {
+    for (const rec of recordings) {
+      if (rec.status !== "completed" && rec.status !== "in_progress") continue;
+      const videoMedia = rec.media_files?.find((mf: { type: string }) => mf.type === "video");
+      if (videoMedia) {
+        return vexaAPI.getRecordingVideoUrl(rec.id, videoMedia.id);
+      }
+    }
+    return null;
+  }, [recordings]);
 
   // Derive each session's start time (wall-clock ms) from segment data.
   // segment.start_time is relative to session start, and segment.absolute_start_time
@@ -249,6 +266,7 @@ export default function MeetingDetailPage() {
     if (recordingFragments.length <= 1) {
       // Single recording — start_time is the seek position
       audioPlayerRef.current?.seekTo(startTimeSeconds);
+      videoPlayerRef.current?.seekTo(startTimeSeconds);
       setPlaybackTime(startTimeSeconds);
       setIsPlaybackActive(true);
       return;
@@ -283,6 +301,7 @@ export default function MeetingDetailPage() {
     const virtualOffset = recordingFragments
       .slice(0, targetFragmentIndex)
       .reduce((sum, f) => sum + (f.duration || 0), 0);
+    videoPlayerRef.current?.seekTo(virtualOffset + startTimeSeconds);
     setPlaybackTime(virtualOffset + startTimeSeconds);
     setIsPlaybackActive(true);
   }, [hasRecordingAudio, recordingFragments, transcripts, sessionStartMsBySessionUid]);
@@ -291,6 +310,7 @@ export default function MeetingDetailPage() {
     if (!hasRecordingAudio || pendingSeekTime == null) return;
     const timer = setTimeout(() => {
       audioPlayerRef.current?.seekTo(pendingSeekTime);
+      videoPlayerRef.current?.seekTo(pendingSeekTime);
       setPlaybackTime(pendingSeekTime);
       setIsPlaybackActive(true);
       setPendingSeekTime(null);
@@ -304,7 +324,7 @@ export default function MeetingDetailPage() {
   // Handle meeting status change from WebSocket
   const handleStatusChange = useCallback((status: MeetingStatus) => {
     // Refetch when status changes so we get latest data and post-meeting artifacts.
-    if (status === "active" || status === "stopping" || status === "completed" || status === "failed") {
+    if (status === "active" || status === "needs_human_help" || status === "stopping" || status === "completed" || status === "failed") {
       fetchMeeting(meetingId);
     }
     if (
@@ -765,13 +785,18 @@ export default function MeetingDetailPage() {
   const canUseSegmentPlayback = isPostMeetingFlow && !noAudioRecordingForMeeting;
   const recordingTopBar = isPostMeetingFlow ? (
     hasRecordingAudio ? (
-      <AudioPlayer
-        ref={audioPlayerRef}
-        fragments={recordingFragments}
-        onTimeUpdate={handlePlaybackTimeUpdate}
-        onFragmentChange={handleFragmentChange}
-        compact
-      />
+      <div className="flex flex-col gap-2">
+        {videoSrc && (
+          <VideoPlayer ref={videoPlayerRef} src={videoSrc} className="max-h-[360px]" />
+        )}
+        <AudioPlayer
+          ref={audioPlayerRef}
+          fragments={recordingFragments}
+          onTimeUpdate={handlePlaybackTimeUpdate}
+          onFragmentChange={handleFragmentChange}
+          compact
+        />
+      </div>
     ) : noAudioRecordingForMeeting ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
         No audio recording for this meeting.
@@ -1544,6 +1569,88 @@ export default function MeetingDetailPage() {
                 fetchMeeting(meetingId);
               }}
             />
+          )}
+
+          {/* Show escalation banner when bot needs human help */}
+          {currentMeeting.status === "needs_human_help" && (
+            <Card className="border-orange-500/50 bg-orange-500/5">
+              <CardContent className="pt-6 pb-6">
+                <div className="flex flex-col items-center text-center">
+                  <div className="h-16 w-16 rounded-full bg-orange-500/10 flex items-center justify-center mb-4">
+                    <AlertTriangle className="h-8 w-8 text-orange-500 animate-pulse" />
+                  </div>
+                  <h2 className="text-xl font-semibold mb-2 text-orange-600 dark:text-orange-400">
+                    Bot needs help
+                  </h2>
+                  <p className="text-sm text-muted-foreground max-w-sm mb-4">
+                    {(currentMeeting.data?.escalation as Record<string, unknown>)?.reason as string
+                      || currentMeeting.data?.escalation_reason as string
+                      || "The bot is blocked and needs human intervention to continue."}
+                  </p>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {(() => {
+                      const escalation = currentMeeting.data?.escalation as Record<string, unknown> | undefined;
+                      const sessionToken = escalation?.session_token as string
+                        || currentMeeting.data?.session_token as string;
+                      if (!sessionToken) return null;
+                      const vncUrl = `${API_BASE_URL}/b/${sessionToken}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${sessionToken}/vnc/websockify`;
+                      return (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-2 bg-orange-600 hover:bg-orange-700"
+                          onClick={() => window.open(vncUrl, "_blank")}
+                        >
+                          <Monitor className="h-4 w-4" />
+                          Open Remote Browser
+                        </Button>
+                      );
+                    })()}
+                    {(() => {
+                      const escalation = currentMeeting.data?.escalation as Record<string, unknown> | undefined;
+                      const sessionToken = escalation?.session_token as string
+                        || currentMeeting.data?.session_token as string;
+                      if (!sessionToken) return null;
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE_URL}/b/${sessionToken}/save`, {
+                                method: "POST",
+                              });
+                              if (!response.ok) throw new Error(await response.text());
+                              toast.success("Browser state saved");
+                            } catch (error) {
+                              toast.error("Save failed: " + (error as Error).message);
+                            }
+                          }}
+                        >
+                          <Save className="h-4 w-4" />
+                          Save Browser State
+                        </Button>
+                      );
+                    })()}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleStopBot}
+                      disabled={isStoppingBot}
+                      className="gap-2"
+                    >
+                      {isStoppingBot ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <StopCircle className="h-4 w-4" />
+                      )}
+                      Stop Bot
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Show failed indicator */}

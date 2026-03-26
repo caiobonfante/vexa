@@ -1,91 +1,35 @@
 import { Page } from 'playwright';
 import { BotConfig } from '../../../types';
-import { WhisperLiveService } from '../../../services/whisperlive';
 import { RecordingService } from '../../../services/recording';
-import { setActiveRecordingService } from '../../../index';
+import { setActiveRecordingService, getRawCaptureService } from '../../../index';
 import { log } from '../../../utils';
 import { spawn, ChildProcess } from 'child_process';
-import {
-  zoomActiveSpeakerSelector,
-  zoomParticipantNameSelector,
-} from './selectors';
+import { zoomParticipantNameSelector } from './selectors';
 import { dismissZoomPopups } from './prepare';
 
-let whisperLive: WhisperLiveService | null = null;
 let recordingService: RecordingService | null = null;
 let recordingStopResolver: (() => void) | null = null;
 let parecordProcess: ChildProcess | null = null;
-let audioSessionStartTime: number | null = null;
 let speakerPollInterval: NodeJS.Timeout | null = null;
 let lastActiveSpeaker: string | null = null;
 let activeBotConfig: BotConfig | null = null;
 let popupDismissInterval: NodeJS.Timeout | null = null;
-let connectWhisperFn: ((cfg: BotConfig) => Promise<void>) | null = null;
-let isReconfiguring = false;
+
+/** Current DOM-polled active speaker — used by per-speaker pipeline as fallback name */
+export function getLastActiveSpeaker(): string | null {
+  return lastActiveSpeaker;
+}
 
 export async function startZoomWebRecording(page: Page | null, botConfig: BotConfig): Promise<void> {
   if (!page) throw new Error('[Zoom Web] Page required for recording');
 
   activeBotConfig = botConfig;
 
-  const transcriptionEnabled = botConfig.transcribeEnabled !== false;
-
-  if (transcriptionEnabled) {
-    whisperLive = new WhisperLiveService({ whisperLiveUrl: process.env.WHISPER_LIVE_URL });
-    const whisperLiveUrl = await whisperLive.initializeWithStubbornReconnection('Zoom Web');
-    log(`[Zoom Web] WhisperLive URL: ${whisperLiveUrl}`);
-
-    // Open the WebSocket connection (initialize() only sets allocatedServerUrl — connect is separate)
-    // cfg parameter allows reconfigure to reconnect with updated language/task
-    const connectWhisper = async (cfg: BotConfig) => {
-      try {
-        await whisperLive!.connectToWhisperLive(
-          cfg,
-          (data: any) => {
-            if (data?.status === 'WAIT') {
-              log(`[Zoom Web] WhisperLive server busy — waiting...`);
-            } else if (data?.segments) {
-              const texts = (data.segments as any[])
-                .filter((s: any) => s.completed && s.text)
-                .map((s: any) => s.text as string);
-              if (texts.length > 0) log(`[Zoom Web] Transcript: ${texts.join(' ').trim()}`);
-            }
-          },
-          (err: Event) => {
-            log(`[Zoom Web] WhisperLive WebSocket error`);
-          },
-          (evt: CloseEvent) => {
-            if (isReconfiguring) {
-              log(`[Zoom Web] WhisperLive connection closed during reconfigure (code=${evt.code}) — skipping auto-reconnect`);
-              return;
-            }
-            log(`[Zoom Web] WhisperLive connection closed (code=${evt.code}). Reconnecting in 2s...`);
-            whisperLive?.setServerReady(false);
-            setTimeout(() => {
-              connectWhisper(activeBotConfig || cfg).then(() => {
-                // New session UID generated on reconnect — reset timestamps and re-send speaker
-                // so the server knows who is talking (mirrors reconfigure logic).
-                audioSessionStartTime = Date.now();
-                if (lastActiveSpeaker && whisperLive) {
-                  const relativeMs = Date.now() - audioSessionStartTime;
-                  const sent = whisperLive.sendSpeakerEvent('SPEAKER_START', lastActiveSpeaker, lastActiveSpeaker, relativeMs, activeBotConfig || cfg);
-                  log(`🎤 [Zoom Web] SPEAKER_START (re-sent after reconnect): ${lastActiveSpeaker} (sent=${sent})`);
-                }
-              }).catch(() => {});
-            }, 2000);
-          }
-        );
-        log(`[Zoom Web] WhisperLive WebSocket connected (lang=${cfg.language || 'auto'})`);
-      } catch (e: any) {
-        log(`[Zoom Web] WhisperLive connect error: ${e.message}. Retrying in 2s...`);
-        setTimeout(() => { connectWhisper(activeBotConfig || cfg).catch(() => {}); }, 2000);
-      }
-    };
-    connectWhisperFn = connectWhisper;
-    await connectWhisper(botConfig);
-  } else {
-    log('[Zoom Web] Transcription disabled — recording only mode');
-  }
+  // WhisperLive transcription is disabled for Zoom Web.
+  // The per-speaker pipeline in index.ts handles transcription via
+  // startPerSpeakerAudioCapture() + SpeakerStreamManager + TranscriptionClient.
+  // WhisperLive was a duplicate path that produced ~2x segments in Redis.
+  log('[Zoom Web] Transcription handled by per-speaker pipeline (WhisperLive disabled)');
 
   // Recording service
   const wantsAudioCapture =
@@ -99,8 +43,6 @@ export async function startZoomWebRecording(page: Page | null, botConfig: BotCon
     recordingService.start();
     log('[Zoom Web] Recording service started');
   }
-
-  audioSessionStartTime = Date.now();
 
   // Start PulseAudio capture from zoom_sink monitor.
   // Zoom web client routes audio through PulseAudio null sink (same as native SDK fallback).
@@ -135,7 +77,6 @@ export async function stopZoomWebRecording(): Promise<void> {
     popupDismissInterval = null;
   }
 
-  audioSessionStartTime = null;
   lastActiveSpeaker = null;
 
   // Unblock the blocking wait
@@ -150,12 +91,7 @@ export async function stopZoomWebRecording(): Promise<void> {
     parecordProcess = null;
   }
 
-  if (whisperLive) {
-    whisperLive = null;
-  }
-
   activeBotConfig = null;
-  connectWhisperFn = null;
 
   if (recordingService) {
     try {
@@ -168,66 +104,10 @@ export async function stopZoomWebRecording(): Promise<void> {
   }
 }
 
-/**
- * Reconfigure the active WhisperLive session with new language/task.
- * Called when a `reconfigure` Redis command is received.
- * For Zoom Web the WhisperLive socket lives in Node.js, not the browser,
- * so we reconnect the socket with the updated config instead of calling
- * the browser-side `triggerWebSocketReconfigure`.
- *
- * Mirrors the pattern used in Google Meet / Teams:
- * 1. Close existing socket (generates new session UID on reconnect)
- * 2. Reset audio session start time for speaker event timestamps
- * 3. Reconnect with updated config
- */
 export async function reconfigureZoomWebRecording(language: string | null, task: string | null): Promise<void> {
-  if (!whisperLive || !activeBotConfig || !connectWhisperFn) {
-    log('[Zoom Web] reconfigure: WhisperLive not active — ignoring');
-    return;
-  }
-  log(`[Zoom Web] Reconfiguring WhisperLive: lang=${language}, task=${task}`);
-
-  // Update the stored config so reconnect loops use the new values
-  activeBotConfig = { ...activeBotConfig, language: language ?? undefined, task: task ?? undefined };
-
-  try {
-    // Suppress auto-reconnect from onClose handler during reconfigure
-    isReconfiguring = true;
-
-    // 1. Close existing socket to establish fresh session (new UID generated on reconnect)
-    whisperLive.setServerReady(false);
-    whisperLive.closeSocketForReconfigure();
-
-    // Brief pause to ensure socket is fully closed
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // 2. Reconnect with updated config — connectToWhisperLive generates new sessionUid
-    isReconfiguring = false;
-    await connectWhisperFn(activeBotConfig);
-    log('[Zoom Web] Reconfigure reconnect complete');
-
-    // 3. Reset audioSessionStartTime — WhisperLive server resets segment timestamps
-    //    to ~0 on a new connection, so our speaker event timestamps must also reset
-    //    to stay aligned. Without this, re-sent SPEAKER_START would have a large
-    //    relativeMs from the original session while segments start at ~0ms → gap.
-    //    This mirrors Google Meet which calls audioSvc.resetSessionStartTime().
-    audioSessionStartTime = Date.now();
-    log(`[Zoom Web] Reset audioSessionStartTime for new session`);
-
-    // 4. Re-send current speaker on the new session so server knows who's talking.
-    // Without this, the server only sees audio but no speaker info until the next
-    // speaker change (which may never happen in a 1-on-1 call).
-    // No delay needed — connectToWhisperLive now resolves only after socket.onopen,
-    // so the new sessionUid is already set and socket is OPEN.
-    if (lastActiveSpeaker && whisperLive) {
-      const relativeMs = Date.now() - audioSessionStartTime; // Will be ~0ms
-      const sent = whisperLive.sendSpeakerEvent('SPEAKER_START', lastActiveSpeaker, lastActiveSpeaker, relativeMs, activeBotConfig!);
-      log(`🎤 [Zoom Web] SPEAKER_START (re-sent after reconfigure): ${lastActiveSpeaker} (sent=${sent}, uid=${whisperLive.getSessionUid()}, relativeMs=${relativeMs})`);
-    }
-  } catch (e: any) {
-    isReconfiguring = false;
-    log(`[Zoom Web] Reconfigure reconnect error: ${e.message}`);
-  }
+  // WhisperLive is disabled for Zoom Web — per-speaker pipeline handles transcription.
+  // Reconfigure is a no-op; language/task changes are handled at the per-speaker pipeline level.
+  log(`[Zoom Web] reconfigure: WhisperLive not active — ignoring (lang=${language}, task=${task})`);
 }
 
 export function getZoomWebRecordingService(): RecordingService | null {
@@ -259,10 +139,8 @@ async function startPulseAudioCapture(): Promise<void> {
         started = true;
         resolve();
       }
-      const float32 = pcmInt16ToFloat32(chunk);
-      if (whisperLive) {
-        whisperLive.sendAudioData(float32);
-      }
+      // Audio recording only — transcription is handled by the per-speaker pipeline
+      // in index.ts (startPerSpeakerAudioCapture → browser ScriptProcessor → handlePerSpeakerAudioData)
       if (recordingService) {
         recordingService.appendPCMBuffer(chunk);
       }
@@ -297,8 +175,6 @@ async function startPulseAudioCapture(): Promise<void> {
 function startSpeakerPolling(page: Page, botConfig: BotConfig): void {
   speakerPollInterval = setInterval(async () => {
     if (!page || page.isClosed()) return;
-    // Use activeBotConfig (updated on reconfigure) — NOT the closure's botConfig
-    const cfg = activeBotConfig || botConfig;
     try {
       const speakerName = await page.evaluate((footerSelector: string) => {
         function nameFromContainer(container: Element | null): string | null {
@@ -320,26 +196,20 @@ function startSpeakerPolling(page: Page, botConfig: BotConfig): void {
         return null;
       }, zoomParticipantNameSelector);
 
-      if (!audioSessionStartTime) return;
-      const relativeMs = Date.now() - audioSessionStartTime;
-
       if (speakerName && speakerName !== lastActiveSpeaker) {
-        // Speaker changed
-        if (lastActiveSpeaker && whisperLive) {
-          whisperLive.sendSpeakerEvent('SPEAKER_END', lastActiveSpeaker, lastActiveSpeaker, relativeMs, cfg);
+        // Speaker changed — log to raw capture if active
+        const rawCapture = getRawCaptureService();
+        if (rawCapture) {
+          rawCapture.logSpeakerEvent(lastActiveSpeaker, speakerName);
+        }
+        if (lastActiveSpeaker) {
           log(`🔇 [Zoom Web] SPEAKER_END: ${lastActiveSpeaker}`);
         }
         lastActiveSpeaker = speakerName;
-        if (whisperLive) {
-          whisperLive.sendSpeakerEvent('SPEAKER_START', speakerName, speakerName, relativeMs, cfg);
-          log(`🎤 [Zoom Web] SPEAKER_START: ${speakerName}`);
-        }
+        log(`🎤 [Zoom Web] SPEAKER_START: ${speakerName}`);
       } else if (!speakerName && lastActiveSpeaker) {
         // No active speaker
-        if (whisperLive) {
-          whisperLive.sendSpeakerEvent('SPEAKER_END', lastActiveSpeaker, lastActiveSpeaker, relativeMs, cfg);
-          log(`🔇 [Zoom Web] SPEAKER_END: ${lastActiveSpeaker}`);
-        }
+        log(`🔇 [Zoom Web] SPEAKER_END: ${lastActiveSpeaker}`);
         lastActiveSpeaker = null;
       }
     } catch {
@@ -348,13 +218,3 @@ function startSpeakerPolling(page: Page, botConfig: BotConfig): void {
   }, 250);
 }
 
-// ---- Helpers ----
-
-function pcmInt16ToFloat32(buffer: Buffer): Float32Array {
-  const int16 = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.length / 2);
-  const float32 = new Float32Array(int16.length);
-  for (let i = 0; i < int16.length; i++) {
-    float32[i] = int16[i] / 32768.0;
-  }
-  return float32;
-}

@@ -45,6 +45,7 @@ const STATUS_ORDER: Record<string, number> = {
   requested: 0,
   joining: 1,
   awaiting_admission: 2,
+  needs_human_help: 2.5,
   active: 3,
   completed: 4,
   failed: -1,

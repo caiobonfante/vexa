@@ -46,14 +46,68 @@
 
 | Level | Gate | Score | Evidence | Last checked |
 |-------|------|-------|----------|-------------|
-| 0 | Not tested (SDK-based, self-hosted only) | 0 | — | — |
-| 30 | SDK initializes, bot attempts join | 0 | — | — |
-| 60 | Bot joins real Zoom meeting, audio captured | 0 | — | — |
-| 80 | Transcription works end-to-end | 0 | — | — |
-| 90 | Multiple meetings, different IDs | 0 | — | — |
-| 95 | Regional subdomain URLs | 0 | — | — |
+| 0 | Code exists + infrastructure routed | 90 | 8 complete modules at platforms/zoom/web/. ZOOM_WEB=true confirmed in bot-manager. POST /bots with platform=zoom creates container. No SDK needed. | 2026-03-24 |
+| 30 | Bot navigates to Zoom web client, enters name | 90 | Meeting 57: navigated to app.zoom.us/wc/87932820681/join, entered name "Vexa Zoom Test", muted mic/video, clicked Join. No CAPTCHA. | 2026-03-25 |
+| 50 | Bot joins real Zoom meeting, audio captured via PulseAudio | 90 | Meeting 57: bot immediately admitted (no waiting room). PulseAudio capture started with 3 streams. Speaker "Dmtiry Grankin" detected via DOM polling. Recording to WAV started. Chat panel opened. | 2026-03-25 |
+| 60 | Transcription works end-to-end | 90 | Meeting 63: 11 confirmed segments, Russian speech transcribed correctly. WhisperLive connected, PulseAudio capture working. CUDA OOM resolved (workers restarted). | 2026-03-25 |
+| 70 | Waiting room + host admission | 0 | Not tested (meetings 57/63 had no waiting room — bot was immediately admitted). admission.ts ready but unvalidated. | — |
+| 80 | Transcription works with 2+ speakers, correct attribution | 50 | Meeting 72: Speaker "Dmtiry Grankin" detected via DOM polling (amplitude-gated fix works). TTS bot survived >10s (grace period fix works). But WhisperLive stubbed — no segments in DB. Transcription service healthy but per-speaker pipeline not connecting. | 2026-03-25 |
+| 90 | Multiple meetings, different IDs | 0 | Not tested | — |
+| 95 | Regional subdomain URLs (us05web.zoom.us/j/...) | 90 | Meeting 57 used `us05web.zoom.us` regional subdomain — URL correctly routed via `meeting_url` field. | 2026-03-25 |
 
-**Current: 0 (Zoom untested, requires SDK + OAuth + Marketplace app)**
+**Current: 60 (transcription works end-to-end. Speaker detection fixed (amplitude-gated voting), TTS bots survive (grace period). WhisperLive stubbed in per-speaker pipeline — blocks transcription segments.)**
+
+#### Zoom first live test (2026-03-25)
+
+**Meeting 57** — real Zoom meeting at `us05web.zoom.us/j/87932820681`
+
+| Step | Result |
+|------|--------|
+| API accepts request | PASS — meeting 57 created, container `vexa-bot-57-b371a184` spawned |
+| ZOOM_WEB routing | PASS — bot-manager logs "using Playwright web client for Zoom" |
+| CAPTCHA | **NO CAPTCHA** — bot navigated directly to pre-join page |
+| Name + mute + join | PASS — name entered, mic/video muted, Join clicked |
+| Admission | PASS — immediately admitted (Leave button visible) |
+| Popup dismissal | PASS — dismissed "feature tip" + "chatting as guest" popups |
+| Status transitions | PASS — `requested → joining → active` |
+| PulseAudio capture | PASS — 3 audio streams, capture receiving data |
+| Speaker detection | PASS — DOM polling detected "Dmtiry Grankin" via active speaker CSS |
+| Recording | PASS — WAV recording started |
+| Chat panel | PASS — opened and observing |
+| Transcription | FAIL — external CUDA OOM (not Zoom code) |
+
+**Two code gaps found:**
+1. `speaker-identity.ts:332` — `resolveSpeakerName()` only handles `googlemeet` and `msteams`, returns empty for `zoom`. Per-speaker audio track naming doesn't work for Zoom. Low priority — DOM polling speaker detection works as primary path.
+2. `WHISPER_LIVE_URL` empty in bot container — WhisperLive runs in stub mode. Per-speaker transcription client uses direct HTTP to transcription service (which was OOM).
+
+#### Zoom second live test (2026-03-25)
+
+**Meeting 63** — real Zoom meeting at `us04web.zoom.us/j/78705332776`
+
+| Step | Result |
+|------|--------|
+| API accepts request | PASS — meeting 63 created, container spawned |
+| Bot joins | PASS — immediately admitted, status → active |
+| Transcription | PASS — 11 confirmed segments, Russian speech correctly transcribed |
+| Speaker detection | PASS — DOM polling detected "Dmitriy Grankin" via CSS selector |
+| Speaker attribution | FAIL — resolveSpeakerName() returns "" for zoom, segments have empty speaker |
+| TTS speak command | PARTIAL — TTS synthesizes audio but `[Microphone] Unsupported platform for mic toggle: zoom` |
+| TTS audio in meeting | FAIL — audio plays to PulseAudio but doesn't reach meeting (virtual_mic not routed to browser) |
+| Speaker bots join | FAIL — bots 66/67/69 (Alice/Bob/Charlie) went active→completed in ~4s (ejected) |
+| Multi-speaker data | BLOCKED — no TTS speakers could stay in meeting |
+
+**Three blockers found and FIXED (2026-03-25):**
+1. ~~`microphone.ts` — mic toggle not implemented for zoom~~ **FIXED** — `toggleZoomMic()` implemented, clicks `.join-audio-container__btn`. Verified by independent verifier.
+2. ~~Speaker bots ejected ~4s after joining~~ **FIXED** — `removal.ts` false-positive on `framenavigated` during Zoom audio init handshake. Added 10s grace period. Verified by independent verifier.
+3. ~~`speaker-identity.ts:332` — resolveSpeakerName() returns empty for zoom~~ **FIXED** — Added `trackLastAudioMs` amplitude tracking. Active speaker name now votes only on the most recently active audio track, preventing `isNameTaken` from blocking all tracks. Verified by independent verifier, compile clean.
+
+#### Zoom research findings (2026-03-24)
+
+- **Zoom Web code discovered:** 8 complete Playwright modules at `services/vexa-bot/core/src/platforms/zoom/web/`. All compiled and present in vexa-bot:dev image.
+- **Infrastructure routed:** `ZOOM_WEB=true` confirmed in bot-manager env.
+- **CAPTCHA risk mitigated:** First live test showed no CAPTCHA on guest web join. May vary by meeting settings.
+- **Three approaches evaluated** (full details in `zoom-research.md`): Browser Web Client (validated, working), Native Meeting SDK (requires proprietary binaries + Marketplace review), Zoom RTMS SDK (strategic long-term, requires paid Developer Pack).
+- **Competitor validation:** Browser automation is the industry standard. Recall.ai, MeetingBaaS, and multiple open-source tools use the same approach.
 
 ### Cross-Platform
 
@@ -71,10 +125,10 @@
 ```
 Google Meet:   75/100
 MS Teams:      85/100  (was 65 — audio capture + 3-speaker validated 2026-03-24)
-Zoom:           0/100
+Zoom:          60/100  (was 50 — transcription validated 2026-03-25)
 Cross-platform: 60/100
 ────────────────────
-Weighted avg:  70/100  (Google 40%, Teams 40%, Zoom 10%, Cross 10%)
+Weighted avg:  74/100  (Google 40%, Teams 40%, Zoom 10%, Cross 10%)
 ```
 
 ## Out of scope

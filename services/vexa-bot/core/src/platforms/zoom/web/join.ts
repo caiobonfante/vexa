@@ -85,16 +85,30 @@ export async function joinZoomWebMeeting(page: Page | null, botConfig: BotConfig
     log(`[Zoom Web] Warning: joining callback failed: ${e.message}`);
   }
 
-  // Dismiss the "Use microphone and camera" permission dialog(s).
+  // Handle the "Use microphone and camera" permission dialog(s).
   // Zoom shows this dialog up to twice (camera+mic, then mic-only).
-  // We click "Continue without microphone and camera" each time.
+  // ALL bots must click "Allow" to join the audio channel — without it, Zoom
+  // never creates <audio> elements for other participants and the per-speaker
+  // capture pipeline gets no audio data. Recorder bots mute their mic in preview
+  // (below) so they don't transmit, but they still need to join audio to RECEIVE.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      // Click "Allow" to grant audio permission (needed to receive meeting audio)
+      const allowBtn = page.locator('button:has-text("Allow")').first();
+      const allowVisible = await allowBtn.isVisible({ timeout: 4000 });
+      if (allowVisible) {
+        await allowBtn.click();
+        log(`[Zoom Web] Granted audio permission (attempt ${attempt + 1})`);
+        await page.waitForTimeout(600);
+        continue;
+      }
+      // Fallback: if "Allow" not found, check for dismiss button — but log a warning
+      // since skipping audio permission means no audio capture
       const dismissBtn = page.locator(zoomPermissionDismissSelector).first();
-      const visible = await dismissBtn.isVisible({ timeout: 4000 });
+      const visible = await dismissBtn.isVisible({ timeout: 1000 });
       if (visible) {
+        log(`[Zoom Web] WARNING: No "Allow" button found, falling back to dismiss — audio capture may not work (attempt ${attempt + 1})`);
         await dismissBtn.click();
-        log(`[Zoom Web] Dismissed permission dialog (attempt ${attempt + 1})`);
         await page.waitForTimeout(600);
       } else {
         break;
@@ -124,18 +138,24 @@ export async function joinZoomWebMeeting(page: Page | null, botConfig: BotConfig
 
   await page.waitForTimeout(300);
 
-  // Ensure mic and video are off (they show as red/active = already muted in preview)
-  // The preview buttons are toggles — only click if not already muted
-  try {
-    const muteBtn = page.locator(zoomPreviewMuteSelector);
-    const muteAriaLabel = await muteBtn.getAttribute('aria-label');
-    // "Mute" means currently unmuted → click to mute. "Unmute" means already muted → skip.
-    if (muteAriaLabel === 'Mute') {
-      await muteBtn.click();
-      log('[Zoom Web] Muted microphone in preview');
+  // Ensure mic is muted in preview for recorder bots (they only need to receive audio).
+  // Voice agent bots keep mic unmuted so Zoom grants audio access for TTS output.
+  // PulseAudio starts muted (entrypoint.sh), so no audio leaks before TTS.
+  const isVoiceAgent = !!botConfig.voiceAgentEnabled;
+  if (!isVoiceAgent) {
+    try {
+      const muteBtn = page.locator(zoomPreviewMuteSelector);
+      const muteAriaLabel = await muteBtn.getAttribute('aria-label');
+      // "Mute" means currently unmuted → click to mute. "Unmute" means already muted → skip.
+      if (muteAriaLabel === 'Mute') {
+        await muteBtn.click();
+        log('[Zoom Web] Muted microphone in preview (recorder bot — receive-only audio)');
+      }
+    } catch {
+      log('[Zoom Web] Could not toggle preview mic (may already be muted)');
     }
-  } catch {
-    log('[Zoom Web] Could not toggle preview mic (may already be muted)');
+  } else {
+    log('[Zoom Web] Voice agent: keeping mic enabled in preview for TTS');
   }
 
   try {

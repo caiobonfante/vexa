@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
 const AGENT_API_URL = process.env.AGENT_API_URL || "http://localhost:8100";
+// Service-to-service token — must match BOT_API_TOKEN in the agent-api container
+const AGENT_API_TOKEN = process.env.AGENT_API_TOKEN || "";
 
 async function getUserToken(): Promise<string> {
   const cookieStore = await cookies();
@@ -24,9 +26,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ path: s
   const { path } = await context.params;
   const url = new URL(req.url);
   const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
-  const userToken = await getUserToken();
   const resp = await fetch(target, {
-    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
+    headers: { "Content-Type": "application/json", "X-API-Key": AGENT_API_TOKEN },
   });
   return safeJsonResponse(resp);
 }
@@ -40,12 +41,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ path: 
   // For chat endpoint: inject user's bot token into request so agent container gets it
   if (path.join("/") === "chat") {
     const userToken = await getUserToken();
-    let body = JSON.parse(rawBody);
-    body.bot_token = userToken; // Agent API will pass this to the container
+    const body = JSON.parse(rawBody);
+    body.bot_token = userToken; // Agent API will pass this to the container for vexa CLI calls
 
     const resp = await fetch(target, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-API-Key": AGENT_API_TOKEN },
       body: JSON.stringify(body),
     });
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ path: 
 
   const resp = await fetch(target, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": AGENT_API_TOKEN },
     body: rawBody,
   });
   return safeJsonResponse(resp);
@@ -72,10 +73,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ path: s
   const url = new URL(req.url);
   const body = await req.text();
   const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
-  const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
+    headers: { "Content-Type": "application/json", "X-API-Key": AGENT_API_TOKEN },
     body,
   });
   return safeJsonResponse(resp);
@@ -86,10 +86,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ path
   const url = new URL(req.url);
   const body = await req.text();
   const target = `${AGENT_API_URL}/api/${path.join("/")}${url.search}`;
-  const userToken = await getUserToken();
   const resp = await fetch(target, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json", "X-API-Key": userToken },
+    headers: { "Content-Type": "application/json", "X-API-Key": AGENT_API_TOKEN },
     body: body || undefined,
   });
   return safeJsonResponse(resp);

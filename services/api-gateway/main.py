@@ -35,6 +35,7 @@ ADMIN_API_URL = os.getenv("ADMIN_API_URL")
 BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL")
 TRANSCRIPTION_COLLECTOR_URL = os.getenv("TRANSCRIPTION_COLLECTOR_URL")
 MCP_URL = os.getenv("MCP_URL")
+CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")  # Optional — calendar-service
 
 # Public share-link settings (for "ChatGPT read from URL" flows)
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")  # Optional override, e.g. https://api.vexa.ai
@@ -410,6 +411,60 @@ async def avatar_reset_proxy(platform: Platform, native_meeting_id: str, request
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 # --- END Voice Agent Interaction Routes ---
+
+# --- Calendar Routes (proxy to Calendar Service) ---
+
+@app.post("/calendar/connect",
+          tags=["Calendar"],
+          summary="Trigger initial calendar sync after OAuth",
+          dependencies=[Depends(api_key_scheme)])
+async def calendar_connect_proxy(request: Request):
+    if not CALENDAR_SERVICE_URL:
+        raise HTTPException(status_code=501, detail="Calendar service not configured")
+    url = f"{CALENDAR_SERVICE_URL}/calendar/connect"
+    return await forward_request(app.state.http_client, "POST", url, request)
+
+@app.get("/calendar/status",
+         tags=["Calendar"],
+         summary="Check calendar connection status",
+         dependencies=[Depends(api_key_scheme)])
+async def calendar_status_proxy(request: Request):
+    if not CALENDAR_SERVICE_URL:
+        raise HTTPException(status_code=501, detail="Calendar service not configured")
+    url = f"{CALENDAR_SERVICE_URL}/calendar/status"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
+@app.delete("/calendar/disconnect",
+            tags=["Calendar"],
+            summary="Disconnect calendar integration",
+            dependencies=[Depends(api_key_scheme)])
+async def calendar_disconnect_proxy(request: Request):
+    if not CALENDAR_SERVICE_URL:
+        raise HTTPException(status_code=501, detail="Calendar service not configured")
+    url = f"{CALENDAR_SERVICE_URL}/calendar/disconnect"
+    return await forward_request(app.state.http_client, "DELETE", url, request)
+
+@app.get("/calendar/events",
+         tags=["Calendar"],
+         summary="List upcoming calendar events",
+         dependencies=[Depends(api_key_scheme)])
+async def calendar_events_proxy(request: Request):
+    if not CALENDAR_SERVICE_URL:
+        raise HTTPException(status_code=501, detail="Calendar service not configured")
+    url = f"{CALENDAR_SERVICE_URL}/calendar/events"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
+@app.put("/calendar/preferences",
+         tags=["Calendar"],
+         summary="Update calendar auto-join preferences",
+         dependencies=[Depends(api_key_scheme)])
+async def calendar_preferences_proxy(request: Request):
+    if not CALENDAR_SERVICE_URL:
+        raise HTTPException(status_code=501, detail="Calendar service not configured")
+    url = f"{CALENDAR_SERVICE_URL}/calendar/preferences"
+    return await forward_request(app.state.http_client, "PUT", url, request)
+
+# --- END Calendar Routes ---
 
 # --- Recording Routes (proxy to Bot Manager) ---
 

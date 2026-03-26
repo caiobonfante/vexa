@@ -32,6 +32,9 @@ const LOCK_THRESHOLD = 2;
 /** Minimum vote ratio to lock (70%) */
 const LOCK_RATIO = 0.7;
 
+/** Track last audio activity time per track (for Zoom active-speaker disambiguation) */
+const trackLastAudioMs = new Map<number, number>();
+
 /**
  * Check if a name is already taken by another track.
  * "Taken" means locked to another track.
@@ -88,6 +91,28 @@ export function getLockedMapping(trackIndex: number): string | null {
  */
 export function isTrackLocked(trackIndex: number): boolean {
   return lockedMappings.has(trackIndex);
+}
+
+/**
+ * Report that a track just received audio data.
+ * Called from the audio pipeline so Zoom active-speaker voting
+ * can disambiguate which track the highlighted name belongs to.
+ */
+export function reportTrackAudio(trackIndex: number): void {
+  trackLastAudioMs.set(trackIndex, Date.now());
+}
+
+/**
+ * Is this track the most recently active one? (within 500ms tolerance)
+ * Used by Zoom to vote active speaker name only on the loudest/most-recent track.
+ */
+function isMostRecentlyActiveTrack(trackIndex: number): boolean {
+  const myTime = trackLastAudioMs.get(trackIndex) || 0;
+  if (myTime === 0) return false;
+  for (const [idx, time] of trackLastAudioMs) {
+    if (idx !== trackIndex && time > myTime + 500) return false;
+  }
+  return true;
 }
 
 // ─── Browser State Query ─────────────────────────────────────────────────────
@@ -309,13 +334,156 @@ async function resolveTeamsSpeakerName(
   return null;
 }
 
+// ─── Zoom Speaker Resolution ─────────────────────────────────────────────────
+
+/**
+ * Zoom DOM traversal: walk up from audio element to find participant name.
+ * Zoom web client wraps each participant's media in a video-avatar container
+ * with a .video-avatar__avatar-footer label containing the name.
+ */
+async function traverseZoomDOM(page: Page, elementIndex: number): Promise<string | null> {
+  return await page.evaluate(
+    ({ idx }) => {
+      const mediaElements = Array.from(
+        document.querySelectorAll('audio, video')
+      ).filter((el: any) =>
+        !el.paused &&
+        el.srcObject instanceof MediaStream &&
+        (el.srcObject as MediaStream).getAudioTracks().length > 0
+      );
+
+      const targetElement = mediaElements[idx] as HTMLElement | undefined;
+      if (!targetElement) return null;
+
+      // Walk up the DOM tree looking for Zoom participant containers
+      let current: HTMLElement | null = targetElement;
+      while (current && current !== document.body) {
+        // Check for video-avatar container
+        if (current.classList.contains('video-avatar__avatar') ||
+            current.querySelector('.video-avatar__avatar-footer')) {
+          const footer = current.querySelector('.video-avatar__avatar-footer');
+          if (footer) {
+            const span = footer.querySelector('span');
+            const text = (span?.textContent?.trim() || (footer as HTMLElement).innerText?.trim()) || null;
+            if (text && text.length > 0) return text;
+          }
+        }
+        // Check for speaker-active-container (main speaker view)
+        if (current.classList.contains('speaker-active-container__video-frame')) {
+          const footer = current.querySelector('.video-avatar__avatar-footer');
+          if (footer) {
+            const span = footer.querySelector('span');
+            const text = (span?.textContent?.trim() || (footer as HTMLElement).innerText?.trim()) || null;
+            if (text && text.length > 0) return text;
+          }
+        }
+        current = current.parentElement;
+      }
+
+      return null;
+    },
+    { idx: elementIndex }
+  );
+}
+
+/**
+ * Query Zoom active speaker from DOM (the participant currently highlighted).
+ */
+async function queryZoomActiveSpeaker(page: Page, botName?: string): Promise<string | null> {
+  try {
+    return await page.evaluate((selfName: string) => {
+      // Get name from active speaker container
+      function nameFromContainer(container: Element | null): string | null {
+        if (!container) return null;
+        const footer = container.querySelector('.video-avatar__avatar-footer');
+        if (!footer) return null;
+        const span = footer.querySelector('span');
+        return (span?.textContent?.trim() || (footer as HTMLElement).innerText?.trim()) || null;
+      }
+
+      // Layout 1: Normal view — active speaker has a dedicated full-size container
+      const name1 = nameFromContainer(document.querySelector('.speaker-active-container__video-frame'));
+      if (name1) {
+        const selfLower = selfName.toLowerCase();
+        const nameLower = name1.toLowerCase();
+        if (!nameLower.includes(selfLower) && !selfLower.includes(nameLower)) {
+          return name1;
+        }
+      }
+
+      // Layout 2: Screen-share view — active speaker tile has the --active modifier
+      const name2 = nameFromContainer(document.querySelector('.speaker-bar-container__video-frame--active'));
+      if (name2) {
+        const selfLower = selfName.toLowerCase();
+        const nameLower = name2.toLowerCase();
+        if (!nameLower.includes(selfLower) && !selfLower.includes(nameLower)) {
+          return name2;
+        }
+      }
+
+      return null;
+    }, botName || 'Vexa');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Zoom speaker resolution: DOM traversal + active speaker correlation → voting → lock.
+ * Same voting/locking system as GMeet and Teams.
+ *
+ * Path 1: DOM traversal from audio element → find participant name in ancestor tile.
+ * Path 2: Active speaker query → if exactly one speaker highlighted, correlate with audio activity.
+ */
+async function resolveZoomSpeakerName(
+  page: Page,
+  elementIndex: number,
+  botName?: string,
+): Promise<string | null> {
+  // Locked → permanent, instant return
+  const locked = getLockedMapping(elementIndex);
+  if (locked) return locked;
+
+  // Path 1: DOM traversal from the audio element
+  const domName = await traverseZoomDOM(page, elementIndex);
+  if (domName) {
+    if (!isNameTaken(domName, elementIndex)) {
+      recordTrackVote(elementIndex, domName);
+      return getLockedMapping(elementIndex) || domName;
+    }
+  }
+
+  // Path 2: Active speaker correlation (like GMeet voting)
+  // Only vote on the track that most recently had audio — prevents all tracks
+  // from voting for the same highlighted name simultaneously.
+  const activeSpeaker = await queryZoomActiveSpeaker(page, botName);
+  if (activeSpeaker && isMostRecentlyActiveTrack(elementIndex)) {
+    if (!isNameTaken(activeSpeaker, elementIndex)) {
+      recordTrackVote(elementIndex, activeSpeaker, 1.0);
+      return getLockedMapping(elementIndex) || activeSpeaker;
+    }
+  }
+
+  // No name found — return top voted if not taken
+  const votes = trackVotes.get(elementIndex);
+  if (votes && votes.size > 0) {
+    const sorted = Array.from(votes.entries()).sort((a, b) => b[1] - a[1]);
+    for (const [name] of sorted) {
+      if (!isNameTaken(name, elementIndex)) return name;
+    }
+  }
+
+  return null;
+}
+
 // ─── Main Resolution ─────────────────────────────────────────────────────────
 
 /**
  * Resolve speaker name for any platform.
  * Google Meet: speaking-indicator correlation → voting → permanent lock.
  * Teams: DOM traversal → voting → permanent lock.
- * Both enforce one-name-per-track, one-track-per-name.
+ * Zoom: DOM traversal + active speaker correlation → voting → permanent lock.
+ * All enforce one-name-per-track, one-track-per-name.
  */
 export async function resolveSpeakerName(
   page: Page,
@@ -329,6 +497,8 @@ export async function resolveSpeakerName(
     name = await resolveGoogleMeetSpeakerName(page, elementIndex, botName);
   } else if (platform === 'msteams') {
     name = await resolveTeamsSpeakerName(page, elementIndex);
+  } else if (platform === 'zoom') {
+    name = await resolveZoomSpeakerName(page, elementIndex, botName);
   } else {
     log(`[SpeakerIdentity] Unknown platform "${platform}" — returning empty`);
     return '';
@@ -348,6 +518,7 @@ export async function resolveSpeakerName(
 export function clearSpeakerNameCache(): void {
   trackVotes.clear();
   lockedMappings.clear();
+  trackLastAudioMs.clear();
   log('[SpeakerIdentity] All track mappings cleared.');
 }
 

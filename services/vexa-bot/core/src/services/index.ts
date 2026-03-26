@@ -3,4 +3,4 @@ export { RecordingService } from './recording';
 export { TranscriptionClient, type TranscriptionClientConfig, type TranscriptionResult } from './transcription-client';
 export { SegmentPublisher, type SegmentPublisherConfig } from './segment-publisher';
 export { SpeakerStreamManager, type SpeakerStreamManagerConfig } from './speaker-streams';
-export { resolveSpeakerName, clearSpeakerNameCache, invalidateSpeakerName } from './speaker-identity';
+export { resolveSpeakerName, clearSpeakerNameCache, invalidateSpeakerName, reportTrackAudio } from './speaker-identity';

@@ -5,7 +5,7 @@
 | Check | Score | Evidence | Last checked |
 |-------|-------|----------|-------------|
 | Agent reads manifests and produces findings | 80 | MVP0: researcher found root causes from artifacts + web search | 2026-03-24 |
-| Team coordinates (research → implement → test) | 70 | MVP0 PASS: Alpha-Beta team climbed Level 1→2→3→5 with task dependencies | 2026-03-24 |
+| Team coordinates (research → implement → test) | 90 | MVP6c2: TeamCreate with 6 teammates coordinated 3 parallel features. Researcher→executor pipeline, researchers shut down after research. All 3 features advanced. | 2026-03-25 |
 | Agent executes tests (not just reads code) | 80 | MVP0 PASS: `make unit` 9/9, wav-pipeline 1 segment, 163s replay 27 segments. Real stdout captured. | 2026-03-24 |
 | Score moves with execution evidence | 80 | MVP0 PASS: findings.md updated with command + output from both teammates | 2026-03-24 |
 | Independent verification catches errors | 90 | MVP0 PASS: Beta caught wav-test bug (missing segments arg) that Alpha missed. Conflict → investigation → resolution. | 2026-03-24 |
@@ -44,4 +44,4 @@
 | MVP3 | Loop hosts live meeting for Level 5 validation | **PASS** — Alpha sent TTS bots to live Teams meeting, captured 11 segments. Lead set up browser session, Alpha executed autonomously. |
 | MVP4 | Orchestrator picks work across features, spawns teams | **PASS** — Picked speaking-bot (score 0), spawned researcher+executor+verifier, moved score 0→70, found 3 bugs, zero verification discrepancies. |
 | MVP5 | Strategy + parallel execution + user priority | **PASS** — Strategy phase produced market backlog, 3 parallel teams advanced 3 features (meeting-fluency +5 commands, speaking-bot 70→90, chat 0→50), zero verification discrepancies, user priority integrated. |
-| MVP6 | Scheduled, continuous, no human trigger | NOT DONE |
+| MVP6 | Scheduled, continuous, no human trigger | **IN PROGRESS** — MVP6c2: TeamCreate, 3 features advanced (knowledge 30→40, calendar 50→65, Zoom live validated). Not yet scheduled/continuous. |

@@ -217,16 +217,20 @@ def mint_meeting_token(meeting_id: int, user_id: int, platform: str, native_meet
     
     return f"{header_b64}.{payload_b64}.{signature_b64}"
 
-async def publish_meeting_status_change(meeting_id: int, new_status: str, redis_client: Optional[aioredis.Redis], platform: str, native_meeting_id: str, user_id: int):
+async def publish_meeting_status_change(meeting_id: int, new_status: str, redis_client: Optional[aioredis.Redis], platform: str, native_meeting_id: str, user_id: int, extra_data: Optional[Dict[str, Any]] = None):
     """Publish meeting status changes via Redis Pub/Sub on meeting-ID channel."""
     if not redis_client:
         logger.warning("Redis client not available for publishing meeting status change")
         return
     try:
+        status_payload = {"status": new_status}
+        if extra_data:
+            status_payload["data"] = extra_data
         payload = {
             "type": "meeting.status",
             "meeting": {"id": meeting_id, "platform": platform, "native_id": native_meeting_id},
-            "payload": {"status": new_status},
+            "payload": status_payload,
+            "user_id": user_id,
             "ts": datetime.utcnow().isoformat()
         }
         channel = f"bm:meeting:{meeting_id}:status"
@@ -883,7 +887,10 @@ async def request_bot(
         transcribe = True if req.transcribe_enabled is None else bool(req.transcribe_enabled)
         meeting_data['transcribe_enabled'] = transcribe
         # Enable recording by default; callers can opt-out with recording_enabled=false
-        if req.recording_enabled is not None:
+        if req.video:
+            meeting_data['recording_enabled'] = True
+            meeting_data['capture_modes'] = ['audio', 'video']
+        elif req.recording_enabled is not None:
             meeting_data['recording_enabled'] = bool(req.recording_enabled)
         else:
             meeting_data['recording_enabled'] = True
@@ -1072,6 +1079,7 @@ async def request_bot(
             default_avatar_url=req.default_avatar_url,
             agent_enabled=req.agent_enabled,
             extra_bot_config=authenticated_extra_config,
+            capture_modes=meeting_data.get('capture_modes'),
         )
         container_start_time = datetime.utcnow()
         logger.info(f"Call to start_bot_container completed. Container ID: {container_id}, Connection ID: {connection_id}")
@@ -1997,7 +2005,7 @@ async def bot_status_change_callback(
                 
         elif new_status == MeetingStatus.ACTIVE:
             # Handle activation
-            if meeting.status in [MeetingStatus.REQUESTED.value, MeetingStatus.JOINING.value, MeetingStatus.AWAITING_ADMISSION.value, MeetingStatus.FAILED.value]:
+            if meeting.status in [MeetingStatus.REQUESTED.value, MeetingStatus.JOINING.value, MeetingStatus.AWAITING_ADMISSION.value, MeetingStatus.FAILED.value, MeetingStatus.NEEDS_HUMAN_HELP.value]:
                 success = await update_meeting_status(meeting, MeetingStatus.ACTIVE, db)
                 if success:
                     meeting.bot_container_id = payload.container_id
@@ -2016,6 +2024,46 @@ async def bot_status_change_callback(
                 success = False
                 return {"status": "warning", "detail": f"Meeting status '{meeting.status}' not updated to active"}
                 
+        elif new_status == MeetingStatus.NEEDS_HUMAN_HELP:
+            # Handle escalation — bot is blocked and needs human intervention via VNC
+            success = await update_meeting_status(meeting, MeetingStatus.NEEDS_HUMAN_HELP, db)
+
+            if success:
+                # Store escalation metadata in meeting.data JSONB
+                if not meeting.data:
+                    meeting.data = {}
+                meeting_data = dict(meeting.data)
+                escalation_reason = payload.reason or "unknown"
+                escalated_at = payload.timestamp or datetime.utcnow().isoformat()
+                meeting_data['escalation'] = {
+                    'reason': escalation_reason,
+                    'escalated_at': escalated_at,
+                }
+
+                # Generate a session token for VNC access
+                session_token = secrets.token_urlsafe(24)
+                vnc_url = f"/b/{session_token}"
+                meeting_data['escalation']['vnc_url'] = vnc_url
+                meeting_data['escalation']['session_token'] = session_token
+
+                meeting.data = meeting_data
+                attributes.flag_modified(meeting, 'data')
+
+                # Write browser_session:{token} to Redis (same pattern as browser_session mode)
+                if redis_client:
+                    browser_session_data = json.dumps({
+                        'container_name': payload.container_id or meeting.bot_container_id,
+                        'meeting_id': meeting.id,
+                        'user_id': meeting.user_id,
+                        'escalation': True,
+                    })
+                    await redis_client.set(f"browser_session:{session_token}", browser_session_data, ex=3600)
+                    logger.info(f"Registered VNC session token for escalation: browser_session:{session_token}")
+
+                await db.commit()
+                await db.refresh(meeting)
+                logger.info(f"Bot escalation for meeting {meeting_id}: reason={escalation_reason}, vnc_url={vnc_url}")
+
         else:
             # Handle other status changes (joining, awaiting_admission)
             success = await update_meeting_status(meeting, new_status, db)
@@ -2026,7 +2074,15 @@ async def bot_status_change_callback(
 
         # Publish meeting status change via Redis Pub/Sub
         if success or (new_status == MeetingStatus.ACTIVE and meeting.status == MeetingStatus.ACTIVE.value):
-            await publish_meeting_status_change(meeting.id, new_status.value, redis_client, meeting.platform, meeting.platform_specific_id, meeting.user_id)
+            # Include escalation data in the WebSocket event so dashboard can render immediately
+            publish_extra = None
+            if new_status == MeetingStatus.NEEDS_HUMAN_HELP and meeting.data and 'escalation' in meeting.data:
+                publish_extra = {
+                    'escalation_reason': meeting.data['escalation'].get('reason'),
+                    'vnc_url': meeting.data['escalation'].get('vnc_url'),
+                    'escalated_at': meeting.data['escalation'].get('escalated_at'),
+                }
+            await publish_meeting_status_change(meeting.id, new_status.value, redis_client, meeting.platform, meeting.platform_specific_id, meeting.user_id, extra_data=publish_extra)
 
         # Schedule webhook task for status change (for all status changes)
         await schedule_status_webhook_task(

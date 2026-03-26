@@ -126,6 +126,7 @@ services:
       - BOT_MANAGER_URL=http://bot-manager:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://transcription-collector:8000
       - MCP_URL=http://mcp:18888
+      - CALENDAR_SERVICE_URL=http://calendar-service:8050
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CORS_ORIGINS=http://localhost:3002,http://localhost:3001
@@ -168,6 +169,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - BOT_IMAGE_NAME=vexa-bot:dev
+      - RAW_CAPTURE=${RAW_CAPTURE:-}
       - DOCKER_NETWORK=vexa-agentic_vexa_agentic
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -289,6 +291,33 @@ services:
     depends_on:
       - redis
       - postgres
+    restart: unless-stopped
+
+  calendar-service:
+    build:
+      context: ../../..
+      dockerfile: services/calendar-service/Dockerfile
+    ports:
+      - "${CALENDAR_SERVICE_PORT:-8050}:8050"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-vexa_agentic}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSL_MODE=disable
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - BOT_MANAGER_URL=http://bot-manager:8080
+      - BOT_API_TOKEN=${BOT_API_TOKEN:-}
+      - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
+      - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - vexa_agentic
+    depends_on:
+      - postgres
+      - bot-manager
     restart: unless-stopped
 
 volumes:

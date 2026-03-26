@@ -1,8 +1,8 @@
 # Speaking Bot Test Findings
 
-## Gate verdict: PASS — regular bots PASS, browser_session bugs FIXED (pending rebuild)
+## Gate verdict: PASS — regular bots + Zoom live validated
 
-## Score: 90 (pending container rebuild)
+## Score: 90 (Zoom TTS validated live 2026-03-25)
 
 Regular meeting bots (Teams/Google Meet) have a fully working speak pipeline validated at Level 5 with 16 complete speak cycles. Browser session bots had 4 bugs — all 4 fixed and independently verified (2026-03-24).
 
@@ -19,7 +19,7 @@ All 4 bugs fixed by executor, independently verified by verifier with zero discr
 
 Additional: `meeting_id` added to BrowserSessionConfig (types.ts:51), passed in config JSON (main.py:701).
 
-**To activate:** Rebuild `vexa-bot:dev` image and restart browser_session containers.
+**Activated:** vexa-bot:dev rebuilt 2026-03-25. Zoom live test (meeting 72): full TTS cycle — synthesize → unmute → paplay → mute. Bot survived without ejection (grace period fix working).
 
 ## Implementation status (validated 2026-03-24)
 

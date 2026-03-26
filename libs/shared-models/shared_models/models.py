@@ -174,3 +174,29 @@ class MediaFile(Base):
     recording = relationship("Recording", back_populates="media_files")
 
 
+class CalendarEvent(Base):
+    """A calendar event synced from Google Calendar for auto-join scheduling."""
+    __tablename__ = "calendar_events"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    external_event_id = Column(Text, nullable=False)
+    title = Column(Text, nullable=True)
+    start_time = Column(sqlalchemy.DateTime(timezone=True), nullable=False)
+    end_time = Column(sqlalchemy.DateTime(timezone=True), nullable=True)
+    meeting_url = Column(Text, nullable=True)
+    platform = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, server_default='pending', default='pending')
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
+    sync_token = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+    meeting = relationship("Meeting")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'external_event_id', name='uq_calendar_event_user_ext_id'),
+        Index('ix_calendar_events_start_time', 'start_time'),
+        Index('ix_calendar_events_status', 'status'),
+    )
+
+

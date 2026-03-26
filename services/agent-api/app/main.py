@@ -172,10 +172,10 @@ async def _meeting_status_subscriber():
                 logger.debug(f"Non-JSON meeting status message: {message['data']!r}")
                 continue
 
-            status = data.get("status", "")
-            meeting_id = data.get("meeting_id") or data.get("id")
+            status = data.get("payload", {}).get("status", "")
+            meeting_id = data.get("meeting", {}).get("id")
             user_id = str(data.get("user_id", ""))
-            platform = data.get("platform", "unknown")
+            platform = data.get("meeting", {}).get("platform", "unknown")
             duration_seconds = data.get("duration_seconds", 0)
 
             logger.info(f"Meeting status event: meeting={meeting_id} user={user_id} status={status} platform={platform}")
@@ -449,11 +449,16 @@ async def on_meeting_completed(event: dict, background_tasks: BackgroundTasks):
         raise HTTPException(400, "Missing user_id or meeting id in event")
 
     message = (
-        f"Meeting {meeting_id} ({platform}) just ended after {duration // 60}m{duration % 60}s. "
-        f"Process this meeting: fetch the transcript with `vexa meeting transcript {meeting_id}`, "
-        f"summarize it, extract action items and decisions, save to knowledge/meetings/, "
-        f"and update timeline.md with any dates or deadlines mentioned. "
-        f"Send me a brief summary when done."
+        f"Meeting {meeting_id} ({platform}) ended after {duration // 60}m{duration % 60}s. "
+        f"Process it now:\n"
+        f"1. Fetch transcript: `vexa meeting transcript {meeting_id}`\n"
+        f"2. For each person with a clear role: create/update `knowledge/entities/contacts/{{first-last}}.md`\n"
+        f"3. For each company/org mentioned: create/update `knowledge/entities/companies/{{name}}.md`\n"
+        f"4. Write meeting minutes: `knowledge/meetings/YYYY-MM-DD-{meeting_id}.md` (replace YYYY-MM-DD with today)\n"
+        f"5. Write action items: `knowledge/action-items/YYYY-MM-DD-{meeting_id}.md` (replace YYYY-MM-DD with today)\n"
+        f"6. Update `timeline.md` with any dates, deadlines, or future events\n"
+        f"7. Run `vexa workspace save`\n"
+        f"Reply with a 2-sentence summary when done."
     )
 
     logger.info(f"Meeting completed webhook: meeting {meeting_id} for user {user_id}")
@@ -489,11 +494,16 @@ async def on_meeting_completed_internal(event: dict, background_tasks: Backgroun
         raise HTTPException(400, "Missing user_id or meeting id in event")
 
     message = (
-        f"Meeting {meeting_id} ({platform}) just ended after {duration // 60}m{duration % 60}s. "
-        f"Process this meeting: fetch the transcript with `vexa meeting transcript {meeting_id}`, "
-        f"summarize it, extract action items and decisions, save to knowledge/meetings/, "
-        f"and update timeline.md with any dates or deadlines mentioned. "
-        f"Send me a brief summary when done."
+        f"Meeting {meeting_id} ({platform}) ended after {duration // 60}m{duration % 60}s. "
+        f"Process it now:\n"
+        f"1. Fetch transcript: `vexa meeting transcript {meeting_id}`\n"
+        f"2. For each person with a clear role: create/update `knowledge/entities/contacts/{{first-last}}.md`\n"
+        f"3. For each company/org mentioned: create/update `knowledge/entities/companies/{{name}}.md`\n"
+        f"4. Write meeting minutes: `knowledge/meetings/YYYY-MM-DD-{meeting_id}.md` (replace YYYY-MM-DD with today)\n"
+        f"5. Write action items: `knowledge/action-items/YYYY-MM-DD-{meeting_id}.md` (replace YYYY-MM-DD with today)\n"
+        f"6. Update `timeline.md` with any dates, deadlines, or future events\n"
+        f"7. Run `vexa workspace save`\n"
+        f"Reply with a 2-sentence summary when done."
     )
 
     logger.info(f"Internal meeting-completed webhook: meeting {meeting_id} for user {user_id}")

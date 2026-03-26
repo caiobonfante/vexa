@@ -52,6 +52,7 @@ class MeetingStatus(str, Enum):
     JOINING = "joining"
     AWAITING_ADMISSION = "awaiting_admission"
     ACTIVE = "active"
+    NEEDS_HUMAN_HELP = "needs_human_help"
     STOPPING = "stopping"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -95,15 +96,23 @@ def get_valid_status_transitions() -> Dict[MeetingStatus, List[MeetingStatus]]:
         MeetingStatus.JOINING: [
             MeetingStatus.AWAITING_ADMISSION,
             MeetingStatus.ACTIVE,  # Allow direct transition when bot is immediately admitted (no waiting room)
+            MeetingStatus.NEEDS_HUMAN_HELP,  # Escalation: unknown blocking state during join
             MeetingStatus.FAILED,
             MeetingStatus.COMPLETED,
             MeetingStatus.STOPPING,
         ],
         MeetingStatus.AWAITING_ADMISSION: [
             MeetingStatus.ACTIVE,
+            MeetingStatus.NEEDS_HUMAN_HELP,  # Escalation: waiting room timeout approaching
             MeetingStatus.FAILED,
             MeetingStatus.COMPLETED,
             MeetingStatus.STOPPING,
+        ],
+        MeetingStatus.NEEDS_HUMAN_HELP: [
+            MeetingStatus.ACTIVE,     # User resolved, bot continues
+            MeetingStatus.FAILED,     # User gave up or VNC timeout
+            MeetingStatus.STOPPING,   # User stops bot
+            MeetingStatus.COMPLETED,  # User stops bot
         ],
         MeetingStatus.ACTIVE: [
             MeetingStatus.STOPPING,
@@ -159,6 +168,11 @@ def get_status_source(from_status: MeetingStatus, to_status: MeetingStatus) -> s
         (MeetingStatus.AWAITING_ADMISSION, MeetingStatus.FAILED),
         (MeetingStatus.ACTIVE, MeetingStatus.FAILED),
         (MeetingStatus.STOPPING, MeetingStatus.FAILED),
+        # Escalation transitions
+        (MeetingStatus.JOINING, MeetingStatus.NEEDS_HUMAN_HELP),
+        (MeetingStatus.AWAITING_ADMISSION, MeetingStatus.NEEDS_HUMAN_HELP),
+        (MeetingStatus.NEEDS_HUMAN_HELP, MeetingStatus.ACTIVE),
+        (MeetingStatus.NEEDS_HUMAN_HELP, MeetingStatus.FAILED),
     ]
     
     if (from_status, to_status) in bot_callback_transitions:
@@ -403,6 +417,10 @@ class MeetingCreate(BaseModel):
     mode: Optional[str] = Field(
         None,
         description="Bot mode: 'browser_session' for remote browser access, or None for default meeting mode."
+    )
+    video: Optional[bool] = Field(
+        True,
+        description="Enable video recording. When true, automatically sets recording_enabled=true and capture_modes=['audio', 'video']. Default: on."
     )
     authenticated: Optional[bool] = Field(
         False,

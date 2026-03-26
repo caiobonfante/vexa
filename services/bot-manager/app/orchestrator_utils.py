@@ -158,6 +158,7 @@ async def start_bot_container(
     default_avatar_url: Optional[str] = None,
     agent_enabled: Optional[bool] = None,
     extra_bot_config: Optional[Dict[str, Any]] = None,
+    capture_modes: Optional[list[str]] = None,
 ) -> Optional[tuple[str, str]]:
     """
     Starts a vexa-bot container via requests_unixsocket AFTER checking user limit.
@@ -244,6 +245,8 @@ async def start_bot_container(
     }
     if recording_enabled is not None:
         bot_config_data["recordingEnabled"] = bool(recording_enabled)
+    if capture_modes is not None:
+        bot_config_data["captureModes"] = capture_modes
     if voice_agent_enabled is not None:
         bot_config_data["voiceAgentEnabled"] = bool(voice_agent_enabled)
     if default_avatar_url:
@@ -273,6 +276,11 @@ async def start_bot_container(
         environment.append(f"TTS_SERVICE_URL={tts_service_url}")
     else:
         logger.info("TTS_SERVICE_URL not set — TTS will be unavailable")
+
+    # Pass RAW_CAPTURE to bot if set (enables per-speaker audio WAV dumping for offline iteration)
+    raw_capture = os.getenv("RAW_CAPTURE", "").strip()
+    if raw_capture:
+        environment.append(f"RAW_CAPTURE={raw_capture}")
 
     # Add Zoom-specific environment variables if platform is Zoom
     if platform == "zoom":
@@ -317,7 +325,8 @@ async def start_bot_container(
         "AutoRemove": not agent_enabled,  # Agent containers persist for interactive use
         "ExtraHosts": ["host.docker.internal:host-gateway"],
         "PortBindings": {
-            "9223/tcp": [{"HostIp": "0.0.0.0", "HostPort": str(cdp_host_port)}]
+            "9223/tcp": [{"HostIp": "0.0.0.0", "HostPort": str(cdp_host_port)}],
+            "6080/tcp": [{"HostPort": "0"}],  # VNC/noVNC for escalation (dynamic host port, nothing listens until escalation)
         },
     }
 
@@ -350,7 +359,7 @@ async def start_bot_container(
     create_payload = {
         "Image": image,
         "Env": environment,
-        "ExposedPorts": {"9223/tcp": {}},
+        "ExposedPorts": {"9223/tcp": {}, "6080/tcp": {}},
         "Labels": {
             "vexa.user_id": str(user_id),
             "vexa.meeting_id": str(meeting_id),

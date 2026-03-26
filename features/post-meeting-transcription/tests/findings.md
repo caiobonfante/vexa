@@ -58,6 +58,7 @@ Meeting 648 — 2 speakers (Alice, Bob), Teams, 6 utterances
 | Dashboard playback accurate | 30 | Recording accessible in MinIO. duration_seconds=null may break seek. Needs manual test. | 2026-03-23 |
 | 3+ speaker accuracy | 90 | 82% speaker, 92% capture on 3-speaker stress | 2026-03-23 |
 | Edge cases (short, overlap, silence) | 80 | Short utterances get "Unknown", rapid turns misattributed, silence handled well | 2026-03-23 |
+| Video recording | 70 | 3 code bugs fixed and verified; ffmpeg in Dockerfile, getStartTime() added, VideoPlayer wired. Pending container rebuild + E2E test. | 2026-03-24 |
 
 ## 3-Speaker Stress Results (2026-03-23)
 
@@ -81,6 +82,33 @@ Meeting 653 — 3 speakers (Alice, Bob, Charlie), Teams, 12 utterances, 5 scenar
 ### GET /transcripts fix
 
 Root cause was **token scope**: `vxa_bot_` tokens have scope `bot`, but transcription-collector requires `tx`, `user`, or `admin`. Using `vxa_user_` token for user 5 returns all 6 segments correctly.
+
+## Video Recording Capability (2026-03-24)
+
+**Status: 85% built, 3 bugs fixed, pending E2E test**
+
+Video recording was discovered already implemented in vexa-bot (`VideoRecordingService`) but not wired end-to-end. Three bugs blocked it from working:
+
+| Bug | Root cause | Fix | Verified |
+|-----|-----------|-----|----------|
+| `RecordingService.getStartTime()` missing | `index.ts:702` calls `activeRecordingService.getStartTime()` but method didn't exist on `RecordingService` (only on `VideoRecordingService`) | Added `private startTime: number = 0` field, set in `start()`, added `getStartTime()` method | YES — verifier confirmed |
+| ffmpeg not in runtime Docker image | ffmpeg installed in build stage but NOT runtime stage of `services/vexa-bot/core/Dockerfile` | Added `ffmpeg` to runtime stage `apt-get install` | YES — verifier confirmed |
+| VideoPlayer not wired into dashboard | `video-player.tsx` component existed but was never imported in meeting page | Imported `VideoPlayer`, added `videoSrc` memo to find video MediaFile, renders above AudioPlayer when video exists | YES — verifier confirmed |
+
+### How to enable
+
+```
+PUT /api/vexa/meetings/{id}/recording-config
+{ "capture_modes": ["audio", "video"] }
+```
+
+The bot checks `capture_modes` on join. When `"video"` is present, it spawns ffmpeg to capture the X11 display (the browser window showing the meeting) into webm/mp4.
+
+### What remains
+
+1. **Container rebuild** — runtime Dockerfile now includes ffmpeg, but the container image needs rebuilding
+2. **E2E test with actual meeting** — join a real meeting with video enabled, verify the video file uploads to MinIO and plays in dashboard
+3. **Audio/video sync verification** — the `getStartTime()` fix enables correct `audioDelayMs` calculation for muxing, but needs real-meeting validation
 
 ## Action Items (priority order)
 

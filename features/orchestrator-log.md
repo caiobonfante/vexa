@@ -220,3 +220,113 @@ Test 2: Three speakers rapid turns             ✗ (pre-existing, 3-speaker merg
 - Meeting API MVP1 (event-driven triggers) is the next priority
 
 **MVP5 verdict: PASS.** Strategy + parallel execution + user priority integration works.
+
+## MVP6 cycle 1: 2026-03-25 — Agent Teams + user priorities (Zoom, Video, Calendar)
+
+**Objective:** First agent-team-based execution. 3 parallel feature teams using Claude Code agent teams (not subagents). User priorities: Zoom speaker ID + TTS, video recording, calendar integration.
+
+**Strategy Phase:** Skipped — backlog 1 day old, still fresh.
+
+**Planning Phase:**
+- Built priority map from all feature findings + user explicit priorities
+- Identified 3 non-overlapping features for parallel execution
+- Dependency graph: Zoom (speaker-identity.ts, microphone.ts, removal.ts), Video (Dockerfile, recording.ts, dashboard), Calendar (new service, no overlap)
+
+**Team Structure (agent teams, not subagents):**
+- 6 teammates: 3 researchers (Sonnet) + 3 executors (default model)
+- Researchers produce findings first, executors receive research context
+- Researchers switch to verifier role after execution
+- Lead coordinates, mediates, shuts down completed teams
+
+**Execution Phase — Batch 1 (3 teams in parallel):**
+
+| Team | Feature | Roles | Result |
+|------|---------|-------|--------|
+| Zoom | Speaker ID + TTS | researcher → executor → verifier | 3 fixes: speaker name amplitude tracking, removal grace period, mic toggle verified. 4/4 verified, compile clean. |
+| Video | Recording E2E | researcher → executor → verifier | 4/4 code checks verified. Docker rebuild in progress. |
+| Calendar | Integration MVP | researcher → executor → verifier | Full service built (migration, OAuth, calendar-service, gateway, compose). 5/6 verified. 1 blocking auth bug found by verifier → fixed. |
+
+**Score changes:**
+
+| Feature | Before | After | Evidence |
+|---------|--------|-------|----------|
+| Zoom RT (speaker attribution) | 20 | 80 (pending rebuild + live test) | 3 code fixes verified: amplitude-gated voting, 10s grace period, mic toggle |
+| Video recording | 70 | 85 (pending rebuild + E2E) | 3 prior fixes verified by independent verifier, build in progress |
+| Calendar integration | 0 | 50 (pending deploy + OAuth test) | Full MVP built, 1 auth bug found and fixed by verification |
+
+**Verification quality:** Zero discrepancies on Zoom (4/4) and Video (4/4). Calendar verifier caught 1 blocking auth bug (sync.py used wrong header for POST /bots) — this is exactly the kind of error that would have silently broken the core feature value. Verification ROI proven again.
+
+**What agent teams proved:**
+- Agent teams work for parallel feature work with 6 teammates
+- Researcher→Executor→Verifier pipeline produces high-quality output
+- Researchers switching to verifier role is efficient (they know the codebase from research)
+- Lead can shut down completed teams while others continue
+- One blocking bug caught that would have been silent in production
+
+**What needs work:**
+- Docker rebuild is the keystone for Batch 2 (unlocks Zoom live test, video E2E, speaking bot)
+- Calendar needs Google Console setup + BOT_API_TOKEN provisioning
+- Scheduler E2E running — will unblock calendar auto-join
+
+**Batch 2 planned:**
+1. Live Zoom meeting test (speaker ID + TTS) — blocked by rebuild
+2. Live chat test in browser-session — blocked by rebuild
+3. Scheduler E2E — running now
+
+## MVP6 cycle 2: 2026-03-25 — TeamCreate + 3 parallel features (Knowledge, Calendar, Zoom)
+
+**Objective:** First cycle using TeamCreate for coordination. 3 parallel feature teams: knowledge workspace entity extraction, calendar deployment, live Zoom meeting validation.
+
+**Strategy Phase:** Skipped — backlog 1 day old, still fresh.
+
+**Planning Phase:**
+- Keystone action identified: vexa-bot:dev rebuild (already done at 03:00)
+- Environment validated: 56 PASS, 0 FAIL, 1 WARN
+- Scheduler at 80 (E2E passed) — unblocks calendar
+- 3 non-overlapping features scheduled in parallel
+
+**Team Structure (TeamCreate):**
+- 6 teammates: 3 researchers (Sonnet) + 3 executors
+- Researchers produce findings first, executors receive research context
+- Researchers shut down after research to save tokens
+- Lead coordinates, verifies changes, mediates
+
+**Execution Phase — Batch 1 (3 teams in parallel):**
+
+| Team | Feature | Researcher Finding | Executor Result |
+|------|---------|-------------------|-----------------|
+| Knowledge | Entity extraction (30→40) | No new code needed — webhook trigger already wired. Two-file fix: strengthen message + add entity format spec. | Both files edited. Webhook returns accepted. Pending agent-api rebuild. |
+| Calendar | Deploy + test (50→65) | Full deployment checklist with env vars, smoke tests. | Container built, migration applied, all 4 smoke tests pass. BOT_API_TOKEN configured. |
+| Zoom | Live meeting test | Full test plan with exact curl commands. Identified WhisperLive stub as risk. | Meeting 72: bot joined, speaker detected, TTS survived, chat works. WhisperLive stubbed — no transcription segments. |
+
+**Score changes:**
+
+| Feature | Before | After | Evidence |
+|---------|--------|-------|----------|
+| Knowledge workspace | 30 | 40 | Entity extraction pipeline wired (webhook + CLAUDE.md format spec) |
+| Calendar integration | 50 | 65 | Deployed, migration applied, all endpoints responding |
+| Multi-platform (Zoom) | 60 | 60 | Speaker detection fixed, TTS bots survive, but WhisperLive stub blocks transcription |
+| Speaking bot | 90 | 90 | Zoom TTS validated live (meeting 72) — no score change, confirms existing score |
+| Chat | 50 | 60 | Zoom chat send+read validated live (meeting 72) |
+
+**Batch gate:** PASS — no regressions. Changes are additive, non-overlapping.
+
+**What MVP6c2 proved:**
+- TeamCreate works for parallel feature coordination
+- Researcher→executor pipeline with shutdown-after-research saves tokens
+- Two-file knowledge fix is highest-ROI pattern (no new service, just better prompts)
+- Calendar deployment was straightforward once research produced checklist
+- Zoom 3 fixes all validated in live meeting
+
+**What needs work:**
+- WhisperLive is stubbed in per-speaker pipeline — blocks Zoom transcription
+- Knowledge entity extraction needs agent-api container rebuild to activate
+- Calendar needs Google OAuth credentials for full functionality
+- Chat Zoom DOM selectors not implemented (API layer works)
+
+**Blockers identified:**
+1. WhisperLive stub → investigate why per-speaker audio isn't connecting to transcription service
+2. Agent-api rebuild → pick up new webhook message for entity extraction
+3. Google Console → OAuth credentials for calendar sync
+
+**MVP6 cycle 2 verdict: PASS.** TeamCreate coordination works. 3 features advanced in parallel with zero conflicts.

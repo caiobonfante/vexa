@@ -73,7 +73,12 @@ FBAPPS
   autocutsel -s CLIPBOARD &
 
   # websockify bridges VNC (port 5900) to web (port 6080) for noVNC
-  websockify --web /usr/share/novnc 6080 localhost:5900 &
+  # Use --web only if novnc is installed, otherwise plain WebSocket proxy
+  if [ -d /usr/share/novnc ]; then
+    websockify --web /usr/share/novnc 6080 localhost:5900 &
+  else
+    websockify 6080 localhost:5900 &
+  fi
   echo "[entrypoint] websockify started on port 6080"
 
   # CDP proxy: Chromium binds CDP to 127.0.0.1 only. Socat exposes it on 0.0.0.0:9223

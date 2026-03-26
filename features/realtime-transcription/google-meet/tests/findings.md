@@ -8,7 +8,9 @@
 | Bot joins mock (3 speakers) | 90 | 3 speakers found, all locked permanently at 100% | 2026-03-16 20:27 | Update mock with real DOM findings |
 | Admission detection | 90 | Works on 3 different real meetings (auto-admitted via "Leave call" button detection). Polling window works correctly. False-positive selectors fixed in prior run. | 2026-03-17 10:48 | Test locked meetings requiring host admission |
 | Media element discovery | 95 | Found 3 elements in 3 different real meetings + mock. All elements: paused=false, readyState=4, tracks=1, enabled=1. MediaRecorder started (audio/webm;codecs=opus). | 2026-03-17 10:48 | Test with varying participant counts (5, 10+) |
-| Speaker identity locks | 90 | Mock: 3/3 locked at 100%. Real: 2 tiles found consistently across 3 meetings (bot + host), 1 unique non-bot participant detected by central list. | 2026-03-17 10:48 | Test real meeting with 3+ active speakers |
+| Speaker identity locks (TTS) | 90 | Mock: 3/3 locked at 100%. Real: 2 tiles found consistently across 3 meetings (bot + host), 1 unique non-bot participant detected by central list. | 2026-03-17 10:48 | Test real meeting with 3+ active speakers |
+| Speaker identity locks (human) | 40 | Meeting 672: 23/215 segments unnamed, lock took 585s for speaker-0. Overlapping speech prevents voting. | 2026-03-23 | **CSRC upgrade:** `getContributingSources()` provides instant identity — see backlog below |
+| Multi-track dedup | 40 | Same person on 2 tracks produces duplicate content during SFU remapping | 2026-03-23 | **CSRC upgrade:** CSRC changes instantly when SFU remaps stream — see backlog below |
 | Audio reaches TX service | 90 | HTTP 200, non-empty text, 7 segments from mock | 2026-03-16 20:27 | Test with real meeting audio (needs mic) |
 | Transcription content | 80 | Mock: 3 speakers transcribed correctly (Alice, Bob, Carol) incl. Russian. 22 segments over WS with real speech text. Real meeting: untested with active mic | 2026-03-17 10:29 | Test real meeting with microphone + multiple speakers |
 | WS delivery | 90 | Connected ws://localhost:8056/ws, subscribed to meeting 8798, received 22 live transcript messages. 3 speakers (Alice Johnson, Bob Smith, Carol Williams). Mutable→completed flow working. Meeting status event delivered. First segment ~3s after bot active. | 2026-03-17 10:29 | Test with real meeting, verify latency under load |
@@ -20,6 +22,27 @@
 **Overall: 88/100** — Confirmation logic raised 40→60 with LocalAgreement-2 prefix fix. Bottleneck: no replay data to validate at Level 2, no unit test covering the new prefix path directly.
 
 **To reach 95:** (1) Collect fresh data to enable replay tests — data/raw/ is empty. (2) Add unit test that passes `segments` to `handleTranscriptionResult` to directly exercise prefix path. (3) Fix pre-existing `__tests__/speaker-streams.test.ts` "fuzzy match" test (assumes behaviour that never existed). (4) Test real meeting with mic audio.
+
+## Backlog: CSRC-Based Speaker Identity (research complete, not implemented)
+
+**Research:** `../zoom/tests/csrc-speaker-research.md` (2026-03-25)
+
+**Opportunity:** `RTCRtpReceiver.getContributingSources()` returns per-participant CSRC identifiers with audio levels. Google Meet's SFU sets CSRC values — each participant gets a unique, session-constant CSRC. When the SFU remaps one of its 3 virtual streams to a different speaker, the CSRC changes instantly.
+
+**What this solves:**
+- **Multi-track dedup (score 40):** CSRC tells you exactly who is on each stream — no voting ambiguity when same person appears on 2 tracks during SFU remapping
+- **Slow human speaker locking (585s):** CSRC provides instant identity — no need for 2+ vote threshold, no DOM class scraping
+- **Obfuscated selector fragility:** CSRC is a standard WebRTC API, not dependent on Google's compiled CSS class names
+
+**Implementation approach:**
+1. Hook RTCPeerConnection via `addInitScript` (same pattern Teams already uses for ontrack)
+2. Poll `getContributingSources()` every 250ms on each receiver
+3. One-time correlation: CSRC ID -> participant name (via DOM, then CSRC is authoritative)
+4. Replace DOM voting with CSRC-based identity for all subsequent audio
+
+**Priority:** Medium-high. Would raise speaker identity (human) from 40 to 90+ and multi-track dedup from 40 to 90+. No equivalent for Zoom (CSRC count=0) or Teams (unknown, needs 5-min live test).
+
+**Not started.** No code changes yet. This is a future improvement, not a blocker.
 
 ## Bugs found and fixed
 
