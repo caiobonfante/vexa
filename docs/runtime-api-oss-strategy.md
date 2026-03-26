@@ -47,21 +47,17 @@ This follows the Supabase playbook ("open-source Firebase") — framing against 
 
 ---
 
-## License: FSL (Functional Source License)
+## License: Apache-2.0
 
-**Why FSL over alternatives:**
+Vexa itself depends on Runtime API. A restrictive license (FSL, AGPL) would create friction for Vexa's own licensing and downstream users. Apache-2.0 is the right choice:
 
-| License | Cloud Protection | Enterprise Friction | Fork Risk |
-|---------|-----------------|--------------------| ----------|
-| Apache-2.0 | None — anyone can wrap as SaaS | None | None |
-| AGPL | Strong (network copyleft) | Medium — some legal depts ban it | None |
-| **FSL** | **Strong (non-compete clause)** | **Low (standardized, 2yr sunset to Apache-2.0)** | **None** |
-| BSL | Variable | High (each one different) | High on switch |
-| SSPL | Nuclear | Very high | Very high |
+- **Zero friction** — no copyleft, no non-compete, enterprise pre-approved
+- **CNCF-compatible** — required for Sandbox/Incubating/Graduated
+- **Patent grant** — explicit protection that MIT lacks
+- **Maximum adoption** — no legal department will block it
+- **Proven at scale** — Kubernetes, Temporal, Supabase all Apache-2.0
 
-FSL is the 2026 best practice for infra tools (created by Sentry, adopted by growing ecosystem). Non-compete clause prevents competitors from wrapping it as a competing SaaS. 2-year automatic conversion to Apache-2.0 builds trust.
-
-**Industry evidence:** Every restrictive license switch (HashiCorp BSL, Elastic SSPL, Redis SSPL) triggered forks. FSL avoids this by being restrictive from day one — no expectations to violate.
+The moat is not in 764 lines of container orchestration. It's in the meeting intelligence, transcription pipeline, voice agent, and managed cloud built on top. Temporal proved this: MIT license, $5B valuation — operational complexity is the real moat.
 
 ---
 
@@ -227,7 +223,7 @@ Rules: Talk like a builder, no superlatives, respond to every comment in first 4
 
 | Risk | Severity | Mitigation |
 |------|----------|-----------|
-| AWS/GCP wrapping as managed service | Low (too niche) | FSL non-compete clause prevents this anyway |
+| AWS/GCP wrapping as managed service | Low (too niche for cloud providers) | Moat is in domain intelligence, not container CRUD |
 | Recall.ai free-riding | Low | Moat is in meeting intelligence, not container orchestration |
 | Fork risk | Zero | FSL from day 1, no license rug-pull |
 | Maintenance burden | Medium | Community is a force multiplier, not a replacement for engineering |
@@ -248,7 +244,7 @@ When internal and OSS versions diverge, the OSS project dies (Hystrix, Conductor
 | 1000+ stars | Consider CNCF Sandbox if multi-company interest. |
 
 Day 1 requirements:
-- LICENSE (FSL)
+- LICENSE (Apache-2.0)
 - README.md
 - CONTRIBUTING.md
 - CODE_OF_CONDUCT.md (Contributor Covenant 2.1)
@@ -264,7 +260,7 @@ Day 1 requirements:
 |----------|--------|
 | Open-source Runtime API? | Yes — validated gap, proven COSS economics |
 | When? | Before PMF (every successful COSS company did) |
-| License? | FSL (non-compete + 2yr sunset to Apache-2.0) |
+| License? | Apache-2.0 (max adoption, Vexa depends on it) |
 | Repo structure? | Separate repo from day 1 |
 | Lead use case? | AI agent sandboxes |
 | Name? | TBD — Drydock, Berth, or Cradle (check availability) |
