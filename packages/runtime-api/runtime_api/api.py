@@ -170,6 +170,7 @@ async def create_container(req: CreateContainerRequest, request: Request):
         gpu_type=profile_def.get("gpu_type"),
         node_selector=profile_def.get("node_selector", {}),
         working_dir=profile_def.get("working_dir"),
+        k8s_overrides=profile_def.get("k8s_overrides", {}),
     )
 
     try:

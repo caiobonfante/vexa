@@ -2,13 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Copy source and install
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-# Copy application
 COPY runtime_api/ runtime_api/
 COPY profiles.example.yaml profiles.yaml
+RUN pip install --no-cache-dir .
 
 EXPOSE 8090
 

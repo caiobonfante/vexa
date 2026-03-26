@@ -121,20 +121,34 @@ class KubernetesBackend(Backend):
                 client.V1LocalObjectReference(name=config.K8S_IMAGE_PULL_SECRET)
             ]
 
+        # K8s-specific overrides (tolerations, affinity, annotations, etc.)
+        k8s = spec.k8s_overrides or {}
+
+        pod_spec_kwargs = {
+            "restart_policy": "Never",
+            "service_account_name": config.K8S_SERVICE_ACCOUNT or None,
+            "image_pull_secrets": image_pull_secrets,
+            "node_selector": spec.node_selector or None,
+            "containers": [container],
+            "volumes": volumes or None,
+        }
+        if k8s.get("tolerations"):
+            pod_spec_kwargs["tolerations"] = [
+                client.V1Toleration(**t) for t in k8s["tolerations"]
+            ]
+        if k8s.get("affinity"):
+            pod_spec_kwargs["affinity"] = k8s["affinity"]
+
+        annotations = k8s.get("annotations", {})
+
         pod = client.V1Pod(
             metadata=client.V1ObjectMeta(
                 name=spec.name,
                 namespace=ns,
                 labels=labels,
+                annotations=annotations or None,
             ),
-            spec=client.V1PodSpec(
-                restart_policy="Never",
-                service_account_name=config.K8S_SERVICE_ACCOUNT or None,
-                image_pull_secrets=image_pull_secrets,
-                node_selector=spec.node_selector or None,
-                containers=[container],
-                volumes=volumes or None,
-            ),
+            spec=client.V1PodSpec(**pod_spec_kwargs),
         )
 
         loop = asyncio.get_event_loop()

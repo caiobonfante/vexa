@@ -58,7 +58,7 @@ async def list_containers(redis, user_id: str = None, profile: str = None) -> li
             continue
         if profile and data.get("profile") != profile:
             continue
-        data["name"] = key.replace(KEY_PREFIX, "")
+        data["name"] = key.removeprefix(KEY_PREFIX)
         results.append(data)
     return results
 

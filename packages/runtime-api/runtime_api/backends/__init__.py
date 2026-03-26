@@ -33,6 +33,7 @@ class ContainerSpec:
     gpu_type: str | None = None  # "nvidia", "vaapi"
     node_selector: dict[str, str] = field(default_factory=dict)
     working_dir: str | None = None
+    k8s_overrides: dict = field(default_factory=dict)  # opaque K8s-specific: tolerations, affinity, etc.
 
 
 @dataclass

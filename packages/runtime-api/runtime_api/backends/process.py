@@ -20,6 +20,7 @@ from typing import AsyncIterator, Optional
 
 from runtime_api import config
 from runtime_api.backends import Backend, ContainerInfo, ContainerSpec
+from runtime_api.utils import parse_memory
 
 logger = logging.getLogger("runtime_api.backends.process")
 
@@ -77,7 +78,7 @@ class ProcessBackend(Backend):
         def _set_limits():
             os.setsid()  # new process group for clean termination
             if spec.memory_limit:
-                mem_bytes = _parse_memory(spec.memory_limit)
+                mem_bytes = parse_memory(spec.memory_limit)
                 resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
 
         try:
@@ -193,7 +194,7 @@ class ProcessBackend(Backend):
                 if not all(proc_labels.get(k) == v for k, v in labels.items()):
                     continue
 
-            name = data.get("name", key.replace(PROCESS_PREFIX, ""))
+            name = data.get("name", key.removeprefix(PROCESS_PREFIX))
             pid = data.get("pid")
             status = data.get("status", "unknown")
 
@@ -258,7 +259,7 @@ class ProcessBackend(Backend):
 
             pid = data.get("pid")
             if not pid or not _pid_alive(pid):
-                name = data.get("name", key.replace(PROCESS_PREFIX, ""))
+                name = data.get("name", key.removeprefix(PROCESS_PREFIX))
                 logger.info(f"Reaper: process {name} (PID={pid}) is dead")
 
                 # Get exit code if possible
@@ -325,14 +326,3 @@ def _terminate_process_group(pid: int, timeout: int = 10) -> bool:
         return False
 
 
-def _parse_memory(mem_str: str) -> int:
-    mem_str = mem_str.strip()
-    multipliers = {
-        "k": 1024, "ki": 1024,
-        "m": 1024**2, "mi": 1024**2,
-        "g": 1024**3, "gi": 1024**3,
-    }
-    for suffix, mult in sorted(multipliers.items(), key=lambda x: -len(x[0])):
-        if mem_str.lower().endswith(suffix):
-            return int(float(mem_str[:-len(suffix)]) * mult)
-    return int(mem_str)

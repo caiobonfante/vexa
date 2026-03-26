@@ -45,6 +45,7 @@ PROFILE_DEFAULTS = {
     "node_selector": {},
     "max_per_user": 0,  # 0 = unlimited
     "working_dir": None,
+    "k8s_overrides": {},  # opaque K8s-specific: tolerations, affinity, annotations
 }
 
 

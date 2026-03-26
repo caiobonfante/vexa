@@ -15,6 +15,7 @@ import requests_unixsocket
 
 from runtime_api import config
 from runtime_api.backends import Backend, ContainerInfo, ContainerSpec
+from runtime_api.utils import parse_memory
 
 logger = logging.getLogger("runtime_api.backends.docker")
 
@@ -97,6 +98,8 @@ class DockerBackend(Backend):
             None,
             lambda: session.post(f"{url}/exec/{exec_id}/start", json={"Detach": False}, stream=True),
         )
+        # TODO: iter_content is synchronous — blocks event loop during streaming.
+        # Migrate to httpx or aiohttp for non-blocking exec streaming.
         for chunk in resp.iter_content(chunk_size=4096):
             if chunk:
                 yield chunk
@@ -175,7 +178,7 @@ class DockerBackend(Backend):
 
         # Resource limits
         if spec.memory_limit:
-            host_config["Memory"] = _parse_memory(spec.memory_limit)
+            host_config["Memory"] = parse_memory(spec.memory_limit)
 
         payload: dict[str, Any] = {
             "Image": spec.image,
@@ -323,15 +326,3 @@ def _extract_ports(port_list: list[dict]) -> dict[str, int]:
     return result
 
 
-def _parse_memory(mem_str: str) -> int:
-    """Parse memory string like '2Gi', '512m' to bytes."""
-    mem_str = mem_str.strip()
-    multipliers = {
-        "k": 1024, "ki": 1024,
-        "m": 1024**2, "mi": 1024**2,
-        "g": 1024**3, "gi": 1024**3,
-    }
-    for suffix, mult in sorted(multipliers.items(), key=lambda x: -len(x[0])):
-        if mem_str.lower().endswith(suffix):
-            return int(float(mem_str[:-len(suffix)]) * mult)
-    return int(mem_str)
