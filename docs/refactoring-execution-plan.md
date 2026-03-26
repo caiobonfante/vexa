@@ -278,14 +278,26 @@ git rm -r services/bot-manager/
 
 ### 5.2 CI pipeline for subtree publishing
 
-On merge to main:
-1. `git subtree split --prefix=packages/runtime-api` → push to `vexa-ai/vexa-runtime`
-2. `git subtree split --prefix=packages/agent-runtime` → push to `vexa-ai/vexa-agents`
-3. Publish to PyPI + ghcr.io
+Proven pattern used by Symfony (50+ packages), Laravel (28 packages). Tool: `splitsh-lite` via `danharrin/monorepo-split-github-action`.
+
+**On merge to main:** split subtree → force-push to mirror repo (preserves all commit history + authors)
+**On tag:** split + tag mirror + publish to PyPI (OIDC, no stored tokens) + build/push Docker to GHCR
+
+Setup:
+1. Create empty mirror repos: `vexa-ai/vexa-runtime`, `vexa-ai/vexa-agents`
+2. Create fine-grained PAT with `contents: write` on mirror repos → `SPLIT_ACCESS_TOKEN` secret
+3. Configure PyPI trusted publisher (OIDC, no tokens stored)
+4. Add auto-close PR workflow to each mirror repo (redirects to monorepo)
+
+See `docs/runtime-api-oss-strategy.md` for the full GitHub Actions YAML.
 
 ### 5.3 Contributor attribution
 
-`git subtree split` preserves full commit history including authors. All contributor commits automatically appear in mirror repos.
+`splitsh-lite` creates synthetic commits preserving the original author, date, and message — just rewrites paths to repo root. All contributor commits automatically appear in mirror repos with proper attribution. agrogov's, jbschooley's, and all other contributors' work carries through.
+
+### 5.4 Mirror repo auto-close PRs
+
+Each mirror repo gets `.github/workflows/close-prs.yml` that auto-closes PRs with a message redirecting to the monorepo. This prevents contributor confusion.
 
 ---
 
