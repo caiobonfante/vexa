@@ -42,7 +42,7 @@ def app_client(mock_user, mock_db, mock_redis):
     """Create a TestClient with mocked dependencies."""
     from main import app
     from api.auth import get_current_user
-    from shared_models.database import get_db
+    from meeting_api.database import get_db
 
     async def override_get_current_user():
         return mock_user
@@ -149,7 +149,7 @@ class TestGetTranscript:
         The full response requires a real ORM Meeting object for model_validate,
         so we verify the DB query path works and that a found meeting doesn't 404.
         """
-        from shared_models.models import Meeting
+        from meeting_api.models import Meeting
 
         # Create a real Meeting ORM instance (not a Mock) so model_validate works
         meeting = Meeting(

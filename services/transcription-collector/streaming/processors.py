@@ -12,9 +12,10 @@ import redis.asyncio as aioredis # For type hinting redis_client
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_models.database import async_session_local # For DB sessions
-from shared_models.models import User, Meeting, MeetingSession, APIToken
-from shared_models.schemas import Platform
+from meeting_api.database import async_session_local
+from meeting_api.models import Meeting, MeetingSession
+from meeting_api.schemas import Platform
+from admin_models.models import User, APIToken
 from config import REDIS_SEGMENT_TTL, REDIS_SPEAKER_EVENT_KEY_PREFIX, REDIS_SPEAKER_EVENT_TTL # Added new configs (NEW)
 # Speaker mapping is no longer needed in the collector — bot labels segments at source
 

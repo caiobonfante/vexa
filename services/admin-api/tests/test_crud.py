@@ -14,7 +14,7 @@ os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("DB_PASSWORD", "test")
 
 from app.main import app, verify_admin_token, verify_analytics_or_admin_token, get_current_user
-from shared_models.database import get_db
+from admin_models.database import get_db
 from httpx import AsyncClient, ASGITransport
 
 

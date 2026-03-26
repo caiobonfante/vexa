@@ -10,9 +10,9 @@ import os
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_models.models import Meeting
-from shared_models.database import async_session_local
-from shared_models.webhook_delivery import deliver, build_envelope
+from .models import Meeting
+from .database import async_session_local
+from .webhook_delivery import deliver, build_envelope
 
 from .config import TRANSCRIPTION_COLLECTOR_URL, POST_MEETING_HOOKS
 from .webhooks import send_completion_webhook

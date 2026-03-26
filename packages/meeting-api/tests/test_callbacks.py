@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from shared_models.schemas import MeetingStatus, MeetingCompletionReason, MeetingFailureStage
+from meeting_api.schemas import MeetingStatus, MeetingCompletionReason, MeetingFailureStage
 
 from .conftest import (
     TEST_MEETING_ID,

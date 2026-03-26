@@ -11,8 +11,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared_models.database import get_db
-from shared_models.schemas import Platform, MeetingStatus
+from .database import get_db
+from .schemas import Platform, MeetingStatus
 
 from .auth import get_user_and_token
 from .meetings import _find_active_meeting, get_redis

@@ -18,7 +18,7 @@ from pydantic import BaseModel, ValidationError
 # ---------------------------------------------------------------------------
 # Import the live schemas — if these imports fail, the contract is broken.
 # ---------------------------------------------------------------------------
-from shared_models.schemas import (
+from meeting_api.schemas import (
     BotStatus,
     BotStatusResponse,
     MeetingCreate,

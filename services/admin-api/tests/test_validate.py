@@ -13,7 +13,7 @@ os.environ.setdefault("DB_PASSWORD", "test")
 
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from shared_models.database import get_db
+from admin_models.database import get_db
 
 
 def _make_user(user_id=5, email="test@example.com", max_concurrent_bots=3):

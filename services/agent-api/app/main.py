@@ -35,7 +35,7 @@ logger = logging.getLogger("agent_api")
 
 app = FastAPI(title="Vexa Agent API", version="0.2.0")
 
-from shared_models.security_headers import SecurityHeadersMiddleware
+from admin_models.security_headers import SecurityHeadersMiddleware
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
 

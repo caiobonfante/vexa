@@ -17,15 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
-from shared_models.database import get_db
-from shared_models.models import Meeting, MeetingSession, Recording, MediaFile
-from shared_models.schemas import (
+from .database import get_db
+from .models import Meeting, MeetingSession, Recording, MediaFile
+from .schemas import (
     RecordingResponse,
     RecordingListResponse,
     RecordingStatus,
     RecordingSource,
 )
-from shared_models.storage import create_storage_client
+from .storage import create_storage_client
 
 from .auth import get_user_and_token
 from .config import get_recording_metadata_mode

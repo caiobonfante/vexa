@@ -6,7 +6,7 @@ import pytest
 
 
 def test_sign_payload():
-    from shared_models.webhook_delivery import sign_payload
+    from meeting_api.webhook_delivery import sign_payload
     payload = b'{"event": "test"}'
     secret = "test-secret-123"
     sig = sign_payload(payload, secret)
@@ -16,13 +16,13 @@ def test_sign_payload():
 
 
 def test_build_headers_no_secret():
-    from shared_models.webhook_delivery import build_headers
+    from meeting_api.webhook_delivery import build_headers
     headers = build_headers()
     assert headers == {"Content-Type": "application/json"}
 
 
 def test_build_headers_with_secret():
-    from shared_models.webhook_delivery import build_headers
+    from meeting_api.webhook_delivery import build_headers
     payload = b'{"event": "test"}'
     headers = build_headers(webhook_secret="my-secret", payload_bytes=payload)
     assert headers["Authorization"] == "Bearer my-secret"
@@ -32,7 +32,7 @@ def test_build_headers_with_secret():
 
 
 def test_build_headers_empty_secret():
-    from shared_models.webhook_delivery import build_headers
+    from meeting_api.webhook_delivery import build_headers
     headers = build_headers(webhook_secret="  ", payload_bytes=b"test")
     # Empty/whitespace secret should not add auth headers
     assert "Authorization" not in headers
@@ -40,7 +40,7 @@ def test_build_headers_empty_secret():
 
 def test_signature_is_verifiable():
     """Client should be able to verify the signature."""
-    from shared_models.webhook_delivery import build_headers
+    from meeting_api.webhook_delivery import build_headers
     secret = "webhook-secret-abc"
     payload = json.dumps({"event": "meeting.completed", "id": 123}).encode()
     headers = build_headers(webhook_secret=secret, payload_bytes=payload)
@@ -54,14 +54,14 @@ def test_signature_is_verifiable():
 
 
 def test_retry_module_imports():
-    from shared_models.retry import with_retry, _is_retryable
+    from meeting_api.retry import with_retry, _is_retryable
     assert callable(with_retry)
     assert callable(_is_retryable)
 
 
 @pytest.mark.asyncio
 async def test_retry_succeeds_first_try():
-    from shared_models.retry import with_retry
+    from meeting_api.retry import with_retry
 
     call_count = 0
 
@@ -78,7 +78,7 @@ async def test_retry_succeeds_first_try():
 @pytest.mark.asyncio
 async def test_retry_retries_on_transient():
     import httpx
-    from shared_models.retry import with_retry
+    from meeting_api.retry import with_retry
 
     call_count = 0
 
@@ -97,7 +97,7 @@ async def test_retry_retries_on_transient():
 @pytest.mark.asyncio
 async def test_retry_no_retry_on_client_error():
     import httpx
-    from shared_models.retry import with_retry
+    from meeting_api.retry import with_retry
 
     call_count = 0
 

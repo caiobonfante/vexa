@@ -24,8 +24,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from shared_models.models import Meeting, MeetingSession
-from shared_models.schemas import MeetingStatus
+from meeting_api.models import Meeting, MeetingSession
+from meeting_api.schemas import MeetingStatus
 from meeting_api.auth import UserProxy
 
 
@@ -125,7 +125,7 @@ class MockResult:
 
 def _fake_refresh(obj, *args, **kwargs):
     """Simulate DB refresh by populating server-default fields on ORM objects."""
-    from shared_models.models import Meeting as MeetingModel
+    from meeting_api.models import Meeting as MeetingModel
     if isinstance(obj, MeetingModel):
         now = datetime.utcnow()
         if obj.id is None:
@@ -188,7 +188,7 @@ async def client(mock_db, mock_redis) -> AsyncGenerator[AsyncClient, None]:
     async def override_auth():
         return (TEST_API_KEY, test_user)
 
-    from shared_models.database import get_db
+    from meeting_api.database import get_db
     from meeting_api.auth import get_user_and_token
 
     app.dependency_overrides[get_db] = override_get_db
@@ -219,7 +219,7 @@ async def unauthed_client(mock_db, mock_redis) -> AsyncGenerator[AsyncClient, No
     async def override_get_db():
         yield mock_db
 
-    from shared_models.database import get_db
+    from meeting_api.database import get_db
     app.dependency_overrides[get_db] = override_get_db
     meetings_mod.set_redis(mock_redis)
 

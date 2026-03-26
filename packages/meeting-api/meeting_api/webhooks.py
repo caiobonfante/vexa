@@ -1,4 +1,4 @@
-"""Webhook delivery — thin wrapper over shared_models.webhook_delivery.
+"""Webhook delivery — thin wrapper over meeting_api.webhook_delivery.
 
 Preserves the exact HMAC signing algorithm, envelope format, and header
 contracts from bot-manager. See tests/contracts/test_webhook_contracts.py.
@@ -14,9 +14,9 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from shared_models.models import Meeting
-from shared_models.webhook_url import validate_webhook_url
-from shared_models.webhook_delivery import (
+from .models import Meeting
+from .webhook_url import validate_webhook_url
+from .webhook_delivery import (
     deliver,
     build_envelope,
     clean_meeting_data,
@@ -178,7 +178,7 @@ async def send_status_webhook(
 
 async def send_event_webhook(meeting_id: int, event_type: str, data: dict):
     """Fire-and-forget webhook for recording/transcription events."""
-    from shared_models.database import async_session_local
+    from .database import async_session_local
 
     try:
         async with async_session_local() as db:

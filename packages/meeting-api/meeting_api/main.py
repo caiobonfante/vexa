@@ -14,9 +14,9 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from shared_models.database import init_db, async_session_local
-from shared_models.webhook_delivery import set_redis_client as set_webhook_redis
-from shared_models.webhook_retry_worker import (
+from .database import init_db, async_session_local
+from .webhook_delivery import set_redis_client as set_webhook_redis
+from .webhook_retry_worker import (
     start_retry_worker,
     stop_retry_worker,
     set_session_factory as set_retry_session_factory,

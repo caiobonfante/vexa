@@ -19,7 +19,7 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel, Field
 
-from shared_models.webhook_delivery import (
+from meeting_api.webhook_delivery import (
     WEBHOOK_API_VERSION,
     build_envelope,
     build_headers,

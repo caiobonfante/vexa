@@ -18,14 +18,14 @@ from datetime import datetime, timedelta, timezone
 import secrets
 
 # Import schemas for documentation
-from shared_models.schemas import (
-    MeetingCreate, MeetingResponse, MeetingListResponse, MeetingDataUpdate, # Updated/Added Schemas
+from meeting_api.schemas import (
+    MeetingCreate, MeetingResponse, MeetingListResponse, MeetingDataUpdate,
     TranscriptionResponse, TranscriptionSegment,
-    UserCreate, UserResponse, TokenResponse, UserDetailResponse, # Admin Schemas
+    UserCreate, UserResponse, TokenResponse, UserDetailResponse,
     ErrorResponse,
-    Platform, # Import Platform enum for path parameters
-    BotStatusResponse, # ADDED: Import response model for documentation
-    SpeakRequest, ChatSendRequest, ChatMessagesResponse, ScreenContentRequest, # Voice agent schemas
+    Platform,
+    BotStatusResponse,
+    SpeakRequest, ChatSendRequest, ChatMessagesResponse, ScreenContentRequest,
 )
 
 load_dotenv()
@@ -141,7 +141,7 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     if origin.strip()
 ]
-from shared_models.security_headers import SecurityHeadersMiddleware
+from meeting_api.security_headers import SecurityHeadersMiddleware
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(

@@ -16,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
-from shared_models.database import get_db
-from shared_models.models import Meeting, MeetingSession
-from shared_models.schemas import (
+from .database import get_db
+from .models import Meeting, MeetingSession
+from .schemas import (
     MeetingStatus,
     MeetingCompletionReason,
     MeetingFailureStage,

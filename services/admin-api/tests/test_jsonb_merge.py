@@ -15,7 +15,7 @@ os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("DB_PASSWORD", "test")
 
 from app.main import app, verify_admin_token
-from shared_models.database import get_db
+from admin_models.database import get_db
 
 
 # --- Fixtures ---

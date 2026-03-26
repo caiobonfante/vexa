@@ -5,9 +5,9 @@ from sqlalchemy.future import select
 import logging
 import os
 
-from shared_models.models import User, APIToken
-from shared_models.database import get_db
-from shared_models.token_scope import check_token_scope
+from admin_models.models import User, APIToken
+from admin_models.database import get_db
+from admin_models.token_scope import check_token_scope
 
 logger = logging.getLogger("bot_manager.auth")
 

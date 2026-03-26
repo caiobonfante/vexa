@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from shared_models.schemas import (
+from meeting_api.schemas import (
     MeetingCompletionReason,
     MeetingFailureStage,
     MeetingStatus,
@@ -281,7 +281,7 @@ class TestStatusTransitionContract:
     """Verify the valid status transitions are frozen."""
 
     def test_valid_transitions_from_requested(self):
-        from shared_models.schemas import get_valid_status_transitions
+        from meeting_api.schemas import get_valid_status_transitions
         transitions = get_valid_status_transitions()
         expected = {
             MeetingStatus.JOINING,
@@ -292,7 +292,7 @@ class TestStatusTransitionContract:
         assert set(transitions[MeetingStatus.REQUESTED]) == expected
 
     def test_valid_transitions_from_active(self):
-        from shared_models.schemas import get_valid_status_transitions
+        from meeting_api.schemas import get_valid_status_transitions
         transitions = get_valid_status_transitions()
         expected = {
             MeetingStatus.STOPPING,
@@ -302,12 +302,12 @@ class TestStatusTransitionContract:
         assert set(transitions[MeetingStatus.ACTIVE]) == expected
 
     def test_terminal_states(self):
-        from shared_models.schemas import get_valid_status_transitions
+        from meeting_api.schemas import get_valid_status_transitions
         transitions = get_valid_status_transitions()
         assert transitions[MeetingStatus.COMPLETED] == []
         assert transitions[MeetingStatus.FAILED] == []
 
     def test_is_valid_transition_helper(self):
-        from shared_models.schemas import is_valid_status_transition
+        from meeting_api.schemas import is_valid_status_transition
         assert is_valid_status_transition(MeetingStatus.REQUESTED, MeetingStatus.JOINING)
         assert not is_valid_status_transition(MeetingStatus.COMPLETED, MeetingStatus.ACTIVE)

@@ -9,8 +9,9 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from shared_models.database import get_db, init_db
-from shared_models.models import CalendarEvent, User
+from meeting_api.database import get_db, init_db
+from meeting_api.models import CalendarEvent
+from admin_models.models import User
 from app.sync import sync_user_calendar, schedule_upcoming_bots
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -32,7 +33,7 @@ async def sync_loop():
     """Background loop: sync all connected calendars and schedule bots."""
     while True:
         try:
-            from shared_models.database import async_session_local
+            from meeting_api.database import async_session_local
             async with async_session_local() as db:
                 # Find all users with google_calendar oauth configured
                 result = await db.execute(select(User))

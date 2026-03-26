@@ -11,10 +11,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from collections import namedtuple
 
-# Add shared_models to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'libs', 'shared-models'))
-
-from shared_models.token_scope import (
+from admin_models.token_scope import (
     generate_prefixed_token,
     parse_token_scope,
     check_token_scope,

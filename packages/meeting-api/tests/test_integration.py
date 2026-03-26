@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from shared_models.schemas import MeetingStatus
+from meeting_api.schemas import MeetingStatus
 
 from .conftest import (
     TEST_USER_ID,

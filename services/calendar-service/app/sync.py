@@ -10,7 +10,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from shared_models.models import CalendarEvent, User
+from meeting_api.models import CalendarEvent
+from admin_models.models import User
 from app.google_calendar import (
     refresh_access_token,
     list_events,

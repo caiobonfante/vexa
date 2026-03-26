@@ -13,16 +13,17 @@ from datetime import datetime # Import datetime
 from sqlalchemy import func
 from pydantic import BaseModel, Field, HttpUrl
 
-# Import shared models and schemas
-from shared_models.models import User, APIToken, Base, Meeting, Transcription, MeetingSession # Import Base for init_db and Meeting
-from shared_models.schemas import (UserCreate, UserResponse, TokenResponse, UserDetailResponse, UserBase, UserUpdate, MeetingResponse,
-                                 UserTableResponse, MeetingTableResponse, MeetingSessionResponse, TranscriptionStats, 
-                                 MeetingPerformanceMetrics, MeetingTelematicsResponse, UserMeetingStats, 
-                                 UserUsagePatterns, UserAnalyticsResponse) # Import analytics schemas
+# Import admin models (User, APIToken) from admin-models package
+from admin_models.models import User, APIToken, Base
+from admin_models.database import get_db, init_db
 
-# Database utilities (needs to be created)
-from shared_models.database import get_db, init_db  # New import
-from shared_models.webhook_url import validate_webhook_url
+# Import meeting models from meeting-api package
+from meeting_api.models import Meeting, Transcription, MeetingSession
+from meeting_api.schemas import (UserCreate, UserResponse, TokenResponse, UserDetailResponse, UserBase, UserUpdate, MeetingResponse,
+                                 UserTableResponse, MeetingTableResponse, MeetingSessionResponse, TranscriptionStats,
+                                 MeetingPerformanceMetrics, MeetingTelematicsResponse, UserMeetingStats,
+                                 UserUsagePatterns, UserAnalyticsResponse)
+from meeting_api.webhook_url import validate_webhook_url
 
 # Logging configuration
 logging.basicConfig(
@@ -31,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("admin_api")
 
-from shared_models.security_headers import SecurityHeadersMiddleware
+from admin_models.security_headers import SecurityHeadersMiddleware
 
 # App initialization
 app = FastAPI(title="Vexa Admin API")
@@ -135,7 +136,7 @@ user_router = APIRouter(
 )
 
 # --- Helper Functions ---
-from shared_models.token_scope import generate_prefixed_token, check_token_scope, parse_token_scope
+from admin_models.token_scope import generate_prefixed_token, check_token_scope, parse_token_scope
 
 def generate_secure_token(length=40, scope: str = "user"):
     return generate_prefixed_token(scope, length)
@@ -479,7 +480,7 @@ async def create_token_for_user(user_id: int, scope: str = "user", db: AsyncSess
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     token_value = generate_secure_token(scope=scope)
-    # Use the APIToken model from shared_models
+    # Use the APIToken model from admin_models
     # Use timezone-naive datetime for TIMESTAMP WITHOUT TIME ZONE column
     db_token = APIToken(
         token=token_value, 
