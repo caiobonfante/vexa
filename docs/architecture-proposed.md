@@ -194,6 +194,59 @@ Cross-references are integers: `meetings.user_id = 5`. The FK exists at the DB l
 | `shared-models` | Vexa DB schema — will be split: each package owns its models, this becomes admin-only (users/tokens) |
 | `transcript-rendering` | Transcript UI processing — used by dashboard, internal to Vexa |
 
+## Auth Model
+
+Packages are infrastructure, not products with accounts. They don't manage users.
+
+### Standalone (someone installs just meeting-api)
+
+```
+Deployer sets: API_KEYS=key1,key2,key3
+
+Client → meeting-api
+         │
+         ├── check X-API-Key against API_KEYS env var
+         ├── user_id comes from request body (opaque string)
+         └── no users table, no token lifecycle, no scopes
+```
+
+The deployer manages auth however they want — API keys in env, OAuth proxy in front, custom middleware. The package just needs to know "is this request allowed" (API key check) and "who is it from" (`user_id` parameter).
+
+This is how Temporal, MinIO, and Traefik work. Infrastructure packages don't manage users. User management is a product concern.
+
+### Inside Vexa (full monorepo deployment)
+
+```
+Client → api-gateway → admin-api (validate vxa_bot_xxx token)
+                      ← { user_id: 5, scopes: [bot], max_concurrent: 3 }
+         │
+         ├── inject X-User-ID: 5
+         ├── inject X-User-Scopes: bot
+         ├── inject X-User-Limits: 3
+         │
+         └── meeting-api reads headers, stores user_id=5
+             never queries users table
+```
+
+Admin-api owns user lifecycle (create, delete, tokens, scopes, limits). Gateway is the auth boundary. Packages downstream are unaware of how auth works — they just read headers.
+
+### Auth interface in each package
+
+```python
+# Each package ships a simple auth module:
+
+async def validate_request(request: Request) -> dict:
+    """Returns {user_id, scopes} or raises 401/403.
+
+    Checks in order:
+    1. X-User-ID header (trusted — set by gateway behind a reverse proxy)
+    2. X-API-Key header (standalone — checked against API_KEYS env var)
+    3. Neither → 401
+    """
+```
+
+No Protocol class, no dependency injection, no plugin system. Just a function that checks headers. Works in both modes.
+
 ## Migration Path
 
 This is the target. Getting there from current state:
