@@ -102,10 +102,7 @@ async def startup():
     await app.state.redis.ping()
     logger.info("Redis connected")
 
-    # Scheduler executor
-    recovered = await scheduler.recover_orphaned_jobs(app.state.redis)
-    if recovered:
-        logger.info(f"Recovered {recovered} orphaned scheduler jobs")
+    # Scheduler executor (recover_orphaned_jobs runs inside the executor loop)
     app.state.executor_task = asyncio.create_task(
         scheduler.start_executor(app.state.redis)
     )

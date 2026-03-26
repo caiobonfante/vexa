@@ -18,7 +18,6 @@ AI agent runtime framework. Route user messages to LLM agents running inside eph
 ### Docker Compose (recommended)
 
 ```bash
-curl -O https://raw.githubusercontent.com/vexa-ai/agent-runtime/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -27,8 +26,6 @@ Requires Runtime API and Redis running alongside.
 ### From source
 
 ```bash
-git clone https://github.com/vexa-ai/agent-runtime.git
-cd agent-runtime
 pip install -e .
 uvicorn agent_runtime.main:app --host 0.0.0.0 --port 8100
 ```
@@ -39,18 +36,18 @@ uvicorn agent_runtime.main:app --host 0.0.0.0 --port 8100
 # Stream a response from the agent (SSE)
 curl -N -X POST http://localhost:8100/api/chat \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
+  -H "X-API-Key: your-api-key" \
   -d '{
-    "message": "What files are in the workspace?",
-    "session_id": "session-abc"
+    "user_id": "user-1",
+    "message": "What files are in the workspace?"
   }'
 ```
 
 ### List sessions
 
 ```bash
-curl http://localhost:8100/api/sessions \
-  -H "Authorization: Bearer your-api-key"
+curl http://localhost:8100/api/sessions?user_id=user-1 \
+  -H "X-API-Key: your-api-key"
 ```
 
 ### Schedule a job
@@ -58,7 +55,7 @@ curl http://localhost:8100/api/sessions \
 ```bash
 curl -X POST http://localhost:8100/api/schedule \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
+  -H "X-API-Key: your-api-key" \
   -d '{
     "execute_at": "2025-01-15T14:00:00Z",
     "request": {
@@ -80,6 +77,9 @@ curl -X POST http://localhost:8100/api/schedule \
 | `POST` | `/api/sessions` | Create a new named session |
 | `PUT` | `/api/sessions/{id}` | Rename a session |
 | `DELETE` | `/api/sessions/{id}` | Delete a session |
+| `GET` | `/api/workspace/files` | List files in a user's workspace |
+| `GET` | `/api/workspace/file` | Get file content from workspace |
+| `POST` | `/api/workspace/file` | Write a file to the workspace |
 | `POST` | `/api/schedule` | Schedule a deferred HTTP request |
 | `GET` | `/api/schedule` | List scheduled jobs |
 | `DELETE` | `/api/schedule/{id}` | Cancel a scheduled job |
@@ -123,7 +123,7 @@ The scheduler uses Redis sorted sets to queue future HTTP requests. An in-proces
 ```
 Schedule job → Redis sorted set (score = execute_at timestamp)
                     │
-Worker loop polls every 1s
+Worker loop polls every 5s (configurable)
                     │
                     ▼
 Fire HTTP request → target URL
@@ -133,18 +133,26 @@ Fire HTTP request → target URL
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHAT_API_PORT` | `8100` | Server port |
+| `AGENT_RUNTIME_PORT` | `8100` | Server port |
 | `REDIS_URL` | `redis://redis:6379` | Redis connection URL |
 | `RUNTIME_API_URL` | `http://runtime-api:8090` | Runtime API for container lifecycle |
+| `API_KEY` | — | API key for authentication (empty = open access) |
 | `AGENT_IMAGE` | `agent:latest` | Docker image for agent containers |
+| `AGENT_CLI` | `claude` | Agent CLI command inside containers |
+| `AGENT_ALLOWED_TOOLS` | `Read,Write,Edit,Bash,Glob,Grep` | Tools the agent CLI can use |
+| `DEFAULT_MODEL` | — | Default LLM model for the agent |
 | `DOCKER_NETWORK` | — | Docker network to attach containers to |
+| `CONTAINER_PREFIX` | `agent-` | Prefix for container names |
 | `IDLE_TIMEOUT` | `300` | Seconds before idle containers are stopped |
+| `STORAGE_BACKEND` | `local` | Storage backend: `local` or `s3` |
+| `WORKSPACE_PATH` | `/workspace` | Workspace path inside containers |
 | `S3_ENDPOINT` | — | S3-compatible endpoint for workspace persistence |
 | `S3_ACCESS_KEY` | — | S3 access key |
 | `S3_SECRET_KEY` | — | S3 secret key |
 | `S3_BUCKET` | `workspaces` | S3 bucket for workspaces |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `LOG_LEVEL` | `INFO` | Log level |
+| `SCHEDULER_POLL_INTERVAL` | `5` | Seconds between scheduler polls |
 
 ## Use Cases
 
