@@ -31,7 +31,7 @@
 <p align="center">
   <a href="#whats-new">What’s new</a> •
   <a href="#quickstart">Quickstart</a> •
-  <a href="#agent-runtime">Agent Runtime</a> •
+  <a href="#agent-api">Agent API</a> •
   <a href="#2-get-transcripts">API</a> •
   <a href="https://docs.vexa.ai">Docs</a> •
   <a href="#roadmap">Roadmap</a> •
@@ -114,7 +114,7 @@ Run everything including your own GPU transcription service.
 
 ## What's new
 
-**Agent Runtime (preview)**
+**Agent API (preview)**
 - **Ephemeral agent containers** — browser, agent, worker profiles with zero idle cost
 - **Agent API** — agent sessions, Claude CLI streaming, workspace sync, scheduling
 - **Scheduler** — cron, relative delays, `on_success`/`on_failure` container chaining
@@ -198,9 +198,9 @@ For Kubernetes production deployments. See [deploy/helm/README.md](deploy/helm/R
 Recording supports local filesystem, MinIO, and cloud S3-compatible backends.
 See [Recording Storage](https://docs.vexa.ai/recording-storage) for configuration details.
 
-<a id="agent-runtime"></a>
+<a id="agent-api"></a>
 
-## Agent Runtime
+## Agent API
 
 Vexa isn't just a meeting API — it's a runtime where AI agents natively understand meetings. No gluing together E2B sandboxes with Recall.ai webhooks. Meetings are a built-in primitive.
 

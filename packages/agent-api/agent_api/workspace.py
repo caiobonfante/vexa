@@ -8,9 +8,9 @@ import asyncio
 import logging
 from typing import Protocol
 
-from agent_runtime import config
+from agent_api import config
 
-logger = logging.getLogger("agent_runtime.workspace")
+logger = logging.getLogger("agent_api.workspace")
 
 
 class ExecProtocol(Protocol):

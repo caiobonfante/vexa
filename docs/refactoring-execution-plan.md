@@ -29,11 +29,11 @@ vexa/
 │   │   ├── profiles.example.yaml
 │   │   └── tests/
 │   │
-│   ├── agent-runtime/              ← AI agent framework (publishable)
+│   ├── agent-api/              ← AI agent framework (publishable)
 │   │   ├── pyproject.toml
 │   │   ├── README.md               ← "AI agent runtime" (no meeting mentions)
 │   │   ├── Dockerfile
-│   │   ├── agent_runtime/
+│   │   ├── agent_api/
 │   │   │   ├── __init__.py
 │   │   │   ├── main.py             ← FastAPI app
 │   │   │   ├── chat.py             ← SSE streaming via container exec
@@ -91,7 +91,7 @@ vexa/
 
 **What's publishable (packages/):**
 - `runtime-api` → `pip install vexa-runtime` / `docker pull vexa-runtime`
-- `agent-runtime` → `pip install vexa-agents` / `docker pull vexa-agents`
+- `agent-api` → `pip install vexa-agents` / `docker pull vexa-agents`
 - `shared-models` → `pip install vexa-models` (DB models, schemas)
 
 **What's Vexa-only (services/):**
@@ -215,9 +215,9 @@ Meeting API returns exact same response shapes:
 
 ---
 
-## Phase 3: Extract Agent Runtime
+## Phase 3: Extract Agent API
 
-### 3.1 Create packages/agent-runtime/
+### 3.1 Create packages/agent-api/
 
 Move from `services/agent-api/`:
 - Chat streaming (SSE via docker exec)
@@ -234,7 +234,7 @@ Move from `services/agent-api/`:
 ### 3.3 Agent API becomes thin Vexa wrapper
 
 ```
-services/agent-api/  → imports from packages/agent-runtime/
+services/agent-api/  → imports from packages/agent-api/
                      → adds Vexa-specific auth, config, TTS integration
 ```
 
@@ -313,7 +313,7 @@ Phase 2 ─── meeting-api creation (1 week)
    │         gateway routing change
    │         run both paths, validate
    │
-Phase 3 ─── agent-runtime extraction (3-4 days)
+Phase 3 ─── agent-api extraction (3-4 days)
    │
 Phase 4 ─── delete bot-manager (1 day)
    │

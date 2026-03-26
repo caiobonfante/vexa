@@ -1,11 +1,11 @@
-"""Tests for agent_runtime.container_manager — Runtime API delegation."""
+"""Tests for agent_api.container_manager — Runtime API delegation."""
 
 import pytest
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from agent_runtime.container_manager import ContainerManager
+from agent_api.container_manager import ContainerManager
 
 
 # ---------------------------------------------------------------------------

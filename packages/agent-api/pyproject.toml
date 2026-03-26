@@ -1,8 +1,8 @@
 [project]
-name = "agent-runtime"
+name = "agent-api"
 version = "0.1.0"
 requires-python = ">=3.11"
-description = "Generic AI agent runtime — chat streaming, workspace sync, scheduling"
+description = "AI agent API — chat streaming, workspace sync, scheduling"
 license = {text = "Apache-2.0"}
 dependencies = [
     "fastapi>=0.110",

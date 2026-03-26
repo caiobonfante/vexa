@@ -70,7 +70,7 @@ These live in `packages/` and are designed to be independently publishable with 
 | Package | Description |
 |---------|-------------|
 | [runtime-api](../packages/runtime-api/) | Generic container lifecycle API — Docker, K8s, and process backends |
-| [agent-runtime](../packages/agent-runtime/) | AI agent runtime — chat streaming, workspace sync, scheduling |
+| [agent-api](../packages/agent-api/) | AI agent runtime — chat streaming, workspace sync, scheduling |
 | [shared-models](../packages/shared-models/) | SQLAlchemy models, Pydantic schemas, DB migrations |
 
 > **Phase 0 note:** `shared-models` moved from `libs/shared-models/` to `packages/shared-models/`. All import paths updated.

@@ -1,8 +1,8 @@
-# Agent Runtime
+# Agent API
 
 ## Why
 
-Running an LLM agent inside a container is the easy part. The hard parts are everything around it: routing user messages to the right container, resuming sessions after container restarts, syncing workspace files so work survives reboots, and scheduling future jobs without a separate cron service. Every AI product that wants stateful agents in containers solves these problems from scratch. Agent Runtime packages the application layer — chat routing, sessions, workspace persistence, scheduling — so you wire it to [Runtime API](../runtime-api/) for container ops and get a complete agent backend.
+Running an LLM agent inside a container is the easy part. The hard parts are everything around it: routing user messages to the right container, resuming sessions after container restarts, syncing workspace files so work survives reboots, and scheduling future jobs without a separate cron service. Every AI product that wants stateful agents in containers solves these problems from scratch. Agent API packages the application layer — chat routing, sessions, workspace persistence, scheduling — so you wire it to [Runtime API](../runtime-api/) for container ops and get a complete agent backend.
 
 ## What
 
@@ -33,7 +33,7 @@ Requires Runtime API and Redis running alongside.
 
 ```bash
 pip install -e .
-uvicorn agent_runtime.main:app --host 0.0.0.0 --port 8100
+uvicorn agent_api.main:app --host 0.0.0.0 --port 8100
 ```
 
 ### Send a chat message
@@ -100,7 +100,7 @@ curl -X POST http://localhost:8100/api/schedule \
        │
        ▼
 ┌──────────────┐
-│ Agent Runtime │
+│ Agent API │
 │              │
 │ • chat SSE   │     ┌──────────────┐
 │ • sessions   │────▶│  Runtime API  │──▶ Docker / K8s / Process
@@ -117,7 +117,7 @@ Redis    S3/MinIO
 ### How chat works
 
 1. User sends message via `POST /api/chat`
-2. Agent Runtime ensures agent container is running (via Runtime API)
+2. Agent API ensures agent container is running (via Runtime API)
 3. Executes LLM CLI inside container via `docker exec`
 4. Streams response back as SSE events
 5. Session state saved to Redis for continuity
@@ -169,10 +169,10 @@ Fire HTTP request → target URL
 
 ## Relationship to Runtime API
 
-Agent Runtime handles the **application layer** — chat routing, sessions, workspaces, scheduling. It delegates all **container operations** (create, stop, idle management) to [Runtime API](../runtime-api/).
+Agent API handles the **application layer** — chat routing, sessions, workspaces, scheduling. It delegates all **container operations** (create, stop, idle management) to [Runtime API](../runtime-api/).
 
 ```
-Agent Runtime = what the agent does
+Agent API = what the agent does
 Runtime API   = where the agent runs
 ```
 

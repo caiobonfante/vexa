@@ -21,3 +21,8 @@
 - [research_splitsh_and_subtree_splitting.md](research_splitsh_and_subtree_splitting.md) — splitsh-lite deep dive, 5 GitHub Actions compared, auth patterns, end-to-end split+PyPI+Docker workflow
 - [research_monorepo_publishing_case_studies.md](research_monorepo_publishing_case_studies.md) — Laravel/Babel/React/Apollo publishing from monorepos: splitsh-lite, Yarn+custom, Rollup+custom, Changesets; versioning, CI, gotchas
 - [research_monorepo_subtree_splitting.md](research_monorepo_subtree_splitting.md) — Synthesized: 2 patterns (mirror repos vs registry-only), splitsh-lite status, GH Actions workflow, Python verdict
+- [research_standalone_repo_structures.md](research_standalone_repo_structures.md) — Traefik/MinIO/Loki repo layouts: root files, Makefiles, Helm placement, CI, local-vs-prod deploy patterns
+- [research_temporal_repo_structure.md](research_temporal_repo_structure.md) — temporalio/temporal deep dive: root files, Makefile (80+ targets), 3-tier docker/helm separation, CI (18 workflows), DX files
+- [research_symfony_laravel_file_level_extraction.md](research_symfony_laravel_file_level_extraction.md) — Exact file-by-file: monorepo component dir vs standalone split repo; verdict: ZERO standalone-only files, everything lives in monorepo
+- [research_helm_chart_repo_patterns.md](research_helm_chart_repo_patterns.md) — In-repo vs separate chart repo survey, OCI registry adoption, versioning, GH Actions workflow, Vexa recommendation
+- [research_oss_credibility_and_repo_structure.md](research_oss_credibility_and_repo_structure.md) — 15-project survey: minimum viable files, HN/Reddit reception patterns, Python infra layouts, testing standalone, Vexa gap analysis

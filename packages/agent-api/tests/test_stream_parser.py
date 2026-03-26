@@ -1,8 +1,8 @@
-"""Tests for agent_runtime.stream_parser — Claude CLI stream-json parsing."""
+"""Tests for agent_api.stream_parser — Claude CLI stream-json parsing."""
 
 import pytest
 
-from agent_runtime.stream_parser import parse_event
+from agent_api.stream_parser import parse_event
 
 
 class TestTextEvents:

@@ -10,9 +10,9 @@ import logging
 from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
-from agent_runtime import config
+from agent_api import config
 
-logger = logging.getLogger("agent_runtime.auth")
+logger = logging.getLogger("agent_api.auth")
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 

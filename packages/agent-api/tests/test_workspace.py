@@ -1,9 +1,9 @@
-"""Tests for agent_runtime.workspace — file sync and path safety."""
+"""Tests for agent_api.workspace — file sync and path safety."""
 
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from agent_runtime import workspace
+from agent_api import workspace
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ class TestPathValidation:
     """Test the _validate_path function from main.py that guards workspace endpoints."""
 
     def test_path_traversal_rejected(self):
-        from agent_runtime.main import _validate_path
+        from agent_api.main import _validate_path
         from fastapi import HTTPException
 
         bad_paths = [
@@ -125,7 +125,7 @@ class TestPathValidation:
             assert exc_info.value.status_code == 400, f"Expected 400 for path: {p!r}"
 
     def test_valid_paths_accepted(self):
-        from agent_runtime.main import _validate_path
+        from agent_api.main import _validate_path
 
         good_paths = [
             "file.txt",

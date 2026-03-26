@@ -6,8 +6,8 @@ recurring jobs.
 
 Usage::
 
-    from agent_runtime.scheduler import schedule_job, cancel_job, list_jobs
-    from agent_runtime.scheduler import start_executor, stop_executor
+    from agent_api.scheduler import schedule_job, cancel_job, list_jobs
+    from agent_api.scheduler import start_executor, stop_executor
 
     # Schedule an HTTP callback in 5 minutes
     job = await schedule_job(redis, {
@@ -34,9 +34,9 @@ from uuid import uuid4
 
 import httpx
 
-from agent_runtime import config
+from agent_api import config
 
-logger = logging.getLogger("agent_runtime.scheduler")
+logger = logging.getLogger("agent_api.scheduler")
 
 # Redis keys
 JOBS_KEY = "scheduler:jobs"              # Sorted set: score=execute_at, member=job_json

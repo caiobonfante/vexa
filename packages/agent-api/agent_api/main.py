@@ -22,24 +22,24 @@ from pydantic import BaseModel
 
 import redis.asyncio as aioredis
 
-from agent_runtime import config
-from agent_runtime.auth import require_api_key
-from agent_runtime.chat import (
+from agent_api import config
+from agent_api.auth import require_api_key
+from agent_api.chat import (
     clear_session,
     delete_session_meta,
     list_sessions,
     run_chat_turn,
     save_session_meta,
 )
-from agent_runtime.container_manager import ContainerManager
-from agent_runtime import scheduler
-from agent_runtime import workspace
+from agent_api.container_manager import ContainerManager
+from agent_api import scheduler
+from agent_api import workspace
 
 logging.basicConfig(
     level=config.LOG_LEVEL,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-logger = logging.getLogger("agent_runtime")
+logger = logging.getLogger("agent_api")
 
 app = FastAPI(title="Agent Runtime", version="0.1.0")
 

@@ -1,4 +1,4 @@
-"""Tests for agent_runtime.scheduler — Redis sorted-set job scheduler."""
+"""Tests for agent_api.scheduler — Redis sorted-set job scheduler."""
 
 import json
 import time
@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_runtime import scheduler
-from agent_runtime.scheduler import (
+from agent_api import scheduler
+from agent_api.scheduler import (
     EXECUTING_KEY,
     HISTORY_KEY,
     IDEMPOTENCY_PREFIX,
@@ -212,7 +212,7 @@ class TestProcessJob:
         mock_response.text = "ok"
         mock_response.request = AsyncMock()
 
-        with patch("agent_runtime.scheduler.httpx.AsyncClient") as mock_client_cls:
+        with patch("agent_api.scheduler.httpx.AsyncClient") as mock_client_cls:
             client_instance = AsyncMock()
             client_instance.request = AsyncMock(return_value=mock_response)
             client_instance.__aenter__ = AsyncMock(return_value=client_instance)
@@ -239,7 +239,7 @@ class TestProcessJob:
         mock_response.text = "ok"
         mock_response.request = AsyncMock()
 
-        with patch("agent_runtime.scheduler.httpx.AsyncClient") as mock_client_cls:
+        with patch("agent_api.scheduler.httpx.AsyncClient") as mock_client_cls:
             client_instance = AsyncMock()
             client_instance.request = AsyncMock(return_value=mock_response)
             client_instance.__aenter__ = AsyncMock(return_value=client_instance)
@@ -267,7 +267,7 @@ class TestCronReschedule:
         mock_response.text = "ok"
         mock_response.request = AsyncMock()
 
-        with patch("agent_runtime.scheduler.httpx.AsyncClient") as mock_client_cls:
+        with patch("agent_api.scheduler.httpx.AsyncClient") as mock_client_cls:
             client_instance = AsyncMock()
             client_instance.request = AsyncMock(return_value=mock_response)
             client_instance.__aenter__ = AsyncMock(return_value=client_instance)

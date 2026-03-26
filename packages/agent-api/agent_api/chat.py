@@ -9,11 +9,11 @@ import json
 import logging
 from typing import AsyncGenerator, Optional
 
-from agent_runtime import config
-from agent_runtime.container_manager import ContainerManager
-from agent_runtime.stream_parser import parse_event
+from agent_api import config
+from agent_api.container_manager import ContainerManager
+from agent_api.stream_parser import parse_event
 
-logger = logging.getLogger("agent_runtime.chat")
+logger = logging.getLogger("agent_api.chat")
 
 # Redis key prefixes for session state
 SESSION_PREFIX = "agent:session:"

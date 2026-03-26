@@ -13,9 +13,9 @@ from typing import Optional
 
 import httpx
 
-from agent_runtime import config
+from agent_api import config
 
-logger = logging.getLogger("agent_runtime.container_manager")
+logger = logging.getLogger("agent_api.container_manager")
 
 
 @dataclass
