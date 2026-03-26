@@ -221,6 +221,28 @@ shutdown() → None
 listen_events(on_exit) → None
 ```
 
+### Resource limits by backend
+
+Not all backends enforce all resource limits. This is an honest summary of what actually works:
+
+| Limit | Docker | Kubernetes | Process |
+|-------|--------|------------|---------|
+| `memory_limit` | ✅ cgroups hard limit | ✅ pod limit (OOMKill) | ⚠️ `RLIMIT_AS` — limits virtual address space, not RSS. Unreliable for languages that memory-map files. |
+| `cpu_limit` | ❌ not implemented | ✅ pod CPU limit | ❌ no POSIX equivalent to cgroups |
+| `cpu_request` | ❌ not applicable | ✅ pod CPU request (scheduling) | ❌ N/A |
+| `memory_request` | ❌ not applicable | ✅ pod memory request (scheduling) | ❌ N/A |
+| `shm_size` | ✅ Docker `--shm-size` | ✅ tmpfs volume at /dev/shm | ❌ not implemented (uses host /dev/shm) |
+| `gpu` | ❌ not implemented | ✅ via node_selector + device plugin | ❌ N/A |
+
+**Kubernetes** is the only backend with full resource enforcement. **Docker** handles memory and shm but silently ignores CPU limits. **Process** silently ignores most limits.
+
+Limits that are silently ignored are NOT errors — the container starts and runs without the constraint. If you set `cpu_limit: "500m"` on the Docker backend, the container gets unlimited CPU. There's no warning at creation time. This is a known limitation, not a bug — enforcing would mean rejecting valid requests on backends that can't express the limit.
+
+**Choose your backend based on what isolation you need:**
+- **Multi-tenant with hard limits** → Kubernetes
+- **Single-host with memory isolation** → Docker
+- **Development / Vexa Lite / no container runtime** → Process (trusted workloads only)
+
 ## Lifecycle Callbacks
 
 Pass a `callback_url` when creating a container. Runtime API POSTs to it on state transitions:
