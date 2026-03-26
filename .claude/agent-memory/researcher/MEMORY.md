@@ -1,0 +1,23 @@
+# Researcher Memory Index
+
+- [research_iac_for_runtime_containers.md](research_iac_for_runtime_containers.md) — Pulumi Automation API and CDKTF evaluation for on-demand container management (verdict: not suitable)
+- [research_sandbox_platforms_comparison.md](research_sandbox_platforms_comparison.md) — E2B, Piston, Judge0, OpenSandbox, Microsandbox, Daytona, Firecracker comparison for CaaS (verdict: keep our Runtime API)
+- [reference_caas_research.md](reference_caas_research.md) — Coder, DevPod, Gitpod, Sablier, Coolify, CapRover, Tsuru comparison for CaaS/dev-env platforms
+- [research_browser_automation_farms.md](research_browser_automation_farms.md) — Browserless, Selenium Grid 4, Moon, Selenoid, Browserbase, Steel Browser comparison for CaaS API design patterns
+- [research_coss_business_models.md](research_coss_business_models.md) — 11 COSS case studies, licensing matrix, timing/risks, FSL recommendation for Runtime API extraction
+- [research_oss_licensing_landscape_2025.md](research_oss_licensing_landscape_2025.md) — Apache/MIT/BSL/AGPL/SSPL/ELv2/FSL comparison, cloud-wrapping lessons, Fair Source, practical recs
+- [research_oss_governance_models.md](research_oss_governance_models.md) — Governance (BDFL/company/foundation), CONTRIBUTING.md, CoC, CLA vs DCO for small extracted projects
+- [research_coss_deep_dives.md](research_coss_deep_dives.md) — Docker, GitLab, Elastic, Redis, Sentry, MongoDB, HashiCorp deep dives: business models, license changes, revenue, forks, lessons
+- [research_coss_timing_and_risks.md](research_coss_timing_and_risks.md) — When to open-source (timing vs PMF), cloud-wrapping wars, fork risk analysis, meeting bot competitive landscape, infra OSS success factors
+- [research_oss_repo_structure_extraction.md](research_oss_repo_structure_extraction.md) — Separate repo vs monorepo vs subtree vs submodule vs package extraction; verdict: separate repo + PyPI for small team CaaS
+- [research_open_source_extraction_checklist.md](research_open_source_extraction_checklist.md) — Master checklist for extracting Runtime API as OSS: what to strip, pluggable patterns, strangler fig, E2B/Coolify/Airflow refs
+- [research_oss_consumption_patterns.md](research_oss_consumption_patterns.md) — 5 patterns for parent product consuming extracted OSS (verdict: microservice + upstream-first for Vexa/Runtime API)
+- [research_oss_extraction_case_studies.md](research_oss_extraction_case_studies.md) — 6 extraction case studies (React, K8s, Temporal, Kafka, Airflow, Netflix OSS): strategies, timelines, fork mgmt, mistakes
+- [research_api_extraction_patterns.md](research_api_extraction_patterns.md) — Docker/Temporal/Terraform/K8s/FastAPI/Fly API surface design: generic vs specific, plugin/profile patterns, 3-layer profile recommendation
+- [research_oss_extraction_playbook.md](research_oss_extraction_playbook.md) — Master playbook: extraction strategy, repo structure, API design, dependency direction, governance, stripping checklist
+- [research_monorepo_vs_multirepo_coss.md](research_monorepo_vs_multirepo_coss.md) — 7 COSS case studies (Supabase/Grafana/HashiCorp/Docker/Temporal/PostHog/GitLab), tooling, decision framework, Vexa recommendation
+- [research_symfony_monorepo_splitting.md](research_symfony_monorepo_splitting.md) — Symfony's splitsh-lite workflow: tooling, CI YAML, component READMEs, cross-deps, versioning, 9 gotchas
+- [research_python_monorepo_pypi_tooling.md](research_python_monorepo_pypi_tooling.md) — Python monorepo->PyPI tooling: uv workspaces, Pants, Hatch, splitsh-lite, Docker builds, 6 real projects at scale
+- [research_splitsh_and_subtree_splitting.md](research_splitsh_and_subtree_splitting.md) — splitsh-lite deep dive, 5 GitHub Actions compared, auth patterns, end-to-end split+PyPI+Docker workflow
+- [research_monorepo_publishing_case_studies.md](research_monorepo_publishing_case_studies.md) — Laravel/Babel/React/Apollo publishing from monorepos: splitsh-lite, Yarn+custom, Rollup+custom, Changesets; versioning, CI, gotchas
+- [research_monorepo_subtree_splitting.md](research_monorepo_subtree_splitting.md) — Synthesized: 2 patterns (mirror repos vs registry-only), splitsh-lite status, GH Actions workflow, Python verdict

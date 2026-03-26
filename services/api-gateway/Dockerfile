@@ -5,8 +5,8 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install shared library first
-COPY ./libs/shared-models /app/libs/shared-models
-RUN pip install --no-cache-dir /app/libs/shared-models
+COPY ./packages/shared-models /app/packages/shared-models
+RUN pip install --no-cache-dir /app/packages/shared-models
 
 # Copy application code and requirements
 COPY ./services/api-gateway/requirements.txt /app/

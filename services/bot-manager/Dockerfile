@@ -6,9 +6,9 @@ WORKDIR /app
 
 # --- Install Shared Library ---
 # Copy the shared library source code
-COPY ./libs/shared-models/ /app/libs/shared-models/
+COPY ./packages/shared-models/ /app/packages/shared-models/
 # Install the shared library so it's available to the app
-RUN pip install --no-cache-dir /app/libs/shared-models/
+RUN pip install --no-cache-dir /app/packages/shared-models/
 
 # --- Install App Dependencies ---
 # Copy the requirements file

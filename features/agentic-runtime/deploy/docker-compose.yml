@@ -210,7 +210,7 @@ services:
       - "${TC_PORT:-8060}:8000"
     volumes:
       - ../../../alembic.ini:/app/alembic.ini
-      - ../../../libs/shared-models/alembic:/app/alembic
+      - ../../../packages/shared-models/alembic:/app/alembic
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -242,7 +242,7 @@ services:
       dockerfile: services/transcription-collector/Dockerfile
     volumes:
       - ../../../alembic.ini:/app/alembic.ini
-      - ../../../libs/shared-models/alembic:/app/alembic
+      - ../../../packages/shared-models/alembic:/app/alembic
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432

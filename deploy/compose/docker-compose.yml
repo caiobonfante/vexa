@@ -136,7 +136,7 @@ services:
       start_period: 10s
     volumes:
       - ../../alembic.ini:/app/alembic.ini
-      - ../../libs/shared-models/alembic:/app/alembic
+      - ../../packages/shared-models/alembic:/app/alembic
     environment:
       - DB_HOST=${DB_HOST:-postgres}
       - DB_PORT=${DB_PORT:-5432}

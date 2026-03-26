@@ -1,5 +1,5 @@
 # Shared library dependency - REMOVED (Installed via Dockerfile RUN command)
-# -e ../../libs/shared-models
+# -e ../../packages/shared-models
 fastapi>=0.100.0
 uvicorn>=0.22.0
 websockets>=11.0.3

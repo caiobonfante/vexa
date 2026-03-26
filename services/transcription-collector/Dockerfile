@@ -5,12 +5,12 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install shared library first
-COPY ./libs/shared-models /app/libs/shared-models
+COPY ./packages/shared-models /app/packages/shared-models
 # Explicitly install the shared library from its location within the container
-RUN pip install --no-cache-dir /app/libs/shared-models
+RUN pip install --no-cache-dir /app/packages/shared-models
 
 COPY alembic.ini /app/alembic.ini
-COPY ./libs/shared-models/alembic /app/alembic
+COPY ./packages/shared-models/alembic /app/alembic
 
 # Copy application code and requirements
 # COPY ./services/transcription-collector/requirements.txt /app/ # Replaced by the line below

@@ -3,8 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Shared models (DB, auth, token_scope)
-COPY libs/shared-models /app/libs/shared-models
-RUN pip install --no-cache-dir /app/libs/shared-models
+COPY packages/shared-models /app/packages/shared-models
+RUN pip install --no-cache-dir /app/packages/shared-models
 
 COPY services/runtime-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

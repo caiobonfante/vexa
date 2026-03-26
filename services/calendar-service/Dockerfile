@@ -3,8 +3,8 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install shared library
-COPY ./libs/shared-models /app/libs/shared-models
-RUN pip install --no-cache-dir /app/libs/shared-models
+COPY ./packages/shared-models /app/packages/shared-models
+RUN pip install --no-cache-dir /app/packages/shared-models
 
 COPY ./services/calendar-service/ /app/
 

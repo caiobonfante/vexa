@@ -105,7 +105,7 @@ RUN pip3 install --no-cache-dir --upgrade pydantic>=2.0.0 && \
 RUN rm -f /tmp/requirements-*.txt
 
 # Copy shared library
-COPY libs/shared-models /app/shared-models
+COPY packages/shared-models /app/shared-models
 
 # Add shared_models to Python path (more reliable than pip install)
 ENV PYTHONPATH="/app/shared-models${PYTHONPATH:+:${PYTHONPATH}}"
@@ -138,7 +138,7 @@ COPY services/tts-service/ /app/tts-service/
 
 # Alembic migrations
 COPY alembic.ini /app/alembic.ini
-COPY libs/shared-models/alembic/ /app/alembic/
+COPY packages/shared-models/alembic/ /app/alembic/
 
 # -----------------------------------------------------------------------------
 # Node.js Bot Build
