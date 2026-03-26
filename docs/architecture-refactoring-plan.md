@@ -504,3 +504,43 @@ No big bang rewrite. Extract piece by piece while production keeps running.
 - **Selenium Grid 4** — Architectural parallel. Router → Distributor → Node = Gateway → Runtime API → backends. Capability-based selection = profile system.
 - **E2B** — Template system (Dockerfile → snapshot → fast start) mirrors profile concept.
 - **Stripe API versioning** — Expand-and-contract for schema migration. Date-based versions overkill for internal refactoring.
+
+---
+
+## Build vs Buy: Deep Validation
+
+### Research Scope
+30+ projects evaluated across 5 categories (sandboxing, browser farms, dev environments, task runners, container APIs). Two separate investigations: platform-level CaaS alternatives and SDK/library unification layers.
+
+### Verdict: Build
+
+**No unified Docker+K8s container CRUD API exists as open source.** Everyone who needs this builds their own. Our ~764-line Runtime API is the correct approach.
+
+| Category | Projects Reviewed | Best Match | Why Not |
+|----------|-------------------|------------|---------|
+| Sandboxing | E2B, Piston, Judge0, OpenSandbox, Microsandbox, Daytona | OpenSandbox (Alibaba) | 3 weeks old, injects Go daemon, no callbacks |
+| Browser farms | Selenium Grid, Browserless, Selenoid, Moon, Steel | Selenium Grid 4 | K8s only for dynamic, no Docker backend |
+| Dev environments | Coder, DevPod, Gitpod, Coolify, CapRover | Coder | AGPL license, massive overkill |
+| K8s-native | agent-sandbox (k8s-sigs) | agent-sandbox | K8s only, no Docker for local dev |
+| Libraries | Libcloud, kr8s, Dagger, Pulumi, Testcontainers | None | No library unifies Docker+K8s container CRUD |
+
+### Patterns to Adopt
+
+| Pattern | Source | Apply To |
+|---------|--------|----------|
+| `callback_url` on creation | Judge0 | Runtime API: caller passes URL, we POST on exit/fail |
+| Container groups | Sablier | Start agent + browser atomically |
+| 5 timeout taxonomy | Selenoid | idle, max, startup, creation-attempt, deletion timeouts |
+| Hot-reloadable profiles | Selenoid | `profiles.json` with SIGHUP reload |
+| `POST /renew` (extend TTL) | OpenSandbox | Complements our `/touch` endpoint |
+| SandboxTemplate CRD | agent-sandbox | Future K8s operator migration |
+| Lifecycle hooks | Nomad | prestart/poststart/poststop per profile |
+
+### SDK Recommendation
+
+Replace `kubernetes` Python client with **kr8s** (BSD-3, 955 stars, monthly releases):
+- Native async (eliminates `run_in_executor`)
+- Dict-based pod specs (no V1Pod/V1Container boilerplate)
+- Estimated K8s backend reduction: 426 → ~250 lines
+
+Keep `docker` Python SDK as-is (stable, well-documented).
