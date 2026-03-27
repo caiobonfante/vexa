@@ -881,7 +881,26 @@ async def stop_bot(
         return {"message": f"Meeting already {all_meetings[0].status}."}
 
     for meeting in non_terminal:
-        if not meeting.bot_container_id:
+        # Resolve container name: DB first, fallback to runtime API lookup
+        container_name = meeting.bot_container_id
+        if not container_name:
+            try:
+                client = _get_httpx_client()
+                resp = await client.get(
+                    f"{RUNTIME_API_URL}/containers",
+                    params={"user_id": str(current_user.id), "profile": "meeting"},
+                    timeout=10.0,
+                )
+                if resp.status_code == 200:
+                    for c in resp.json():
+                        meta = c.get("metadata") or {}
+                        if meta.get("meeting_id") == meeting.id and c.get("status") == "running":
+                            container_name = c.get("name")
+                            break
+            except Exception as e:
+                logger.warning(f"Runtime API lookup failed for meeting {meeting.id}: {e}")
+
+        if not container_name:
             success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=MeetingCompletionReason.STOPPED)
             if success:
                 await publish_meeting_status_change(meeting.id, MeetingStatus.COMPLETED.value, redis_client, platform_value, native_meeting_id, meeting.user_id)
@@ -899,7 +918,7 @@ async def stop_bot(
                 meeting.data = {}
             meeting.data["stop_requested"] = True
             await db.commit()
-            background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, 0)
+            background_tasks.add_task(_delayed_container_stop, container_name, meeting.id, 0)
             success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=MeetingCompletionReason.STOPPED)
             if success:
                 await publish_meeting_status_change(meeting.id, MeetingStatus.COMPLETED.value, redis_client, platform_value, native_meeting_id, meeting.user_id)
@@ -916,7 +935,7 @@ async def stop_bot(
 
         # Schedule delayed stop
         stop_delay = 0 if platform_value == "browser_session" else BOT_STOP_DELAY_SECONDS
-        background_tasks.add_task(_delayed_container_stop, meeting.bot_container_id, meeting.id, stop_delay)
+        background_tasks.add_task(_delayed_container_stop, container_name, meeting.id, stop_delay)
 
         # Update to STOPPING
         old_status = meeting.status

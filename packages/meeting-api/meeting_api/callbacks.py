@@ -205,14 +205,16 @@ async def bot_startup_callback(
     if meeting.status in [MeetingStatus.REQUESTED.value, MeetingStatus.JOINING.value, MeetingStatus.AWAITING_ADMISSION.value, MeetingStatus.FAILED.value]:
         success = await update_meeting_status(meeting, MeetingStatus.ACTIVE, db)
         if success:
-            meeting.bot_container_id = payload.container_id
+            if payload.container_id:
+                meeting.bot_container_id = payload.container_id
             meeting.start_time = datetime.utcnow()
             await db.commit()
             await db.refresh(meeting)
     elif meeting.status == MeetingStatus.ACTIVE.value:
-        meeting.bot_container_id = payload.container_id
-        await db.commit()
-        await db.refresh(meeting)
+        if payload.container_id:
+            meeting.bot_container_id = payload.container_id
+            await db.commit()
+            await db.refresh(meeting)
 
     if meeting.status == MeetingStatus.ACTIVE.value and old_status != MeetingStatus.ACTIVE.value:
         await publish_meeting_status_change(meeting.id, MeetingStatus.ACTIVE.value, redis_client, meeting.platform, meeting.platform_specific_id, meeting.user_id)
@@ -328,14 +330,16 @@ async def bot_status_change_callback(
                               MeetingStatus.NEEDS_HUMAN_HELP.value]:
             success = await update_meeting_status(meeting, MeetingStatus.ACTIVE, db)
             if success:
-                meeting.bot_container_id = payload.container_id
+                if payload.container_id:
+                    meeting.bot_container_id = payload.container_id
                 meeting.start_time = datetime.utcnow()
                 await db.commit()
                 await db.refresh(meeting)
         elif meeting.status == MeetingStatus.ACTIVE.value:
-            meeting.bot_container_id = payload.container_id
-            await db.commit()
-            await db.refresh(meeting)
+            if payload.container_id:
+                meeting.bot_container_id = payload.container_id
+                await db.commit()
+                await db.refresh(meeting)
             return {"status": "container_updated", "meeting_id": meeting.id, "meeting_status": meeting.status}
 
     elif new_status == MeetingStatus.NEEDS_HUMAN_HELP:
