@@ -6,26 +6,76 @@ Users want to interact with their meeting AI agent from Telegram — ask questio
 
 ## Data Flow
 
-```mermaid
-graph TD
-    TG[Telegram User] -->|message| Bot[telegram-bot :8888]
+```
+User sends message in Telegram
+    |
+    v
+telegram-bot :8888 receives Update
+    |
+    v
+auth check: do we have a cached token for this user?
+    |
+    yes → use cached token from Redis
+    no  → admin-api :8057 get_or_create_auth(telegram_id)
+              |
+              v
+          creates user if needed, mints API token
+              |
+              v
+          cache in Redis with 24h TTL
+    |
+    v
+POST /api/chat to api-gateway :8056 with X-API-Key header
+    |
+    v
+api-gateway validates token, injects X-User-ID
+    |
+    v
+agent-api :8100 receives chat request
+    |
+    v
+has active container for this user?
+    no  → runtime-api :8090 spawns agent container (Docker)
+    yes → reuse existing
+    |
+    v
+SSE stream begins: text_delta events flow back
+    |
+    v
+telegram-bot accumulates text, edits message every 1s
+    |                          (progressive: user sees typing effect)
+    |
+    v
+stream ends (done event)
+    |
+    v
+final edit_message_text with complete response + stop button
+    |
+    v
+User sees complete response in Telegram
 
-    Bot -->|get_or_create_auth| Admin[admin-api :8057]
-    Admin -->|user + token| Bot
-    Bot -->|cache token| Redis[(Redis)]
+---
 
-    Bot -->|POST /api/chat<br/>X-API-Key header| GW[api-gateway :8056]
-    GW --> Agent[agent-api :8100]
-    Agent -->|spawn container| Runtime[runtime-api :8090]
-    Agent -->|SSE stream<br/>text_delta events| Bot
+Meeting commands (/join, /stop, /transcript):
+    telegram-bot → api-gateway :8056 → meeting-api :8080
+    /join  → POST /bots with meeting URL → 201 (bot requested)
+    /stop  → DELETE /bots/{platform}/{id} → 202 (stop requested)
+    /transcript → GET /transcripts/{meeting_id} → JSON segments
 
-    Bot -->|edit_message_text<br/>progressive, 1s interval| TG
+Session commands (/new, /sessions):
+    telegram-bot → api-gateway :8056 → agent-api :8100
+    /new      → POST /api/sessions → new session, reset context
+    /sessions → GET /api/sessions → list with timestamps
 
-    Bot -->|/join, /stop, /transcript| GW
-    GW -->|bot lifecycle| Meeting[meeting-api :8080]
-    GW -->|transcripts| TC[transcription-collector]
+Error handling:
+    403 from gateway → _invalidate_token() → retry once with fresh token
+    API timeout      → "Sorry, the agent is not responding" to user
+    Stream breaks    → partial response shown, error message appended
 
-    Ext[External trigger] -->|POST /internal/trigger :8200| Bot
+Group chat:
+    message without @mention or reply-to-bot → ignored
+    @mention → strip bot name from text, process normally
+    reply to bot message → process normally
 ```
 
 ## Code Ownership

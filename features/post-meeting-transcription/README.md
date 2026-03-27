@@ -6,29 +6,87 @@ Meetings produce recordings and speaker events, but raw audio isn't useful — u
 
 ## Data Flow
 
-```mermaid
-graph TD
-    Meeting[Meeting in progress] --> Bot[vexa-bot]
+```
+DURING MEETING (automatic, no user action):
 
-    Bot -->|webm audio| MinIO[(MinIO)]
-    Bot -->|SPEAKER_START/END events| BM[bot-manager]
-    BM -->|store events| DB[(Postgres<br/>meeting.data JSONB)]
+vexa-bot joins meeting via Playwright
+    |
+    v
+captures per-speaker audio streams (ScriptProcessorNode)
+    |                              |
+    v                              v
+audio chunks → recording       speaker events collected from DOM
+    |          (webm format)       |
+    v                              v
+upload to MinIO               bot exits → POST callback to bot-manager
+                                   |
+                                   v
+                              store SPEAKER_START/END events
+                              in meeting.data JSONB (Postgres)
 
-    User[User / Dashboard] -->|POST /meetings/id/transcribe| GW[api-gateway :8056]
-    GW --> BM
+---
 
-    BM -->|download webm| MinIO
-    BM -->|ffmpeg convert → WAV| TX[transcription-service]
-    TX -->|segments| BM
-    BM -->|map speakers to segments| BM2[_map_speakers_to_segments]
-    BM2 -->|INSERT| DB2[(Postgres<br/>transcriptions table)]
+AFTER MEETING (user triggers):
 
-    Dashboard[Dashboard :3001] -->|GET /transcripts| GW
-    GW --> TC[transcription-collector]
-    TC --> DB2
+User clicks "Transcribe" in Dashboard (or API call)
+    |
+    v
+POST /meetings/{id}/transcribe → api-gateway :8056 → bot-manager
+    |
+    v
+already transcribed?
+    yes → 409 Conflict (no re-transcription, no versioning)
+    no  → continue
+    |
+    v
+download webm recording from MinIO
+    |
+    v
+ffmpeg convert webm → WAV (required for Whisper)
+    |
+    v
+POST WAV to transcription-service (faster-whisper)
+    |
+    v
+result: segments[] with text, timestamps, language
+    |
+    v
+_map_speakers_to_segments():
+    for each segment:
+        find speaker events that overlap segment's time range
+        pick speaker with most overlap
+        |
+        segment.start/end overlaps no events? → speaker = "Unknown"
+        segment is very short (1 word)?       → often "Unknown" (known issue)
+        rapid speaker turn?                   → may misattribute (event boundary lag)
+    |
+    v
+INSERT mapped segments into Postgres transcriptions table
+    status = "completed"
 
-    Dashboard -->|audio stream| MinIO
-    Dashboard -->|click segment → seek audio| Playback[Audio Player]
+---
+
+SERVING (dashboard playback):
+
+Dashboard :3001
+    |
+    v
+GET /transcripts/{meeting_id} → api-gateway :8056 → transcription-collector
+    |                                                      |
+    v                                                      v
+display segments with speaker names              query Postgres
+    |
+    v
+audio player loads recording URL from MinIO
+    |
+    v
+user clicks a segment
+    |
+    v
+seek audio to segment.start_time
+    |
+    known issue: duration_seconds=null on some recordings → seek may break
+    known issue: very long segments (confirmation failure) → wrong seek position
 ```
 
 ## Code Ownership

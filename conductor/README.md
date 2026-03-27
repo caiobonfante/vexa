@@ -8,38 +8,101 @@ The conductor keeps agents running, focused, and honest. It reads the manifest (
 
 ## Data Flow
 
-```mermaid
-graph TD
-    User[User in chat] -->|describe mission| Claude[Claude Code session]
-    Claude -->|write| Mission[conductor/missions/name.md]
+```
+User describes mission in chat (or writes conductor/missions/{name}.md)
+    |
+    v
+run.sh --mission {name}
+    |
+    v
+worktree exists for this mission?
+    no  → git worktree add .worktrees/{name}/ (isolated branch)
+          copy conductor scripts + mission file into worktree
+    yes → reuse existing
+    |
+    v
+read mission.md → extract focus, target, stop-when
+    |
+    v
+ITERATION LOOP (repeats until done, plateau, or limit):
+    |
+    v
+    read state.json → current iteration, scores, last evaluation
+    |
+    v
+    plateau detected? (same scores for 3+ iterations)
+        yes → inject PLATEAU ALERT into orchestrator prompt
+        no  → continue
+    |
+    v
+    last evaluation was REJECTED?
+        yes → inject rejection context into prompt
+        no  → continue
+    |
+    v
+    spawn orchestrator: claude -p --append-system-prompt-file (feature README.md)
+        |
+        v
+    orchestrator reads README.md (system design), mission.md (objective)
+        |
+        v
+    diagnose → fix → verify (autonomous, no human)
+        |
+        v
+    stream-json events → batches/stream-N.jsonl (live, every tool call)
+        |
+        v
+    parse-stream.py extracts:
+        batches/batch-N.log   ← activity log (▶ BASH, ◀ READ, ✎ EDIT)
+        batches/meta-N.json   ← cost, tokens, turns, files changed
+    |
+    v
+    snapshot scores: check-completion.py reads all findings.md
+        → update state.json with current scores
+    |
+    v
+    spawn evaluator: claude -p --agent evaluator
+        |
+        v
+    evaluator checks:
+        did scores actually move? (git diff findings.md)
+        is there execution evidence? (command + stdout, not prose)
+        did anything regress? (compare score snapshots)
+        constraints violated? (cross-service imports, ownership)
+        |
+        v
+    writes evaluator-verdict.md → ACCEPT or REJECT with evidence
+    |
+    v
+    check completion:
+        mission target met?     → STOP: mission accomplished
+        iteration limit hit?    → STOP: limit reached
+        stop signal file exists? → STOP: user halted
+        none of the above?      → LOOP: next iteration
 
-    Mission --> Run[run.sh]
-    Run -->|git worktree add| WT[.worktrees/name/]
-    Run -->|--append-system-prompt-file| Orch[claude -p<br/>Orchestrator]
+---
 
-    Orch -->|read| Manifest[feature README.md<br/>system design]
-    Orch -->|diagnose + fix + verify| Code[Codebase]
-    Orch -->|update| Findings[features/tests/findings.md]
-    Orch -->|stream events| Stream[batches/stream-N.jsonl]
+dashboard.py :8899 (runs in background, serves web UI):
+    reads: state.json, meta-N.json, batch-N.log, conductor.log, verdict
+    serves: /api/dashboard (JSON), /api/batch/{name}, /api/logs/{name}
+    auto-refreshes every 5s
+    click mission → see activity log + evaluator verdict + conductor log
 
-    Stream --> Parser[parse-stream.py]
-    Parser --> Log[batches/batch-N.log<br/>activity log]
-    Parser --> Meta[batches/meta-N.json<br/>cost, tokens, turns]
+---
 
-    Run -->|after batch| Eval[claude -p<br/>Evaluator]
-    Eval -->|read findings diff| Findings
-    Eval -->|check constraints| Manifest
-    Eval -->|write| Verdict[evaluator-verdict.md]
-
-    Run -->|snapshot scores| Check[check-completion.py]
-    Check -->|read all| AllFindings[features/*/tests/findings.md]
-    Check -->|update| State[conductor/state.json]
-
-    State --> Dash[dashboard.py :8899]
-    Log --> Dash
-    Meta --> Dash
-    Verdict --> Dash
-    Dash --> Browser[Web Dashboard]
+MERGE (after mission complete):
+    run.sh --merge {name}
+        |
+        v
+    pre-merge gate:
+        1. evaluator verdict = ACCEPTED?
+        2. mission focus matches changed files?
+        3. no cross-service import violations?
+        4. tests pass?
+        5. no score regressions?
+        |
+        all pass → merge branch into main, clean up worktree
+        any fail → BLOCKED, show what failed
 ```
 
 ## Code Ownership
@@ -95,13 +158,39 @@ Design enforcement via manifest       0   manifests exist, not wired to evaluato
 
 ## Documentation Flow
 
-```mermaid
-graph LR
-    M[README.md<br/>what SHOULD be true] -->|agent reads| Code[code changes<br/>what IS now true]
-    Code -->|agent verifies| F[findings.md<br/>what we proved]
-    Code -->|agent generates| R[README.md<br/>what users read]
-    M -.->|evaluator checks| Code
-    M -.->|drift check| R
+```
+Agent starts a mission
+    |
+    v
+read feature README.md ← this is the design intent (what SHOULD be true)
+    |
+    v
+diagnose what's broken (compare README claims vs actual code behavior)
+    |
+    v
+fix code to match README's quality bar
+    |
+    v
+run tests, capture evidence (command + stdout)
+    |
+    v
+update findings.md with evidence and new scores
+    |
+    v
+did the code change what the feature does?
+    yes → update README.md:
+            Why section   ← stays (design intent, rarely changes)
+            Data Flow     ← update if architecture changed
+            Quality Bar   ← update current values
+            Certainty     ← update scores + evidence
+            Known Issues  ← add/remove as discovered
+    no  → README stays as-is
+    |
+    v
+evaluator checks:
+    did code respect README constraints?
+    does README still match code?
+    any drift? → flag it, next iteration fixes it
 ```
 
 **Order of operations** — every mission follows this:
