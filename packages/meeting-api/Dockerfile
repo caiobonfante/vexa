@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps
-COPY requirements.txt .
+COPY packages/meeting-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy admin models (auth, token_scope)
