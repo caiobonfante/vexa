@@ -9,21 +9,21 @@
 | Bot joins real meeting | 95 | **G5 re-proved:** Bot joined real Google Meet (bjw-ujaj-zpf) via new meeting-api path. Callbacks: joining → awaiting_admission → active all fired. Prior evidence (3 meetings: cxi-ebnp-ixk, hcx-qgnx-dre, kpw-ccvz-umz) also used same bot code. | 2026-03-27 | Test locked meetings requiring host admission |
 | Bot joins mock (3 speakers) | 0 | **Path verified, mock HTML missing.** Bot creation via meeting-api verified: bot 22 spawned, container initialized (VAD, TranscriptionClient, SegmentPublisher), joining callback fired to meeting-api. But `google-meet.html` mock does not exist in `mocks/` dir (only `zoom.html`), and `mock.dev.vexa.ai` returns 404. Cannot run 3-speaker mock test without the mock HTML. Prior evidence (3 speakers locked at 100%) used bot code that is unchanged. | 2026-03-27 | Create `mocks/google-meet.html` with pre-join screen, name input, participant tiles, and 3 audio sources |
 | Admission detection | 90 | **G5 re-proved:** awaiting_admission → active callback fired on real Google Meet (bjw-ujaj-zpf). Bot code unchanged — same "Leave call" button detection logic. | 2026-03-27 | Test locked meetings requiring host admission |
-| Media element discovery | 95 | **Code unchanged, needs re-test to confirm.** ScriptProcessor audio capture code unchanged. G5 transcription success (3 Whisper calls, 2 confirmed segments) implies media elements found and audio captured. Prior: 3 elements in 3 meetings, paused=false, readyState=4. | 2026-03-27 | Test with varying participant counts (5, 10+) |
+| Media element discovery | 95 | **Multi-speaker TTS test (meeting 21, 5 participants).** 3 media elements found with audio, all 3 streams captured audio from 4 speakers (SFU multiplexing). Confirmed with 5 participants (recorder + 3 TTS + 1 human). | 2026-03-27 | Test with 10+ participants |
 | Speaker identity locks (TTS) | 60 | **TTS multi-speaker test (meeting 21, 2026-03-27).** 3 TTS voices (alloy/Amy, echo/Danny, fable/Joe) sent via speak API. All 3 synthesized and played successfully. speaker-1 track got name changes tracked (Alice Johnson → Vexa G5 Bot → Bob Smith → Charlie Davis) — 5/16 segments attributed. speaker-2 track (9/16 segments) never got a name assigned — empty speaker field. Prior mock test (3/3 locked at 100%) was in controlled environment; live meeting shows partial attribution. | 2026-03-27 | Fix speaker-2 identity gap — CSRC upgrade or DOM polling improvement |
 | Speaker identity locks (human) | 50 | **Live multi-speaker test (meeting 21, 2026-03-27).** Dmitriy Grankin (real human) correctly identified on speaker-0: 2/2 segments attributed. speaker-1 tracked bot name changes. speaker-2 (9 segments) has no speaker attribution. 4 unique speaker entities detected (Dmitriy Grankin, Bob Smith, Charlie Davis, + unnamed). Human speaker locking works but 56% of segments unattributed overall. | 2026-03-27 | **CSRC upgrade:** `getContributingSources()` provides instant identity — see backlog below |
 | Multi-track dedup | 40 | **Live test shows track issue.** speaker-2 is a separate audio track that never gets speaker identity. Content on speaker-2 includes TTS playback that overlaps with speaker-1 content. Not a dedup issue per se — it's a track that lacks identity. | 2026-03-27 | **CSRC upgrade:** CSRC changes instantly when SFU remaps stream — see backlog below |
-| Audio reaches TX service | 90 | **G5 re-proved:** Whisper transcription: 3 calls, 125ms avg latency. Audio successfully sent from bot to transcription-service via HTTP POST. | 2026-03-27 | — |
+| Audio reaches TX service | 95 | **Multi-speaker TTS test (meeting 21).** 53 Whisper calls, 199ms avg latency, 0 failed. Audio from 3 TTS bots (Alice, Bob, Charlie) + 1 human (Dmitriy) all transcribed. All 9 scripted utterances returned non-empty text. | 2026-03-27 | — |
 | Transcription content | 90 | **Multi-speaker TTS test (meeting 21, 2026-03-27).** 16 confirmed segments: 2 Russian (Dmitriy Grankin, real speech), 14 English (TTS-generated). Whisper accurately transcribed TTS output — text matches sent scripts exactly (e.g., "Thanks, Alice. The mobile team completed the user authentication flow last week."). 3 Piper voices (Amy/Danny/Joe) all produced intelligible audio. Russian + English multi-language within same meeting. | 2026-03-27 | — |
 | WS delivery | 90 | **G5 WS verified:** WebSocket connection to `ws://localhost:8056/ws?api_key=...` succeeded. Subscribe payload `{action: "subscribe", meetings: [{platform: "google_meet", native_id: "bjw-ujaj-zpf"}]}` returned `{type: "subscribed", meetings: [{platform: "google_meet", native_id: "bjw-ujaj-zpf"}]}`. No live messages (meeting idle at time of test). Prior: 22 live messages, 3 speakers, mutable→completed flow. | 2026-03-27 | Test during active speech for live segment delivery |
-| REST /transcripts | 95 | **G5 REST verified:** `GET /transcripts/google_meet/bjw-ujaj-zpf` returns meeting 21 with 2 segments. Both segments: speaker="Dmitriy Grankin", language="ru", completed=true, with absolute timestamps. REST output matches Postgres exactly (2 rows, same speaker/text/language). Full pipeline: db_writer → Postgres → gateway REST read path confirmed. | 2026-03-27 | — |
-| GC prevention | 95 | **Code unchanged, needs re-test to confirm.** `window.__vexaAudioStreams` fix in bot code — unchanged. Prior: 324 onSegmentReady calls confirmed. | 2026-03-16 20:15 | — |
-| Confirmation logic | 65 | **Code unchanged, needs re-test to confirm.** LocalAgreement-2 prefix logic unchanged. G5: 2 confirmed segments from real speech — confirmation DID trigger (improvement over prior confirmation failures). 9/9 unit tests still pass. Replay still blocked — data/raw/ absent. | 2026-03-27 | Run replay with fresh data; add unit test for prefix path |
-| VAD (Silero) loads and filters | 90 | **G5 re-proved:** VAD: 79 chunks checked, 65 rejected — active filtering confirmed with real speech. Silero model loads and performs silence rejection effectively (82% rejection rate on real meeting audio). | 2026-03-27 | — |
+| REST /transcripts | 95 | **Multi-speaker TTS test (meeting 21).** `GET /transcripts/google_meet/bjw-ujaj-zpf` returns 16 segments. Speakers: Dmitriy Grankin (2), Bob Smith (4), Charlie Davis (1), unnamed (9). REST matches Postgres exactly. Multi-language (ru+en) in same meeting. | 2026-03-27 | — |
+| GC prevention | 95 | **Multi-speaker TTS test confirms.** Bot ran 30+ min with 53 Whisper calls, 648 VAD chunks — audio capture never stopped. `window.__vexaAudioStreams` fix prevents GC. | 2026-03-27 | — |
+| Confirmation logic | 80 | **Multi-speaker TTS test (meeting 21).** 44 drafts → 16 confirmed, 1 discarded. Confirmation triggered reliably for all 9 scripted utterances. Average confirm latency 11.8s. LocalAgreement-2 prefix algorithm working correctly with live TTS audio across 3 speakers. | 2026-03-27 | Run replay with fresh data; test with overlapping speech |
+| VAD (Silero) loads and filters | 95 | **Multi-speaker TTS test (meeting 21).** 648 chunks checked, 330 rejected (50.9% during active speech period). Correctly passed speech and rejected silence across 3 TTS speakers + 1 human. Silero model stable over 30+ min session. | 2026-03-27 | — |
 
-**Overall: 78/100** — TTS multi-speaker validation (meeting 21, 2026-03-27). Full speaking-bot pipeline verified end-to-end: speak API → TTS service (Piper, 3 voices) → PulseAudio → meeting audio → Whisper transcription → Redis → Postgres. 16 confirmed segments from 4 detected speakers. Transcription content accuracy excellent (TTS text matches exactly). **Key gap:** speaker-2 audio track (9/16 segments, 56%) has no speaker attribution — speaker identity voting only works for speaker-1 track where Google Meet display name changes are tracked. Speaker identity (TTS) dropped from 90→60 due to this live-meeting gap vs prior mock-only evidence.
+**Overall: 79/100** — Multi-speaker TTS validation (meeting 21, 2026-03-27). 3 TTS bots (Alice, Bob, Charlie) + 1 human (Dmitriy) in real Google Meet. 9 scripted utterances sent via TTS, all transcribed nearly verbatim. 53 Whisper calls (199ms avg, 0 failed), 16 confirmed segments, all persisted to Postgres, all returned via REST. **Key gap:** Track 2 locked to "Alice Johnson" but speaker name is empty on all 9 track-2 segments — speaker identity lock not applied to published segments. Track 1 (dynamic, not locked) correctly identifies Bob Smith and Charlie Davis per-segment. **Bug:** permanent lock doesn't propagate to segment speaker field.
 
-**To reach 90:** (1) Fix speaker-2 identity gap — either CSRC upgrade (`getContributingSources()`) or improved DOM polling to associate all tracks. (2) Create `mocks/google-meet.html` for repeatable testing. (3) Test WS during active speech. (4) Collect fresh data for replay tests.
+**To reach 90:** (1) Fix speaker name propagation bug — locked track should apply locked name to segments. (2) CSRC upgrade for instant identity without voting. (3) Create `mocks/google-meet.html` for repeatable testing. (4) Test WS during active speech for live segment delivery.
 
 ## Backlog: CSRC-Based Speaker Identity (research complete, not implemented)
 
@@ -46,6 +46,30 @@
 
 **Not started.** No code changes yet. This is a future improvement, not a blocker.
 
+## Multi-speaker TTS test (2026-03-27 14:54)
+
+**Setup:** Meeting 21 (bjw-ujaj-zpf). Recorder bot (meeting 21, transcribe=true). 3 TTS bots: Alice (23), Bob (24), Charlie (25), transcribe=false. Human host: Dmitriy Grankin.
+
+**Script:** 9 sequential utterances (Alice×3, Bob×3, Charlie×3) with 10-14s pauses. Sent via Redis PUBLISH `bot_commands:meeting:{id}` → `{"action":"speak","text":"..."}`.
+
+**Results:**
+- 53 Whisper calls, 199ms avg, 0 failed
+- 44 drafts → 16 confirmed, 1 discarded
+- Confirm latency: 11.8s avg
+- VAD: 648 checked, 330 rejected (50.9% — good ratio during active speech)
+
+**Segment Attribution:**
+
+| Track | Lock | Segments | Speaker in DB | Correct? |
+|-------|------|----------|--------------|----------|
+| speaker-0 | Dmitriy Grankin (LOCKED 100%) | 2 | Dmitriy Grankin | YES (2/2) |
+| speaker-1 | NOT locked (dynamic) | 5 | Bob Smith (4), Charlie Davis (1) | YES (5/5) |
+| speaker-2 | Alice Johnson (LOCKED 100%) | 9 | (empty) | NO — lock exists but name not applied |
+
+**Bug found:** Track 2 locked to "Alice Johnson" via `LOCKED PERMANENTLY (2/2 votes, 100%)` but published segments have empty speaker field. The permanent lock's speaker name is not propagated to the segment when it gets confirmed and published. Track 1 (not locked) correctly identifies speakers per-segment via dynamic voting.
+
+**SFU behavior observed:** Google Meet SFU muxes 3 audio streams for all participants. Track 2 carried: Alice (utterances 1,4,7), Charlie (3,5), Bob test phrase, and continuation segments. Track 1 carried: Bob (2,6,9), Charlie (8). The SFU dynamically remaps who is on which stream.
+
 ## Bugs found and fixed
 
 ### 1. False-positive waiting room selectors (2026-03-17)
@@ -64,6 +88,13 @@
 **File:** `vad.ts` — added `/app/vexa-bot/core/node_modules/@jjhbw/silero-vad/weights/silero_vad.onnx` to candidate paths (line 47). Previously only had relative paths from `__dirname` which resolved incorrectly in `dist/services/` at runtime. Now uses 4-candidate search: two relative, one absolute, one fallback.
 **Found by:** Bot logs showing `VAD not available (Silero VAD model not found)`
 **Verified:** Bot 8806 logs `[VAD] Silero model loaded`, 3 speakers transcribed successfully.
+
+### 5. Locked track speaker name not applied to segments (2026-03-27) — NOT FIXED
+**File:** Speaker identity / SegmentPublisher code path
+**Symptom:** Track 2 locked to "Alice Johnson" (LOCKED PERMANENTLY, 2/2 votes, 100%), but all 9 confirmed segments on track 2 have empty speaker field in both bot logs and Postgres.
+**Found by:** Multi-speaker TTS test (meeting 21)
+**Impact:** 56% of segments (9/16) missing speaker attribution despite correct lock
+**Hypothesis:** The lock updates the identity mapping, but the segment publisher reads the speaker name from a different source (e.g., current DOM polling rather than the lock table). Track 1 (not locked) gets speaker names from per-segment dynamic voting, which works.
 
 ## WS delivery test (2026-03-17 10:29)
 
@@ -155,7 +186,7 @@ Full comparison was documented in `services/vexa-bot/tests/mock-meeting/real-mee
 | Real meeting (1 participant, no mic) | Yes | PASS (join+admission), N/A (transcription) |
 | Real meeting (2+ participants, with mic) | Yes | PASS (partial) — meeting 21: 1 human (Dmitriy Grankin) + TTS bots. 16 segments transcribed, 4 speakers detected. Speaker-2 track (9 segments) has no attribution. |
 | Real meeting (locked, requires admission) | No | — |
-| Real meeting (5+ participants) | No | — |
+| Real meeting (5 participants, TTS scripted) | Yes | PASS (pipeline) — meeting 21: 5 participants (1 human + 3 TTS + 1 recorder). 9 scripted utterances all transcribed. 7/16 segments attributed, 9/16 empty speaker (track 2 bug). Text accuracy excellent. |
 | Real meeting (screen sharing active) | No | — |
 | Real meeting (participant joins/leaves mid-meeting) | No | — |
 | Different meeting URLs (various xxx-yyyy-zzz) | Yes | PASS — 3 URLs tested: cxi-ebnp-ixk, hcx-qgnx-dre, kpw-ccvz-umz. All joined, admitted, completed lifecycle. |
