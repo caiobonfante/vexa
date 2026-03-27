@@ -6,6 +6,8 @@ and an httpx.AsyncClient wired to the FastAPI app with all deps overridden.
 
 # --- Environment must be set BEFORE any shared_models import ---
 import os
+import sys
+from pathlib import Path
 
 os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("DB_PORT", "5432")
@@ -14,6 +16,12 @@ os.environ.setdefault("DB_USER", "test_user")
 os.environ.setdefault("DB_PASSWORD", "test_pass")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("ADMIN_TOKEN", "test-admin-secret")
+
+# Ensure libs/admin-models is importable (needed by collector modules)
+_repo = Path(__file__).resolve().parent.parent.parent.parent
+_admin_models_path = str(_repo / "libs" / "admin-models")
+if _admin_models_path not in sys.path:
+    sys.path.insert(0, _admin_models_path)
 
 import json
 from datetime import datetime, timezone
