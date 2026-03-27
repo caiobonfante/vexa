@@ -659,3 +659,72 @@ The conductor can now enforce service boundaries because:
 No feature scores changed — this was documentation-only. The improvement is structural: the conductor can now validate that code changes respect service boundaries.
 
 **Mission verdict: COMPLETE.** Target met in 1 iteration. All 4 directories have structured READMEs with all 5 required sections.
+
+## Conductor iteration 9: 2026-03-28 — Meeting-aware agent implementation (iteration 1/5)
+
+**Mission:** meeting-aware-agent — agent has no knowledge of user's active meetings. Gateway injects active meeting context into agent-api.
+**Target:** Score >= 90 (real meeting with bot + Telegram chat where agent knows what's happening)
+**Constraint:** Gateway owns injection, agent-api never calls meeting-api. Use existing endpoints. No new DB tables.
+**Approach:** Solo orchestrator — diagnose, implement, deploy, test.
+
+### Diagnosis
+
+Traced the full chain:
+- **Gateway** (1638 lines): Proxies to meeting-api, transcription-collector, admin-api — but NOT to agent-api. No /api/chat or /api/sessions routes.
+- **Agent-API** (chat.py): Has `context_prefix` param in `run_chat_turn()` — perfect injection hook, currently unused from endpoint.
+- **Meeting-API**: `GET /bots/status` returns `{"running_bots":[]}` — works.
+- **Transcription-Collector**: `GET /transcripts/{platform}/{id}` returns segments — works (67 segments for real meeting chk-vjqv-zms).
+- **Redis**: Both gateway and agent-api have access.
+
+### Implementation (3 files changed)
+
+| File | Change |
+|------|--------|
+| `packages/agent-api/agent_api/chat.py` | `save_session_meta` accepts `meeting_aware` param. New `get_session_meta` function. |
+| `packages/agent-api/agent_api/main.py` | `SessionCreateRequest` gets `meeting_aware: bool`. Chat endpoint reads `X-Meeting-Context` header → passes as `context_prefix`. New `_format_meeting_context` helper. |
+| `services/api-gateway/main.py` | Add `AGENT_API_URL` env var. Add `_build_meeting_context()` middleware. Add 7 agent-api proxy routes (`/api/chat`, `/api/sessions/*`). Chat proxy does streaming SSE + meeting context injection. |
+
+### Deployment
+
+- Built agent-api image from worktree: `docker build -t agent-api:latest -f packages/agent-api/Dockerfile .`
+- Built gateway image from worktree: `docker build -t vexa-restore-api-gateway -f services/api-gateway/Dockerfile .`
+- Restarted agent-api-live container with new image
+- Restarted api-gateway container with `AGENT_API_URL=http://172.24.0.1:8100`
+- Both healthy: agent-api 8100 ✅, gateway 8056 ✅
+
+### Test Results (8 tests)
+
+| # | Test | Result |
+|---|------|--------|
+| 1 | Session with meeting_aware=true | ✅ `{"meeting_aware":true}` returned |
+| 2 | Flag in Redis | ✅ `{"meeting_aware": true}` in HMAP |
+| 3 | Gateway proxies /api/sessions | ✅ Auth works, route exists |
+| 4 | GET /bots/status | ✅ `{"running_bots":[]}` |
+| 5 | Chat SSE through gateway | ✅ Streaming works (agent CLI error is pre-existing) |
+| 6 | X-Meeting-Context header parsing | ✅ Agent-api processes header |
+| 7 | Prompt file with meeting context | ✅ **KEY:** Full context with participants + transcript in /tmp/.chat-prompt.txt |
+| 8 | Non-meeting-aware session | ✅ `meeting_aware: false` |
+
+### Score change
+
+| Feature | Before | After | Evidence |
+|---------|--------|-------|----------|
+| meeting-aware-agent | 0 | 60 | API layer validated: session flag, header parsing, context formatting, prompt injection |
+
+### Blockers for 80+
+
+1. **No active meeting bot** — /bots/status returns empty. Need real Teams meeting with bot for gateway to fetch real context.
+2. **Agent CLI not authenticated** — Claude Code in container returns "Not logged in". Pre-existing infra issue.
+3. **Worktree deleted** — Git worktree accidentally removed during compose operations. Code changes preserved in running containers and `implementation-patch.md`. Need recreate worktree + re-commit.
+
+### What iteration 2 needs
+
+1. Recreate worktree, re-apply and commit code changes
+2. Host Teams meeting with auto-admit
+3. Send bot to meeting, wait for transcript
+4. Test full gateway injection chain with active bot
+5. Fix agent CLI authentication in container
+6. Score 80: agent references meeting content via API
+7. Score 90: same via Telegram
+
+**Iteration 1 verdict: PARTIAL.** API layer works (score 60). Need active meeting + authenticated agent for 80+.

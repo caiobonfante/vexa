@@ -1,6 +1,6 @@
 import uvicorn
 from fastapi import FastAPI, Request, Response, HTTPException, status, Depends, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import APIKeyHeader
@@ -36,6 +36,7 @@ BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL")
 TRANSCRIPTION_COLLECTOR_URL = os.getenv("TRANSCRIPTION_COLLECTOR_URL")
 MCP_URL = os.getenv("MCP_URL")
 CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")  # Optional — calendar-service
+AGENT_API_URL = os.getenv("AGENT_API_URL")  # Optional — agent-api for chat
 
 # Public share-link settings (for "ChatGPT read from URL" flows)
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")  # Optional override, e.g. https://api.vexa.ai
@@ -936,6 +937,217 @@ async def forward_admin_request(request: Request, path: str):
     admin_path = f"/admin/{path}" 
     url = f"{ADMIN_API_URL}{admin_path}"
     return await forward_request(app.state.http_client, request.method, url, request)
+
+# --- Agent API Routes (chat, sessions) ---
+
+async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optional[str]:
+    """Fetch active meeting context for a user. Returns JSON string or None."""
+    try:
+        # Get running bots for this user
+        resp = await client.get(
+            f"{BOT_MANAGER_URL}/bots/status",
+            headers={"x-user-id": str(user_id)},
+            timeout=5.0,
+        )
+        if resp.status_code != 200:
+            return None
+        bots_data = resp.json()
+        running_bots = bots_data.get("running_bots", [])
+        if not running_bots:
+            return None
+
+        active_meetings = []
+        for bot in running_bots:
+            platform = bot.get("platform")
+            meeting_id = bot.get("native_meeting_id")
+            if not platform or not meeting_id:
+                continue
+
+            # Fetch transcript segments
+            segments = []
+            try:
+                t_resp = await client.get(
+                    f"{TRANSCRIPTION_COLLECTOR_URL}/transcripts/{platform}/{meeting_id}",
+                    headers={"x-user-id": str(user_id)},
+                    timeout=5.0,
+                )
+                if t_resp.status_code == 200:
+                    t_data = t_resp.json()
+                    all_segments = t_data.get("segments", [])
+                    segments = all_segments[-50:]  # latest 50 segments max
+            except Exception:
+                pass
+
+            participants = list(set(
+                s.get("speaker", "") for s in segments if s.get("speaker")
+            ))
+            active_meetings.append({
+                "meeting_id": meeting_id,
+                "platform": platform,
+                "status": bot.get("normalized_status", "active"),
+                "participants": participants,
+                "latest_segments": [
+                    {
+                        "speaker": s.get("speaker", "Unknown"),
+                        "text": s.get("text", ""),
+                        "timestamp": str(s.get("absolute_start_time") or s.get("start_time") or s.get("start", "")),
+                    }
+                    for s in segments
+                ],
+            })
+
+        if not active_meetings:
+            return None
+        return json.dumps({"active_meetings": active_meetings})
+    except Exception as e:
+        logger.warning(f"Meeting context fetch failed for user {user_id}: {e}")
+        return None
+
+
+@app.post("/api/chat",
+          tags=["Agent"],
+          summary="Send a message to the AI agent (SSE stream)",
+          description="Forwards chat to agent-api. If session is meeting_aware, injects active meeting context.",
+          dependencies=[Depends(api_key_scheme)])
+async def agent_chat_proxy(request: Request):
+    """Forward chat to agent-api with meeting context injection."""
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+
+    body = await request.body()
+    extra_headers = {}
+
+    # Parse body to check meeting_aware session
+    try:
+        data = json.loads(body)
+        user_id = data.get("user_id", "")
+        session_id = data.get("session_id")
+
+        if user_id and session_id:
+            redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
+            if redis_client:
+                meta_raw = await redis_client.hget(f"agent:sessions:{user_id}", session_id)
+                if meta_raw:
+                    meta = json.loads(meta_raw)
+                    if meta.get("meeting_aware"):
+                        # Resolve internal user_id from API key
+                        client_key = request.headers.get("x-api-key")
+                        internal_uid = user_id
+                        if client_key:
+                            user_data = await _resolve_token(app.state.http_client, client_key)
+                            if user_data:
+                                internal_uid = str(user_data["user_id"])
+                        context = await _get_meeting_context(app.state.http_client, internal_uid)
+                        if context:
+                            extra_headers["x-meeting-context"] = context
+    except Exception as e:
+        logger.warning(f"Meeting context injection error: {e}")
+
+    # Build forwarding headers
+    excluded = {"host", "content-length", "transfer-encoding"}
+    headers = {k.lower(): v for k, v in request.headers.items() if k.lower() not in excluded}
+    for h in ["x-user-id", "x-user-scopes", "x-user-limits"]:
+        headers.pop(h, None)
+
+    # Auth: inject identity headers
+    client_key = headers.get("x-api-key")
+    if client_key:
+        user_data = await _resolve_token(app.state.http_client, client_key)
+        if user_data:
+            headers["x-user-id"] = str(user_data["user_id"])
+            headers["x-user-scopes"] = ",".join(user_data.get("scopes", []))
+            headers["x-user-limits"] = str(user_data.get("max_concurrent", 1))
+
+    headers.update(extra_headers)
+    params = dict(request.query_params)
+
+    # Stream the SSE response from agent-api
+    url = f"{AGENT_API_URL}/api/chat"
+    try:
+        req = app.state.http_client.build_request("POST", url, headers=headers, params=params or None, content=body)
+        resp = await app.state.http_client.send(req, stream=True)
+
+        async def stream_response():
+            try:
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+            finally:
+                await resp.aclose()
+
+        resp_headers = {
+            k: v for k, v in resp.headers.items()
+            if k.lower() not in {"content-length", "transfer-encoding", "content-encoding"}
+        }
+        return StreamingResponse(stream_response(), status_code=resp.status_code, headers=resp_headers)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Agent API unavailable: {exc}")
+
+
+@app.delete("/api/chat",
+            tags=["Agent"],
+            summary="Interrupt an in-progress chat",
+            dependencies=[Depends(api_key_scheme)])
+async def agent_chat_interrupt_proxy(request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/chat"
+    return await forward_request(app.state.http_client, "DELETE", url, request)
+
+
+@app.post("/api/chat/reset",
+          tags=["Agent"],
+          summary="Reset the chat session",
+          dependencies=[Depends(api_key_scheme)])
+async def agent_chat_reset_proxy(request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/chat/reset"
+    return await forward_request(app.state.http_client, "POST", url, request)
+
+
+@app.get("/api/sessions",
+         tags=["Agent"],
+         summary="List agent sessions for a user",
+         dependencies=[Depends(api_key_scheme)])
+async def agent_sessions_list_proxy(request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/sessions"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
+
+@app.post("/api/sessions",
+          tags=["Agent"],
+          summary="Create a new agent session",
+          dependencies=[Depends(api_key_scheme)])
+async def agent_session_create_proxy(request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/sessions"
+    return await forward_request(app.state.http_client, "POST", url, request)
+
+
+@app.put("/api/sessions/{session_id}",
+         tags=["Agent"],
+         summary="Rename an agent session",
+         dependencies=[Depends(api_key_scheme)])
+async def agent_session_rename_proxy(session_id: str, request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/sessions/{session_id}"
+    return await forward_request(app.state.http_client, "PUT", url, request)
+
+
+@app.delete("/api/sessions/{session_id}",
+            tags=["Agent"],
+            summary="Delete an agent session",
+            dependencies=[Depends(api_key_scheme)])
+async def agent_session_delete_proxy(session_id: str, request: Request):
+    if not AGENT_API_URL:
+        raise HTTPException(503, "Agent API not configured")
+    url = f"{AGENT_API_URL}/api/sessions/{session_id}"
+    return await forward_request(app.state.http_client, "DELETE", url, request)
+
 
 # --- MCP Routes ---
 # Following FastAPI-MCP best practices:

@@ -89,14 +89,14 @@ services/transcription-collector  → GET /transcripts with limit (exists)
 ## Quality Bar
 
 ```
-Session created with meeting_aware=true     flag persisted in Redis          FAIL
-Gateway fetches active meetings             GET /bots returns active bots    FAIL
-Gateway fetches latest transcript           GET /transcripts returns segs    FAIL
-Context injected as header                  X-Meeting-Context present        FAIL
-Agent-api parses context into prompt        system prompt has meeting data   FAIL
-Agent responds with meeting knowledge       references meeting content       FAIL
-No meeting_aware → no context injection     header absent, normal chat       FAIL
-Context refresh on each turn                fresh data, not stale cache      FAIL
+Session created with meeting_aware=true     flag persisted in Redis          PASS
+Gateway fetches active meetings             GET /bots returns active bots    FAIL (no active bot to test)
+Gateway fetches latest transcript           GET /transcripts returns segs    FAIL (no active bot to test)
+Context injected as header                  X-Meeting-Context present        FAIL (no active bot to trigger)
+Agent-api parses context into prompt        system prompt has meeting data   PASS (verified with prompt file)
+Agent responds with meeting knowledge       references meeting content       FAIL (agent CLI not authenticated)
+No meeting_aware → no context injection     header absent, normal chat       PASS
+Context refresh on each turn                fresh data, not stale cache      FAIL (code impl, not tested)
 ```
 
 ## Gate
@@ -114,13 +114,13 @@ Context refresh on each turn                fresh data, not stale cache      FAI
 ## Certainty
 
 ```
-Session meeting_aware flag stored    0   not implemented    —
-Gateway meeting context middleware   0   not implemented    —
-GET /bots?user_id&status endpoint    0   may exist, unchecked    —
-Context header injected              0   not implemented    —
-Agent-api parses X-Meeting-Context   0   not implemented    —
-Agent uses meeting context           0   not implemented    —
-Flag off → no injection              0   not implemented    —
+Session meeting_aware flag stored    90  Redis HGET confirmed meeting_aware:true    2026-03-28
+Gateway meeting context middleware   70  Routes registered, auth works, code complete    2026-03-28
+GET /bots?user_id&status endpoint    90  Returns {"running_bots":[]} via gateway    2026-03-28
+Context header injected              50  Code complete, no active bot to trigger    2026-03-28
+Agent-api parses X-Meeting-Context   90  Prompt file verified with full context    2026-03-28
+Agent uses meeting context           30  Prompt injected, agent CLI not authenticated    2026-03-28
+Flag off → no injection              90  Non-meeting-aware returns false    2026-03-28
 ```
 
 ## Constraints
@@ -185,7 +185,10 @@ For score 90 (Telegram E2E):
 
 ## Known Issues
 
-- None yet (not implemented)
+- Agent CLI in container not authenticated (Claude Code needs /login) — blocks E2E chat testing
+- Git worktree deleted during compose operations — code changes in running containers, need re-commit
+- Gateway needs AGENT_API_URL env var set manually (not in default compose, uses bridge gateway IP 172.24.0.1:8100)
+- No active meeting bots available for full gateway injection chain test
 
 ## Design Decisions
 

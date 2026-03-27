@@ -12,6 +12,7 @@ services:
       - BOT_MANAGER_URL=http://meeting-api:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - MCP_URL=http://mcp:18888
+      - AGENT_API_URL=${AGENT_API_URL:-}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
       - PUBLIC_BASE_URL=https://share.dev.vexa.ai
       - TRANSCRIPT_SHARE_TTL_SECONDS=900

@@ -127,6 +127,7 @@ services:
       - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - MCP_URL=http://mcp:18888
       - CALENDAR_SERVICE_URL=http://calendar-service:8050
+      - AGENT_API_URL=http://agent-api:8100
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CORS_ORIGINS=http://localhost:3002,http://localhost:3001
@@ -136,6 +137,7 @@ services:
       - admin-api
       - bot-manager
       - meeting-api
+      - agent-api
       - redis
     restart: unless-stopped
 

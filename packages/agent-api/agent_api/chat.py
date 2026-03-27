@@ -54,13 +54,15 @@ async def list_sessions(redis, user_id: str) -> list[dict]:
     return sessions
 
 
-async def save_session_meta(redis, user_id: str, session_id: str, name: str):
+async def save_session_meta(redis, user_id: str, session_id: str, name: str, extra: dict = None):
     """Save/update session metadata in Redis index."""
     import time
     existing = await redis.hget(f"{SESSIONS_INDEX}{user_id}", session_id)
     meta = json.loads(existing) if existing else {"created_at": time.time()}
     meta["name"] = name
     meta["updated_at"] = time.time()
+    if extra:
+        meta.update(extra)
     await redis.hset(f"{SESSIONS_INDEX}{user_id}", session_id, json.dumps(meta))
     await redis.expire(f"{SESSIONS_INDEX}{user_id}", 86400 * 30)
 

@@ -70,6 +70,7 @@ class UserIdRequest(BaseModel):
 class SessionCreateRequest(BaseModel):
     user_id: str
     name: str = "New session"
+    meeting_aware: bool = False
 
 
 class SessionRenameRequest(BaseModel):
@@ -114,10 +115,40 @@ async def health():
 # ── Chat endpoints ─────────────────────────────────────────────────────────
 
 
+def _format_meeting_context(context_json: str) -> str:
+    """Format X-Meeting-Context JSON into a human-readable system prompt prefix."""
+    try:
+        ctx = json.loads(context_json)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    meetings = ctx.get("active_meetings", [])
+    if not meetings:
+        return ""
+    parts = ["[MEETING CONTEXT] The user has active meetings right now:\n"]
+    for m in meetings:
+        mid = m.get("meeting_id", "unknown")
+        platform = m.get("platform", "unknown")
+        participants = m.get("participants", [])
+        parts.append(f"Meeting {mid} ({platform}), participants: {', '.join(participants) or 'unknown'}")
+        segments = m.get("latest_segments", [])
+        if segments:
+            parts.append("Latest transcript:")
+            for s in segments[-30:]:  # cap display at 30 most recent
+                speaker = s.get("speaker", "Unknown")
+                text = s.get("text", "")
+                parts.append(f"  {speaker}: {text}")
+        parts.append("")
+    parts.append("Use this meeting context to inform your responses. The user may ask about what's being discussed.")
+    return "\n".join(parts)
+
+
 @app.post("/api/chat", dependencies=[Depends(require_api_key)])
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     """Send a message to the agent. Returns SSE stream.
     Retries once with a fresh container if the first attempt fails."""
+    # Read meeting context from gateway-injected header
+    meeting_context_header = request.headers.get("x-meeting-context", "")
+    context_prefix = _format_meeting_context(meeting_context_header) if meeting_context_header else ""
 
     async def generate():
         retries = 0
@@ -128,6 +159,7 @@ async def chat(req: ChatRequest):
                     app.state.redis, cm,
                     req.user_id, req.message, req.model,
                     req.session_id, req.session_name,
+                    context_prefix=context_prefix,
                 ):
                     yield data
                 return
@@ -177,8 +209,11 @@ async def get_sessions(user_id: str):
 async def create_session(req: SessionCreateRequest):
     """Create a new named session."""
     session_id = str(uuid.uuid4())
-    await save_session_meta(app.state.redis, req.user_id, session_id, req.name)
-    return {"session_id": session_id, "name": req.name}
+    await save_session_meta(
+        app.state.redis, req.user_id, session_id, req.name,
+        extra={"meeting_aware": req.meeting_aware},
+    )
+    return {"session_id": session_id, "name": req.name, "meeting_aware": req.meeting_aware}
 
 
 @app.delete("/api/sessions/{session_id}", dependencies=[Depends(require_api_key)])
