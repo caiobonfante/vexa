@@ -90,3 +90,41 @@ Speaker attribution works perfectly for **known bot names** (bot name matches sp
 - Simultaneous/overlapping speech from multiple TTS bots
 - More than 3 concurrent speaker bots
 - Speakers with names not matching their bot display name
+
+---
+
+## Dashboard Env Config Validation
+Date: 2026-03-27 14:15
+
+### Fixes Applied
+| Issue | Severity | Before | After | Impact |
+|-------|----------|--------|-------|--------|
+| Admin API URL unreachable | CRITICAL | `VEXA_ADMIN_API_URL=http://localhost:8067` | `http://localhost:8056` | All auth broken — admin-api container has no host port mapping, must route via gateway |
+| Admin API key mismatch | CRITICAL | `VEXA_ADMIN_API_KEY=vexa-admin-token` | `changeme` | Even through gateway, admin requests rejected with "Invalid API key" |
+| NEXTAUTH_URL wrong port | MEDIUM | `http://localhost:3002` | `http://localhost:3001` | NextAuth callbacks redirect to wrong port, breaking OAuth flows |
+| NEXT_PUBLIC_APP_URL wrong port | MEDIUM | `http://localhost:3002` | `http://localhost:3001` | Magic link URLs point to wrong port |
+
+### Verification After Fix
+| Check | Status | Detail |
+|-------|--------|--------|
+| Health endpoint | PASS | `status: "ok"`, adminApi reachable, vexaApi reachable |
+| Direct login | PASS | POST /api/auth/send-magic-link returns token + user |
+| Auth/me | PASS | Cookie-based auth works correctly |
+| Meetings API proxy | PASS | Returns meetings list via gateway |
+| All pages (/, /meetings, /settings, /docs, /login) | PASS | All return 200 |
+| Server logs | PASS | No errors, only expected SMTP-not-configured warning |
+
+### Riskiest thing
+The admin API container (`vexa-restore-admin-api-1`) has no host port mapping — it exposes `8001/tcp` internally but nothing on the host. The .env comment claimed "Host port 8067 maps to container port 8001" which was false. If the gateway goes down, admin API is completely inaccessible from the host.
+
+### Untested
+- Full browser-based login flow (needs Playwright/browser)
+- WebSocket live transcript connection
+- Agent API proxy (port 8100 — not verified if agent-api container is running)
+- Recording playback
+- Zoom/Calendar OAuth flows
+
+### Surprising
+1. The .env had THREE different port numbers: dev server (3001 in package.json), .env URLs (3002), Docker container (3000)
+2. The gateway successfully proxies admin API routes — no separate admin API port needed on host
+3. Cross-origin warning in dev: `dashboard.dev.vexa.ai` accessing `/_next/*` — someone has DNS pointing to this dev server
