@@ -770,11 +770,15 @@ async def get_user_details(
 
 # --- Internal Endpoints (service-to-service, not in OpenAPI docs) ---
 INTERNAL_API_SECRET = os.environ.get("INTERNAL_API_SECRET", "")
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 @app.post("/internal/validate", include_in_schema=False)
 async def validate_token(request: Request, payload: dict, db: AsyncSession = Depends(get_db)):
     """Validate an API token and return user identity info.
     Called by api-gateway to inject X-User-ID headers."""
+    # Fail closed: if INTERNAL_API_SECRET is not configured, reject unless in dev mode
+    if not DEV_MODE and not INTERNAL_API_SECRET:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="INTERNAL_API_SECRET not configured")
     # Authenticate the caller (gateway) via shared secret
     if INTERNAL_API_SECRET:
         provided = request.headers.get("X-Internal-Secret", "")

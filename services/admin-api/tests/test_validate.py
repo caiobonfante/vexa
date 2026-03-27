@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # Set required env vars before importing app
 os.environ.setdefault("ADMIN_API_TOKEN", "test-admin-token")
+os.environ.setdefault("INTERNAL_API_SECRET", "test-internal-secret")
 os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("DB_PORT", "5432")
 os.environ.setdefault("DB_NAME", "test")
@@ -14,6 +15,9 @@ os.environ.setdefault("DB_PASSWORD", "test")
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 from admin_models.database import get_db
+
+INTERNAL_SECRET = "test-internal-secret"
+INTERNAL_HEADERS = {"X-Internal-Secret": INTERNAL_SECRET}
 
 
 def _make_user(user_id=5, email="test@example.com", max_concurrent_bots=3):
@@ -56,16 +60,21 @@ async def test_validate_valid_scoped_token(mock_db):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/internal/validate", json={"token": token})
+        with patch("app.main.INTERNAL_API_SECRET", INTERNAL_SECRET):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/internal/validate",
+                    json={"token": token},
+                    headers=INTERNAL_HEADERS,
+                )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["user_id"] == 5
-        assert data["scopes"] == ["bot"]
-        assert data["max_concurrent"] == 3
-        assert data["email"] == "test@example.com"
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["user_id"] == 5
+            assert data["scopes"] == ["bot"]
+            assert data["max_concurrent"] == 3
+            assert data["email"] == "test@example.com"
     finally:
         app.dependency_overrides.clear()
 
@@ -83,13 +92,18 @@ async def test_validate_legacy_token(mock_db):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/internal/validate", json={"token": token})
+        with patch("app.main.INTERNAL_API_SECRET", INTERNAL_SECRET):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/internal/validate",
+                    json={"token": token},
+                    headers=INTERNAL_HEADERS,
+                )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["scopes"] == ["legacy"]
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["scopes"] == ["legacy"]
     finally:
         app.dependency_overrides.clear()
 
@@ -104,11 +118,16 @@ async def test_validate_invalid_token(mock_db):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/internal/validate", json={"token": "bad_token"})
+        with patch("app.main.INTERNAL_API_SECRET", INTERNAL_SECRET):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/internal/validate",
+                    json={"token": "bad_token"},
+                    headers=INTERNAL_HEADERS,
+                )
 
-        assert resp.status_code == 401
+            assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()
 
@@ -121,10 +140,15 @@ async def test_validate_missing_token(mock_db):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/internal/validate", json={})
+        with patch("app.main.INTERNAL_API_SECRET", INTERNAL_SECRET):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/internal/validate",
+                    json={},
+                    headers=INTERNAL_HEADERS,
+                )
 
-        assert resp.status_code == 401
+            assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()

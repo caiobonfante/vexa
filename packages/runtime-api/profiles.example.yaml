@@ -44,7 +44,6 @@ profiles:
     auto_remove: false
     ports:
       "8080/tcp": {}
-    max_per_user: 1          # one sandbox per user
     gpu: false
 
   # GPU compute — for ML inference or video processing

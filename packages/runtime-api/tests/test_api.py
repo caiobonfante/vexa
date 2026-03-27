@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 from unittest.mock import AsyncMock
 
@@ -74,28 +75,27 @@ profiles:
     resources:
       memory_limit: "2Gi"
     idle_timeout: 600
-    max_per_user: 2
   worker:
     image: "python:3.12-slim"
     idle_timeout: 300
-    max_per_user: 0
 """)
     profiles.close()
     config.PROFILES_PATH = profiles.name
     config.API_KEYS = []  # disable auth for tests
 
-    # Build a minimal app that does NOT connect to real Redis
     mock_backend = MockBackend()
-    test_app = FastAPI()
-    test_app.include_router(router)
-    test_app.include_router(scheduler_router)
 
-    @test_app.on_event("startup")
-    async def test_startup():
-        test_app.state.redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-        test_app.state.backend = mock_backend
+    @asynccontextmanager
+    async def lifespan(app):
+        app.state.redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+        app.state.backend = mock_backend
         from runtime_api.profiles import load_profiles
         load_profiles()
+        yield
+
+    test_app = FastAPI(lifespan=lifespan)
+    test_app.include_router(router)
+    test_app.include_router(scheduler_router)
 
     yield test_app
     os.unlink(profiles.name)
@@ -103,7 +103,8 @@ profiles:
 
 @pytest.fixture
 def client(app):
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 def test_health(client):

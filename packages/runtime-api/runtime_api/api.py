@@ -161,17 +161,6 @@ async def create_container(req: CreateContainerRequest, request: Request):
         except ValueError as e:
             raise HTTPException(400, str(e))
 
-    # Enforce max_per_user
-    max_per_user = profile_def.get("max_per_user", 0)
-    if max_per_user > 0:
-        current_count = await state.count_user_containers(redis, req.user_id, profile=req.profile)
-        if current_count >= max_per_user:
-            raise HTTPException(
-                429,
-                f"User {req.user_id} already has {current_count}/{max_per_user} "
-                f"running containers for profile {req.profile}",
-            )
-
     # Generate container name
     if req.name:
         name = _sanitize_name(req.name)

@@ -148,7 +148,6 @@ profiles:
     assert p["mounts"] == []
     assert p["ports"] == {}
     assert p["node_selector"] == {}
-    assert p["max_per_user"] == 0
 
 
 def test_missing_image_defaults_to_empty_string(tmp_path):
