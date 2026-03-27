@@ -72,7 +72,7 @@ async def test_validate_valid_scoped_token(mock_db):
 
 @pytest.mark.asyncio
 async def test_validate_legacy_token(mock_db):
-    """Legacy token (no vxa_ prefix) returns scopes: ["admin"]."""
+    """Legacy token (no vxa_ prefix) returns scopes: ["legacy"]."""
     token = "legacy_token_no_prefix_here"
     user = _make_user()
     api_token = _make_api_token(token)
@@ -89,7 +89,7 @@ async def test_validate_legacy_token(mock_db):
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["scopes"] == ["admin"]
+        assert data["scopes"] == ["legacy"]
     finally:
         app.dependency_overrides.clear()
 
