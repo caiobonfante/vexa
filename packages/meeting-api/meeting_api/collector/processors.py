@@ -153,16 +153,28 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
 
         async with async_session_local() as db:
             try:
-                # Verify MeetingToken and extract claims
+                # Verify MeetingToken and extract claims.
+                # Internal Redis stream messages are trusted — if no token is
+                # present, fall back to stream_data fields directly.
                 token = stream_data.get('token')
-                claims = verify_meeting_token(token)
-                if not claims:
+                claims = verify_meeting_token(token) if token else None
+                if claims:
+                    internal_meeting_id = int(claims.get('meeting_id'))
+                    platform_val = claims.get('platform') or stream_data.get('platform')
+                    native_meeting_id = claims.get('native_meeting_id') or stream_data.get('meeting_id')
+                elif not token:
+                    # No token provided — trusted internal message
+                    raw_mid = stream_data.get('meeting_id')
+                    if not raw_mid:
+                        logger.warning(f"Message {message_id} (type: {message_type}) has no token and no meeting_id. Skipping.")
+                        return True
+                    internal_meeting_id = int(raw_mid)
+                    platform_val = stream_data.get('platform')
+                    native_meeting_id = stream_data.get('native_meeting_id')
+                    logger.debug(f"Message {message_id} accepted without token (internal stream)")
+                else:
                     logger.warning(f"Message {message_id} (type: {message_type}) failed MeetingToken verification. Skipping.")
                     return True
-
-                internal_meeting_id = int(claims.get('meeting_id'))
-                platform_val = claims.get('platform') or stream_data.get('platform')
-                native_meeting_id = claims.get('native_meeting_id') or stream_data.get('meeting_id')
 
                 # Process different message types
                 if message_type == "session_start":

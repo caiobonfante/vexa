@@ -745,7 +745,7 @@ async def request_bot(
         config={"image": BOT_IMAGE_NAME, "env": env_vars},
         user_id=current_user.id,
         callback_url=f"{MEETING_API_URL}/bots/internal/callback/exited",
-        metadata={"meeting_id": meeting_id},
+        metadata={"meeting_id": meeting_id, "connection_id": connection_id},
     )
 
     if not result:

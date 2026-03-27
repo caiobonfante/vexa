@@ -83,13 +83,17 @@ async def _fire_exit_callback(redis, name: str, exit_code: int = 0) -> None:
     if not callback_url:
         return
 
+    metadata = container_data.get("metadata", {})
     payload = {
+        # Merge metadata first so domain-specific fields (e.g. connection_id)
+        # appear as top-level keys in the callback payload.
+        **metadata,
         "container_id": container_data.get("container_id", ""),
         "name": name,
         "profile": container_data.get("profile", ""),
         "status": "stopped" if exit_code == 0 else "failed",
         "exit_code": exit_code,
-        "metadata": container_data.get("metadata", {}),
+        "metadata": metadata,
     }
 
     # Store as pending for retry
