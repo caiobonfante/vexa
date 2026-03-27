@@ -5,13 +5,13 @@ WORKDIR /app
 # Install system deps
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps
-COPY packages/meeting-api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy admin models (auth, token_scope)
+# Copy admin models first (its plain pydantic dep must not override pydantic[email])
 COPY libs/admin-models /admin-models
 RUN pip install --no-cache-dir /admin-models
+
+# Install Python deps (includes pydantic[email] which adds email-validator)
+COPY packages/meeting-api/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app code
 COPY packages/meeting-api .
