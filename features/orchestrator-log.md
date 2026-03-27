@@ -728,3 +728,31 @@ Traced the full chain:
 7. Score 90: same via Telegram
 
 **Iteration 1 verdict: PARTIAL.** API layer works (score 60). Need active meeting + authenticated agent for 80+.
+
+## Conductor iteration 10: 2026-03-28 — Meeting-aware agent re-implementation (iteration 2/5)
+
+**Mission:** Same as iteration 9. Re-implemented on clean branch after worktree loss.
+**Approach:** Solo orchestrator — re-implement from scratch on `conductor/meeting-aware-agent` branch.
+
+### What happened
+
+1. Previous worktree was deleted. Created new branch `conductor/meeting-aware-agent` from `feature/agentic-runtime`.
+2. Re-implemented all 3 changes (agent-api session flag + context parsing, gateway middleware + proxy routes, docker-compose env).
+3. Rebuilt both images (agent-api:latest, vexa-restore-api-gateway).
+4. Restarted both containers.
+5. Re-verified all tests — all pass with same results as iteration 1.
+6. New evidence: prompt file inside agent container confirmed with meeting context.
+
+### Score: 60 (confirmed, no change)
+
+Same blockers: agent CLI needs /login, no active meeting bot.
+
+### What iteration 3 needs
+
+To reach score 80:
+1. Host a Teams meeting with /host-teams-meeting-auto
+2. Send bot to generate transcript
+3. Verify gateway fetches real context and injects it
+4. Get Claude Code authenticated in agent container (or test with a different approach)
+
+**Iteration 2 verdict: CONFIRMED.** Score 60 re-verified after clean rebuild. Code on conductor/meeting-aware-agent branch.
