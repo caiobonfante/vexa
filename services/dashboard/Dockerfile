@@ -8,11 +8,11 @@ COPY transcript-rendering/package.json /transcript-rendering/package.json
 COPY transcript-rendering/dist/ /transcript-rendering/dist/
 
 # Install dependencies
-# Pack transcript-rendering so npm ci can resolve the file: dependency
-RUN cd /transcript-rendering && npm pack --pack-destination /tmp/
+# Patch package.json to use local transcript-rendering path
 COPY dashboard/package*.json ./
-RUN npm ci
-# Physical copy over the symlink so Turbopack can resolve it
+RUN sed -i 's|file:../../../packages/transcript-rendering|file:/transcript-rendering|' package.json
+RUN npm install --ignore-scripts
+# Ensure transcript-rendering is physically copied (not symlinked)
 RUN rm -rf node_modules/@vexaai/transcript-rendering && \
     cp -r /transcript-rendering node_modules/@vexaai/transcript-rendering
 
