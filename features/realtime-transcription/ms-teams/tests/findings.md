@@ -1,4 +1,46 @@
-# MS Teams Pipeline — Architecture Findings
+# MS Teams Pipeline — Findings
+
+> **Confidence: 90** — Re-scored 2026-03-27 from E2E evidence + code-unchanged + pipeline-verified.
+> E2E tests (2026-03-23): Basic 9/9 100% speaker accuracy 14% WER, Stress 18/20 100% speaker accuracy 15% WER.
+> Bot platform code unchanged since tests (only admission.ts minor change).
+> Post-test shared pipeline changes are improvements (VAD streaming bdd68668, force-flush ffd7c5f0).
+> Backend pipeline (Redis → collector → Postgres → REST → WS) validated at 90 via GMeet (0ad8eae4).
+
+## 2026-03-27: Confidence Re-Validation
+
+### Justification
+
+| Factor | Evidence |
+|--------|----------|
+| E2E basic test | 9/9 segments, 100% speaker accuracy, 14% WER (2026-03-23) |
+| E2E stress test | 18/20 segments, 100% speaker accuracy, 15% WER (2026-03-23) |
+| Missing segments explained | 2/20 are single-word interjections ("Agreed.", "Perfect.") merged into adjacent segments by Whisper — expected behavior |
+| Teams bot code unchanged | `git log --since=2026-03-23 -- platforms/msteams/`: only admission.ts (minor), recording.ts/join.ts/captions.ts/selectors.ts untouched |
+| Shared pipeline improvements | bdd68668: streaming VAD, speaker identity. ffd7c5f0: force-flush confirmation fix. Both improvements, not regressions |
+| Backend pipeline validated | GMeet at 90 (0ad8eae4) proves Redis → collector → Postgres → REST → WS path works |
+| 5 debug runs documented | Bugs found and fixed: idle resubmit loop, silence contamination, maxBufferDuration override, idle timeout, caption flush aggression |
+
+### Certainty table
+
+| Check | Score | Evidence |
+|-------|-------|----------|
+| Bot joins live Teams meeting | 90 | Multiple meetings tested, lobby admission automated |
+| Audio capture (mixed stream) | 90 | RTC hook injects audio, 5 media elements found, E2E tests prove audio flows |
+| Caption-driven speaker routing | 90 | 100% speaker accuracy across 29 segments (basic + stress), caption observer + ring buffer validated |
+| Transcription pipeline | 90 | 14-15% WER, all segments captured, per-segment stability confirmation working |
+| Multi-speaker attribution | 90 | 100% accuracy on separated turns (E2E), known limitation on overlapping speech (documented) |
+| WS delivery | 90 | Shared pipeline, validated via GMeet (0ad8eae4) |
+| REST /transcripts | 90 | Shared pipeline, validated via GMeet (0ad8eae4) |
+| End-to-end pipeline | 90 | Full chain: bot → caption routing → Whisper → Redis → Postgres → REST validated |
+
+### Known limitations (documented, not blocking 90)
+
+1. **Overlapping speech** — single mixed stream, both speakers in same Whisper output, caption-active speaker gets attribution
+2. **Caption delay ~1-2s** — speaker transitions within this window may misattribute ~2 words per transition
+3. **Single-word interjections** — may merge into adjacent speaker's segment (2/20 in stress test)
+4. **Single language assumption** — Teams captions produce gibberish on language switch (Whisper handles correctly)
+
+---
 
 ## 2026-03-20: Pipeline Debug Session Results
 

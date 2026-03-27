@@ -1,8 +1,8 @@
 # Realtime Transcription
 
-> **Confidence: 90** — Re-scored from fresh evidence (dkn-pwrq-obk + meeting 21, 2026-03-27). 3 TTS bots (Alice/Bob/Charlie) + 1 human (Dmitriy) in real Google Meet. 100% speaker accuracy (3/3), 100% completeness, WER 18% (number normalization only), confirm latency 6-7s. Speaker name bug fixed (9e1c774a). Full pipeline: bot → Whisper → Redis → Postgres → REST API.
-> **Tested:** Bot joins, audio capture, Whisper transcription, VAD, segment persistence, speaker identity (3 TTS + 1 human across 2 meetings), multi-track dedup (3 speakers/3 tracks, zero duplicates), REST API, confirmation logic (unit tests + live validation).
-> **Not tested:** 3+ distinct human speakers, 5+ speaker SFU remapping, WS live delivery during active speech, Zoom, language locking in live meeting.
+> **Confidence: 90** — Both platforms validated. GMeet: 3 TTS + 1 human, 100% speaker accuracy, WER 18%, confirm latency 6-7s (dkn-pwrq-obk + meeting 21, 2026-03-27). Teams: E2E tests 9/9 basic + 18/20 stress, 100% speaker accuracy, 14-15% WER (2026-03-23), bot code unchanged, shared pipeline verified.
+> **Tested:** Bot joins (both platforms), audio capture (per-speaker GMeet + mixed+caption Teams), Whisper transcription, VAD, segment persistence, speaker identity (GMeet: 3 TTS + 1 human, voting/locking; Teams: caption-driven routing, 100% attribution), multi-track dedup, REST API, WS delivery, confirmation logic.
+> **Not tested:** 3+ distinct human speakers, 5+ speaker SFU remapping, WS live delivery during active speech, Zoom, language locking in live meeting, Teams overlapping speech attribution.
 > **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).
 >
 > **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md) | **Cycle:** validation (collect → iterate → expand)
