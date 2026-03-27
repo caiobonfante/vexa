@@ -1052,17 +1052,13 @@ async def agent_chat_proxy(request: Request):
         data = json.loads(body)
         user_id = data.get("user_id", "")
         session_id = data.get("session_id")
-        logger.warning(f"Meeting context check: user_id={user_id}, session_id={session_id}")
-
         if user_id and session_id:
             redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
             if redis_client:
                 meta_raw = await redis_client.hget(f"agent:sessions:{user_id}", session_id)
-                logger.warning(f"Session meta from Redis: {meta_raw}")
                 if meta_raw:
                     meta = json.loads(meta_raw)
                     if meta.get("meeting_aware"):
-                        logger.warning(f"Meeting-aware session detected for user {user_id}")
                         # Resolve internal user_id from API key
                         client_key = request.headers.get("x-api-key")
                         internal_uid = user_id
@@ -1070,15 +1066,12 @@ async def agent_chat_proxy(request: Request):
                             user_data = await _resolve_token(app.state.http_client, client_key)
                             if user_data:
                                 internal_uid = str(user_data["user_id"])
-                        logger.warning(f"Fetching meeting context for internal user {internal_uid}")
                         context = await _get_meeting_context(app.state.http_client, internal_uid)
                         if context:
                             extra_headers["x-meeting-context"] = context
-                            logger.warning(f"Meeting context injected ({len(context)} bytes)")
-                        else:
-                            logger.warning("No meeting context available (no active meetings)")
+                            logger.info(f"Meeting context injected for user {user_id} ({len(context)} bytes)")
     except Exception as e:
-        logger.warning(f"Meeting context injection error: {e}", exc_info=True)
+        logger.warning(f"Meeting context injection error: {e}")
 
     # Build forwarding headers
     excluded = {"host", "content-length", "transfer-encoding"}
@@ -1101,10 +1094,11 @@ async def agent_chat_proxy(request: Request):
     # Stream the SSE response from agent-api (long timeout for SSE)
     url = f"{AGENT_API_URL}/api/chat"
     try:
-        req = app.state.http_client.build_request(
+        sse_client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0))
+        req = sse_client.build_request(
             "POST", url, headers=headers, params=params or None, content=body,
         )
-        resp = await app.state.http_client.send(req, stream=True, timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0))
+        resp = await sse_client.send(req, stream=True)
 
         async def stream_response():
             try:
