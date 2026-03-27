@@ -574,14 +574,18 @@ Your mission comes from the mission file above. Execute:
 2. FIX: Minimal changes to fix root causes. One fix per root cause.
    Don't stack workarounds. Don't fix things outside the mission scope.
 
-3. VERIFY: Prove it works. For UI/dashboard missions, verify in a real browser
+3. DEPLOY: If you changed service code, rebuild and restart affected containers.
+   Check the feature README Deployment section for which containers to rebuild.
+   Verify health endpoints after restart. Do NOT skip this — testing undeployed code proves nothing.
+
+4. VERIFY: Prove it works. For UI/dashboard missions, verify in a real browser
    (use the /deliver protocol). For API missions, show curl/test output.
    Evidence must be specific: command + stdout + result.
 
-4. UPDATE FINDINGS: Write execution evidence to features/{focus}/tests/findings.md.
+5. UPDATE FINDINGS: Write execution evidence to features/{focus}/tests/findings.md.
    Every score claim must have: command run + stdout captured. No prose-only claims.
 
-5. UPDATE README: The feature's README.md must be honest about current state:
+6. UPDATE README: The feature's README.md must be honest about current state:
    - Quality Bar: change FAIL → PASS only where you have execution evidence
    - Certainty: update scores + evidence + date
    - Known Issues: add anything discovered, remove anything fixed
@@ -589,7 +593,7 @@ Your mission comes from the mission file above. Execute:
    - Why / Constraints: do NOT change unless the mission explicitly requires it
    README is the source of truth. If code changed behavior, README must reflect it.
 
-6. UPDATE STATE: Update conductor/state.json with new scores.
+7. UPDATE STATE: Update conductor/state.json with new scores.
    Append to features/orchestrator-log.md what you did and what changed.
 
 ## RULES

@@ -131,6 +131,30 @@ Flag off → no injection              0   not implemented    —
 - Transcript limit: latest 50 segments max — prevents context explosion
 - No new database tables — uses existing bots, meetings, transcriptions tables via API
 
+## Deployment
+
+```
+Code changes:
+    services/api-gateway/       → new middleware for meeting context injection
+    packages/agent-api/         → parse X-Meeting-Context, inject into system prompt
+    deploy/compose/             → env vars if needed (none expected)
+
+Containers to rebuild:
+    vexa-restore-api-gateway-1       → docker compose build api-gateway
+    vexa-restore-agent-api-1         → docker compose build agent-api
+
+Restart required:
+    docker compose up -d api-gateway agent-api
+
+Verification after deploy:
+    curl -sf http://localhost:8056/health          → gateway healthy
+    curl -sf http://localhost:8100/health          → agent-api healthy
+    POST /api/chat with meeting_aware session      → X-Meeting-Context injected
+
+No migration needed — no database changes.
+No new env vars expected — gateway already has access to meeting-api routes.
+```
+
 ## Known Issues
 
 - None yet (not implemented)
