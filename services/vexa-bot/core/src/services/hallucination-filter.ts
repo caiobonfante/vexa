@@ -57,8 +57,13 @@ export function isHallucination(text: string): boolean {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
 
-  // Known phrase (exact match)
-  if (loadPhrases().has(lower)) return true;
+  // Known phrase (exact match, then retry with normalized punctuation)
+  const db = loadPhrases();
+  if (db.has(lower)) return true;
+  const stripped = lower.replace(/[.!?…]+$/g, '').replace(/\.{2,}$/g, '');
+  if (stripped !== lower && db.has(stripped)) return true;
+  if (stripped !== lower && db.has(stripped + '...')) return true;
+  if (stripped !== lower && db.has(stripped + '.')) return true;
 
   // Too short (single word < 10 chars)
   const words = trimmed.split(/\s+/);
