@@ -74,11 +74,11 @@ RUN mkdir -p \
     /app/api-gateway \
     /app/admin-api \
     /app/bot-manager \
-    /app/transcription-collector \
+    /app/meeting-api \
     /app/vexa-bot \
     /app/mcp \
     /app/tts-service \
-    /app/shared-models \
+    /app/admin-models \
     /app/alembic \
     /var/log/supervisor \
     /var/log/vexa-bots \
@@ -104,15 +104,16 @@ RUN pip3 install --no-cache-dir --upgrade pydantic>=2.0.0 && \
 # Clean up requirements files
 RUN rm -f /tmp/requirements-*.txt
 
-# Copy shared library
-COPY packages/shared-models /app/shared-models
+# Copy admin models and meeting-api libraries
+COPY libs/admin-models /app/admin-models
+COPY packages/meeting-api /app/meeting-api
 
-# Add shared_models to Python path (more reliable than pip install)
-ENV PYTHONPATH="/app/shared-models${PYTHONPATH:+:${PYTHONPATH}}"
+# Add libraries to Python path
+ENV PYTHONPATH="/app/admin-models:/app/meeting-api${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Verify shared_models is importable
-RUN python3 -c "import shared_models; print(f'shared_models found at: {shared_models.__file__}')" \
-    && python3 -c "from shared_models.models import User, Meeting; print('Models imported successfully')"
+# Verify imports
+RUN python3 -c "from admin_models.models import User; print('admin_models imported successfully')" \
+    && python3 -c "from meeting_api.schemas import Platform; print('meeting_api imported successfully')"
 
 # -----------------------------------------------------------------------------
 # Application Code
@@ -127,8 +128,8 @@ COPY services/admin-api/ /app/admin-api/
 # Bot Manager (including the new process orchestrator)
 COPY services/bot-manager/app/ /app/bot-manager/app/
 
-# Transcription Collector
-COPY services/transcription-collector/ /app/transcription-collector/
+# Meeting API (replaces transcription-collector)
+COPY packages/meeting-api/ /app/meeting-api/
 
 # MCP Service
 COPY services/mcp/ /app/mcp/

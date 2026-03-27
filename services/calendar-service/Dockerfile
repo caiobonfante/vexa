@@ -2,9 +2,9 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install shared library
-COPY ./packages/shared-models /app/packages/shared-models
-RUN pip install --no-cache-dir /app/packages/shared-models
+# Install admin models library
+COPY ./libs/admin-models /app/libs/admin-models
+RUN pip install --no-cache-dir /app/libs/admin-models
 
 COPY ./services/calendar-service/ /app/
 
