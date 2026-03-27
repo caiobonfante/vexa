@@ -1,4 +1,5 @@
 import { log } from '../utils';
+import { isHallucination } from './hallucination-filter';
 
 /**
  * Per-speaker audio buffer with offset-based sliding window.
@@ -177,6 +178,15 @@ export class SpeakerStreamManager {
 
     const trimmed = transcript.trim();
 
+    // Hallucination filter — drop known junk before it enters the confirmation pipeline
+    if (isHallucination(trimmed)) {
+      log(`[SpeakerStreams] [FILTERED] Hallucination for "${buffer.speakerName}": "${trimmed.substring(0, 60)}"`);
+      if (buffer.idleSubmitted) {
+        this.fullReset(buffer);
+      }
+      return;
+    }
+
     // Idle/flush submit — emit immediately, this is the last chance
     if (buffer.idleSubmitted) {
       this.emitSegment(buffer, trimmed);
@@ -232,6 +242,10 @@ export class SpeakerStreamManager {
             buffer.windowStartMs = baseWindowMs + Math.floor(seg.start * 1000);
             const segEndMs = baseWindowMs + Math.floor(seg.end * 1000);
             if (!seg.text.trim() || !this.onSegmentConfirmed) continue;
+            if (isHallucination(seg.text.trim())) {
+              log(`[SpeakerStreams] [FILTERED] Hallucination segment for "${buffer.speakerName}": "${seg.text.trim().substring(0, 60)}"`);
+              continue;
+            }
             const segmentId = `${buffer.speakerId}:${buffer.sequenceNumber}`;
             this.onSegmentConfirmed(buffer.speakerId, buffer.speakerName, seg.text.trim(), buffer.windowStartMs, segEndMs, segmentId);
             buffer.sequenceNumber++;
@@ -448,6 +462,10 @@ export class SpeakerStreamManager {
    */
   private emitSegment(buffer: SpeakerBuffer, text: string): void {
     if (!text || !this.onSegmentConfirmed) return;
+    if (isHallucination(text)) {
+      log(`[SpeakerStreams] [FILTERED] Hallucination in emit for "${buffer.speakerName}": "${text.substring(0, 60)}"`);
+      return;
+    }
     // Dedup: don't re-emit the same text that was just confirmed (acoustic echo / residual audio)
     if (text === buffer.lastConfirmedText) {
       log(`[SpeakerStreams] Dedup skip for "${buffer.speakerName}": "${text.substring(0, 50)}" (same as last confirmed)`);
