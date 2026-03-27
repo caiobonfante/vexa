@@ -40,6 +40,58 @@ Three routers provide different access levels:
 - **PostgreSQL** -- `users`, `api_tokens`, `meetings`, `meeting_sessions`, `transcriptions` tables via `shared_models`
 - **shared_models** -- ORM models, schemas, database session factory, token scope utilities
 
+## Data Flow
+
+```
+External request (with auth header)
+    │
+    ▼
+FastAPI middleware checks authentication:
+    │
+    ├── /admin/* endpoints:
+    │     requires X-Admin-API-Key header
+    │     hmac.compare_digest against ADMIN_API_TOKEN env var
+    │
+    ├── /admin/analytics/* endpoints:
+    │     accepts X-Admin-API-Key (admin) OR ANALYTICS_API_TOKEN (read-only)
+    │
+    ├── /user/* endpoints:
+    │     requires X-API-Key header
+    │     validates token against api_tokens table
+    │     injects user context
+    │
+    └── /internal/validate:
+          accepts any POST with token in body
+          returns user_id + scopes + email
+          ⚠ NO caller authentication
+    │
+    ▼
+Router handles request
+    │
+    ▼
+SQLAlchemy async queries against PostgreSQL
+    │
+    ├── users table (CRUD, find-or-create by email)
+    ├── api_tokens table (scoped: user/bot/tx/admin)
+    ├── meetings table (analytics joins)
+    ├── meeting_sessions table (telematics)
+    └── transcriptions table (stats)
+    │
+    ▼
+Response returned (JSON)
+```
+
+## Code Ownership
+
+```
+services/admin-api/app/main.py        → all routes (admin, analytics, user, internal), auth middleware
+services/admin-api/app/scripts/       → database management scripts (recreate_db.py)
+services/admin-api/tests/             → 6 test files (auth, CRUD, validate, JSONB merge, gate)
+services/admin-api/Dockerfile         → container build (includes admin-models + meeting-api packages)
+shared/admin-models/                  → ORM models (User, APIToken), database session, security headers
+shared/meeting-api/                   → Meeting/Transcription models, schemas, webhook validation
+```
+
 ## How
 
 ### Run
@@ -120,3 +172,27 @@ curl -X POST http://localhost:8001/admin/users \
 - [ ] **P2**: Add HEALTHCHECK to Dockerfile
 - [ ] **P3**: Add integration tests against real PostgreSQL (testcontainers or docker-compose test profile)
 - [ ] **P3**: Add pagination to analytics endpoints that currently return unbounded results
+
+## Constraints
+
+- admin-api is the ONLY service that writes to `users` and `api_tokens` tables — no other service has DB write access for user data
+- All authentication flows resolve through admin-api — either directly or via `/internal/validate` from api-gateway
+- Token scoping is enforced: `user`, `bot`, `tx`, `admin` — each scope grants different endpoint access
+- `X-Admin-API-Key` uses constant-time comparison (`hmac.compare_digest`) — timing attacks mitigated
+- PostgreSQL is the only data store — no Redis, no caching layer
+- Depends on `admin-models` and `meeting-api` shared packages — Dockerfile COPYs and installs both
+- `/internal/validate` is hidden from OpenAPI but network-accessible — relies on network-level isolation
+- SSRF validation on webhook URLs via `meeting_api.webhook_url.validate_webhook_url()`
+- README.md MUST be updated when behavior changes
+
+## Known Issues
+
+- `/internal/validate` is unauthenticated — any HTTP client on the network can resolve tokens to user identity (P0)
+- Legacy tokens without `vxa_` prefix default to `["admin"]` scope — potential privilege escalation
+- Webhook secret stored in plaintext JSONB (not hashed)
+- `created_at` null repair pattern copy-pasted 9 times (SQLAlchemy async refresh issue)
+- No rate limiting on any endpoint — token brute-force theoretically possible
+- Shallow JSONB merge on PATCH — nested objects overwritten, not deep-merged
+- No HEALTHCHECK in Dockerfile
+- No integration tests against real PostgreSQL
+- Some analytics endpoints return unbounded results (no pagination)

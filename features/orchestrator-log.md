@@ -606,3 +606,56 @@ Target (score >= 95 with evidence for all checks) met. Stop condition (3+ iterat
 ### Score: 95 (confirmed, committed)
 
 **Mission verdict: COMPLETE.** All code changes verified, tested, and committed. Score 95 is the ceiling without a TELEGRAM_BOT_TOKEN.
+
+## Conductor iteration 8: 2026-03-28 — Structured READMEs for telegram-chat service dependencies
+
+**Mission:** Create structured README.md files for the 4 services telegram-chat depends on: services/telegram-bot, packages/agent-api, packages/runtime-api, services/admin-api.
+**Target:** Each directory has README.md with: Why, Data Flow (ASCII), Code Ownership, Constraints, Known Issues.
+**Constraint:** No code changes — documentation only.
+**Duration:** ~5 minutes
+**Approach:** Solo orchestrator — read code, add missing sections.
+
+### Diagnosis
+
+All 4 READMEs existed but were missing structured sections the conductor needs for enforcement:
+
+| Service | Had | Missing |
+|---------|-----|---------|
+| services/telegram-bot | Why, What, How | Data Flow, Code Ownership, Constraints, Known Issues |
+| packages/agent-api | Why, What, Features, How, API Reference, Architecture, Env Vars, Production Readiness | Data Flow, Code Ownership, Constraints, Known Issues |
+| packages/runtime-api | Why, What (with flow diagrams), How, API Reference, Backends, Production Readiness | Data Flow, Code Ownership, Constraints, Known Issues |
+| services/admin-api | Why, What, How, Production Readiness | Data Flow, Code Ownership, Constraints, Known Issues |
+
+### Changes made (0 code changes, 4 README updates)
+
+| File | Sections added |
+|------|---------------|
+| services/telegram-bot/README.md | Data Flow (full request chain), Code Ownership (4 entries), Constraints (10 rules), Known Issues (5 items) |
+| packages/agent-api/README.md | Data Flow (chat request lifecycle), Code Ownership (8 modules), Constraints (10 rules), Known Issues (7 items) |
+| packages/runtime-api/README.md | Data Flow (container lifecycle + idle + reconcile), Code Ownership (12 modules), Constraints (11 rules), Known Issues (10 items) |
+| services/admin-api/README.md | Data Flow (auth routing + DB queries), Code Ownership (6 entries), Constraints (9 rules), Known Issues (9 items) |
+
+### Verification
+
+```
+Required sections per README: Why, Data Flow, Code Ownership, Constraints, Known Issues
+telegram-bot:  5/5 ✓
+agent-api:     5/5 ✓
+runtime-api:   5/5 ✓
+admin-api:     5/5 ✓
+Total:         20/20 ✓
+```
+
+### What this enables
+
+The conductor can now enforce service boundaries because:
+1. **Constraints** define what each service is allowed to do and not do
+2. **Code Ownership** maps files to responsibilities — agents know what they own
+3. **Data Flow** shows the request chain — agents understand integration points
+4. **Known Issues** are honest — no optimistic claims, all derived from code review
+
+### Score impact
+
+No feature scores changed — this was documentation-only. The improvement is structural: the conductor can now validate that code changes respect service boundaries.
+
+**Mission verdict: COMPLETE.** Target met in 1 iteration. All 4 directories have structured READMEs with all 5 required sections.

@@ -10,6 +10,49 @@ Runtime API fills that gap. `POST /containers` with a profile name and a callbac
 
 **Why not build it yourself?** Container lifecycle code is deceptively simple until you handle: orphaned containers after crashes (state reconciliation on startup), idle detection across restarts (Redis-backed timers), callback delivery with retry (exponential backoff), graceful shutdown that doesn't kill active work, and per-user concurrency enforcement across a distributed fleet. That's what the 2400 lines here do.
 
+## Data Flow
+
+```
+Client (agent-api or direct)
+    │
+    ▼
+POST /containers { profile, user_id, callback_url }
+    │
+    ▼
+profiles.py: load profile from YAML, merge with request overrides
+    │
+    ▼
+backends/: dispatch to configured backend (Docker / K8s / Process)
+    │
+    ├── docker.py:    docker create + start via unix socket
+    ├── kubernetes.py: kubectl apply Pod spec
+    └── process.py:   subprocess.Popen with resource limits
+    │
+    ▼
+state.py: register in Redis (name, profile, user_id, status, callback_url)
+    │
+    ▼
+201 { name, status: "running", ports }
+
+---
+
+Idle management (background loop):
+    for each container in Redis:
+      if now - last_touch > idle_timeout:
+        backend.stop(name)
+        fire callback(status=stopped, reason=idle_timeout)
+        state.remove(name)
+
+POST /containers/{name}/touch resets idle timer (heartbeat)
+
+---
+
+On startup: reconcile_state()
+    list containers in Redis vs actual backend state
+    dead in backend but alive in Redis → fire exit callback, remove
+    alive in backend but not in Redis → register (orphan recovery)
+```
+
 ## What
 
 ### Container lifecycle — what happens when you POST /containers
@@ -391,6 +434,52 @@ Audited 2026-03-27. 5029 lines across 13 source files + 9 test files. Unit test 
 8. **Observability** — Promote `debug`-level exception logging in idle loop and event listeners to `warning` or `error`. Add structured logging. Add Prometheus metrics endpoint (container count, creation latency, callback success rate).
 9. **Process backend fixes** — Make `_terminate_process_group` async-safe (run in executor). Document that `exec` doesn't enter the process namespace.
 10. **K8s backend validation** — Test with a real or mocked K8s cluster. Add port mapping via K8s Services or NodePort. Handle `kubernetes` import gracefully when package not installed.
+
+## Code Ownership
+
+```
+runtime_api/main.py            → FastAPI app, startup (Redis, backend, reconcile, idle loop), shutdown
+runtime_api/api.py             → REST endpoints: /containers CRUD, /profiles, /health
+runtime_api/config.py          → all settings from environment variables
+runtime_api/profiles.py        → YAML profile loader with SIGHUP hot-reload
+runtime_api/state.py           → Redis-backed container registry (register, remove, list, touch)
+runtime_api/lifecycle.py       → idle loop, exit handler, callback delivery with retry
+runtime_api/scheduler.py       → job scheduler (CRUD, cron, retry) — NOT wired into main.py
+runtime_api/scheduler_api.py   → scheduler REST endpoints — NOT wired into main.py
+runtime_api/utils.py           → shared utilities
+runtime_api/backends/__init__.py → Backend ABC, ContainerSpec, ContainerInfo
+runtime_api/backends/docker.py   → Docker backend via unix socket
+runtime_api/backends/kubernetes.py → K8s backend via kubernetes Python client
+runtime_api/backends/process.py  → Process backend via subprocess.Popen
+tests/                         → 106 tests (85 pass, 21 skipped integration)
+```
+
+## Constraints
+
+- Backend-agnostic — same REST API regardless of Docker, Kubernetes, or Process backend
+- Redis is the ONLY state store — no SQL database, all container state in Redis
+- One profile YAML file defines all container templates — hot-reloadable via SIGHUP
+- Idle management is automatic — containers die after `idle_timeout` without heartbeat
+- Callback delivery is best-effort with retry — not guaranteed (3 attempts with backoff)
+- SSRF protection on `callback_url` — blocks private IPs, loopback, link-local, metadata services
+- Container names must be unique — format: `{profile}-{user_id}-{hash}`
+- State reconciliation on startup — Redis state synced with backend reality
+- `/exec` endpoint allows arbitrary command execution — privileged, no restrictions
+- Auth disabled by default (empty `API_KEYS`) — must be explicitly configured
+- README.md MUST be updated when behavior changes
+
+## Known Issues
+
+- `state.count_user_containers` does not exist — per-user concurrency limits (`max_per_user`) documented but never enforced
+- `config.SCHEDULER_POLL_INTERVAL` not defined — scheduler would crash at runtime if started
+- Scheduler module fully implemented but never wired into `main.py` — dead code
+- `croniter` missing from `pyproject.toml` dependencies — scheduler import fails
+- Docker `exec` uses synchronous `iter_content` blocking the event loop (acknowledged TODO)
+- Health endpoint is O(N) — scans all Redis keys via `SCAN` + individual `GET` per container
+- `_terminate_process_group` uses blocking `time.sleep` in async context — blocks event loop
+- K8s backend never tested (not even with mocks)
+- No rate limiting on any endpoint
+- CORS defaults to `*`
 
 ## License
 

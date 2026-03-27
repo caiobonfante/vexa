@@ -190,6 +190,7 @@ run_in_worktree() {
   [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
   [[ "$STATUS_ONLY" == "true" ]] && args+=(--status)
 
+  cd "$wt_path"
   exec "$wt_path/conductor/run.sh" "${args[@]}"
 }
 

@@ -4,6 +4,37 @@
 
 Running an LLM agent inside a container is the easy part. The hard parts are everything around it: routing user messages to the right container, resuming sessions after container restarts, and syncing workspace files so work survives reboots. Every AI product that wants stateful agents in containers solves these problems from scratch. Agent API packages the application layer — chat routing, sessions, workspace persistence — so you wire it to [Runtime API](../runtime-api/) for container ops and get a complete agent backend.
 
+## Data Flow
+
+```
+User / Frontend
+    │
+    ▼
+POST /api/chat (with X-API-Key or X-User-ID)
+    │
+    ▼
+Auth middleware validates API key (hmac.compare_digest)
+    │
+    ▼
+container_manager: is agent container running?
+    │
+    no  → POST runtime-api:8090/containers (spawn container)
+    yes → reuse existing
+    │
+    ▼
+docker exec inside agent container: run agent CLI with user message
+    │
+    ▼
+stream_parser: parse agent CLI stdout as SSE events
+    │
+    ▼
+SSE stream back to caller: text_delta → done → stream_end
+    │
+    ▼
+Session state saved to Redis (7-day TTL)
+Workspace files synced to S3/local on container idle/stop
+```
+
 ## What
 
 AI agent runtime framework. Route user messages to LLM agents running inside ephemeral containers, with session management and workspace persistence.
@@ -171,6 +202,42 @@ Runtime API   = where the agent runs
 - [ ] Add request ID middleware for log correlation
 - [ ] Add timeout on agent CLI exec
 - [ ] Validate Runtime API reachability on startup with clear error message
+
+## Code Ownership
+
+```
+agent_api/main.py              → FastAPI app, startup/shutdown, lifespan
+agent_api/chat.py              → POST/DELETE /api/chat, SSE streaming, session routing
+agent_api/config.py            → all settings from environment variables
+agent_api/auth.py              → API key middleware (hmac.compare_digest)
+agent_api/container_manager.py → Runtime API client, container cache, exec relay
+agent_api/stream_parser.py     → SSE event parsing from agent CLI stdout
+agent_api/workspace.py         → S3/local workspace sync, file CRUD
+tests/                         → 91 unit tests (auth, chat, endpoints, containers, streaming, workspace)
+```
+
+## Constraints
+
+- One agent container per user — deterministic naming (`{prefix}{user_id}`), automatic reuse
+- Delegates ALL container operations (create, stop, exec) to Runtime API — never calls Docker directly
+- Redis for session state with 7-day TTL — agent-api does not use a SQL database
+- S3-compatible storage for workspace persistence — requires AWS CLI in agent image
+- SSE streaming only for chat — no polling, no webhooks for response delivery
+- `X-API-Key` or `X-User-ID` header required on all endpoints (empty `API_KEY` disables auth)
+- Workspace file paths validated against traversal attacks (no `../`)
+- Chat interrupt via `DELETE /api/chat` kills the running exec process
+- `/internal/workspace/*` endpoints are internal — not exposed through api-gateway
+- README.md MUST be updated when behavior changes
+
+## Known Issues
+
+- S3 sync requires AWS CLI in agent container image — undocumented dependency, silently fails without it
+- No request tracing — no correlation IDs in logs, debugging cross-service issues requires timestamp matching
+- Container cache race condition — between cache check and exec, container can die (chat retry mitigates)
+- CORS defaults to `*` — acceptable for dev, needs restriction in production
+- Empty `API_KEY` env var silently disables authentication
+- No timeout on agent CLI exec — a hung agent blocks the SSE stream indefinitely
+- Large workspace files loaded into memory for S3 upload — no streaming upload
 
 ## License
 
