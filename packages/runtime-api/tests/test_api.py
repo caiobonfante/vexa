@@ -55,13 +55,16 @@ class MockBackend(Backend):
 
 @pytest.fixture
 def app():
-    """Create test app with mock backend and fake Redis."""
+    """Create test app with mock backend and fake Redis — bypasses real startup."""
     import fakeredis.aioredis
-    from runtime_api.main import create_app
     from runtime_api import config
+    from runtime_api.api import router
+    from runtime_api.scheduler_api import scheduler_router
 
     # Use a temporary profiles file
     import tempfile, os
+    from fastapi import FastAPI
+
     profiles = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
     profiles.write("""
 profiles:
@@ -81,10 +84,11 @@ profiles:
     config.PROFILES_PATH = profiles.name
     config.API_KEYS = []  # disable auth for tests
 
-    test_app = create_app()
-
-    # Override startup to use mock backend + fakeredis
+    # Build a minimal app that does NOT connect to real Redis
     mock_backend = MockBackend()
+    test_app = FastAPI()
+    test_app.include_router(router)
+    test_app.include_router(scheduler_router)
 
     @test_app.on_event("startup")
     async def test_startup():

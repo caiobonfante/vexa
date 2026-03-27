@@ -73,12 +73,50 @@ def _sanitize_name(name: str) -> str:
 
 
 def _validate_callback_url(url: str) -> str:
-    """Validate callback URL — reject non-HTTP schemes and internal targets."""
+    """Validate callback URL — reject non-HTTP schemes and internal/private targets."""
+    import ipaddress
+    import socket
+
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https'):
         raise ValueError(f"callback_url must be http(s), got {parsed.scheme}")
-    if parsed.hostname in ('localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'):
-        raise ValueError(f"callback_url cannot target localhost or metadata service")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("callback_url must include a hostname")
+
+    # Normalize and check hostname against known-bad patterns
+    hostname_lower = hostname.lower().rstrip('.')
+    if hostname_lower in ('localhost', 'metadata.google.internal'):
+        raise ValueError("callback_url cannot target localhost or metadata service")
+    # Block .internal, .local, .svc TLDs (K8s, mDNS, internal services)
+    for suffix in ('.internal', '.local', '.svc', '.svc.cluster.local'):
+        if hostname_lower.endswith(suffix):
+            raise ValueError(f"callback_url cannot target internal services ({suffix})")
+
+    # Resolve hostname to IP and check if private/loopback/link-local
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        # It's a DNS name — resolve it
+        try:
+            resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            addrs = [ipaddress.ip_address(r[4][0]) for r in resolved]
+        except socket.gaierror:
+            # Can't resolve — allow it (may be valid external host)
+            return url
+        for addr in addrs:
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                raise ValueError(
+                    f"callback_url resolves to private/loopback address {addr}"
+                )
+        return url
+
+    # Direct IP address check
+    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        raise ValueError(
+            f"callback_url cannot target private/loopback/link-local address {addr}"
+        )
     return url
 
 
@@ -123,9 +161,22 @@ async def create_container(req: CreateContainerRequest, request: Request):
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+    # Enforce max_per_user
+    max_per_user = profile_def.get("max_per_user", 0)
+    if max_per_user > 0:
+        current_count = await state.count_user_containers(redis, req.user_id, profile=req.profile)
+        if current_count >= max_per_user:
+            raise HTTPException(
+                429,
+                f"User {req.user_id} already has {current_count}/{max_per_user} "
+                f"running containers for profile {req.profile}",
+            )
+
     # Generate container name
     if req.name:
         name = _sanitize_name(req.name)
+        if not name:
+            raise HTTPException(400, "Container name is invalid after sanitization")
     else:
         suffix = uuid.uuid4().hex[:8]
         name = _sanitize_name(f"{req.profile}-{req.user_id}-{suffix}")
