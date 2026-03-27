@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared models
-COPY packages/shared-models /shared-models
-RUN pip install --no-cache-dir /shared-models
+# Copy admin models (auth, token_scope)
+COPY libs/admin-models /admin-models
+RUN pip install --no-cache-dir /admin-models
 
 # Copy app code
 COPY packages/meeting-api .

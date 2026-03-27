@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from shared_models.scheduler import schedule_job, cancel_job, list_jobs, get_job  # scheduler stays in shared_models until migrated
+from runtime_api.scheduler import schedule_job, cancel_job, list_jobs, get_job
 from app.auth_simple import require_api_key
 
 logger = logging.getLogger("chat_api.schedule")

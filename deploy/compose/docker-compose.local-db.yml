@@ -38,9 +38,9 @@ services:
       postgres:
         condition: service_healthy
 
-  # Add postgres dependency to transcription-collector
+  # Add postgres dependency to meeting-api
   # Note: Docker Compose merges depends_on, so this adds to existing dependencies
-  transcription-collector:
+  meeting-api:
     depends_on:
       postgres:
         condition: service_healthy

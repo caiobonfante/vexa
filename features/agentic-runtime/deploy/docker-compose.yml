@@ -124,7 +124,7 @@ services:
     environment:
       - ADMIN_API_URL=http://admin-api:8001
       - BOT_MANAGER_URL=http://bot-manager:8080
-      - TRANSCRIPTION_COLLECTOR_URL=http://transcription-collector:8000
+      - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - MCP_URL=http://mcp:18888
       - CALENDAR_SERVICE_URL=http://calendar-service:8050
       - REDIS_URL=redis://redis:6379/0
@@ -135,7 +135,7 @@ services:
     depends_on:
       - admin-api
       - bot-manager
-      - transcription-collector
+      - meeting-api
       - redis
     restart: unless-stopped
 
@@ -202,15 +202,12 @@ services:
       - admin-api
     restart: unless-stopped
 
-  transcription-collector:
+  meeting-api:
     build:
       context: ../../..
-      dockerfile: services/transcription-collector/Dockerfile
+      dockerfile: packages/meeting-api/Dockerfile
     ports:
-      - "${TC_PORT:-8060}:8000"
-    volumes:
-      - ../../../alembic.ini:/app/alembic.ini
-      - ../../../packages/shared-models/alembic:/app/alembic
+      - "${MEETING_API_PORT:-8080}:8080"
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -239,7 +236,7 @@ services:
   db-migrate:
     build:
       context: ../../..
-      dockerfile: services/transcription-collector/Dockerfile
+      dockerfile: packages/meeting-api/Dockerfile
     volumes:
       - ../../../alembic.ini:/app/alembic.ini
       - ../../../packages/shared-models/alembic:/app/alembic

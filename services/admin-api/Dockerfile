@@ -4,9 +4,9 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Install shared library first
-COPY ./packages/shared-models /app/packages/shared-models
-RUN pip install --no-cache-dir /app/packages/shared-models
+# Install admin models library
+COPY ./libs/admin-models /app/libs/admin-models
+RUN pip install --no-cache-dir /app/libs/admin-models
 
 # Copy application code and requirements
 COPY ./services/admin-api/requirements.txt /app/

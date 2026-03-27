@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     apt-get purge -y curl && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Shared models (scheduler library)
-COPY packages/shared-models /app/packages/shared-models
-RUN pip install --no-cache-dir /app/packages/shared-models
+# Runtime API (scheduler library)
+COPY packages/runtime-api /app/packages/runtime-api
+RUN pip install --no-cache-dir /app/packages/runtime-api
+
+# Admin models (security headers)
+COPY libs/admin-models /app/libs/admin-models
+RUN pip install --no-cache-dir /app/libs/admin-models
 
 COPY services/agent-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

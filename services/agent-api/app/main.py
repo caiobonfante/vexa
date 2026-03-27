@@ -113,8 +113,7 @@ async def startup():
     await app.state.redis.ping()
     logger.info("Redis connected")
 
-    from shared_models.scheduler import recover_orphaned_jobs
-    from shared_models.scheduler_worker import _executor_loop
+    from runtime_api.scheduler import recover_orphaned_jobs, _executor_loop
     recovered = await recover_orphaned_jobs(app.state.redis)
     if recovered:
         logger.info(f"Recovered {recovered} orphaned jobs")
@@ -133,7 +132,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    from shared_models.scheduler_worker import stop_executor
+    from runtime_api.scheduler import stop_executor
     await stop_executor()
     if hasattr(app.state, "meeting_subscriber_task"):
         app.state.meeting_subscriber_task.cancel()
