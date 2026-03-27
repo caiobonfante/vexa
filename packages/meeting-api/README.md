@@ -57,3 +57,71 @@ Bot lifecycle management service. Handles meeting CRUD, voice agent controls (TT
 | `ADMIN_TOKEN` | yes | — | Secret for minting meeting JWTs |
 | `TRANSCRIPTION_COLLECTOR_URL` | no | `http://transcription-collector:8000` | Transcription collector |
 
+## Production Readiness
+
+**Confidence: 52/100**
+
+The service has solid domain logic, good test coverage of happy paths, and a well-structured async codebase. However, several critical bugs, security gaps, and operational blind spots prevent production deployment without remediation.
+
+### Area Scores
+
+| Area | Score | Evidence | Gap |
+|------|-------|----------|-----|
+| **Code quality** | 7/10 | Clean async FastAPI, proper separation of concerns, good use of Pydantic validation, well-structured modules | Deprecated `datetime.utcnow()` throughout, deprecated `@app.on_event` lifecycle hooks, unreachable code in `auth.py:46`, `recreate_db()` DROP SCHEMA CASCADE exists in production code (`database.py`) |
+| **Test coverage** | 6/10 | 161 tests all passing, covers auth, CRUD, callbacks, voice agent, webhooks, recordings, collector (40+ tests) | All 161 tests are fully mocked (MockDB, MockRedis, MockResult) — zero tests against real infrastructure. Integration tests (`test_integration_live.py`) require manual `docker compose up` and skip if unavailable. No CI runs integration tests |
+| **Auth rewrite** | 7/10 | Dual-mode auth works: gateway headers (`X-User-ID`) for production, API keys for standalone. `UserProxy` pattern is clean | Unreachable exception at `auth.py:46`. No rate limiting. No token expiry validation on API keys. Auth middleware returns 403 for both missing and invalid keys (should be 401 for missing) |
+| **Model split** | 5/10 | Own `declarative_base()`, own models (`Meeting`, `Transcription`, `MeetingSession`, `Recording`, `MediaFile`, `CalendarEvent`) | `CalendarEvent` model defined but unused by any endpoint. `collector/auth.py` and `collector/endpoints.py` still import `admin_models.models.APIToken`, `admin_models.models.User`, and `admin_models.token_scope` — tight coupling to old shared library breaks standalone operation. `schemas.py` still contains admin API schemas (`UserBase`, `UserCreate`, `UserResponse`) that are vestiges from old shared models |
+| **TC fold** | 7/10 | Redis Stream consumer with consumer groups, stale message claiming, UPSERT by `segment_id`, background task lifecycle management in `main.py` | **Critical bug**: `mint_meeting_token` in `meetings.py` sets `iss: "meeting-api"` but `verify_meeting_token` in `collector/processors.py` checks `iss: "bot-manager"` — tokens minted by this service will fail verification. Connection retry is basic (sleep + retry loop, no backoff) |
+| **Webhook delivery** | 9/10 | Exponential backoff with jitter, HMAC-SHA256 signing, Redis-backed retry queue, SSRF protection (blocks private IPs, link-local, cloud metadata, internal Docker hostnames), DNS resolution validation, 24h max retry window, backoff schedule `[60, 300, 1800, 7200]s` | No dead-letter queue or alerting after final failure. Webhook secret is per-meeting (stored in `meeting.data` JSONB) but no rotation mechanism |
+| **Standalone docker-compose** | 6/10 | Full stack: meeting-api, runtime-api, redis, postgres with healthchecks. Makefile with `up`, `down`, `test-unit`, `test-integration` targets | No MinIO/S3 service despite storage abstraction requiring it. No Alembic migration step in startup — relies on `create_all()`. No volume mounts for postgres data persistence. No `.env.example` |
+| **Frozen contracts** | 7/10 | Pydantic schemas enforce response shapes. `MeetingStatus` enum with validated state machine transitions. Platform enum. Integration tests verify endpoint shapes | No OpenAPI schema export or contract tests. No versioning strategy. `BotStatusResponse.running_bots` shape is tested but not formally frozen |
+| **Recordings/storage** | 5/10 | Abstract `StorageClient` with MinIO and Local backends. Path traversal protection in `LocalStorageClient`. Dual-mode recording lookup (JSONB vs normalized model) | **N+1 query**: `_find_meeting_data_recording` scans ALL user meetings to find a recording. No pagination on recording queries. MinIO not in docker-compose. No storage health check. Dual-mode lookup adds complexity without clear migration path |
+| **Docker** | 7/10 | Python 3.11-slim, multi-stage-ready, healthcheck configured, proper `--no-cache-dir` pip installs | Still copies and installs `admin-models` shared lib (breaks if lib changes). No multi-stage build (gcc stays in final image). No non-root user. No `.dockerignore` found. Image not pinned to specific Python patch version |
+| **Performance** | 4/10 | Async throughout, SQLAlchemy async with asyncpg, connection pool configured (`pool_size=10`, `max_overflow=20`) | **No httpx connection pooling**: creates new `AsyncClient` per Runtime API call in `meetings.py`. No request timeout configuration on outbound calls. `statement_cache_size=0` disables asyncpg prepared statement cache. No metrics/observability (no Prometheus, no structured logging). `REDIS_URL` required at import time (raises `ValueError` on import) |
+
+### Known Limitations
+
+1. **MeetingToken issuer mismatch** (critical): `mint_meeting_token()` in `meetings.py:~L50` sets `iss: "meeting-api"` but `verify_meeting_token()` in `collector/processors.py` checks for `iss: "bot-manager"`. Any token minted by this service will fail collector verification. This is a **breaking bug** if not compensated by the bot re-minting with the correct issuer.
+
+2. **SecurityHeadersMiddleware not mounted**: `security_headers.py` defines the middleware and `main.py` imports it, but `app.add_middleware(SecurityHeadersMiddleware)` is never called. All security headers (X-Frame-Options, CSP, X-Content-Type-Options) are silently missing.
+
+3. **admin_models coupling**: `collector/auth.py` and `collector/endpoints.py` import from `admin_models.models` and `admin_models.token_scope`. The Dockerfile copies and installs this shared library. This blocks true standalone operation and creates a fragile cross-package dependency.
+
+4. **`recreate_db()` in production code**: `database.py` contains a function that runs `DROP SCHEMA public CASCADE`. No guard prevents accidental invocation. Should be removed or moved to a dev-only script.
+
+5. **No httpx connection pooling**: Every Runtime API call in `meetings.py` creates a new `httpx.AsyncClient`, opening and closing TCP connections per request. Under load this will exhaust file descriptors and add latency.
+
+6. **N+1 recording query**: `_find_meeting_data_recording()` in `recordings.py` loads ALL meetings for a user to search for a recording by ID, instead of querying directly.
+
+7. **Vestigial schemas**: `schemas.py` contains `UserBase`, `UserCreate`, `UserResponse`, `UserUpdate` and other admin-API schemas that are unused by meeting-api endpoints.
+
+8. **No observability**: No Prometheus metrics, no structured logging, no request tracing. The only health signal is `GET /health → {"status": "ok"}` which doesn't check downstream dependencies.
+
+### Validation Plan (to reach 90+)
+
+1. **Fix MeetingToken issuer** — align `iss` claim between `mint_meeting_token` and `verify_meeting_token`. Add a unit test that mints and verifies in sequence. *Moves confidence: +8*
+
+2. **Mount SecurityHeadersMiddleware** — add `app.add_middleware(SecurityHeadersMiddleware)` in `main.py`. Add test verifying headers present. *Moves confidence: +3*
+
+3. **Remove admin_models dependency** — inline the 2-3 needed types (APIToken, User, check_token_scope) into meeting-api's own models or remove the collector auth paths that reference them. Update Dockerfile to stop copying admin-models. *Moves confidence: +5*
+
+4. **Create shared httpx client** — instantiate one `httpx.AsyncClient` at app startup (in lifespan), pass it via `app.state` or dependency injection, close on shutdown. *Moves confidence: +4*
+
+5. **Fix N+1 recording query** — replace `_find_meeting_data_recording` scan with a direct query filtered by recording ID. *Moves confidence: +3*
+
+6. **Remove `recreate_db()`** — delete from `database.py` or move to a CLI-only dev script. *Moves confidence: +2*
+
+7. **Clean up schemas.py** — remove unused admin schemas (UserBase, UserCreate, UserResponse, UserUpdate). Remove unused CalendarEvent model. *Moves confidence: +2*
+
+8. **Add real integration tests to CI** — run `docker compose up` in CI, execute `test_integration_live.py`, tear down. Add a postgres migration test. *Moves confidence: +6*
+
+9. **Add observability** — structured JSON logging, Prometheus metrics endpoint (`/metrics`), request duration histograms, downstream health in `/health` (redis ping, db ping). *Moves confidence: +5*
+
+10. **Docker hardening** — multi-stage build (drop gcc), non-root user, pin Python patch version, add `.dockerignore`. *Moves confidence: +3*
+
+11. **Add MinIO to docker-compose** — recordings/storage won't work standalone without it. Add healthcheck. *Moves confidence: +2*
+
+12. **Fix deprecated APIs** — replace `datetime.utcnow()` with `datetime.now(UTC)`, replace `@app.on_event` with lifespan context manager. *Moves confidence: +2*
+
+**Projected score after all items: ~97/100**
+
