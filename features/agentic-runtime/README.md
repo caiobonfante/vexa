@@ -1,6 +1,6 @@
 # Agentic Runtime
 
-> **Confidence: 85** — MVP0-3 complete (32 gate checks pass). All CLI commands verified. Dashboard integration working.
+> **Confidence: 0** — RESET after architecture refactoring. agent-api renamed, scheduler moved to runtime-api, shared-models split. All prior gate checks invalidated.
 > **Tested:** Agent chat (SSE streaming, session resume), meeting join/transcribe/speak/chat/screen, browser sessions (VNC/CDP), scheduler (16/16 unit tests), workspace persistence (MinIO).
 > **Not tested:** BOT_API_TOKEN wiring (blocks container spawning from agent), post-meeting auto-trigger webhook, server-side chat history.
 > **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list). For workspace/knowledge features, see [knowledge-workspace](../knowledge-workspace/).

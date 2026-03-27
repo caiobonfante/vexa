@@ -1,6 +1,6 @@
 # Remote Browser
 
-> **Confidence: 30** — PoC proven. Container builds, VNC accessible, CDP works. Not integrated into the feature workflow.
+> **Confidence: 0** — RESET after architecture refactoring. Browser session creation path changed (meeting-api to runtime-api). VNC session tokens may not work with new auth.
 > **Tested:** Container builds with VNC packages, browser starts in session mode, VNC accessible via URL, CDP connection works.
 > **Not tested:** MinIO persistence (save/restore browser state), authenticated bot flow, agent + human simultaneous control in production.
 > **Contributions welcome:** MinIO sync for browser profiles, authenticated meeting join flow, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).

@@ -1,6 +1,6 @@
 # Multi-Platform
 
-> **Confidence: GMeet 75, Teams 65, Zoom 0 (weighted 50/100)** — Join flows work for Google Meet and Teams. Zoom SDK broken, not tested.
+> **Confidence: 0** — RESET after architecture refactoring. Bot spawning changed: meeting-api to runtime-api (was bot-manager). Platform configs in profiles.yaml. Needs re-validation.
 > **Tested:** Google Meet standard + custom nickname URLs, Teams personal + enterprise URLs, platform auto-detection from URL.
 > **Not tested:** Zoom (SDK requires app approval), Teams legacy deep links, Teams US Gov/DoD, cross-platform transcript consistency.
 > **Contributions welcome:** Zoom browser-based implementation ([#150](https://github.com/Vexa-ai/vexa/issues/150), [#128](https://github.com/Vexa-ai/vexa/issues/128)), Teams admission bug ([#171](https://github.com/Vexa-ai/vexa/issues/171)), new meeting type coverage.

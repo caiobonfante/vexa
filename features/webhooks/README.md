@@ -1,6 +1,6 @@
 # Webhooks
 
-> **Confidence: 85** — Envelope standardized (was 3 formats, now 1). Signing fixed. E2E delivery untested with public URLs.
+> **Confidence: 0** — RESET after architecture refactoring. webhook_delivery.py moved to meeting-api. Webhook URL now read from meeting.data (was User.data). All delivery paths changed.
 > **Tested:** Payload envelope consistency, event_id generation, signing (timestamp.payload HMAC), bot status events fire.
 > **Not tested:** Delivery to public URLs (tested only with localhost), retry mechanism (fire-and-forget today), transcript.ready event.
 > **Contributions welcome:** Retry via scheduler (migrate webhook_retry_worker), circuit breaker, dead letter alerting.

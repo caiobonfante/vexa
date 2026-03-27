@@ -1,6 +1,6 @@
 # Scheduler
 
-> **Confidence: 90 (unit tests)** — 16/16 tests pass. Core library complete: scheduling, execution, retry, idempotency, crash recovery, callbacks.
+> **Confidence: 0** — RESET after architecture refactoring. Scheduler moved from shared-models to runtime-api. Wired into runtime-api main.py but never tested live.
 > **Tested:** Job scheduling, atomic execution (no duplicates), retry with backoff, crash recovery, cancellation, on_success/on_failure callbacks, idempotency keys.
 > **Not tested:** Executor not wired into running services. REST API not built. No E2E test through gateway.
 > **Contributions welcome:** Wire executor into bot-manager startup, REST API endpoints (POST/GET/DELETE /schedule), calendar-service integration.

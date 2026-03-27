@@ -1,6 +1,6 @@
 # Token Scoping
 
-> **Confidence: 90** — 14/14 tests pass. All 4 scopes (`user`, `bot`, `tx`, `admin`) enforced at gateway. Legacy unscoped tokens backward-compatible.
+> **Confidence: 0** — RESET after architecture refactoring. Token validation moved to gateway header injection. Legacy tokens now return ["legacy"] not ["admin"]. Scope enforcement paths changed.
 > **Tested:** Token creation with scope, prefix visibility, gateway enforcement (in-scope → 200, out-of-scope → 403), legacy token compatibility.
 > **Not tested:** Per-endpoint granularity (currently per-service), per-meeting RBAC.
 > **Contributions welcome:** Per-meeting RBAC ([#158](https://github.com/Vexa-ai/vexa/issues/158)), analytics token scope ([#160](https://github.com/Vexa-ai/vexa/issues/160)), finer-grained per-endpoint scoping.

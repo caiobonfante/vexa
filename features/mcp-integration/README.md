@@ -1,6 +1,6 @@
 # MCP Integration
 
-> **Confidence: 90** — 10/10 tools discoverable. Auth enforced. Tool calls return valid data.
+> **Confidence: 0** — RESET after architecture refactoring. Gateway auth flow changed (header injection). MCP tool calls route through modified gateway. Needs re-validation.
 > **Tested:** tools/list, all read tools (meetings, transcripts, recordings), auth rejection, gateway proxy.
 > **Not tested:** list_meetings pagination (returns all 211 meetings, 2.7MB unbounded), interactive tools (speak/chat not yet exposed as MCP tools), MCP Resources and Subscriptions.
 > **Contributions welcome:** Pagination fix, expose speak/chat/screen as MCP tools ([#127](https://github.com/Vexa-ai/vexa/issues/127)), MCP Resources for meetings.

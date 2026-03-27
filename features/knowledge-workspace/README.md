@@ -1,6 +1,6 @@
 # Knowledge Workspace
 
-> **Confidence: 60** — Knowledge template complete and functional. MinIO persistence working. Agent chat with workspace context working via Telegram and web dashboard.
+> **Confidence: 0** — RESET after architecture refactoring. agent-api renamed from agent-runtime. Workspace module moved. Storage imports changed.
 > **Tested:** Template structure deployed, agent CLAUDE.md instructions working, MinIO workspace sync, vexa schedule integration, streams/entities/timeline structure.
 > **Not tested:** Git-backed workspace init, workspace index injection per chat turn, entity extraction from meeting transcripts, script execution via worker containers, multi-workspace API.
 > **Contributions welcome:** Git init on workspace creation, workspace index injection (scan filesystem → inject summary into prompt), entity extraction from transcripts, script execution in worker containers, additional templates (project, meeting-notes).

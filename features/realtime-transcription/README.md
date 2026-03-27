@@ -1,6 +1,6 @@
 # Realtime Transcription
 
-> **Confidence: Teams 90, GMeet 90, Zoom 0** — E2E validated on both platforms. 92.7% content accuracy. Human speaker identity still weak (40). Zoom not implemented.
+> **Confidence: 0** — RESET after architecture refactoring. bot-manager deleted, meeting-api rewritten, transcription-collector folded in. All prior test evidence invalidated. Needs full re-validation against live meetings.
 > **Tested:** Bot joins, audio capture, Whisper transcription, WebSocket delivery, REST consistency, VAD silence filtering.
 > **Not tested:** Zoom, human speaker locking (<585s), multi-track dedup, language locking in live meeting.
 > **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).

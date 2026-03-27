@@ -1,6 +1,6 @@
 # Post-Meeting Transcription
 
-> **Confidence: 85** — Pipeline works end-to-end. 100% speaker accuracy with 2 speakers. Dashboard playback untested.
+> **Confidence: 0** — RESET after architecture refactoring. Pipeline code moved to meeting-api/collector. Import paths changed. Needs re-validation.
 > **Tested:** Recording to MinIO, speaker event collection, Whisper transcription, speaker mapping via overlap algorithm, segment persistence to Postgres.
 > **Not tested:** Dashboard playback offset (known ~2-5s bug), re-transcription (returns 409), retry on failure, accuracy with 3+ speakers.
 > **Contributions welcome:** Dashboard playback seek fix, re-transcription support, multi-speaker accuracy testing.
