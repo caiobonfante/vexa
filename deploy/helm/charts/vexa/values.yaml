@@ -22,7 +22,7 @@ secrets:
   adminApiToken: "CHANGE_ME"   # Used by Admin API auth & MeetingToken signing across services
   transcriberApiKey: ""
 
-# Shared database config (used by admin-api, bot-manager, transcription-collector)
+# Shared database config (used by admin-api, transcription-collector/meeting-api)
 database:
   host: ""          # auto-filled if postgres.enabled=true, else REQUIRED
   port: 5432
@@ -73,73 +73,6 @@ adminApi:
     limits:
       cpu: 500m
       memory: 512Mi
-  extraEnv: []
-
-botManager:
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: vexa/bot-manager
-    tag: local
-  service:
-    type: ClusterIP
-    port: 8080
-
-  # Orchestrator mode:
-  # - process: spawns bots as child Node.js processes (no Docker socket; designed for Lite/all-in-one images)
-  # - docker: spawns bots as Docker containers (requires Docker daemon socket access)
-  # - nomad: spawns bots via Nomad jobs (production/scale)
-  # - kubernetes: (PoC) spawns bots as Pods via the Kubernetes API (recommended long-term for k8s)
-  orchestrator: process
-
-  # Process orchestrator knobs (only used when orchestrator=process)
-  processOrchestrator:
-    # Chromium/Playwright is much more stable with a larger /dev/shm.
-    # This mounts an in-memory emptyDir to /dev/shm inside the bot-manager Pod.
-    shm:
-      enabled: true
-      # Optional; leave empty to omit. Example: "1Gi"
-      sizeLimit: ""
-
-  # Kubernetes orchestrator knobs (PoC; only used when orchestrator=kubernetes)
-  kubernetesOrchestrator:
-    # Create a namespaced ServiceAccount + Role/RoleBinding for bot-manager to manage bot Pods.
-    createRbac: false
-
-    # Namespace where bot Pods should be created.
-    # Empty means: use the bot-manager Pod namespace.
-    botNamespace: ""
-
-    # ServiceAccount name to attach to bot Pods (optional; empty means "default").
-    botServiceAccountName: ""
-
-  # The Docker orchestrator requires access to a Docker daemon socket.
-  # WARNING: This is privileged and usually NOT available on standard Kubernetes clusters.
-  dockerSocketMount:
-    enabled: false
-    hostPath: /var/run/docker.sock
-
-  bot:
-    # Image name Bot Manager will ask the orchestrator to run (used by docker/kubernetes orchestrators)
-    imageName: "vexa-bot:dev"
-
-    # Only relevant for Docker orchestrator; set if your bot containers must join a specific Docker network.
-    dockerNetwork: ""
-    resources:
-      requests:
-        cpu: "250m"        # measured steady state: 250m (baseline 2026-03-12)
-        memory: "600Mi"    # measured steady state: 597Mi
-      limits:
-        cpu: "1000m"       # 4x headroom for browser spikes
-        memory: "1Gi"      # ~1.7x headroom
-
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 4000m
-      memory: 4Gi
   extraEnv: []
 
 transcriptionCollector:

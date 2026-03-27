@@ -64,7 +64,7 @@ services:
   agent-api:
     build:
       context: ../../..
-      dockerfile: services/agent-api/Dockerfile
+      dockerfile: packages/agent-api/Dockerfile
     ports:
       - "${CHAT_API_PORT:-8100}:8100"
     environment:

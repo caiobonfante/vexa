@@ -123,6 +123,9 @@ model_weights/
 *.pt
 *.pth
 
+# Node
+node_modules/
+
 # Docker
 .docker/
 docker-volumes/
@@ -147,7 +150,8 @@ test_data/
 *.mp4
 *.txt
 !**/requirements.txt
-manifest.csvdocker-compose.override.yml
+manifest.csv
+docker-compose.override.yml
 .env.test
 hub
 test.log
