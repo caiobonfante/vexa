@@ -1,10 +1,14 @@
-"""Tests for gateway header injection (Phase B).
+"""Tests for gateway auth enforcement and header injection.
 
 Verifies:
 - Valid X-API-Key -> downstream gets X-User-ID/X-User-Scopes/X-User-Limits
-- Invalid X-API-Key -> downstream gets X-API-Key only (backward compat)
+- Invalid X-API-Key -> 401 returned, request NOT forwarded
+- Missing X-API-Key -> 401 returned, request NOT forwarded
 - Spoofed X-User-ID stripped before forwarding
 - Cache hit -> admin-api not called twice for same token
+- Public routes (/) -> no auth needed
+- Auth routes (/auth/*) -> no API key required
+- Admin routes with X-Admin-API-Key -> forwarded (admin-api validates)
 """
 import json
 import pytest
@@ -36,8 +40,9 @@ class TestHeaderStripping:
 
     @pytest.mark.asyncio
     async def test_strips_spoofed_x_user_id(self):
-        """Client-supplied X-User-ID is removed."""
+        """Client-supplied X-User-ID is removed (valid token case)."""
         captured_headers = {}
+        user_data = {"user_id": 5, "scopes": ["bot"], "max_concurrent": 3, "email": "test@x.com"}
 
         async def mock_request(method, url, headers=None, params=None, content=None):
             captured_headers.update(headers or {})
@@ -49,10 +54,12 @@ class TestHeaderStripping:
 
         client = AsyncMock()
         client.request = mock_request
-        client.post = AsyncMock(return_value=_make_validate_response(500))
+        client.post = AsyncMock(return_value=_make_validate_response(200, user_data))
+
+        app.state.redis = None
 
         req = _make_request(headers={
-            "x-api-key": "test_key",
+            "x-api-key": "vxa_bot_abc123",
             "x-user-id": "SPOOFED_999",
             "x-user-scopes": "admin",
             "x-user-limits": "100",
@@ -60,9 +67,9 @@ class TestHeaderStripping:
 
         await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
 
-        assert captured_headers.get("x-user-id") != "SPOOFED_999"
-        assert "x-user-scopes" not in captured_headers or captured_headers["x-user-scopes"] != "admin"
-        assert "x-user-limits" not in captured_headers or captured_headers["x-user-limits"] != "100"
+        assert captured_headers.get("x-user-id") == "5"  # From validated token, not spoofed
+        assert captured_headers.get("x-user-scopes") == "bot"
+        assert captured_headers.get("x-user-limits") == "3"
 
 
 class TestHeaderInjection:
@@ -96,9 +103,46 @@ class TestHeaderInjection:
         assert captured_headers["x-user-scopes"] == "bot"
         assert captured_headers["x-user-limits"] == "3"
 
+
+class TestFailClosed:
+    """Auth is a gate: invalid/missing tokens return 401, NOT forwarded."""
+
     @pytest.mark.asyncio
-    async def test_invalid_token_backward_compat(self):
-        """Failed validation still forwards X-API-Key (no identity headers)."""
+    async def test_invalid_token_returns_401(self):
+        """Failed validation returns 401 — request is NOT forwarded downstream."""
+        client = AsyncMock()
+        client.request = AsyncMock()  # Should NOT be called
+        client.post = AsyncMock(return_value=_make_validate_response(401))
+
+        app.state.redis = None
+
+        req = _make_request(headers={"x-api-key": "bad_token"})
+        resp = await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+
+        assert resp.status_code == 401
+        body = json.loads(resp.body)
+        assert "Invalid API key" in body["detail"]
+        client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_token_returns_401(self):
+        """Missing API key returns 401 — request is NOT forwarded downstream."""
+        client = AsyncMock()
+        client.request = AsyncMock()  # Should NOT be called
+
+        app.state.redis = None
+
+        req = _make_request(headers={})
+        resp = await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+
+        assert resp.status_code == 401
+        body = json.loads(resp.body)
+        assert "Missing API key" in body["detail"]
+        client.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_no_token_with_require_auth_false(self):
+        """When require_auth=False, missing API key is allowed (e.g. /auth routes)."""
         captured_headers = {}
 
         async def mock_request(method, url, headers=None, params=None, content=None):
@@ -111,15 +155,35 @@ class TestHeaderInjection:
 
         client = AsyncMock()
         client.request = mock_request
-        client.post = AsyncMock(return_value=_make_validate_response(401))
 
-        app.state.redis = None
+        req = _make_request(headers={})
+        resp = await forward_request(client, "POST", "http://bot-manager:8000/auth/login", req, require_auth=False)
 
-        req = _make_request(headers={"x-api-key": "bad_token"})
-        await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+        assert resp.status_code == 200
 
-        assert captured_headers.get("x-api-key") == "bad_token"
-        assert "x-user-id" not in captured_headers
+    @pytest.mark.asyncio
+    async def test_admin_route_forwards_without_client_key(self):
+        """Admin routes use X-Admin-API-Key, not X-API-Key — always forwarded to admin-api."""
+        import os
+        admin_url = os.environ.get("ADMIN_API_URL", "http://admin-api:8000")
+        captured_headers = {}
+
+        async def mock_request(method, url, headers=None, params=None, content=None):
+            captured_headers.update(headers or {})
+            resp = MagicMock()
+            resp.content = b"{}"
+            resp.status_code = 200
+            resp.headers = {}
+            return resp
+
+        client = AsyncMock()
+        client.request = mock_request
+
+        req = _make_request(headers={"x-admin-api-key": "admin_secret_123"})
+        resp = await forward_request(client, "GET", f"{admin_url}/admin/users", req)
+
+        assert resp.status_code == 200
+        assert captured_headers.get("x-admin-api-key") == "admin_secret_123"
 
 
 class TestTokenCache:

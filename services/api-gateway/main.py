@@ -173,7 +173,7 @@ logger = logging.getLogger("api_gateway")
 
 
 # --- Helper for Forwarding ---
-async def forward_request(client: httpx.AsyncClient, method: str, url: str, request: Request) -> Response:
+async def forward_request(client: httpx.AsyncClient, method: str, url: str, request: Request, *, require_auth: bool = True) -> Response:
     # Copy original headers, converting to a standard dict
     # Exclude host, content-length, transfer-encoding as they are handled by httpx/server
     excluded_headers = {"host", "content-length", "transfer-encoding"}
@@ -188,12 +188,20 @@ async def forward_request(client: httpx.AsyncClient, method: str, url: str, requ
 
     # Forward appropriate auth header if present
     if is_admin_request:
+        # Admin routes — admin-api validates X-Admin-API-Key itself
         admin_key = request.headers.get("x-admin-api-key")
         if admin_key:
             headers["x-admin-api-key"] = admin_key
     else:
-        # Forward client API key for bot-manager and transcription-collector
+        # Client API key auth — fail-closed: reject if missing or invalid
         client_key = request.headers.get("x-api-key")
+        if require_auth and not client_key:
+            return Response(
+                content=json.dumps({"detail": "Missing API key"}),
+                status_code=401,
+                media_type="application/json",
+            )
+
         if client_key:
             headers["x-api-key"] = client_key
 
@@ -203,6 +211,12 @@ async def forward_request(client: httpx.AsyncClient, method: str, url: str, requ
                 headers["x-user-id"] = str(user_data["user_id"])
                 headers["x-user-scopes"] = ",".join(user_data.get("scopes", []))
                 headers["x-user-limits"] = str(user_data.get("max_concurrent", 1))
+            elif require_auth:
+                return Response(
+                    content=json.dumps({"detail": "Invalid API key"}),
+                    status_code=401,
+                    media_type="application/json",
+                )
 
     # Forward query parameters
     forwarded_params = dict(request.query_params)
@@ -255,7 +269,7 @@ async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[di
     except Exception as e:
         logger.warning(f"Token validation failed: {e}")
 
-    # Fall through — downstream will get X-API-Key only (backward compat)
+    # Validation failed or admin-api unreachable — caller decides whether to reject
     return None
 
 # --- Root Endpoint --- 
@@ -1049,7 +1063,7 @@ async def forward_mcp_path(request: Request, path: str):
 async def proxy_auth(path: str, request: Request):
     """Proxy /auth/* routes to bot-manager."""
     url = f"{BOT_MANAGER_URL}/auth/{path}"
-    return await forward_request(app.state.http_client, request.method, url, request)
+    return await forward_request(app.state.http_client, request.method, url, request, require_auth=False)
 
 
 # --- Remote Browser Session Routes ---
