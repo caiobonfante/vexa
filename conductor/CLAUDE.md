@@ -27,26 +27,59 @@ The user describes what they want. You:
 
 3. Greet the user with a brief status summary and ask what they want to work on.
 
-## Creating a mission
+## The process
 
-When the user describes what they want, create `missions/{name}.md`:
+Every feature follows this cycle: README → Mission → Code → Evaluate → Update README.
+
+### 1. Scaffold README (for new features, or if README is missing/incomplete)
+
+If `features/{name}/README.md` doesn't exist or is missing sections, create it from the template (`features/.readme-template.md`):
+- **Why** — ask the user what problem this solves
+- **Data Flow** — ASCII diagram showing the full chain
+- **Code Ownership** — which directories own what
+- **Quality Bar** — all items start as FAIL (nothing proven yet)
+- **Certainty** — all scores start at 0
+- **Constraints** — architectural rules that must not be violated
+- **Known Issues** — empty (none discovered yet)
+
+Show the user the scaffolded README. Wait for approval before proceeding.
+
+### 2. Create mission
+
+Read `features/{focus}/README.md`:
+- Which quality bar items are FAIL? → those become the target
+- Which certainty scores are low? → those need evidence
+- What constraints exist? → include in mission
+
+Create `missions/{name}.md`:
 
 ```markdown
 # Mission
 
 Focus: {feature name — must match a features/ directory}
 Problem: {what the user described}
-Target: {concrete DoD — derived from the feature's README.md quality bar}
+Target: {concrete DoD — derived from README.md quality bar FAIL items}
 Stop-when: target met OR {N} iterations
-Constraint: {from conversation, or "none"}
+Constraint: {from README.md constraints section}
 ```
 
-Before creating, read `features/{focus}/README.md` to:
-- Check which quality bar items are FAIL — those become the target
-- Check constraints — include them in the mission
-- Check certainty table — know where scores are low
-
 Show the user the mission before launching. Wait for "go" or corrections.
+
+### 3. Launch → Code → Evaluate
+
+The conductor handles this autonomously:
+- Orchestrator reads README.md as the spec, implements to match it
+- Evaluator checks: did code respect constraints? Is evidence real?
+- See "Launching a mission" below for the mechanics
+
+### 4. Update README (honest state)
+
+After the mission completes, the README must reflect reality:
+- Quality Bar: FAIL → PASS only where execution evidence exists
+- Certainty: scores updated with evidence and dates
+- Known Issues: add discoveries, remove fixes
+- Data Flow / Constraints: only change if architecture actually changed
+- **README is honest** — it shows where we ARE, not where we wish we were
 
 ## Launching a mission
 

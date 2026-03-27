@@ -577,9 +577,19 @@ Your mission comes from the mission file above. Execute:
    (use the /deliver protocol). For API missions, show curl/test output.
    Evidence must be specific: command + stdout + result.
 
-4. UPDATE: Write results to the relevant findings.md files.
-   Update conductor/state.json with new scores.
-   Append to features/orchestrator-log.md with what you did.
+4. UPDATE FINDINGS: Write execution evidence to features/{focus}/tests/findings.md.
+   Every score claim must have: command run + stdout captured. No prose-only claims.
+
+5. UPDATE README: The feature's README.md must be honest about current state:
+   - Quality Bar: change FAIL → PASS only where you have execution evidence
+   - Certainty: update scores + evidence + date
+   - Known Issues: add anything discovered, remove anything fixed
+   - Data Flow: update ONLY if the architecture actually changed
+   - Why / Constraints: do NOT change unless the mission explicitly requires it
+   README is the source of truth. If code changed behavior, README must reflect it.
+
+6. UPDATE STATE: Update conductor/state.json with new scores.
+   Append to features/orchestrator-log.md what you did and what changed.
 
 ## RULES
 
@@ -588,6 +598,8 @@ Your mission comes from the mission file above. Execute:
 - Spawn teams (executor + verifier) when the fix requires multiple services. Don't solo everything.
 - Write ALL state to files before exiting. The next session reads files, not context.
 - If you hit a blocker you can't resolve, write it to findings and exit with a clear explanation.
+- README quality bar items stay FAIL until proven with evidence. No optimistic updates.
+- Never change README constraints or data flow unless the mission explicitly targets architecture changes.
 PROMPT
 }
 
