@@ -669,8 +669,10 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
   local batch_meta="$BATCH_DIR/meta-${iteration}.json"
 
   # Run claude with stream-json — every tool call, edit, bash command is an event
+  # Use --add-dir to ensure claude operates in the correct directory (worktree or main repo)
   claude -p "Execute the mission. Read conductor/mission.md and conductor/state.json first." \
     --append-system-prompt-file "$prompt_file" \
+    --add-dir "$REPO" \
     --permission-mode auto \
     --output-format stream-json \
     --verbose \
@@ -728,6 +730,7 @@ EVALPROMPT
   set +e
   claude -p "Evaluate the latest conductor batch." \
     --append-system-prompt-file "$eval_prompt_file" \
+    --add-dir "$REPO" \
     --agent evaluator \
     --permission-mode auto \
     --output-format stream-json \
