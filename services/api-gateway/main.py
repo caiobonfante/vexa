@@ -941,34 +941,64 @@ async def forward_admin_request(request: Request, path: str):
 # --- Agent API Routes (chat, sessions) ---
 
 async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optional[str]:
-    """Fetch active meeting context for a user. Returns JSON string or None."""
+    """Fetch active meeting context for a user. Returns JSON string or None.
+
+    Uses two approaches:
+    1. GET /bots/status for running containers (with platform/meeting_id if available)
+    2. GET /meetings for all user meetings filtered to active status (fallback)
+    """
     try:
-        # Get running bots for this user
-        resp = await client.get(
-            f"{BOT_MANAGER_URL}/bots/status",
-            headers={"x-user-id": str(user_id)},
-            timeout=5.0,
-        )
-        if resp.status_code != 200:
-            return None
-        bots_data = resp.json()
-        running_bots = bots_data.get("running_bots", [])
-        if not running_bots:
-            return None
+        headers = {"x-user-id": str(user_id)}
 
+        # Strategy 1: Check running bots
         active_meetings = []
-        for bot in running_bots:
-            platform = bot.get("platform")
-            meeting_id = bot.get("native_meeting_id")
-            if not platform or not meeting_id:
-                continue
+        bot_platforms = {}  # meeting_id -> platform for active bots
 
-            # Fetch transcript segments
+        resp = await client.get(f"{BOT_MANAGER_URL}/bots/status", headers=headers, timeout=5.0)
+        has_running_bots = False
+        if resp.status_code == 200:
+            bots_data = resp.json()
+            running_bots = bots_data.get("running_bots", [])
+            has_running_bots = len(running_bots) > 0
+
+            for bot in running_bots:
+                platform = bot.get("platform")
+                meeting_id = bot.get("native_meeting_id")
+                if platform and meeting_id:
+                    bot_platforms[meeting_id] = platform
+
+        if not has_running_bots:
+            return None
+
+        # Strategy 2: Get meetings list to find active ones with correct platform/ID
+        if not bot_platforms:
+            # Bots are running but platform/meeting_id not in status — check meetings list
+            m_resp = await client.get(
+                f"{TRANSCRIPTION_COLLECTOR_URL}/meetings",
+                headers=headers,
+                timeout=5.0,
+            )
+            if m_resp.status_code == 200:
+                m_data = m_resp.json()
+                meetings_list = m_data.get("meetings", m_data) if isinstance(m_data, dict) else m_data
+                if isinstance(meetings_list, list):
+                    for m in meetings_list:
+                        if m.get("status") in ("active", "requested", "joining"):
+                            mid = m.get("native_meeting_id") or m.get("platform_specific_id")
+                            plat = m.get("platform")
+                            if mid and plat:
+                                bot_platforms[mid] = plat
+
+        if not bot_platforms:
+            return None
+
+        # Fetch transcript for each active meeting
+        for meeting_id, platform in bot_platforms.items():
             segments = []
             try:
                 t_resp = await client.get(
                     f"{TRANSCRIPTION_COLLECTOR_URL}/transcripts/{platform}/{meeting_id}",
-                    headers={"x-user-id": str(user_id)},
+                    headers=headers,
                     timeout=5.0,
                 )
                 if t_resp.status_code == 200:
@@ -984,7 +1014,7 @@ async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optio
             active_meetings.append({
                 "meeting_id": meeting_id,
                 "platform": platform,
-                "status": bot.get("normalized_status", "active"),
+                "status": "active",
                 "participants": participants,
                 "latest_segments": [
                     {
@@ -1022,14 +1052,17 @@ async def agent_chat_proxy(request: Request):
         data = json.loads(body)
         user_id = data.get("user_id", "")
         session_id = data.get("session_id")
+        logger.warning(f"Meeting context check: user_id={user_id}, session_id={session_id}")
 
         if user_id and session_id:
             redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
             if redis_client:
                 meta_raw = await redis_client.hget(f"agent:sessions:{user_id}", session_id)
+                logger.warning(f"Session meta from Redis: {meta_raw}")
                 if meta_raw:
                     meta = json.loads(meta_raw)
                     if meta.get("meeting_aware"):
+                        logger.warning(f"Meeting-aware session detected for user {user_id}")
                         # Resolve internal user_id from API key
                         client_key = request.headers.get("x-api-key")
                         internal_uid = user_id
@@ -1037,11 +1070,15 @@ async def agent_chat_proxy(request: Request):
                             user_data = await _resolve_token(app.state.http_client, client_key)
                             if user_data:
                                 internal_uid = str(user_data["user_id"])
+                        logger.warning(f"Fetching meeting context for internal user {internal_uid}")
                         context = await _get_meeting_context(app.state.http_client, internal_uid)
                         if context:
                             extra_headers["x-meeting-context"] = context
+                            logger.warning(f"Meeting context injected ({len(context)} bytes)")
+                        else:
+                            logger.warning("No meeting context available (no active meetings)")
     except Exception as e:
-        logger.warning(f"Meeting context injection error: {e}")
+        logger.warning(f"Meeting context injection error: {e}", exc_info=True)
 
     # Build forwarding headers
     excluded = {"host", "content-length", "transfer-encoding"}
@@ -1061,11 +1098,13 @@ async def agent_chat_proxy(request: Request):
     headers.update(extra_headers)
     params = dict(request.query_params)
 
-    # Stream the SSE response from agent-api
+    # Stream the SSE response from agent-api (long timeout for SSE)
     url = f"{AGENT_API_URL}/api/chat"
     try:
-        req = app.state.http_client.build_request("POST", url, headers=headers, params=params or None, content=body)
-        resp = await app.state.http_client.send(req, stream=True)
+        req = app.state.http_client.build_request(
+            "POST", url, headers=headers, params=params or None, content=body,
+        )
+        resp = await app.state.http_client.send(req, stream=True, timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0))
 
         async def stream_response():
             try:
