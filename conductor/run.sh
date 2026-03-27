@@ -624,9 +624,39 @@ state['status'] = 'running'
 state_path.write_text(json.dumps(state, indent=2) + '\n')
 "
 
-  # Write prompt to file (avoids shell escaping issues with backticks/pipes/$ in markdown)
+  # Build prompt file: orchestrator instructions + feature README + owned service READMEs
   local prompt_file="$BATCH_DIR/prompt-${iteration}.txt"
   build_prompt > "$prompt_file"
+
+  # Append feature README as system design context
+  local focus
+  focus=$(grep -i '^Focus:' "$MISSION_FILE" 2>/dev/null | cut -d: -f2- | xargs)
+  if [[ -n "$focus" ]]; then
+    local feature_readme="$REPO/features/$focus/README.md"
+    if [[ -f "$feature_readme" ]]; then
+      echo "" >> "$prompt_file"
+      echo "## FEATURE SYSTEM DESIGN (from features/$focus/README.md)" >> "$prompt_file"
+      echo "" >> "$prompt_file"
+      cat "$feature_readme" >> "$prompt_file"
+    fi
+
+    # Extract code ownership dirs from feature README, append their READMEs
+    local owned_dirs
+    owned_dirs=$(grep -E '^\s*(services|packages|libs)/' "$feature_readme" 2>/dev/null | sed 's/→.*//' | xargs 2>/dev/null || true)
+    for dir in $owned_dirs; do
+      # Strip trailing whitespace and path suffixes like (bot-manager routes)
+      dir=$(echo "$dir" | sed 's/(.*//' | xargs)
+      local svc_readme="$REPO/$dir/README.md"
+      if [[ -f "$svc_readme" ]]; then
+        echo "" >> "$prompt_file"
+        echo "## SERVICE DESIGN: $dir (from $dir/README.md)" >> "$prompt_file"
+        echo "" >> "$prompt_file"
+        cat "$svc_readme" >> "$prompt_file"
+      fi
+    done
+  fi
+
+  log "prompt built: $(wc -c < "$prompt_file") bytes, focus=$focus"
 
   # Run claude with prompt from file
   set +e
