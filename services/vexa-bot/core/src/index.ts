@@ -26,7 +26,7 @@ import { ensureBrowserDataDir, syncBrowserDataFromS3, cleanStaleLocks, BROWSER_D
 import { TranscriptionClient } from './services/transcription-client';
 import { SegmentPublisher } from './services/segment-publisher';
 import { SpeakerStreamManager } from './services/speaker-streams';
-import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken, reportTrackAudio } from './services/speaker-identity';
+import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken, reportTrackAudio, getLockedMapping } from './services/speaker-identity';
 import { SileroVAD } from './services/vad';
 import { isHallucination } from './services/hallucination-filter';
 import { SpeakerStreamHandle } from './services/audio';
@@ -1504,6 +1504,27 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
   } else {
     const currentName = speakerManager.getSpeakerName(speakerId) || '';
     let locked = isTrackLocked(speakerIndex);
+
+    // Sync locked name → speaker-streams buffer. Once a track is locked, the
+    // re-resolve block below is skipped (!locked gate). If the buffer was empty
+    // when the lock happened (e.g. addSpeaker('') on first audio before voting
+    // completed), the locked name never propagates. Fix: on every audio chunk,
+    // check if locked and buffer name is stale, and update.
+    if (locked) {
+      const lockedName = getLockedMapping(speakerIndex);
+      if (lockedName && lockedName !== currentName) {
+        log(`[🔒 LOCK SYNC] Track ${speakerIndex}: "${currentName}" → "${lockedName}" (syncing locked name to buffer)`);
+        speakerManager.updateSpeakerName(speakerId, lockedName);
+        if (!currentName) {
+          await segmentPublisher.publishSpeakerEvent({
+            speaker: lockedName,
+            type: 'joined',
+            timestamp: Date.now(),
+          });
+          log(`[📡 SPEAKER EVENT] "${lockedName}" joined → Redis`);
+        }
+      }
+    }
 
     // Detect participant count change → invalidate ALL mappings (including locks)
     // Google Meet reassigns audio tracks when participants join/leave.
