@@ -50,6 +50,7 @@ GATEWAY_URL = os.getenv("GATEWAY_URL", "http://api-gateway:8000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 EDIT_INTERVAL = 1.0  # seconds between Telegram message edits
+TOKEN_CACHE_TTL = 86400  # 24 hours — tokens auto-expire from Redis cache
 
 # --- Redis connection ---
 
@@ -109,10 +110,17 @@ async def get_or_create_auth(tg_user) -> tuple[str, str]:
 
         token = token_resp.json()["token"]
 
-    # Store in Redis (no expiry)
-    await r.set(key, f"{user_id}:{token}")
+    # Store in Redis with TTL — forces periodic re-auth
+    await r.set(key, f"{user_id}:{token}", ex=TOKEN_CACHE_TTL)
     logger.info(f"Auto-created auth for tg_user {tg_user.id} -> user {user_id}")
     return user_id, token
+
+
+async def _invalidate_token(tg_user_id: int) -> None:
+    """Clear cached token for a Telegram user, forcing re-auth on next call."""
+    r = await get_redis()
+    await r.delete(f"telegram:{tg_user_id}")
+    logger.info(f"Invalidated cached token for tg_user {tg_user_id}")
 
 
 # --- Tool labels ---
@@ -204,6 +212,7 @@ def _truncate(text: str, limit: int = 4000) -> str:
 @dataclass
 class ChatState:
     user_id: str
+    tg_user_id: int = 0  # Telegram user ID for token refresh
     token: str = ""
     stream_task: asyncio.Task | None = None
     bot_msg_id: int | None = None
@@ -212,18 +221,20 @@ class ChatState:
     active_meeting: str | None = None  # "platform/native_id"
 
 
-_states: dict[int, ChatState] = {}
+_states: dict[tuple[int, str], ChatState] = {}
 
 
-def _get_state(chat_id: int, user_id: str, token: str = "") -> ChatState:
-    if chat_id not in _states:
-        _states[chat_id] = ChatState(user_id=user_id, token=token)
+def _get_state(chat_id: int, user_id: str, token: str = "", tg_user_id: int = 0) -> ChatState:
+    key = (chat_id, user_id)
+    if key not in _states:
+        _states[key] = ChatState(user_id=user_id, tg_user_id=tg_user_id, token=token)
     else:
-        # Update token if refreshed
         if token:
-            _states[chat_id].token = token
-            _states[chat_id].user_id = user_id
-    return _states[chat_id]
+            _states[key].token = token
+            _states[key].user_id = user_id
+        if tg_user_id:
+            _states[key].tg_user_id = tg_user_id
+    return _states[key]
 
 
 # --- Keyboard helpers ---
@@ -243,6 +254,8 @@ async def _stream_response(
     context: ContextTypes.DEFAULT_TYPE,
     state: ChatState,
     message: str,
+    *,
+    _retried: bool = False,
 ) -> None:
     bot = context.bot
     payload = {"user_id": state.user_id, "message": message, "bot_token": state.token}
@@ -255,6 +268,16 @@ async def _stream_response(
         _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=None, headers=_headers) as client:
             async with client.stream("POST", f"{AGENT_API_URL}/api/chat", json=payload) as resp:
+                if resp.status_code == 403 and not _retried and state.tg_user_id:
+                    # Token revoked — invalidate cache, re-auth, retry once
+                    await _invalidate_token(state.tg_user_id)
+                    from types import SimpleNamespace
+                    fake_user = SimpleNamespace(id=state.tg_user_id, full_name=None, username=None)
+                    new_user_id, new_token = await get_or_create_auth(fake_user)
+                    state.user_id = new_user_id
+                    state.token = new_token
+                    logger.info(f"Token refreshed for tg_user {state.tg_user_id} after 403")
+                    return await _stream_response(chat_id, context, state, message, _retried=True)
                 if resp.status_code != 200:
                     body = await resp.aread()
                     raise RuntimeError(f"API error {resp.status_code}: {body.decode()[:200]}")
@@ -430,7 +453,7 @@ async def _ensure_auth(update: Update) -> tuple[ChatState, int]:
     tg_user = update.effective_user
     chat_id = update.effective_chat.id
     user_id, token = await get_or_create_auth(tg_user)
-    state = _get_state(chat_id, user_id, token)
+    state = _get_state(chat_id, user_id, token, tg_user_id=tg_user.id)
     return state, chat_id
 
 
@@ -766,15 +789,51 @@ async def transcript_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # --- Message handler ---
 
 
+def _is_group_chat(update: Update) -> bool:
+    """Check if the message is in a group/supergroup chat."""
+    return update.effective_chat.type in ("group", "supergroup")
+
+
+def _should_respond_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """In group chats, only respond when bot is @mentioned or message replies to bot."""
+    msg = update.message
+    # Reply to one of the bot's messages
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        if msg.reply_to_message.from_user.id == context.bot.id:
+            return True
+    # @mentioned — check entities for bot_username mention
+    if msg.entities:
+        bot_username = context.bot.username
+        if bot_username:
+            for entity in msg.entities:
+                if entity.type == "mention":
+                    mention = msg.text[entity.offset:entity.offset + entity.length]
+                    if mention.lower() == f"@{bot_username.lower()}":
+                        return True
+    return False
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_chat:
         return
+
+    # Group chat: only respond when @mentioned or replied to
+    if _is_group_chat(update):
+        if not _should_respond_in_group(update, context):
+            return
 
     text = update.message.text
     if not text or not text.strip():
         await update.message.reply_text("Send me a text message.")
         return
     text = text.strip()
+
+    # Strip bot @mention from the message text in groups
+    if _is_group_chat(update) and context.bot.username:
+        text = re.sub(rf"@{re.escape(context.bot.username)}\s*", "", text, flags=re.IGNORECASE).strip()
+        if not text:
+            await update.message.reply_text("Send me a text message after @mentioning me.")
+            return
 
     try:
         state, chat_id = await _ensure_auth(update)
@@ -826,9 +885,17 @@ TRIGGER_PORT = int(os.getenv("TELEGRAM_BOT_PORT", "8200"))
 
 def _resolve_chat_id(user_id: str) -> int | None:
     """Find the Telegram chat_id for a given user_id."""
-    for chat_id, state in _states.items():
+    for (chat_id, uid), state in _states.items():
         if state.user_id == user_id:
             return chat_id
+    return None
+
+
+def _resolve_state(user_id: str) -> ChatState | None:
+    """Find the ChatState for a given user_id."""
+    for (chat_id, uid), state in _states.items():
+        if state.user_id == user_id:
+            return state
     return None
 
 
@@ -846,9 +913,9 @@ async def trigger_chat(request: dict):
         logger.warning(f"Trigger: no chat_id for user {user_id}")
         return {"status": "error", "detail": f"no chat_id for user {user_id}"}
 
-    state = _states.get(chat_id)
+    state = _resolve_state(user_id)
     if not state:
-        return {"status": "error", "detail": f"no state for chat {chat_id}"}
+        return {"status": "error", "detail": f"no state for user {user_id}"}
 
     # If already streaming, queue it
     if state.stream_task and not state.stream_task.done():

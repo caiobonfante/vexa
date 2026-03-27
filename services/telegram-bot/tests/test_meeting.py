@@ -16,11 +16,11 @@ def _clear_states():
     _states.clear()
 
 
-def _setup_state_with_meeting(chat_id=67890, meeting="google_meet/abc-def"):
+def _setup_state_with_meeting(chat_id=67890, user_id="42", meeting="google_meet/abc-def"):
     """Pre-populate state with an active meeting."""
     from bot import _states, ChatState
-    state = ChatState(user_id="42", token="tok_test", active_meeting=meeting)
-    _states[chat_id] = state
+    state = ChatState(user_id=user_id, tg_user_id=12345, token="tok_test", active_meeting=meeting)
+    _states[(chat_id, user_id)] = state
     return state
 
 
@@ -65,7 +65,7 @@ async def test_join_command_success(mock_update, mock_context):
     assert "google_meet" in call_text
 
     # Verify active_meeting was set
-    state = _states.get(67890)
+    state = _states.get((67890, "42"))
     assert state is not None
     assert state.active_meeting == "google_meet/abc-defg-hij"
 
@@ -103,7 +103,7 @@ async def test_stop_with_meeting(mock_update, mock_context):
 
     call_text = mock_update.message.reply_text.call_args[0][0]
     assert "stopped" in call_text.lower()
-    assert _states[67890].active_meeting is None
+    assert _states[(67890, "42")].active_meeting is None
 
 
 @pytest.mark.asyncio

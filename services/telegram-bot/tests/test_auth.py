@@ -50,7 +50,7 @@ async def test_auth_cache_miss_creates_user(mock_redis, mock_tg_user):
 
     assert user_id == "99"
     assert token == "tok_new_token"
-    mock_redis.set.assert_awaited_once_with("telegram:12345", "99:tok_new_token")
+    mock_redis.set.assert_awaited_once_with("telegram:12345", "99:tok_new_token", ex=86400)
 
 
 @pytest.mark.asyncio

@@ -46,6 +46,7 @@ def mock_update(mock_tg_user):
     update.effective_user = mock_tg_user
     update.effective_chat = MagicMock()
     update.effective_chat.id = 67890
+    update.effective_chat.type = "private"
     update.message = MagicMock()
     update.message.reply_text = AsyncMock()
     update.message.text = "Hello agent"
