@@ -20,7 +20,7 @@ The user describes what they want. You:
    Tell the user: "Dashboard: http://localhost:8899"
 
 2. Read these files:
-   - `manifest.md` — what the conductor is, its constraints, its state
+   - `README.md` — what the conductor is, its constraints, its state
    - `state.json` — current scores and iteration state (if exists)
    - `ls missions/` — what missions exist
    - `./run.sh --list` — what's currently running
@@ -36,12 +36,12 @@ When the user describes what they want, create `missions/{name}.md`:
 
 Focus: {feature name — must match a features/ directory}
 Problem: {what the user described}
-Target: {concrete DoD — derived from the feature's manifest.md quality bar}
+Target: {concrete DoD — derived from the feature's README.md quality bar}
 Stop-when: target met OR {N} iterations
 Constraint: {from conversation, or "none"}
 ```
 
-Before creating, read `features/{focus}/manifest.md` to:
+Before creating, read `features/{focus}/README.md` to:
 - Check which quality bar items are FAIL — those become the target
 - Check constraints — include them in the mission
 - Check certainty table — know where scores are low
@@ -98,7 +98,7 @@ Show:
 
 ## Rules
 
-- Always read the feature's manifest.md before creating a mission
+- Always read the feature's README.md before creating a mission
 - Always show the mission to the user before launching
 - Always check logs when asked about status — don't guess
 - Never modify code in the main repo — missions run in worktrees

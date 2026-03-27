@@ -1,6 +1,6 @@
 # Telegram Chat Feature Agent
 
-> **Manifest: [manifest.md](../manifest.md)** — edges, ownership, quality bar, certainty table. Read it. Follow it.
+> **System design: [README.md](../README.md)** — why, data flow, ownership, quality bar, constraints. Read it. Follow it.
 > Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
 
 ## Scope

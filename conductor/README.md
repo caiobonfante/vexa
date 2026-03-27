@@ -1,167 +1,147 @@
-# Conductor — Recursive Self-Improvement Loop
+# Conductor — Self-Improvement Loop
 
-The conductor is the outer loop that keeps the self-improvement system running. You write a mission, run one command, and walk away. The system autonomously diagnoses, fixes, verifies, and iterates until the mission is accomplished or it gets stuck.
+## Why
 
-## How it works
+The vexa codebase has 15 features, 12 services, and 42 agent configs. Improving any feature requires: reading the right docs, understanding the architecture, writing code that follows constraints, verifying with evidence, and updating docs. A human can't hold all of this in their head. An unsupervised agent drifts — writes code that works but violates the design, inflates scores, ignores constraints.
 
-```
-You write mission.md          The conductor reads it
-        │                              │
-        ▼                              ▼
-┌─────────────┐    spawn    ┌──────────────────┐
-│  conductor  │ ─────────►  │  orchestrator    │
-│  (bash loop)│             │  (claude -p)     │
-│             │  ◄────────  │  diagnose → fix  │
-│  check done │   output    │  → verify        │
-│  snapshot   │             └──────────────────┘
-│  evaluate   │    spawn    ┌──────────────────┐
-│             │ ─────────►  │  evaluator       │
-│             │             │  (skeptical)     │
-│  loop?      │  ◄────────  │  accept/reject   │
-└─────────────┘   verdict   └──────────────────┘
-```
+The conductor keeps agents running, focused, and honest. It reads the manifest (design intent), spawns agents that follow it, verifies their claims with a skeptical evaluator, and tracks progress across sessions. The human steers from chat — describes missions, monitors output, intervenes when needed.
 
-Each iteration:
-1. **Orchestrator** reads mission + state files, diagnoses the problem, fixes it, verifies
-2. **Score snapshot** taken from findings files
-3. **Evaluator** reviews claims — rejects inflated scores, confirms real progress
-4. **Completion check** — mission met? plateau? iteration limit?
-5. If not done → loop with fresh context (rejection/plateau fed into next iteration)
+## Data Flow
 
-## Quick start
+```mermaid
+graph TD
+    User[User in chat] -->|describe mission| Claude[Claude Code session]
+    Claude -->|write| Mission[conductor/missions/name.md]
 
-```bash
-# 1. Edit the mission
-vim conductor/mission.md
+    Mission --> Run[run.sh]
+    Run -->|git worktree add| WT[.worktrees/name/]
+    Run -->|--append-system-prompt-file| Orch[claude -p<br/>Orchestrator]
 
-# 2. Run
-make conductor              # one iteration
-make conductor-loop N=5     # up to 5 iterations
+    Orch -->|read| Manifest[feature README.md<br/>system design]
+    Orch -->|diagnose + fix + verify| Code[Codebase]
+    Orch -->|update| Findings[features/tests/findings.md]
+    Orch -->|stream events| Stream[batches/stream-N.jsonl]
 
-# 3. Watch
-make conductor-log          # conductor decisions
-make conductor-batch        # full agent output from latest iteration
-make conductor-status       # scores + mission progress
+    Stream --> Parser[parse-stream.py]
+    Parser --> Log[batches/batch-N.log<br/>activity log]
+    Parser --> Meta[batches/meta-N.json<br/>cost, tokens, turns]
+
+    Run -->|after batch| Eval[claude -p<br/>Evaluator]
+    Eval -->|read findings diff| Findings
+    Eval -->|check constraints| Manifest
+    Eval -->|write| Verdict[evaluator-verdict.md]
+
+    Run -->|snapshot scores| Check[check-completion.py]
+    Check -->|read all| AllFindings[features/*/tests/findings.md]
+    Check -->|update| State[conductor/state.json]
+
+    State --> Dash[dashboard.py :8899]
+    Log --> Dash
+    Meta --> Dash
+    Verdict --> Dash
+    Dash --> Browser[Web Dashboard]
 ```
 
-## Files
+## Code Ownership
 
-| File | Purpose |
-|------|---------|
-| `mission.md` | **Your steering wheel.** What to work on, definition of done, constraints. |
-| `state.json` | Machine-readable state. Scores, iteration count, evaluation results. Seeded from findings. |
-| `conductor.log` | Timeline of conductor decisions. One line per event. |
-| `batches/batch-N.log` | Full claude output for iteration N. |
-| `batches/eval-N.log` | Full evaluator output for iteration N. |
-| `batches/prompt-N.txt` | The prompt sent to claude for iteration N (debugging). |
-| `evaluator-verdict.md` | Latest evaluator verdict (ACCEPT/REJECT with evidence). |
-| `run.sh` | The conductor script (bash). |
-| `check-completion.py` | Score parsing, completion check, plateau detection. |
-| `Makefile` | All make targets. |
-
-## Mission file format
-
-```markdown
-# Mission
-
-Focus: dashboard bot lifecycle
-Problem: can't create and stop a meeting transcription bot from the dashboard
-Target: bot create + stop works end-to-end from dashboard, verified in browser
-Stop-when: target met OR 5 iterations
-Constraint: don't rebuild vexa-bot image
+```
+conductor/run.sh                    → outer loop, worktree mgmt, spawn orchestrator + evaluator
+conductor/check-completion.py       → score parsing, completion check, plateau detection
+conductor/parse-stream.py           → stream-json → activity log + metadata
+conductor/dashboard.py              → web + terminal dashboard, JSON API
+conductor/dashboard.html            → web UI, auto-refreshes every 5s
+conductor/missions/                 → per-job mission files
+conductor/Makefile                  → make targets
+conductor/CLAUDE.md                 → control room instructions (for interactive sessions)
+.claude/agents/evaluator.md         → skeptical evaluator agent
+.claude/commands/conductor-entry.md → ritualized session entry
+.claude/commands/evaluate.md        → manual evaluator trigger
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| Focus | yes | Short name for the area of work |
-| Problem | yes | What's broken or missing |
-| Target | yes | Definition of done. Can be descriptive or score-based (`score >= 80`) |
-| Stop-when | yes | When the conductor should stop (`target met OR N iterations`) |
-| Constraint | no | What NOT to touch |
+## Quality Bar
 
-Edit `mission.md` while the conductor is running — it re-reads it between iterations.
-
-## Make targets
-
-From repo root (`make conductor-*`) or from `conductor/` directly (`make -C conductor *`):
-
-| Target | Description |
-|--------|-------------|
-| `make conductor` | Run one iteration |
-| `make conductor-loop N=5` | Loop up to N iterations (default: 10) |
-| `make conductor-status` | Show mission, scores, plateau status |
-| `make conductor-dry` | Seed state + show status, don't run |
-| `make conductor-seed` | Reseed state.json from current findings |
-| `make conductor-stop` | Create stop signal — halts after current iteration |
-| `make conductor-resume` | Clear stop signal |
-| `make conductor-log` | Tail conductor log (last 50 lines) |
-| `make conductor-batch` | Show full output of latest iteration |
-| `make conductor-evaluate` | Manually run the evaluator |
-| `make conductor-verdict` | Show latest evaluator verdict |
-| `make mission` | Open mission.md in your editor |
-
-## How to steer
-
-**Before running:** Edit `mission.md` with your objective.
-
-**During a run:** Edit `mission.md` — the conductor re-reads it between iterations.
-
-**Emergency stop:** `make conductor-stop` (or `touch conductor/mission.stop`). Conductor halts after the current iteration finishes.
-
-**Check progress:** `make conductor-status` shows scores and whether the mission is met.
-
-**See what happened:** `make conductor-batch` shows full agent output. `make conductor-log` shows conductor-level decisions.
-
-## Plateau detection
-
-If scores don't change for 3 consecutive iterations (configurable via `P=N`), the conductor:
-1. Logs `PLATEAU DETECTED`
-2. Injects a "PLATEAU ALERT" into the next orchestrator prompt
-3. Forces the orchestrator to reassess its approach
-
-This prevents the system from doing the same thing repeatedly and expecting different results.
-
-## Evaluator
-
-After each iteration, a separate skeptical evaluator agent reviews all claims:
-- Did scores actually change? (git diff on findings.md)
-- Is there execution evidence? (command + stdout, not just "code looks right")
-- Did anything regress?
-- Is the team celebrating prematurely? (mock vs real, curl vs browser)
-
-If the evaluator **rejects**, the rejection context is injected into the next iteration's prompt. The orchestrator must address the rejection before claiming progress.
-
-Evaluator config: `.claude/agents/evaluator.md`
-
-## Architecture
-
-The conductor is intentionally dumb — a bash loop that spawns smart agents. This follows the [Anthropic harness design pattern](https://www.anthropic.com/engineering/harness-design-long-running-apps):
-
-- **Generator-Evaluator split**: Orchestrator generates, Evaluator reviews. Separate agents because self-evaluation produces overconfident results.
-- **Initializer-Executor pattern**: Every session starts by reading state files. No reliance on context window memory.
-- **JSON state**: `state.json` is machine-readable. The conductor parses it programmatically. Agents can't accidentally rewrite the spec.
-- **File-based handoffs**: All state persists in files. Context windows die; files don't.
-
-## CLI reference
-
-```bash
-./conductor/run.sh [OPTIONS]
-
-Options:
-  --max-iterations N      Max iterations (default: 10)
-  --plateau-threshold N   Unchanged iterations before plateau (default: 3)
-  --budget USD            Max spend per iteration (default: unlimited)
-  --dry-run               Seed state + show status, don't run
-  --status                Show current status
-  -h, --help              Show this help
+```
+Orchestrator produces output     >0 bytes        stream-json working          PASS
+Scores parsed correctly          match findings   median + Overall: pattern    PASS
+Completion check detects done    exit 0           score-based + descriptive    PASS
+Evaluator catches false claims   rejects >= 1     caught 4 bugs first run     PASS
+Plateau detection fires          3 unchanged      logic exists, untested       PARTIAL
+Parallel missions (worktrees)    2+ simultaneous  both produced output         PASS
+Live streaming output            see agent work   stream-json → parse-stream   PASS
+Intervention (pause/resume)      inject context   not implemented              FAIL
+Cost tracking                    $/tokens shown   --output-format stream-json  PARTIAL
+Design enforcement               check manifest   manifests exist, not wired   FAIL
 ```
 
-## Troubleshooting
+## Gate
 
-**Empty batch log**: `claude -p` buffers output until completion. A large task may take several minutes. Check `ps aux | grep claude` to confirm it's still running.
+**PASS**: Describe mission in chat → conductor creates worktree → orchestrator runs → stream output visible in dashboard → evaluator verifies → scores + cost shown → manifest constraints not violated.
 
-**Conductor exits immediately**: Check `conductor.log` for the reason. Common causes: missing mission file, stop signal present, iteration limit already reached.
+**FAIL**: Empty output, wrong scores, evaluator misses violations, dashboard stale, or constraints violated without detection.
 
-**Scores not updating**: The orchestrator must write to `conductor/state.json` before exiting. If it doesn't, the conductor re-seeds from findings on next run.
+## Certainty
 
-**Evaluator always rejects**: The evaluator needs real execution evidence (command + stdout). If the orchestrator only reads code without running tests, the evaluator will reject. This is by design.
+```
+run.sh spawns orchestrator           90   3 successful runs                       2026-03-27
+check-completion.py parses scores    80   median + Overall: pattern working       2026-03-27
+Evaluator produces verdict           90   caught 4 real bugs first run            2026-03-27
+Worktree parallel missions           70   both ran, one ignored mission focus     2026-03-27
+Dashboard web UI serves              90   HTML + JSON API on port 8899            2026-03-27
+Stream output parsed                 80   parse-stream.py produces activity log   2026-03-27
+Cost/token tracking                  30   stream-json has data, not displayed yet 2026-03-27
+Intervention (pause/resume)           0   not implemented                         —
+Design enforcement via manifest       0   manifests exist, not wired to evaluator 2026-03-27
+```
+
+## Documentation Flow
+
+```mermaid
+graph LR
+    M[README.md<br/>what SHOULD be true] -->|agent reads| Code[code changes<br/>what IS now true]
+    Code -->|agent verifies| F[findings.md<br/>what we proved]
+    Code -->|agent generates| R[README.md<br/>what users read]
+    M -.->|evaluator checks| Code
+    M -.->|drift check| R
+```
+
+**Order of operations** — every mission follows this:
+
+1. **README.md** is the design intent. Agent reads it before touching code.
+2. **Code** is changed to match the manifest's quality bar and fix known issues.
+3. **findings.md** is updated with execution evidence (command + stdout, not prose).
+4. **README.md** is updated from manifest + code:
+   - **Why** — from manifest (problem, constraints, design decisions)
+   - **What** — from code (what it does, architecture, key behaviors)
+   - **How** — from code (how to run, configure, develop)
+
+**Single source of truth:**
+- Why it exists, design intent → `README.md`
+- Current state, implementation → code + `findings.md`
+- User-facing docs → `README.md` (derived from manifest + code, never invented from scratch)
+
+**Drift detection:** The evaluator checks after each batch:
+- Did code changes respect manifest constraints?
+- Does README still match code?
+- Does manifest still match reality? (if not, update manifest — it's a living doc)
+
+## Constraints
+
+- Conductor is a bash outer loop — does NOT decide what to work on, only whether to keep going
+- All intelligence is in `claude -p` invocations — conductor is dumb orchestration
+- State persists in files (state.json, conductor.log, batches/) — never in memory or context windows
+- Each mission runs in its own git worktree — no shared mutable state between parallel missions
+- Conductor MUST pass the feature's README.md to the orchestrator via `--append-system-prompt-file`
+- Evaluator MUST check manifest constraints, not just score claims
+- Score parsing uses findings.md as source of truth — state.json can be overwritten by snapshots
+- Batch-written scores preserved via `max(parsed, existing)` in snapshots
+- No hardcoded ports, budgets, or model names — all configurable via flags
+- Dashboard reads from files only — no direct communication with running claude processes
+- README.md MUST be updated when behavior changes and match this manifest
+
+## Known Issues
+
+- Orchestrator sometimes ignores mission focus and works on a different feature
+- `check-completion.py` "Met: YES" too permissive for descriptive targets
+- Evaluator verdict file path inconsistent between main conductor/ and worktrees
+- No session persistence yet (`--resume` not wired)
+- Stale files from earlier runs can confuse dashboard

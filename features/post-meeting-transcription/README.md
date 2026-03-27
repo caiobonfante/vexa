@@ -1,96 +1,96 @@
 # Post-Meeting Transcription
 
-> **Confidence: 0** — RESET after architecture refactoring. Pipeline code moved to meeting-api/collector. Import paths changed. Needs re-validation.
-> **Tested:** Recording to MinIO, speaker event collection, Whisper transcription, speaker mapping via overlap algorithm, segment persistence to Postgres.
-> **Not tested:** Dashboard playback offset (known ~2-5s bug), re-transcription (returns 409), retry on failure, accuracy with 3+ speakers.
-> **Contributions welcome:** Dashboard playback seek fix, re-transcription support, multi-speaker accuracy testing.
-
 ## Why
 
-Not all users want realtime transcription. Some just want recording + speaker events during the meeting, then high-quality transcription on demand afterward. Post-meeting transcription is cheaper (one Whisper pass over the full recording) and more reliable (no streaming edge cases, full audio context).
+Meetings produce recordings and speaker events, but raw audio isn't useful — users need a searchable transcript with speaker labels. Post-meeting transcription takes the recording after a meeting ends, runs it through Whisper, maps speakers using the collected events, and serves it through the dashboard with click-to-seek playback. This is the core value prop for users who couldn't attend or want to review.
 
-This is a basic use case for meeting bots — record, then transcribe.
+## Data Flow
 
-**Downstream:** Transcription completion fires `transcript.ready` webhook → can trigger agent containers for summarization, entity extraction, or any post-meeting automation via scheduler callbacks.
+```mermaid
+graph TD
+    Meeting[Meeting in progress] --> Bot[vexa-bot]
 
-## What
+    Bot -->|webm audio| MinIO[(MinIO)]
+    Bot -->|SPEAKER_START/END events| BM[bot-manager]
+    BM -->|store events| DB[(Postgres<br/>meeting.data JSONB)]
 
-User triggers transcription after a completed meeting. The system downloads the recording from storage, runs Whisper on the full audio, maps speakers using speaker events collected during the meeting, and writes segments to the database. The dashboard shows the result with click-to-play (segment click seeks the recording to that timestamp).
+    User[User / Dashboard] -->|POST /meetings/id/transcribe| GW[api-gateway :8056]
+    GW --> BM
 
-### Components
+    BM -->|download webm| MinIO
+    BM -->|ffmpeg convert → WAV| TX[transcription-service]
+    TX -->|segments| BM
+    BM -->|map speakers to segments| BM2[_map_speakers_to_segments]
+    BM2 -->|INSERT| DB2[(Postgres<br/>transcriptions table)]
 
-- **bot-manager**: orchestrates the full flow — downloads recording, calls transcription service, maps speakers, writes to Postgres
-- **transcription-service**: Whisper API (`/v1/audio/transcriptions`) — transcribes the full recording
-- **vexa-bot**: during meeting, records audio (uploads to MinIO) and collects speaker events (sent on exit)
-- **api-gateway**: proxies `POST /meetings/{id}/transcribe` to bot-manager, serves transcript via `GET /transcripts`
-- **dashboard**: renders transcript segments with click-to-play recording playback
+    Dashboard[Dashboard :3001] -->|GET /transcripts| GW
+    GW --> TC[transcription-collector]
+    TC --> DB2
 
-### Data flow
-
-```
-[During meeting]
-  bot records audio → uploads to MinIO (recordings/{user_id}/{recording_id}/{session_uid}.{format})
-  bot accumulates speaker_events in memory (SPEAKER_START/SPEAKER_END per participant)
-  bot exits → sends speaker_events to bot-manager via /status_change callback
-  bot-manager stores speaker_events in meeting.data JSONB
-
-[After meeting — user triggers]
-  POST /meetings/{id}/transcribe
-    → bot-manager downloads recording from MinIO
-    → bot-manager sends recording to transcription-service /v1/audio/transcriptions
-    → Whisper returns segments [{start, end, text}, ...]
-    → bot-manager runs _map_speakers_to_segments(speaker_events, segments)
-       (overlap algorithm: each segment assigned to speaker with most time overlap)
-    → bot-manager writes Transcription rows to Postgres
-    → bot-manager sets meeting.data.transcribed_at
-
-[Dashboard]
-  GET /transcripts/{platform}/{native_meeting_id} → returns segments with speakers
-  Click segment → seeks recording playback to segment.start_time
+    Dashboard -->|audio stream| MinIO
+    Dashboard -->|click segment → seek audio| Playback[Audio Player]
 ```
 
-### Key behaviors
+## Code Ownership
 
-- Transcription is user-triggered via API, not automatic
-- Uses full recording for better context vs real-time chunked processing
-- Speaker mapping via timestamp overlap between speaker events and Whisper segments
-- 409 if transcription already exists (no re-run yet — multiple versions is a nice-to-have)
-- Dashboard playback: click segment to play recording at that position (currently has ~2-5s offset bug)
+```
+services/vexa-bot                          → recording, speaker events
+packages/meeting-api (bot-manager routes)  → POST /transcribe, speaker mapping
+packages/transcription-service             → Whisper inference (ffmpeg + model)
+services/transcription-collector           → segment persistence, GET /transcripts
+services/dashboard                         → transcript viewer, audio player, seek
+libs/shared-models                         → Transcription, Recording, MediaFile models
+```
 
-### Data stages
+## Quality Bar
 
-| Stage | Contents | Produced by | Consumed by |
-|-------|----------|-------------|-------------|
-| **raw** | Recording (webm) + speaker_events in meeting.data | Bot during meeting | Deferred transcription |
-| **core** | Whisper segments mapped to speakers | bot-manager transcribe endpoint | Postgres |
-| **rendered** | Transcript via REST + dashboard playback | api-gateway + dashboard | Users |
+```
+Capture rate (2 speakers)       >= 90%     current: 100%      PASS
+Capture rate (3+ speakers)      >= 80%     current: 92%       PASS
+Speaker accuracy (2 speakers)   >= 70%     current: 100%      PASS
+Speaker accuracy (3+ speakers)  >= 70%     current: 82%       PASS
+WER                             <= 25%     current: 6.6%      PASS
+Dashboard renders transcript    renders    current: untested   FAIL
+Click segment → audio seeks     < 3s       current: untested   FAIL
+Video playback                  renders    current: untested   FAIL
+```
 
-Note: no dataset directories exist yet. `data/raw/`, `data/core/`, and `data/rendered/` are populated on demand during collection runs.
+## Gate
 
-### Configuration
+**PASS**: POST /transcribe → segments with speakers in Postgres → GET /transcripts returns them → dashboard renders segments → clicking segment plays audio from correct timestamp.
 
-| Env var | Default | Where | Purpose |
-|---------|---------|-------|---------|
-| `TRANSCRIPTION_GATEWAY_URL` | (empty) | bot-manager | Whisper endpoint (preferred, falls back to `TRANSCRIPTION_SERVICE_URL`) |
-| `TRANSCRIPTION_SERVICE_URL` | `http://vexa-transcription-gateway:8084` | bot-manager | Whisper endpoint (fallback if `TRANSCRIPTION_GATEWAY_URL` unset) |
-| `MINIO_ENDPOINT` | `minio:9000` | bot-manager | Recording storage |
-| `MINIO_BUCKET` | `vexa-recordings` | bot-manager | Recording bucket |
+**FAIL**: Any step fails, speaker accuracy < 70%, or playback offset > 5s.
 
-## How
+## Certainty
 
-### Test procedure
+```
+Recording uploaded to MinIO         90   webm downloaded (551KB)                 2026-03-23
+Speaker events persisted            90   15 events in meeting.data               2026-03-23
+POST /transcribe succeeds           90   6 segments, language=en                 2026-03-23
+Speaker mapping >= 70%              90   82% on 3 speakers                       2026-03-23
+GET /transcripts returns segments   80   works with vxa_user_ token              2026-03-23
+Dashboard renders transcript        30   not browser-tested                      2026-03-23
+Dashboard playback seeks correctly  30   duration_seconds=null may break         2026-03-23
+Video playback in dashboard         30   3 bugs fixed, container rebuild needed  2026-03-24
+3+ speaker stress test              90   82% speaker, 92% capture               2026-03-23
+```
 
-1. Start compose stack
-2. Host a meeting with TTS bots (known speakers, scripted utterances)
-3. Let meeting complete — verify recording uploaded + speaker_events stored
-4. Call `POST /meetings/{meeting_id}/transcribe`
-5. Verify `GET /transcripts` returns segments with correct speakers
-6. Verify dashboard playback: click segment seeks to correct position
-7. Score speaker attribution accuracy against ground truth (target: >=70%)
+## Constraints
 
-### Known limitations
+- All client-facing API calls go through api-gateway — dashboard never calls bot-manager or transcription-collector directly
+- bot-manager owns transcription orchestration (download → Whisper → map → persist) — no other service duplicates this
+- Dashboard fetches transcripts via `GET /transcripts` through api-gateway, never queries Postgres directly
+- Auth is `X-API-Key` validated at gateway — services trust injected `X-User-ID` headers
+- No Python imports across service boundaries
+- Recording storage is MinIO only — no local filesystem
+- Speaker mapping runs inside bot-manager — not a separate service
+- Segments are immutable after 30s — no updates to persisted rows
+- README.md MUST be updated when behavior changes and match this manifest
 
-- No re-transcription (409 if already transcribed) — multiple versions is a nice-to-have
-- Speaker mapping accuracy depends on speaker event quality (DOM-based detection)
-- Dashboard playback has ~2-5s offset (MediaRecorder vs SegmentPublisher start time drift)
-- No retry on transcription failure
+## Known Issues
+
+- `duration_seconds=null` on recordings may break audio seek
+- Short utterances (1 word) get "Unknown" speaker
+- Rapid speaker turns misattribute due to event boundary lag
+- Whisper splits long monologues → scorer can't match 1:N
+- Video needs container rebuild (ffmpeg added to runtime Dockerfile)

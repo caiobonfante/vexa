@@ -258,7 +258,7 @@ merge_worktree() {
 
   # 3. Check manifest constraints — look for cross-service imports
   echo "3. Manifest constraints..."
-  if [[ -n "$focus" && -f "$REPO/features/$focus/manifest.md" ]]; then
+  if [[ -n "$focus" && -f "$REPO/features/$focus/README.md" ]]; then
     local violations=0
     # Check: no cross-service Python imports
     local changed_py
