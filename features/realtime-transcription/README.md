@@ -1,8 +1,8 @@
 # Realtime Transcription
 
-> **Confidence: 0** — RESET after architecture refactoring. bot-manager deleted, meeting-api rewritten, transcription-collector folded in. All prior test evidence invalidated. Needs full re-validation against live meetings.
-> **Tested:** Bot joins, audio capture, Whisper transcription, WebSocket delivery, REST consistency, VAD silence filtering.
-> **Not tested:** Zoom, human speaker locking (<585s), multi-track dedup, language locking in live meeting.
+> **Confidence: 75** — Re-validated 2026-03-27 via G5 test (meeting 21). Core pipeline re-proved end-to-end through new architecture: bot joined real Google Meet → audio captured → Whisper transcription (3 calls, 125ms avg) → 2 confirmed segments → Redis stream → Postgres (via db_writer). VAD active (79 checked, 65 rejected). Speaker identified (Dmitriy Grankin). Russian transcribed correctly. Mock test needs re-run via meeting-api. WS delivery needs explicit re-test.
+> **Tested:** Bot joins (G5), audio capture (G5), Whisper transcription (G5), VAD filtering (G5), segment persistence (G5), speaker identity single-speaker (G5).
+> **Not tested:** Mock meeting via new path, WS client delivery, multi-speaker identity, multi-track dedup, Zoom, language locking in live meeting.
 > **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).
 >
 > **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md) | **Cycle:** validation (collect → iterate → expand)
