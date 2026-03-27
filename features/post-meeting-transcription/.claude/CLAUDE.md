@@ -1,5 +1,6 @@
 # Post-Meeting Transcription Feature Agent
 
+> **Manifest: [manifest.md](../manifest.md)** — edges, ownership, quality bar, certainty table. Read it. Follow it.
 > Shared protocol: [agents.md](../../../.claude/agents.md) — phases, diagnostics, logging, gate rules
 
 ## Scope

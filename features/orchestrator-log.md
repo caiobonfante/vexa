@@ -584,3 +584,25 @@ Score 100 requires testing the Telegram transport layer (message receipt, progre
 ### Mission status: CLOSED
 
 Target (score >= 95 with evidence for all checks) met. Stop condition (3+ iterations) exceeded. All quality bar items PASS. No further iteration will improve the score without a bot token.
+
+## Conductor iteration 7: 2026-03-27 — Final verification + commit
+
+**Mission:** Verify all claimed code changes actually exist, tests pass, and commit.
+**Approach:** Entry protocol verification — grep for features, run tests, commit.
+
+### Verification
+
+1. **Code exists** — `grep` confirmed all 3 features in `bot.py`:
+   - `TOKEN_CACHE_TTL=86400` (line 53), `_invalidate_token()` (line 119), 403 retry (line 273)
+   - `_is_group_chat()` (line 792), `_should_respond_in_group()` (line 797)
+   - State keyed by `(chat_id, user_id)` in `_get_state()`
+
+2. **Tests pass** — `52 passed, 0 failed` (0.79s)
+
+3. **E2E pass** — `18 passed, 0 failed` (1 transient failure on session continuity resolved on re-run)
+
+4. **Committed** — `e35a5b49` on `feature/agentic-runtime` branch
+
+### Score: 95 (confirmed, committed)
+
+**Mission verdict: COMPLETE.** All code changes verified, tested, and committed. Score 95 is the ceiling without a TELEGRAM_BOT_TOKEN.

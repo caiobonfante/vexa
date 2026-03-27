@@ -1,0 +1,75 @@
+{
+  "iteration": 6,
+  "status": "complete",
+  "mission": "telegram-chat: token refresh, concurrent users, group chat",
+  "last_batch": "2026-03-27",
+  "features": {
+    "agentic-runtime": {
+      "score": 85
+    },
+    "calendar-integration": {
+      "score": 65
+    },
+    "chat": {
+      "score": 60
+    },
+    "knowledge-workspace": {
+      "score": 15
+    },
+    "mcp-integration": {
+      "score": 90
+    },
+    "multi-platform": {
+      "score": 0
+    },
+    "post-meeting-transcription": {
+      "score": 90
+    },
+    "realtime-transcription": {
+      "score": 90
+    },
+    "remote-browser": {
+      "score": 0
+    },
+    "scheduler": {
+      "score": 80
+    },
+    "speaking-bot": {
+      "score": 90
+    },
+    "telegram-chat": {
+      "score": 95
+    },
+    "token-scoping": {
+      "score": 90
+    },
+    "video-recording": {
+      "score": 60
+    },
+    "webhooks": {
+      "score": 90
+    },
+    "multi-platform/zoom-web": {
+      "score": 25
+    },
+    "realtime-transcription/delivery": {
+      "score": 90
+    },
+    "realtime-transcription/google-meet": {
+      "score": 90
+    },
+    "realtime-transcription/ms-teams": {
+      "score": 90
+    },
+    "realtime-transcription/zoom": {
+      "score": 60
+    }
+  },
+  "score_history": [
+    {"iteration": 2, "telegram-chat": 95, "note": "E2E validation, 2 bugs fixed, 15 checks"},
+    {"iteration": 3, "telegram-chat": 95, "note": "3 gaps fixed (token refresh, concurrency, group chat), 52 unit tests"},
+    {"iteration": 5, "telegram-chat": 95, "note": "3 new E2E checks (TTL, re-auth, concurrent sessions), 18 E2E total"},
+    {"iteration": 6, "telegram-chat": 95, "note": "Verified + committed: 52 unit tests pass, 18 E2E pass, all changes committed (e35a5b49)"}
+  ],
+  "plateau_counter": 0
+}

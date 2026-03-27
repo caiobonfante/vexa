@@ -151,3 +151,4 @@ manifest.csvdocker-compose.override.yml
 .env.test
 hub
 test.log
+.worktrees/
