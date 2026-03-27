@@ -135,11 +135,11 @@ setup_worktree() {
   git -C "$REPO" worktree add "$wt_path" "$branch"
 
   # Copy entire conductor/ directory into worktree (may not be committed yet)
-  mkdir -p "$wt_path/conductor/batches"
-  cp "$CONDUCTOR_DIR/run.sh" "$wt_path/conductor/run.sh"
-  cp "$CONDUCTOR_DIR/check-completion.py" "$wt_path/conductor/check-completion.py"
-  cp "$CONDUCTOR_DIR/Makefile" "$wt_path/conductor/Makefile"
-  chmod +x "$wt_path/conductor/run.sh" "$wt_path/conductor/check-completion.py"
+  mkdir -p "$wt_path/conductor/batches" "$wt_path/conductor/missions"
+  for f in run.sh check-completion.py parse-stream.py dashboard.py dashboard.html Makefile README.md CLAUDE.md state.json mission.md; do
+    [[ -f "$CONDUCTOR_DIR/$f" ]] && cp "$CONDUCTOR_DIR/$f" "$wt_path/conductor/$f"
+  done
+  chmod +x "$wt_path/conductor/run.sh" "$wt_path/conductor/check-completion.py" "$wt_path/conductor/parse-stream.py" 2>/dev/null || true
 
   # Copy mission file: prefer conductor/missions/{name}.md, fall back to conductor/mission.md
   local mission_source="$CONDUCTOR_DIR/missions/${name}.md"
@@ -686,9 +686,22 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
   set -e
 
   # Parse stream into human-readable activity log + metadata
-  python3 "$CONDUCTOR_DIR/parse-stream.py" "$batch_stream" "$batch_log" "$batch_meta" "$iteration"
+  if [[ -s "$batch_stream" ]]; then
+    python3 "$CONDUCTOR_DIR/parse-stream.py" "$batch_stream" "$batch_log" "$batch_meta" "$iteration" 2>/dev/null || true
+    local cost
+    cost=$(python3 -c "import json; print(f\"\${json.loads(open('$batch_meta').read()).get('cost_usd',0):.2f}\")" 2>/dev/null || echo "?")
+    local tools
+    tools=$(python3 -c "import json; print(json.loads(open('$batch_meta').read()).get('tool_calls',0))" 2>/dev/null || echo "?")
+    log "batch output: $batch_log (exit: $exit_code, cost: $cost, tools: $tools)"
+  else
+    echo "(no output)" > "$batch_log"
+    echo '{"iteration": '$iteration', "cost_usd": 0, "is_error": true}' > "$batch_meta"
+    log "batch produced no output (exit: $exit_code)"
+  fi
 
-  log "batch output: $batch_log (exit: $exit_code, cost: $(python3 -c "import json; print(f\"\${json.loads(open('$batch_meta').read()).get('cost_usd',0):.2f}\")" 2>/dev/null || echo '?'))"
+  if [[ $exit_code -ne 0 ]]; then
+    log "WARNING: claude exited with code $exit_code — stream may be incomplete"
+  fi
 
   # Update state status
   python3 -c "
@@ -743,7 +756,11 @@ EVALPROMPT
   local exit_code=$?
 
   # Parse stream into activity log + metadata
-  python3 "$CONDUCTOR_DIR/parse-stream.py" "$eval_stream" "$eval_log" "$eval_meta" "$iteration"
+  if [[ -s "$eval_stream" ]]; then
+    python3 "$CONDUCTOR_DIR/parse-stream.py" "$eval_stream" "$eval_log" "$eval_meta" "$iteration" 2>/dev/null || true
+  else
+    echo "(evaluator produced no output)" > "$eval_log"
+  fi
   set -e
 
   log "evaluator output: $eval_log"
