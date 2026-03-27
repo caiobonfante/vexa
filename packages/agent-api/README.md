@@ -176,6 +176,45 @@ Agent API = what the agent does
 Runtime API   = where the agent runs
 ```
 
+## Production Readiness
+
+**Confidence: 38/100**
+
+| Area | Score | Evidence | Gap |
+|------|-------|----------|-----|
+| Core chat streaming | 7/10 | SSE routing, session resumption, retry logic work | No tests for chat.py or main.py endpoints; no timeout on agent CLI exec |
+| Session management | 8/10 | Redis-backed with 7-day TTL, CRUD endpoints complete | Hardcoded session path `/root/.claude/projects/-workspace/` is brittle |
+| Workspace sync | 5/10 | S3 + local backends, path traversal protection | AWS CLI dependency undocumented; no tests for S3 ops or git_commit(); large files loaded into memory |
+| Job scheduling | 0/10 | Config var `SCHEDULER_POLL_INTERVAL` exists | **Entirely missing.** No endpoints, no worker loop, no Redis sorted set. README documents it as a core feature but zero code exists |
+| Authentication | 9/10 | `hmac.compare_digest()` timing-safe comparison, open-access dev mode | CORS defaults to `*`; empty API_KEY silently disables auth |
+| Container lifecycle | 5/10 | Runtime API delegation, in-memory cache, interrupt support | No cache invalidation on container death; race condition between cache check and exec; `_touch()` assumes Runtime API support |
+| Tests | 4/10 | 44 unit tests across auth, stream_parser, workspace, container_manager | **0% coverage on chat.py and main.py** — the two most critical files. No integration tests. Container exec operations untested |
+| Docker | 4/10 | Builds, runs on port 8100 | No HEALTHCHECK; runs as root; no docker-compose at package level |
+| Documentation | 6/10 | Comprehensive README with architecture diagram | Documents scheduler feature that doesn't exist; 5 env vars are unused (AGENT_IMAGE, DOCKER_NETWORK, CONTAINER_PREFIX, IDLE_TIMEOUT, SCHEDULER_POLL_INTERVAL) |
+| Standalone readiness | 5/10 | Can start without Runtime API; sessions work Redis-only | Any chat request fails without Runtime API + Docker daemon + running container; no graceful error for missing deps |
+
+### Known Limitations
+
+1. **Scheduler is vaporware** — README, architecture diagram, env vars, and API table all document a scheduling feature. No implementation exists. Zero lines of scheduler code.
+2. **Core paths untested** — `chat.py` (the main feature) and `main.py` (all HTTP endpoints) have 0% test coverage. The 44 existing tests cover supporting modules only.
+3. **Hardcoded container assumptions** — session path (`/root/.claude/projects/-workspace/`), process pattern (`claude.*stream-json`), and agent CLI (`claude`) are baked in. Changing the agent image breaks chat.
+4. **No standalone docker-compose** — requires separate Runtime API, Redis, and Docker daemon. No single-command local dev setup.
+5. **S3 sync requires AWS CLI in container image** — undocumented dependency. If the agent image lacks `aws`, workspace persistence silently fails.
+6. **No request tracing** — no correlation IDs in logs. Debugging cross-service issues requires timestamp matching.
+7. **Container cache race condition** — between checking the in-memory cache and executing a command, the container can die. No recovery path.
+
+### Validation Plan (to reach 90+)
+
+- [ ] Delete scheduler from README/architecture/env vars OR implement it
+- [ ] Add integration tests for `POST /api/chat` end-to-end (mock Runtime API, real Redis)
+- [ ] Add endpoint tests for all routes in main.py via TestClient
+- [ ] Add S3 sync tests (use moto or MinIO testcontainer)
+- [ ] Add HEALTHCHECK to Dockerfile; switch to non-root user
+- [ ] Create docker-compose.yml with agent-api + runtime-api + redis
+- [ ] Make container paths configurable (session storage, process pattern)
+- [ ] Add request ID middleware for log correlation
+- [ ] Validate Runtime API reachability on startup with clear error message
+
 ## License
 
 Apache-2.0

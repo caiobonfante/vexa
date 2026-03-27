@@ -154,3 +154,43 @@ open http://localhost:8000/docs
 - Set `LOG_LEVEL=DEBUG` for header-level forwarding traces
 - 503 errors mean a downstream service is unreachable
 - WebSocket connections subscribe to Redis channels `meeting:{id}:status`
+
+## Production Readiness
+
+**Confidence: 68/100**
+
+| Area | Score | Evidence | Gap |
+|------|-------|----------|-----|
+| Proxy routing | 9/10 | ~50 endpoints correctly forwarded; test_routes.py confirms all exist | Voice agent endpoints (speak, chat, screen) untested in integration |
+| Header injection & cache | 8/10 | Strips spoofed X-User-* headers before injection; 60s Redis TTL; graceful fallback when Redis/admin-api down | No early cache invalidation (revoked tokens valid up to 60s); admin-api response structure not validated before injection |
+| Token validation | 7/10 | test_header_injection.py covers valid/invalid/cached/spoofed cases | Cannot flush cache on token revocation; no rate limiting on validation |
+| WebSocket hub | 6/10 | Redis Pub/Sub fan-out for meeting status; subscribe authorization delegated to TC | No unit tests for actual message flow; no rate limit on subscribe (DoS vector); concurrent subscribe edge case with duplicate meetings |
+| Remote browser proxy | 7/10 | VNC + CDP WebSocket proxying with token auth; binary + JSON-RPC protocols handled | No unit tests; `print()` debug statement on line 1373 instead of logger; token in URL leaks to browser history |
+| Public share links | 8/10 | `secrets.token_urlsafe(16)` (~2^100 bits); configurable TTL with max cap (24h); proper cache headers | Share link token in URL can leak via logs/browser history (mitigated by TTL) |
+| CORS | 4/10 | Configurable via env var; defaults to localhost:3000,3001 | **Production risk**: if `CORS_ORIGINS` not set, all browser requests silently blocked. No startup warning |
+| Error handling | 8/10 | 503 for unreachable backends; 504 for timeouts; graceful degradation throughout | Error messages from downstream can leak service topology |
+| MCP forwarding | 7/10 | GET/POST/SSE proxying; header filtering; session ID workaround | 400→200 workaround for missing session ID may mask real errors |
+| Tests | 6/10 | 5 test files covering routes, headers, helpers, bot routes, recording routes | No WebSocket tests; no remote browser tests; no MCP protocol tests; no rate limiting tests |
+| Docker | 8/10 | Installs meeting-api package for schemas; non-root user (appuser) | No HEALTHCHECK in Dockerfile |
+| Security | 7/10 | Identity headers stripped before injection; constant-time comparison; SSRF validation on webhooks | No rate limiting on WebSocket subscribe; CDP proxy trusts Redis-sourced hostnames without validation |
+
+### Known Limitations
+
+1. **CORS defaults block production** — `CORS_ORIGINS` defaults to `localhost:3000,3001`. Any production deployment that forgets this env var will have all browser requests silently rejected. No startup warning.
+2. **Token revocation has 60s delay** — cached tokens remain valid for up to 60 seconds after revocation. No cache invalidation endpoint exists.
+3. **WebSocket has no rate limiting** — a client can flood `subscribe` messages, each triggering an HTTP POST to transcription-collector. DoS vector.
+4. **Debug print statement** — line 1373 uses `print()` instead of `logger.debug()` for CDP proxy URL rewriting.
+5. **No WebSocket integration tests** — the real-time meeting status feature (a key selling point) has zero automated test coverage for actual message delivery.
+6. **Admin-api response not validated** — if admin-api returns malformed user_data (e.g., `user_id: null`), it gets injected as `X-User-ID: None` and cached for 60s.
+
+### Validation Plan (to reach 90+)
+
+- [ ] Require `CORS_ORIGINS` env var at startup for non-dev environments (fail fast)
+- [ ] Replace `print()` on line 1373 with `logger.debug()`
+- [ ] Validate admin-api response structure before header injection (user_id is int, scopes is list)
+- [ ] Add rate limiter to WebSocket subscribe (e.g., 10/min per connection)
+- [ ] Add cache invalidation endpoint (admin-only) to flush token cache on revocation
+- [ ] Add WebSocket integration test for subscribe → publish → receive round-trip
+- [ ] Add HEALTHCHECK to Dockerfile
+- [ ] Validate container hostname pattern in CDP proxy (`^vexa-bot-[a-z0-9]+$`)
+- [ ] Truncate downstream error messages to prevent topology leakage
