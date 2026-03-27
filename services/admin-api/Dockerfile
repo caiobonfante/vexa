@@ -1,5 +1,5 @@
 # Base Python image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
@@ -7,6 +7,10 @@ WORKDIR /app
 # Install admin models library
 COPY ./libs/admin-models /app/libs/admin-models
 RUN pip install --no-cache-dir /app/libs/admin-models
+
+# Install meeting-api models (admin reads meeting stats)
+COPY ./packages/meeting-api /app/packages/meeting-api
+RUN pip install --no-cache-dir /app/packages/meeting-api
 
 # Copy application code and requirements
 COPY ./services/admin-api/requirements.txt /app/
