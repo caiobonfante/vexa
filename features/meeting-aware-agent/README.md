@@ -101,7 +101,11 @@ Context refresh on each turn                fresh data, not stale cache      FAI
 
 ## Gate
 
-**90 test**: Real meeting running with bot (Teams or GMeet) → open Telegram → send message → agent responds with awareness of the meeting (who's in it, what's been said). No manual meeting ID or /transcript command needed — the agent just knows.
+**Score 60 (API layer)**: Create meeting-aware session → send chat via curl → gateway fetches active bots + transcript → response references meeting content. Testable without Telegram or live meeting (use existing meeting data in DB).
+
+**Score 80 (live meeting)**: Host a meeting with `/host-teams-meeting-auto`, send TTS bots, wait for transcript segments → send chat via API → agent references what was said in the meeting.
+
+**Score 90 (Telegram E2E)**: Real meeting running with bot → open Telegram → send message → agent responds with meeting awareness. Requires TELEGRAM_BOT_TOKEN.
 
 **PASS**: Agent references meeting content without being told which meeting.
 
@@ -153,6 +157,30 @@ Verification after deploy:
 
 No migration needed — no database changes.
 No new env vars expected — gateway already has access to meeting-api routes.
+
+Env source of truth: deploy/env/env-example
+    Running env: docker exec vexa-restore-api-gateway-1 env | sort
+    If worktree needs different env, create conductor/env-overrides in the worktree.
+```
+
+## Testing Prerequisites
+
+```
+For score 60 (API layer):
+    - compose stack running (make up)
+    - at least one meeting with transcription in DB (from prior test runs)
+    - curl to test API directly
+
+For score 80 (live meeting):
+    - /host-teams-meeting-auto to create meeting + auto-admit
+    - send TTS bots to generate transcript
+    - curl to test API with active meeting
+
+For score 90 (Telegram E2E):
+    - TELEGRAM_BOT_TOKEN set in .env (available)
+    - telegram-bot service running
+    - active meeting with bot
+    - send message from real Telegram client
 ```
 
 ## Known Issues
