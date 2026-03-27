@@ -154,7 +154,7 @@ Runtime API   = where the agent runs
 | Workspace sync | 6/10 | S3 + local backends, path traversal protection | AWS CLI dependency undocumented; large files loaded into memory |
 | Authentication | 9/10 | `hmac.compare_digest()` timing-safe comparison, open-access dev mode | CORS defaults to `*`; empty API_KEY silently disables auth |
 | Container lifecycle | 6/10 | Runtime API delegation, in-memory cache, interrupt support | No cache invalidation on container death; race condition between cache check and exec |
-| Tests | 9/10 | 44 unit tests + chat.py and main.py endpoint tests via TestClient | No S3 integration tests |
+| Tests | 9/10 | 91 unit tests covering auth, chat, endpoints, containers, streaming, workspace | No S3 integration tests |
 | Docker | 9/10 | HEALTHCHECK, non-root user, standalone docker-compose, .dockerignore | — |
 | Documentation | 9/10 | Accurate README, architecture diagram matches code | — |
 | Standalone readiness | 9/10 | docker-compose.yml with agent-api + runtime-api + redis | — |

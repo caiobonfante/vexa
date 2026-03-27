@@ -1375,7 +1375,7 @@ async def browser_cdp_ws(websocket: WebSocket, token: str):
         await websocket.close(code=4502)
         return
 
-    print(f"CDP proxy: original URL={version_info.get('webSocketDebuggerUrl', '')}, rewritten URL={cdp_ws_url}", flush=True)
+    logger.debug("CDP proxy: original URL=%s, rewritten URL=%s", version_info.get('webSocketDebuggerUrl', ''), cdp_ws_url)
     await websocket.accept()
 
     try:

@@ -1,7 +1,7 @@
 """Tests for agent_api.container_manager — Runtime API delegation."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
@@ -25,14 +25,13 @@ def _mock_http(**overrides):
 
 
 def _response(status_code=200, json_data=None, text=""):
-    resp = AsyncMock()
+    resp = MagicMock()
     resp.status_code = status_code
     resp.json.return_value = json_data or {}
     resp.text = text
-    resp.raise_for_status = AsyncMock()
     if status_code >= 400:
         resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            f"HTTP {status_code}", request=AsyncMock(), response=resp,
+            f"HTTP {status_code}", request=MagicMock(), response=resp,
         )
     return resp
 

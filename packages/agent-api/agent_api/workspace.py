@@ -6,7 +6,7 @@ Supports both S3/MinIO backends and local filesystem fallback.
 
 import asyncio
 import logging
-from typing import Protocol
+from typing import Optional, Protocol
 
 from agent_api import config
 
@@ -16,7 +16,7 @@ logger = logging.getLogger("agent_api.workspace")
 class ExecProtocol(Protocol):
     """Protocol for executing commands in a container."""
 
-    async def exec_simple(self, container: str, cmd: list[str]) -> str | None: ...
+    async def exec_simple(self, container: str, cmd: list[str]) -> Optional[str]: ...
 
 
 # --- Container exec helper ---
