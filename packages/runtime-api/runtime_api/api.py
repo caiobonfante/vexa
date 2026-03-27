@@ -227,29 +227,46 @@ async def create_container(req: CreateContainerRequest, request: Request):
         k8s_overrides=profile_def.get("k8s_overrides", {}),
     )
 
+    # Store state BEFORE starting the container so that the callback_url is
+    # available if the container exits immediately (race with Docker event stream).
+    container_data = {
+        "status": "creating",
+        "profile": req.profile,
+        "user_id": req.user_id,
+        "image": req.config.get("image") or profile_def["image"],
+        "created_at": time.time(),
+        "ports": {},
+        "container_id": "",
+        "callback_url": req.callback_url,
+        "metadata": req.metadata,
+    }
+    await state.set_container(redis, name, container_data)
+
     try:
         container_id = await backend.create(spec)
     except Exception as e:
         logger.error(f"Failed to create container {name}: {e}", exc_info=True)
+        await state.delete_container(redis, name)
         raise HTTPException(500, f"Container creation failed: {e}")
 
     # Get ports from backend
     info = await backend.inspect(name)
     result_ports = info.ports if info else {}
 
-    # Store state
-    container_data = {
-        "status": "running",
-        "profile": req.profile,
-        "user_id": req.user_id,
-        "image": req.config.get("image") or profile_def["image"],
-        "created_at": time.time(),
-        "ports": result_ports,
-        "container_id": container_id,
-        "callback_url": req.callback_url,
-        "metadata": req.metadata,
-    }
-    await state.set_container(redis, name, container_data)
+    # Update state with container_id and ports (only if not already stopped
+    # by the exit handler — avoids overwriting stopped/failed status).
+    current = await state.get_container(redis, name)
+    if current and current.get("status") in ("creating", "running"):
+        container_data["status"] = "running"
+        container_data["ports"] = result_ports
+        container_data["container_id"] = container_id
+        await state.set_container(redis, name, container_data)
+    else:
+        # Container already exited and callback was fired; just update
+        # for response but don't overwrite stopped state.
+        container_data["status"] = "running"
+        container_data["ports"] = result_ports
+        container_data["container_id"] = container_id
 
     return _container_response(name, container_data)
 

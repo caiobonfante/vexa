@@ -75,6 +75,7 @@ services:
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa_default
       - PROFILES_PATH=/app/profiles.yaml
       - LOG_LEVEL=DEBUG
+      - ALLOW_PRIVATE_CALLBACKS=${ALLOW_PRIVATE_CALLBACKS:-1}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../packages/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
