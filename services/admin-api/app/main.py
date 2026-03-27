@@ -3,7 +3,7 @@ import logging
 import secrets
 import string
 import os
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Security, Response
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, status, Security, Response
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -769,10 +769,18 @@ async def get_user_details(
     )
 
 # --- Internal Endpoints (service-to-service, not in OpenAPI docs) ---
+INTERNAL_API_SECRET = os.environ.get("INTERNAL_API_SECRET", "")
+
 @app.post("/internal/validate", include_in_schema=False)
-async def validate_token(payload: dict, db: AsyncSession = Depends(get_db)):
+async def validate_token(request: Request, payload: dict, db: AsyncSession = Depends(get_db)):
     """Validate an API token and return user identity info.
     Called by api-gateway to inject X-User-ID headers."""
+    # Authenticate the caller (gateway) via shared secret
+    if INTERNAL_API_SECRET:
+        provided = request.headers.get("X-Internal-Secret", "")
+        if not hmac.compare_digest(provided, INTERNAL_API_SECRET):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid internal secret")
+
     token = payload.get("token", "")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
@@ -791,7 +799,7 @@ async def validate_token(payload: dict, db: AsyncSession = Depends(get_db)):
 
     return {
         "user_id": user.id,
-        "scopes": [scope] if scope else ["admin"],
+        "scopes": [scope] if scope else ["legacy"],
         "max_concurrent": user.max_concurrent_bots,
         "email": user.email,
     }

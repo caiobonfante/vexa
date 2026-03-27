@@ -233,9 +233,14 @@ async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[di
 
     # Validate via admin-api
     try:
+        validate_headers = {}
+        internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+        if internal_secret:
+            validate_headers["X-Internal-Secret"] = internal_secret
         validate_resp = await client.post(
             f"{ADMIN_API_URL}/internal/validate",
             json={"token": api_key},
+            headers=validate_headers,
             timeout=5.0,
         )
         if validate_resp.status_code == 200:

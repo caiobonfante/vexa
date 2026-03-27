@@ -250,6 +250,16 @@ async def schedule_status_webhook_task(
     )
 
 
+def _get_httpx_client() -> httpx.AsyncClient:
+    """Return the shared httpx client from app.state, or a fallback."""
+    from .main import app
+    client = getattr(app.state, "httpx_client", None)
+    if client is None:
+        # Fallback for cases where app hasn't started yet (tests, etc.)
+        return httpx.AsyncClient(timeout=30.0)
+    return client
+
+
 async def _spawn_via_runtime_api(
     profile: str,
     config: Dict[str, Any],
@@ -259,25 +269,25 @@ async def _spawn_via_runtime_api(
 ) -> Optional[Dict[str, Any]]:
     """Create a container via Runtime API POST /containers."""
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{RUNTIME_API_URL}/containers",
-                json={
-                    "profile": profile,
-                    "config": config,
-                    "user_id": str(user_id),
-                    "callback_url": callback_url,
-                    "metadata": metadata,
-                },
-                timeout=30.0,
-            )
-            if resp.status_code == 201:
-                return resp.json()
-            elif resp.status_code == 429:
-                raise HTTPException(status_code=429, detail=resp.json().get("detail", "Concurrency limit reached"))
-            else:
-                logger.error(f"Runtime API returned {resp.status_code}: {resp.text}")
-                return None
+        client = _get_httpx_client()
+        resp = await client.post(
+            f"{RUNTIME_API_URL}/containers",
+            json={
+                "profile": profile,
+                "config": config,
+                "user_id": str(user_id),
+                "callback_url": callback_url,
+                "metadata": metadata,
+            },
+            timeout=30.0,
+        )
+        if resp.status_code == 201:
+            return resp.json()
+        elif resp.status_code == 429:
+            raise HTTPException(status_code=429, detail=resp.json().get("detail", "Concurrency limit reached"))
+        else:
+            logger.error(f"Runtime API returned {resp.status_code}: {resp.text}")
+            return None
     except httpx.RequestError as e:
         logger.error(f"Runtime API request failed: {e}")
         return None
@@ -286,12 +296,12 @@ async def _spawn_via_runtime_api(
 async def _stop_via_runtime_api(container_name: str) -> bool:
     """Stop a container via Runtime API DELETE /containers/{name}."""
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.delete(
-                f"{RUNTIME_API_URL}/containers/{container_name}",
-                timeout=30.0,
-            )
-            return resp.status_code in (200, 404)
+        client = _get_httpx_client()
+        resp = await client.delete(
+            f"{RUNTIME_API_URL}/containers/{container_name}",
+            timeout=30.0,
+        )
+        return resp.status_code in (200, 404)
     except httpx.RequestError as e:
         logger.error(f"Runtime API stop failed for {container_name}: {e}")
         return False
@@ -300,15 +310,15 @@ async def _stop_via_runtime_api(container_name: str) -> bool:
 async def _get_running_bots_from_runtime(user_id: int) -> list:
     """Get running containers for a user from Runtime API + enrich with DB data."""
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{RUNTIME_API_URL}/containers",
-                params={"user_id": str(user_id), "profile": "meeting"},
-                timeout=15.0,
-            )
-            if resp.status_code != 200:
-                return []
-            containers = resp.json()
+        client = _get_httpx_client()
+        resp = await client.get(
+            f"{RUNTIME_API_URL}/containers",
+            params={"user_id": str(user_id), "profile": "meeting"},
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
+            return []
+        containers = resp.json()
     except httpx.RequestError as e:
         logger.error(f"Runtime API list failed for user {user_id}: {e}")
         return []

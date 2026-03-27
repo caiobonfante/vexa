@@ -34,6 +34,9 @@ CALLBACK_BACKOFF = [float(x) for x in os.getenv("CALLBACK_BACKOFF", "1,5,30").sp
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
 # Server
+SCHEDULER_POLL_INTERVAL = int(os.getenv("SCHEDULER_POLL_INTERVAL", "5"))
+
+# Server
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8090"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()

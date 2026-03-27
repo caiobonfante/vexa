@@ -12,7 +12,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
@@ -89,7 +90,21 @@ async def _list_meeting_data_recordings(db: AsyncSession, user_id: int, meeting_
 
 
 async def _find_meeting_data_recording(db: AsyncSession, user_id: int, recording_id: int):
-    stmt = select(Meeting).where(Meeting.user_id == user_id)
+    # Use JSONB containment to find only meetings whose data->'recordings' array
+    # contains an object with the target id, instead of scanning all user meetings.
+    stmt = (
+        select(Meeting)
+        .where(
+            Meeting.user_id == user_id,
+            Meeting.data.isnot(None),
+            Meeting.data["recordings"].cast(JSONB).isnot(None),
+        )
+        .where(
+            text("data->'recordings' @> :pattern").bindparams(
+                pattern=json.dumps([{"id": recording_id}])
+            )
+        )
+    )
     result = await db.execute(stmt)
     for m in result.scalars().all():
         if not isinstance(m.data, dict):

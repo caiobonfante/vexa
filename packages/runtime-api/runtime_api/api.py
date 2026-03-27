@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -65,6 +67,21 @@ class WaitRequest(BaseModel):
 # -- Helpers --
 
 
+def _sanitize_name(name: str) -> str:
+    """Allow only alphanumeric, hyphens, underscores."""
+    return re.sub(r'[^a-zA-Z0-9_-]', '', name)[:128]
+
+
+def _validate_callback_url(url: str) -> str:
+    """Validate callback URL — reject non-HTTP schemes and internal targets."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"callback_url must be http(s), got {parsed.scheme}")
+    if parsed.hostname in ('localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'):
+        raise ValueError(f"callback_url cannot target localhost or metadata service")
+    return url
+
+
 def _get_backend(request: Request) -> Backend:
     return request.app.state.backend
 
@@ -99,12 +116,19 @@ async def create_container(req: CreateContainerRequest, request: Request):
     if not profile_def:
         raise HTTPException(400, f"Unknown profile: {req.profile}")
 
+    # Validate callback URL
+    if req.callback_url:
+        try:
+            _validate_callback_url(req.callback_url)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
     # Generate container name
     if req.name:
-        name = req.name
+        name = _sanitize_name(req.name)
     else:
         suffix = uuid.uuid4().hex[:8]
-        name = f"{req.profile}-{req.user_id}-{suffix}"
+        name = _sanitize_name(f"{req.profile}-{req.user_id}-{suffix}")
 
     # Build env from profile defaults + user config
     env = {**profile_def.get("env", {})}

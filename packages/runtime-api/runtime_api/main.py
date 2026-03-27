@@ -23,6 +23,8 @@ from runtime_api import config
 from runtime_api.api import router
 from runtime_api.lifecycle import handle_container_exit, idle_loop, reconcile_state
 from runtime_api.profiles import install_sighup_handler, load_profiles
+from runtime_api.scheduler import start_executor, stop_executor
+from runtime_api.scheduler_api import scheduler_router
 
 logging.basicConfig(
     level=config.LOG_LEVEL,
@@ -52,6 +54,7 @@ def create_app() -> FastAPI:
         app.add_middleware(APIKeyMiddleware)
 
     app.include_router(router)
+    app.include_router(scheduler_router)
 
     @app.on_event("startup")
     async def startup():
@@ -85,12 +88,18 @@ def create_app() -> FastAPI:
 
         # Start idle management loop
         app.state.idle_task = asyncio.create_task(idle_loop(app.state.redis, backend))
+
+        # Start scheduler executor
+        app.state.scheduler_task = asyncio.create_task(start_executor(app.state.redis))
         logger.info("Runtime API ready")
 
     @app.on_event("shutdown")
     async def shutdown():
         if hasattr(app.state, "idle_task"):
             app.state.idle_task.cancel()
+        if hasattr(app.state, "scheduler_task"):
+            await stop_executor()
+            app.state.scheduler_task.cancel()
         if hasattr(app.state, "backend"):
             await app.state.backend.shutdown()
         if hasattr(app.state, "redis"):

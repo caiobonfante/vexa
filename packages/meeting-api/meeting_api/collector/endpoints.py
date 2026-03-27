@@ -23,7 +23,7 @@ from ..schemas import (
     MeetingCreate,
     MeetingStatus,
 )
-from admin_models.models import User
+from ..auth import UserProxy
 
 from .config import IMMUTABILITY_THRESHOLD
 from .filters import TranscriptionFilter
@@ -269,7 +269,7 @@ async def _get_full_transcript_segments(
             summary="Get list of all meetings for the current user",
             dependencies=[Depends(get_current_user)])
 async def get_meetings(
-    current_user: User = Depends(get_current_user),
+    current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: Optional[int] = Query(None, ge=1, le=100, description="Max meetings to return"),
     offset: Optional[int] = Query(None, ge=0, description="Number of meetings to skip"),
@@ -301,7 +301,7 @@ async def get_transcript_by_native_id(
     native_meeting_id: str,
     request: Request,
     meeting_id: Optional[int] = Query(None, description="Optional specific database meeting ID."),
-    current_user: User = Depends(get_current_user),
+    current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieves the meeting details and transcript segments for a meeting specified by its platform and native ID."""
@@ -358,7 +358,7 @@ async def get_transcript_by_native_id(
             dependencies=[Depends(get_current_user)])
 async def ws_authorize_subscribe(
     payload: WsAuthorizeSubscribeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     authorized: List[Dict[str, str]] = []
@@ -434,7 +434,7 @@ async def update_meeting_data(
     platform: Platform,
     native_meeting_id: str,
     meeting_update: MeetingUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Updates the user-editable data (name, participants, languages, notes) for the latest meeting."""
@@ -510,7 +510,7 @@ async def delete_meeting(
     platform: Platform,
     native_meeting_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """

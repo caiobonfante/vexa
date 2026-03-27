@@ -33,9 +33,8 @@ S3_BUCKET = os.getenv("S3_BUCKET", "workspaces")
 AGENT_CLI = os.getenv("AGENT_CLI", "claude")
 AGENT_ALLOWED_TOOLS = os.getenv("AGENT_ALLOWED_TOOLS", "Read,Write,Edit,Bash,Glob,Grep")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "")
+AGENT_WORKSPACE_PATH = os.getenv("AGENT_WORKSPACE_PATH", "/root/.claude/projects/-workspace")
+AGENT_STREAM_FORMAT = os.getenv("AGENT_STREAM_FORMAT", "stream-json")
 
 # CORS
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
-
-# Scheduler
-SCHEDULER_POLL_INTERVAL = int(os.getenv("SCHEDULER_POLL_INTERVAL", "5"))

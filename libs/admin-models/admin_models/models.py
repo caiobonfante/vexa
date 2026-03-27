@@ -12,7 +12,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     name = Column(String(100))
     image_url = Column(Text)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now(), default=func.now())
     max_concurrent_bots = Column(Integer, nullable=False, server_default='1', default=1)
     data = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=lambda: {})
 

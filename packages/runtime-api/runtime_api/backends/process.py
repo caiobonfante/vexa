@@ -129,7 +129,7 @@ class ProcessBackend(Backend):
         if not pid:
             return True
 
-        success = _terminate_process_group(pid, timeout)
+        success = await asyncio.to_thread(_terminate_process_group, pid, timeout)
 
         # Update registry
         if self._redis:

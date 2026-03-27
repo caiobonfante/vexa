@@ -64,6 +64,26 @@ async def list_containers(redis, user_id: str = None, profile: str = None) -> li
 
 
 
+async def count_user_containers(
+    redis, user_id: str, profile: str = None
+) -> int:
+    """Count running containers for a user, optionally filtered by profile."""
+    count = 0
+    async for key in redis.scan_iter(f"{KEY_PREFIX}*"):
+        raw = await redis.get(key)
+        if not raw:
+            continue
+        data = json.loads(raw)
+        if data.get("user_id") != user_id:
+            continue
+        if data.get("status") != "running":
+            continue
+        if profile and data.get("profile") != profile:
+            continue
+        count += 1
+    return count
+
+
 async def store_pending_callback(redis, name: str, callback_data: dict, ttl: int = 3600):
     """Store a pending callback for retry."""
     await redis.set(

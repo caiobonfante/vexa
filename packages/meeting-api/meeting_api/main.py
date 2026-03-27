@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 
+import httpx
 import redis
 import redis.asyncio as aioredis
 from fastapi import FastAPI
@@ -24,6 +25,7 @@ from .webhook_retry_worker import (
 )
 
 from .config import REDIS_URL, CORS_ORIGINS
+from .security_headers import SecurityHeadersMiddleware
 from .meetings import router as meetings_router, set_redis
 from .callbacks import router as callbacks_router
 from .voice_agent import router as voice_agent_router
@@ -67,6 +69,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security headers
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Mount routers — no prefix, routes already carry /bots etc.
 app.include_router(meetings_router)
@@ -161,6 +166,9 @@ async def startup():
     else:
         logger.warning("Collector consumers NOT started — Redis unavailable")
 
+    # Shared httpx client for connection pooling to Runtime API
+    app.state.httpx_client = httpx.AsyncClient(timeout=30.0)
+
     logger.info("Meeting API ready")
 
 
@@ -181,6 +189,10 @@ async def shutdown():
             except Exception as e:
                 logger.error(f"Error during collector task {i+1} cancellation: {e}", exc_info=True)
     _collector_tasks.clear()
+
+    if hasattr(app.state, "httpx_client") and app.state.httpx_client:
+        await app.state.httpx_client.aclose()
+        logger.info("httpx client closed")
 
     if hasattr(app.state, "redis") and app.state.redis:
         try:

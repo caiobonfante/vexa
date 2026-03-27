@@ -5,7 +5,20 @@ from pathlib import Path
 
 import pytest
 
+from runtime_api import profiles as profiles_module
 from runtime_api.profiles import load_profiles, get_profile, get_all_profiles, PROFILE_DEFAULTS
+
+
+@pytest.fixture(autouse=True)
+def _reset_profiles_globals():
+    """Reset module-level profile state between tests."""
+    old_profiles = profiles_module._profiles
+    old_mtime = profiles_module._mtime
+    profiles_module._profiles = {}
+    profiles_module._mtime = 0.0
+    yield
+    profiles_module._profiles = old_profiles
+    profiles_module._mtime = old_mtime
 
 
 @pytest.fixture

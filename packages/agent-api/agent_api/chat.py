@@ -107,7 +107,7 @@ async def run_chat_turn(
         if session_id:
             check = await cm.exec_simple(container, [
                 "sh", "-c",
-                f"test -f /root/.claude/projects/-workspace/{session_id}.jsonl && echo OK || echo MISSING",
+                f"test -f {config.AGENT_WORKSPACE_PATH}/{session_id}.jsonl && echo OK || echo MISSING",
             ])
             if check and "MISSING" in check:
                 logger.warning(f"Session {session_id[:12]} not found in container, starting fresh")

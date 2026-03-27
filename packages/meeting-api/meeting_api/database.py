@@ -93,6 +93,8 @@ async def init_db():
 
 async def recreate_db():
     """DANGEROUS: Drops all tables and recreates them."""
+    if os.getenv("ALLOW_DROP_SCHEMA") != "true":
+        raise RuntimeError("recreate_db disabled in production. Set ALLOW_DROP_SCHEMA=true to enable.")
     logger.warning(f"!!! DANGEROUS: Dropping and recreating all tables in {DB_NAME} at {DB_HOST}:{DB_PORT} !!!")
     try:
         async with engine.begin() as conn:
