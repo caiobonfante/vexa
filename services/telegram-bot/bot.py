@@ -219,6 +219,7 @@ class ChatState:
     accumulated: str = ""
     pending: str | None = None
     active_meeting: str | None = None  # "platform/native_id"
+    meeting_aware_session_id: str | None = None  # session with meeting_aware=true
 
 
 _states: dict[tuple[int, str], ChatState] = {}
@@ -260,6 +261,13 @@ async def _stream_response(
     bot = context.bot
     payload = {"user_id": state.user_id, "message": message, "bot_token": state.token}
 
+    # Route through gateway when meeting is active (for auto meeting context injection)
+    if state.meeting_aware_session_id:
+        payload["session_id"] = state.meeting_aware_session_id
+        chat_url = f"{GATEWAY_URL}/api/chat"
+    else:
+        chat_url = f"{AGENT_API_URL}/api/chat"
+
     state.accumulated = ""
     last_edit = 0.0
     current_activity = ""
@@ -267,7 +275,7 @@ async def _stream_response(
     try:
         _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=None, headers=_headers) as client:
-            async with client.stream("POST", f"{AGENT_API_URL}/api/chat", json=payload) as resp:
+            async with client.stream("POST", chat_url, json=payload) as resp:
                 if resp.status_code == 403 and not _retried and state.tg_user_id:
                     # Token revoked — invalidate cache, re-auth, retry once
                     await _invalidate_token(state.tg_user_id)
@@ -672,6 +680,19 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 platform = data.get("platform", parsed[0] if parsed else "unknown")
                 native_id = data.get("native_meeting_id", parsed[1] if parsed else "?")
                 state.active_meeting = f"{platform}/{native_id}"
+
+                # Create meeting-aware session so gateway injects meeting context
+                try:
+                    sess_resp = await client.post(
+                        f"{GATEWAY_URL}/api/sessions",
+                        json={"user_id": state.user_id, "name": f"Meeting: {native_id[:20]}", "meeting_aware": True},
+                    )
+                    if sess_resp.status_code in (200, 201):
+                        state.meeting_aware_session_id = sess_resp.json().get("session_id")
+                        logger.info(f"Meeting-aware session created: {state.meeting_aware_session_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to create meeting-aware session: {e}")
+
                 await update.message.reply_text(
                     f"Bot joining meeting.\n"
                     f"Platform: <code>{html.escape(platform)}</code>\n"
@@ -705,7 +726,8 @@ async def stop_meeting_command(update: Update, context: ContextTypes.DEFAULT_TYP
             resp = await client.delete(f"{GATEWAY_URL}/bots/{state.active_meeting}")
             meeting_ref = state.active_meeting
             state.active_meeting = None
-            if resp.status_code in (200, 204):
+            state.meeting_aware_session_id = None
+            if resp.status_code in (200, 202, 204):
                 await update.message.reply_text(f"Meeting bot stopped: <code>{html.escape(meeting_ref)}</code>", parse_mode="HTML")
             else:
                 await update.message.reply_text(f"\u26a0\ufe0f Failed to stop: {resp.status_code}")
