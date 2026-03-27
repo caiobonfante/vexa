@@ -62,8 +62,8 @@ services:
 
   runtime-api:
     build:
-      context: ../..
-      dockerfile: packages/runtime-api/Dockerfile
+      context: ../../packages/runtime-api
+      dockerfile: Dockerfile
     mem_limit: 512m
     expose:
       - "8090"
