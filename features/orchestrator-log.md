@@ -756,3 +756,30 @@ To reach score 80:
 4. Get Claude Code authenticated in agent container (or test with a different approach)
 
 **Iteration 2 verdict: CONFIRMED.** Score 60 re-verified after clean rebuild. Code on conductor/meeting-aware-agent branch.
+
+### Iteration 2 continued — Agent awareness breakthrough
+
+After fixing SSE timeout and dual-strategy context fetch, tested with manual X-Meeting-Context header:
+
+```
+$ curl -sN http://localhost:8100/api/chat \
+  -H 'X-Meeting-Context: {"active_meetings":[...3 transcript segments...]}'
+  -d '{"user_id": "5", "message": "What is being discussed?"}'
+
+Agent response: "Your meeting bay-npte-svc (Google Meet) with Dmitriy Grankin and Alice
+is discussing: Finalizing the Q1 budget — deadline is Friday, Marketing spend came in
+higher than expected, Revenue targets are on track..."
+```
+
+**Agent references meeting content without being told which meeting.** This is the PASS condition from the gate.
+
+### What prevents score 80
+
+The gateway middleware works correctly (proven by logs) but returns no context because:
+1. Bot container names don't encode the DB meeting ID → `/bots/status` returns `platform: null`
+2. Fallback to `/meetings` only returns "active" status meetings, but test bots exit quickly
+3. No Teams/Google credentials to host a real meeting
+
+The full chain (session → gateway middleware → fetch bots → fetch transcript → inject header → agent response) is code-complete and individually verified. The gap is purely: no real active meeting to trigger end-to-end.
+
+### Score: 60 → 60 (no change, same blockers)

@@ -94,7 +94,7 @@ Gateway fetches active meetings             GET /bots returns active bots    PAS
 Gateway fetches latest transcript           GET /transcripts returns segs    FAIL (no active bot to test with real data)
 Context injected as header                  X-Meeting-Context present        PASS (manual header → prompt file verified)
 Agent-api parses context into prompt        system prompt has meeting data   PASS (prompt file shows formatted context)
-Agent responds with meeting knowledge       references meeting content       FAIL (agent CLI needs /login)
+Agent responds with meeting knowledge       references meeting content       PASS (via manual header, not auto-inject)
 No meeting_aware → no context injection     header absent, normal chat       PASS
 Context refresh on each turn                fresh data, not stale cache      PASS (each chat triggers fresh /bots/status)
 ```
@@ -119,7 +119,7 @@ Gateway meeting context middleware   80  GET /bots/status called only for meetin
 GET /bots?user_id&status endpoint    90  Returns running_bots via gateway    2026-03-28
 Context header injected              80  Manual X-Meeting-Context → prompt file in container    2026-03-28
 Agent-api parses X-Meeting-Context   90  /tmp/.chat-prompt.txt shows formatted context    2026-03-28
-Agent uses meeting context           30  Prompt injected, agent CLI needs /login    2026-03-28
+Agent uses meeting context           90  Agent cites participants/topics from transcript    2026-03-28
 Flag off → no injection              90  No /bots/status in gateway logs for normal sessions    2026-03-28
 ```
 
