@@ -27,6 +27,7 @@ from agent_api.auth import require_api_key
 from agent_api.chat import (
     clear_session,
     delete_session_meta,
+    get_session_meta,
     list_sessions,
     run_chat_turn,
     save_session_meta,

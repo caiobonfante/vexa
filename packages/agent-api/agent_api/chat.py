@@ -67,6 +67,17 @@ async def save_session_meta(redis, user_id: str, session_id: str, name: str, ext
     await redis.expire(f"{SESSIONS_INDEX}{user_id}", 86400 * 30)
 
 
+async def get_session_meta(redis, user_id: str, session_id: str) -> dict | None:
+    """Get session metadata from Redis index."""
+    raw = await redis.hget(f"{SESSIONS_INDEX}{user_id}", session_id)
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 async def delete_session_meta(redis, user_id: str, session_id: str):
     """Remove a session from the index."""
     await redis.hdel(f"{SESSIONS_INDEX}{user_id}", session_id)
