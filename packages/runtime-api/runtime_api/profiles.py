@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import signal
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -20,9 +21,28 @@ from runtime_api import config
 
 logger = logging.getLogger("runtime_api.profiles")
 
+_ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
+
 _profiles: dict[str, dict] = {}
 _lock = threading.Lock()
 _mtime: float = 0.0
+
+
+def _expand_env_vars(value: Any) -> Any:
+    """Recursively expand ${VAR} and ${VAR:-default} in strings."""
+    if isinstance(value, str):
+        def _replace(m: re.Match) -> str:
+            expr = m.group(1)
+            if ":-" in expr:
+                var, default = expr.split(":-", 1)
+                return os.environ.get(var, default)
+            return os.environ.get(expr, m.group(0))
+        return _ENV_VAR_RE.sub(_replace, value)
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    return value
 
 # Default profile schema with all supported fields
 PROFILE_DEFAULTS = {
@@ -68,6 +88,7 @@ def load_profiles(path: str | None = None) -> dict[str, dict]:
 
         profiles = {}
         for name, spec in raw.get("profiles", raw).items():
+            spec = _expand_env_vars(spec)
             merged = {**PROFILE_DEFAULTS}
             merged.update(spec)
             # Merge resources sub-dict

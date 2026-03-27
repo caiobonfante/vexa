@@ -29,6 +29,7 @@ PROFILES_PATH = os.getenv("PROFILES_PATH", "profiles.yaml")
 IDLE_CHECK_INTERVAL = int(os.getenv("IDLE_CHECK_INTERVAL", "30"))
 CALLBACK_RETRIES = int(os.getenv("CALLBACK_RETRIES", "3"))
 CALLBACK_BACKOFF = [float(x) for x in os.getenv("CALLBACK_BACKOFF", "1,5,30").split(",")]
+ALLOW_PRIVATE_CALLBACKS = os.getenv("ALLOW_PRIVATE_CALLBACKS", "").lower() in ("1", "true", "yes")
 
 # Auth
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]

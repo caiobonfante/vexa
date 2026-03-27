@@ -45,6 +45,7 @@ from .config import (
     REDIS_URL,
     RUNTIME_API_URL,
     MEETING_API_URL,
+    BOT_IMAGE_NAME,
     BOT_STOP_DELAY_SECONDS,
 )
 from .post_meeting import run_all_tasks, run_status_webhook_task
@@ -741,7 +742,7 @@ async def request_bot(
     # Spawn via Runtime API
     result = await _spawn_via_runtime_api(
         profile="meeting",
-        config={"env": env_vars},
+        config={"image": BOT_IMAGE_NAME, "env": env_vars},
         user_id=current_user.id,
         callback_url=f"{MEETING_API_URL}/bots/internal/callback/exited",
         metadata={"meeting_id": meeting_id},

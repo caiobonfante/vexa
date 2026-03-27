@@ -73,9 +73,15 @@ def _sanitize_name(name: str) -> str:
 
 
 def _validate_callback_url(url: str) -> str:
-    """Validate callback URL — reject non-HTTP schemes and internal/private targets."""
+    """Validate callback URL — reject non-HTTP schemes and internal/private targets.
+
+    Set ALLOW_PRIVATE_CALLBACKS=1 for dev/testing where callbacks target
+    the Docker bridge gateway or other LAN addresses.
+    """
     import ipaddress
     import socket
+
+    from runtime_api import config
 
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https'):
@@ -84,6 +90,10 @@ def _validate_callback_url(url: str) -> str:
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("callback_url must include a hostname")
+
+    # Dev/test escape hatch — skip private-IP checks
+    if config.ALLOW_PRIVATE_CALLBACKS:
+        return url
 
     # Normalize and check hostname against known-bad patterns
     hostname_lower = hostname.lower().rstrip('.')
@@ -203,7 +213,7 @@ async def create_container(req: CreateContainerRequest, request: Request):
         labels=labels,
         ports=ports,
         mounts=mounts,
-        network=req.config.get("network"),
+        network=req.config.get("network") or profile_def.get("network"),
         shm_size=resources.get("shm_size", 0),
         auto_remove=profile_def.get("auto_remove", True),
         cpu_request=resources.get("cpu_request"),
