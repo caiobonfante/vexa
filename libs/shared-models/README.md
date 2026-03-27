@@ -83,13 +83,13 @@ Signature: `X-Webhook-Signature: sha256=<HMAC-SHA256 of timestamp.payload>`
 
 ```bash
 # Install
-pip install -e packages/shared-models/
+pip install -e libs/shared-models/
 
 # Run migrations
 alembic upgrade head
 
 # Run all tests
-pytest packages/shared-models/tests/ packages/shared-models/shared_models/test_*.py -v
+pytest libs/shared-models/tests/ libs/shared-models/shared_models/test_*.py -v
 
 # Check migration status
 alembic current

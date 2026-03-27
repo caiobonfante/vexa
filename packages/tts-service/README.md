@@ -2,29 +2,45 @@
 
 ## Why
 
-Bot containers need text-to-speech to participate as voice agents in meetings, but they should not each hold OpenAI API keys or manage HTTP connections to external providers. The TTS service centralizes OpenAI TTS access behind a single internal endpoint, keeping API key management in one place and allowing future provider swaps without touching bot code.
+Bot containers need text-to-speech to participate as voice agents in meetings. The TTS service provides local speech synthesis with zero external API calls — fully self-hosted, no API keys to manage, no network dependency on external providers.
 
 ## What
 
-A lightweight FastAPI proxy that exposes an OpenAI-compatible `/v1/audio/speech` endpoint. It receives a JSON request with text, voice, and format parameters, streams the request to OpenAI's TTS API, and streams the audio response back to the caller. No database, no state -- pure passthrough with validation.
+A local text-to-speech service using **Piper TTS** (ONNX models). Exposes an OpenAI-compatible `/v1/audio/speech` endpoint so existing code that targets OpenAI's TTS API works without changes. Voice models are auto-downloaded from HuggingFace on first use.
 
-Input: JSON body `{"model": "tts-1", "input": "text to speak", "voice": "nova", "response_format": "pcm"}`
-Output: Streaming audio (PCM 24kHz mono by default, or mp3/opus/aac/wav/flac)
+Input: JSON body `{"model": "tts-1", "input": "text to speak", "voice": "nova", "response_format": "wav"}`
+Output: Audio (WAV 24kHz mono by default, or raw PCM)
 
 ### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (includes loaded voices and aliases) |
+| GET | `/voices` | List downloaded voices and known aliases |
 | POST | `/v1/audio/speech` | Synthesize text to speech (OpenAI-compatible) |
 
-Supported voices: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`
-Supported formats: `pcm`, `mp3`, `opus`, `aac`, `wav`, `flac`
+### Voice mapping
+
+OpenAI voice names are mapped to Piper voices for backward compatibility:
+
+| OpenAI name | Piper voice |
+|-------------|-------------|
+| `alloy` | `en_US-amy-medium` |
+| `echo` | `en_US-danny-low` |
+| `fable` | `en_US-joe-medium` |
+| `onyx` | `en_US-ryan-medium` |
+| `nova` | `en_US-kristin-medium` |
+| `shimmer` | `en_US-lessac-medium` |
+
+You can also use Piper voice names directly (e.g. `en_US-amy-medium`).
+
+Supported formats: `wav` (default), `pcm` (raw Int16LE 24kHz mono)
 
 ### Dependencies
 
-- **OpenAI API** -- requires a valid API key with TTS access
+- **Piper TTS** (bundled) — local ONNX inference, no external calls
 - No database, no Redis, no other Vexa services
+- No API keys required for operation
 
 ## How
 
@@ -43,9 +59,11 @@ uvicorn main:app --host 0.0.0.0 --port 8002
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key for TTS synthesis (required for operation) |
-| `OPENAI_BASE_URL` | OpenAI API base URL (default: `https://api.openai.com`) |
-| `TTS_API_TOKEN` | Optional access token -- if set, requests must include `X-API-Key` header |
+| `TTS_API_TOKEN` | Optional access token — if set, requests must include `X-API-Key` header |
+| `TTS_OUTPUT_SAMPLE_RATE` | Output sample rate (default: `24000`) |
+| `PIPER_VOICES_DIR` | Voice model storage directory (default: `/app/voices`) |
+| `PIPER_DEFAULT_VOICES` | Comma-separated voices to pre-load on startup (default: `en_US-amy-medium,en_US-danny-low`) |
+| `LOG_LEVEL` | Logging level (default: `INFO`) |
 
 ### Test
 
@@ -53,16 +71,19 @@ uvicorn main:app --host 0.0.0.0 --port 8002
 # Health check
 curl http://localhost:8002/health
 
-# Synthesize speech (save as PCM)
+# List voices
+curl http://localhost:8002/voices
+
+# Synthesize speech (save as WAV)
 curl -X POST http://localhost:8002/v1/audio/speech \
   -H "Content-Type: application/json" \
-  -d '{"model": "tts-1", "input": "Hello world", "voice": "nova", "response_format": "pcm"}' \
-  --output speech.pcm
+  -d '{"model": "tts-1", "input": "Hello world", "voice": "nova", "response_format": "wav"}' \
+  --output speech.wav
 ```
 
 ### Debug
 
 - Logs to stdout: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
-- If `OPENAI_API_KEY` is not set, the service starts but returns 503 on synthesis requests
-- 502 errors mean OpenAI returned an error -- the first 200 chars of the upstream error are included in the response
-- Invalid voice names silently fall back to `alloy`; invalid formats fall back to `pcm`
+- Voice models are downloaded on first use — first request for a new voice will be slower
+- Invalid voice names that can't be downloaded return 404
+- The `model` field is accepted but ignored (kept for OpenAI API compatibility)

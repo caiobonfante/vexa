@@ -71,9 +71,7 @@ These live in `packages/` and are designed to be independently publishable with 
 |---------|-------------|
 | [runtime-api](../packages/runtime-api/) | Generic container lifecycle API — Docker, K8s, and process backends |
 | [agent-api](../packages/agent-api/) | AI agent runtime — chat streaming, workspace sync, scheduling |
-| [shared-models](../packages/shared-models/) | SQLAlchemy models, Pydantic schemas, DB migrations |
-
-> **Phase 0 note:** `shared-models` moved from `libs/shared-models/` to `packages/shared-models/`. All import paths updated.
+| [shared-models](../libs/shared-models/) | SQLAlchemy models, Pydantic schemas, DB migrations (deprecated, in `libs/`) |
 
 ## Services
 
@@ -133,7 +131,7 @@ The scheduler is not a standalone service — it runs as an in-process worker in
 
 **Flow:** Calendar Service syncs events → Agent API scheduler queues timed job → job fires → API Gateway → Meeting API spawns bot.
 
-**Code:** `packages/shared-models/shared_models/scheduler.py` + `scheduler_worker.py`
+**Code:** `libs/shared-models/shared_models/scheduler.py` + `scheduler_worker.py`
 
 ## Infrastructure Dependencies
 

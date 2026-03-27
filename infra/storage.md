@@ -126,7 +126,7 @@ aws --endpoint-url http://localhost:9000 s3 ls s3://vexa-recordings/
 
 ### References
 
-- Storage client: [`packages/shared-models/shared_models/storage.py`](../packages/shared-models/shared_models/storage.py)
-- Models (Recording, MediaFile): [`packages/shared-models/shared_models/models.py`](../packages/shared-models/shared_models/models.py)
+- Storage client: [`libs/shared-models/shared_models/storage.py`](../libs/shared-models/shared_models/storage.py)
+- Models (Recording, MediaFile): [`libs/shared-models/shared_models/models.py`](../libs/shared-models/shared_models/models.py)
 - PostgreSQL (table details): [postgresql.md](postgresql.md)
 - Redis (ephemeral layer): [redis.md](redis.md)

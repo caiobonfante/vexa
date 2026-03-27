@@ -239,7 +239,7 @@ services:
       dockerfile: packages/meeting-api/Dockerfile
     volumes:
       - ../../../alembic.ini:/app/alembic.ini
-      - ../../../packages/shared-models/alembic:/app/alembic
+      - ../../../libs/shared-models/alembic:/app/alembic
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432

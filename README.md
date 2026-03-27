@@ -437,7 +437,7 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | **agent** | ~200MB | Claude CLI, post-meeting processing, automation |
 | **worker** | ~50MB | Webhook delivery, file processing |
 
-- [Database models](./packages/shared-models/shared_models/models.py): Shared ORM models, schemas, migrations
+- [Database models](./libs/shared-models/shared_models/models.py): Shared ORM models, schemas, migrations
 
 > 💫 If you're building with Vexa, we'd love your support! [Star our repo](https://github.com/Vexa-ai/vexa/stargazers) to help us reach 2000 stars.
 

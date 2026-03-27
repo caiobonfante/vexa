@@ -53,8 +53,8 @@ Alembic-managed. 3 migrations to date:
 
 Current production version: `a1b2c3d4e5f6` (head).
 
-Models defined in: [`packages/shared-models/shared_models/models.py`](../packages/shared-models/shared_models/models.py)
-Alembic config: [`packages/shared-models/alembic/`](../packages/shared-models/alembic/)
+Models defined in: [`libs/shared-models/shared_models/models.py`](../libs/shared-models/shared_models/models.py)
+Alembic config: [`libs/shared-models/alembic/`](../libs/shared-models/alembic/)
 
 ## How
 
@@ -131,7 +131,7 @@ docker exec vexa_dev-postgres-1 psql -U postgres -d vexa
 
 ### References
 
-- Models: [`packages/shared-models/shared_models/models.py`](../packages/shared-models/shared_models/models.py)
-- Alembic versions: [`packages/shared-models/alembic/versions/`](../packages/shared-models/alembic/versions/)
+- Models: [`libs/shared-models/shared_models/models.py`](../libs/shared-models/shared_models/models.py)
+- Alembic versions: [`libs/shared-models/alembic/versions/`](../libs/shared-models/alembic/versions/)
 - Redis (ephemeral layer): [redis.md](redis.md)
 - Storage (media files): [storage.md](storage.md)

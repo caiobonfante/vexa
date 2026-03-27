@@ -8,7 +8,7 @@
 
 ## 1. shared_models Import Matrix
 
-All services import from `shared_models` (packages/shared-models). Below is the complete mapping:
+All services import from `shared_models` (libs/shared-models). Below is the complete mapping:
 
 | Source File | Imports From | Specific Import | Type |
 |---|---|---|---|

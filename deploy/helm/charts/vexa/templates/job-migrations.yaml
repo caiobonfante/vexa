@@ -32,7 +32,7 @@ spec:
             - |
               set -e
               echo "Checking database state..."
-              state=$(python /app/packages/shared-models/check_db_state.py 2>/dev/null || echo fresh)
+              state=$(python /app/libs/shared-models/check_db_state.py 2>/dev/null || echo fresh)
               echo "Database state: ${state}"
               case "${state}" in
                 alembic)

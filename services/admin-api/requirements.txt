@@ -3,4 +3,4 @@ uvicorn[standard]
 email-validator
 
 # Shared library dependency - REMOVED (Installed via Dockerfile RUN command)
-# -e ../../packages/shared-models
+# -e ../../libs/shared-models

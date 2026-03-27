@@ -21,7 +21,7 @@ Two packages CAN define models that hit the same database, but:
 
 ## Vexa Current State
 
-- `packages/shared-models/shared_models/models.py` defines `Base = declarative_base()` and all models (User, Meeting, etc.)
+- `libs/shared-models/shared_models/models.py` defines `Base = declarative_base()` and all models (User, Meeting, etc.)
 - `services/calendar-service/app/models.py` just re-exports from shared_models — no separate Base
 - Only one `declarative_base()` call in the entire codebase
 

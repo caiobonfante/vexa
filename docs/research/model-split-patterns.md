@@ -4,13 +4,13 @@ Research for Step 6 of the [proposed architecture](../architecture-proposed.md) 
 
 ## Current State
 
-One file (`packages/shared-models/shared_models/models.py`) defines everything:
+One file (`libs/shared-models/shared_models/models.py`) defines everything:
 - `Base = declarative_base()` — single registry, single MetaData
 - `User`, `APIToken` — auth domain (admin-api should own)
 - `Meeting`, `MeetingSession`, `Transcription`, `Recording`, `MediaFile`, `CalendarEvent` — meeting domain (meeting-api should own)
 - Agent tables TBD (agent-api should own)
 
-One Alembic migration chain: 5 migrations in `packages/shared-models/alembic/versions/`, linear from `dc59a1c03d1f` → `c8d9e0f1a2b3`.
+One Alembic migration chain: 5 migrations in `libs/shared-models/alembic/versions/`, linear from `dc59a1c03d1f` → `c8d9e0f1a2b3`.
 
 All services import `from shared_models.models import ...`.
 
@@ -243,7 +243,7 @@ Multiple branches share a single `alembic_version` table. Each branch gets its o
 script_location = alembic
 version_path_separator = os
 version_locations =
-    %(here)s/packages/shared-models/alembic/versions
+    %(here)s/libs/shared-models/alembic/versions
     %(here)s/packages/meeting-api/alembic/versions
     %(here)s/packages/agent-api/alembic/versions
 ```
@@ -373,14 +373,14 @@ This is worth considering if we ever need zero-downtime migrations.
 
 **Before** (one file):
 ```
-packages/shared-models/shared_models/
+libs/shared-models/shared_models/
   models.py     # Base + User + APIToken + Meeting + Transcription + ...
   database.py   # init_db(), session factory
 ```
 
 **After** (split by domain):
 ```
-packages/shared-models/shared_models/
+libs/shared-models/shared_models/
   models.py     # Base + User + APIToken only
   database.py   # init_db(), session factory (imports all model packages for MetaData)
 

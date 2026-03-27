@@ -140,7 +140,7 @@ COPY packages/tts-service/ /app/tts-service/
 # Alembic migrations
 COPY alembic.ini /app/alembic.ini
 # Alembic migrations (still in shared-models until fully migrated)
-COPY packages/shared-models/alembic/ /app/alembic/
+COPY libs/shared-models/alembic/ /app/alembic/
 
 # -----------------------------------------------------------------------------
 # Node.js Bot Build
