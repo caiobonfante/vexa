@@ -81,7 +81,7 @@ These live in `packages/` and are designed to be independently publishable with 
 |---------|------|-------------|
 | [api-gateway](api-gateway/) | 8000 | Entry point. Auth middleware, routing, CORS |
 | [admin-api](admin-api/) | 8001 | User management, API tokens, meeting CRUD |
-| [agent-api](agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces |
+| [agent-api](../packages/agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces. Lives in `packages/`. |
 | [runtime-api](../packages/runtime-api/) | 8090 | Container lifecycle API — Docker, K8s, process backends. Lives in `packages/`. |
 
 ### Domain Services
@@ -97,8 +97,9 @@ These live in `packages/` and are designed to be independently publishable with 
 | Service | Port | Description |
 |---------|------|-------------|
 | [transcription-service](../packages/transcription-service/) | 8083 | Whisper API — speech-to-text (in `packages/`) |
-| [transcription-collector](transcription-collector/) | 8002 | Consumes Redis streams, writes segments to DB |
-| [transcript-rendering](transcript-rendering/) | — | TypeScript library for dedup, grouping, timestamps |
+| [transcript-rendering](../packages/transcript-rendering/) | — | TypeScript library for dedup, grouping, timestamps. Lives in `packages/`. |
+
+> **Note:** The transcription collector is now built into [meeting-api](../packages/meeting-api/). It consumes Redis streams and writes segments to PostgreSQL as part of the meeting domain service.
 
 ### Supporting Services
 

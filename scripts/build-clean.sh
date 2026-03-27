@@ -148,7 +148,7 @@ commit_group "$DIMA" \
 API gateway with auth middleware and CORS. Admin API for user/bot/meeting
 management. Agent API for chat sessions, scheduling, workspaces.
 Runtime API for container orchestration and profiles." \
-  "services/api-gateway/" "services/admin-api/" "services/agent-api/" "services/runtime-api/"
+  "services/api-gateway/" "services/admin-api/" "packages/agent-api/" "packages/runtime-api/"
 
 # 3. Bot manager and orchestrators
 commit_group "$DIMA" \

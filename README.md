@@ -408,10 +408,9 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 |---------|---------|
 | [api-gateway](./services/api-gateway) | Reverse proxy — routes REST, WebSocket, VNC, CDP to backends |
 | [admin-api](./services/admin-api) | User/org CRUD, scoped API tokens, team management |
-| [bot-manager](./services/bot-manager) | Bot lifecycle, meeting CRUD, recordings, interactive bot controls |
-| [agent-api](./services/agent-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
-| [runtime-api](./services/runtime-api) | Container CRUD — spawn/stop/exec, port mapping, idle timeout |
-| [transcription-collector](./services/transcription-collector) | Persists segments from Redis to Postgres, serves transcript API |
+| [meeting-api](./packages/meeting-api) | Bot lifecycle, meeting CRUD, recordings, transcription collector, interactive bot controls |
+| [agent-api](./packages/agent-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
+| [runtime-api](./packages/runtime-api) | Container CRUD — spawn/stop/exec, port mapping, idle timeout |
 
 **Meeting & AI services:**
 

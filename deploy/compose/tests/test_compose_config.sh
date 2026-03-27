@@ -41,7 +41,7 @@ if command -v docker &>/dev/null; then
   echo "  OK: docker-compose.yml parses"
 
   # Check expected services exist
-  for svc in api-gateway admin-api bot-manager transcription-collector mcp dashboard redis; do
+  for svc in api-gateway admin-api meeting-api mcp dashboard redis; do
     if echo "$services" | grep -q "^${svc}$"; then
       echo "  OK: service '$svc' defined"
     else

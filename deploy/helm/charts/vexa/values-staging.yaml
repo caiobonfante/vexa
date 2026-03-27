@@ -66,45 +66,7 @@ adminApi:
     repository: ghcr.io/vexa-ai/admin-api
     tag: staging
 
-# ---------- Bot Manager ----------
-botManager:
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: ghcr.io/vexa-ai/bot-manager
-    tag: staging
-
-  # Kubernetes orchestrator: bots spawn as separate Pods
-  orchestrator: kubernetes
-  kubernetesOrchestrator:
-    createRbac: true
-    botNamespace: ""  # same namespace as bot-manager
-
-  bot:
-    imageName: "ghcr.io/vexa-ai/vexa-bot:staging"
-    resources:
-      requests:
-        cpu: "500m"
-        memory: "512Mi"
-      limits:
-        cpu: "2000m"
-        memory: "4Gi"
-
-  # Additional env vars passed to bot-manager deployment
-  # Note: extraEnv in default values.yaml is a map; templates should handle both
-  transcriptionServiceUrl: "http://vexa-transcription-gateway:8084/v1/audio/transcriptions"
-  transcriptionServiceToken: "vxa_tx_YD5DxB4xHWdpBx0pDPL0XMAdLnt48lFjQ3Aj9r14"
-  postMeetingHooks: "https://app.staging.vexa.ai/api/hooks/meeting-completed"
-
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 2000m
-      memory: 2Gi
-
-# ---------- Transcription Collector ----------
+# ---------- Transcription Collector (meeting-api) ----------
 transcriptionCollector:
   enabled: true
   replicaCount: 1

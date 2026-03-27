@@ -121,13 +121,13 @@ migrate-or-init: check_docker
 			sleep 5; count=$$((count+1)); \
 		done; \
 	fi; \
-	$(COMPOSE_CMD) exec -T transcription-collector python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
+	$(COMPOSE_CMD) exec -T meeting-api python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
 	HAS_ALEMBIC=$$($(COMPOSE_CMD) exec -T postgres psql -U $${DB_USER:-postgres} -d $${DB_NAME:-vexa} -t -c "SELECT 1 FROM information_schema.tables WHERE table_name = 'alembic_version';" 2>/dev/null | tr -d '[:space:]' || echo ""); \
 	if [ "$$HAS_ALEMBIC" = "1" ]; then \
 		$(MAKE) migrate; \
 	else \
-		$(COMPOSE_CMD) exec -T transcription-collector python -c "import asyncio; from shared_models.database import init_db; asyncio.run(init_db())"; \
-		$(COMPOSE_CMD) exec -T transcription-collector python /app/libs/shared-models/fix_alembic_version.py --create-if-missing; \
+		$(COMPOSE_CMD) exec -T meeting-api python -c "import asyncio; from shared_models.database import init_db; asyncio.run(init_db())"; \
+		$(COMPOSE_CMD) exec -T meeting-api python /app/libs/shared-models/fix_alembic_version.py --create-if-missing; \
 	fi
 
 migrate: check_docker
@@ -140,22 +140,22 @@ migrate: check_docker
 			echo "ERROR: postgres not running. Run 'make up' first."; exit 1; \
 		fi; \
 	fi; \
-	$(COMPOSE_CMD) exec -T transcription-collector python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
-	current_version=$$($(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini current 2>/dev/null | grep -E '^[a-f0-9]{12}' | head -1 || echo ""); \
+	$(COMPOSE_CMD) exec -T meeting-api python /app/libs/shared-models/fix_alembic_version.py --repair-stale; \
+	current_version=$$($(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini current 2>/dev/null | grep -E '^[a-f0-9]{12}' | head -1 || echo ""); \
 	if [ "$$current_version" = "dc59a1c03d1f" ]; then \
 		if $(COMPOSE_CMD) exec -T postgres psql -U $${DB_USER:-postgres} -d $${DB_NAME:-vexa} -t -c "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'data';" | grep -q 1; then \
-			$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini stamp 5befe308fa8b; \
+			$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini stamp 5befe308fa8b; \
 		fi; \
 	fi; \
-	$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini upgrade head
+	$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini upgrade head
 
 makemigrations: check_docker
 	@if [ -z "$(M)" ]; then echo "Usage: make makemigrations M=\"your message\""; exit 1; fi
-	$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini revision --autogenerate -m "$(M)"
+	$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini revision --autogenerate -m "$(M)"
 
 init-db: check_docker
-	$(COMPOSE_CMD) run --rm transcription-collector python -c "import asyncio; from shared_models.database import init_db; asyncio.run(init_db())"
-	$(COMPOSE_CMD) run --rm transcription-collector alembic -c /app/alembic.ini stamp head
+	$(COMPOSE_CMD) run --rm meeting-api python -c "import asyncio; from shared_models.database import init_db; asyncio.run(init_db())"
+	$(COMPOSE_CMD) run --rm meeting-api alembic -c /app/alembic.ini stamp head
 
 stamp-db: check_docker
 	@if [ "$(REMOTE_DB)" != "true" ]; then \
@@ -163,7 +163,7 @@ stamp-db: check_docker
 			echo "ERROR: postgres not running. Run 'make up' first."; exit 1; \
 		fi; \
 	fi
-	$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini stamp head
+	$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini stamp head
 
 migration-status: check_docker
 	@if [ "$(REMOTE_DB)" != "true" ]; then \
@@ -171,5 +171,5 @@ migration-status: check_docker
 			echo "ERROR: postgres not running. Run 'make up' first."; exit 1; \
 		fi; \
 	fi
-	$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini current
-	$(COMPOSE_CMD) exec -T transcription-collector alembic -c /app/alembic.ini history --verbose
+	$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini current
+	$(COMPOSE_CMD) exec -T meeting-api alembic -c /app/alembic.ini history --verbose

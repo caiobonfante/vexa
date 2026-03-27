@@ -61,7 +61,7 @@ check "Dashboard :3001" curl -sf http://localhost:3001
 # Step 5: Check database
 echo ">>> Checking database..."
 check "PostgreSQL responding" docker compose exec -T postgres pg_isready -U postgres
-check "Alembic version" docker compose exec -T transcription-collector alembic -c /app/alembic.ini current
+check "Alembic version" docker compose exec -T meeting-api alembic -c /app/alembic.ini current
 
 # Step 6: Check Redis
 echo ">>> Checking Redis..."
