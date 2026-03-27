@@ -31,13 +31,6 @@ services:
       postgres:
         condition: service_healthy
 
-  # Add postgres dependency to bot-manager
-  # Note: Docker Compose merges depends_on, so this adds to existing dependencies
-  bot-manager:
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   # Add postgres dependency to meeting-api
   # Note: Docker Compose merges depends_on, so this adds to existing dependencies
   meeting-api:
