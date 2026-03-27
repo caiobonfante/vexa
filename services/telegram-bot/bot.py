@@ -43,6 +43,7 @@ logger = logging.getLogger("vexa_tg_bot")
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 AGENT_API_URL = os.getenv("AGENT_API_URL", os.getenv("CHAT_API_URL", "http://agent-api:8100"))
+AGENT_API_TOKEN = os.getenv("AGENT_API_TOKEN", os.getenv("BOT_API_TOKEN", ""))
 ADMIN_API_URL = os.getenv("ADMIN_API_URL", "http://admin-api:8001")
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://api-gateway:8000")
@@ -82,7 +83,7 @@ async def get_or_create_auth(tg_user) -> tuple[str, str]:
         return user_id, token
 
     # Auto-create via admin-api
-    email = f"telegram:{tg_user.id}@telegram"
+    email = f"telegram_{tg_user.id}@telegram.user"
     name = tg_user.full_name or tg_user.username or f"tg_{tg_user.id}"
 
     async with httpx.AsyncClient(timeout=15) as client:
@@ -244,14 +245,14 @@ async def _stream_response(
     message: str,
 ) -> None:
     bot = context.bot
-    payload = {"user_id": state.user_id, "message": message}
+    payload = {"user_id": state.user_id, "message": message, "bot_token": state.token}
 
     state.accumulated = ""
     last_edit = 0.0
     current_activity = ""
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=None, headers=_headers) as client:
             async with client.stream("POST", f"{AGENT_API_URL}/api/chat", json=payload) as resp:
                 if resp.status_code != 200:
@@ -404,7 +405,7 @@ async def _start_stream(
 
 async def _interrupt(state: ChatState):
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             await client.request(
                 "DELETE", f"{AGENT_API_URL}/api/chat",
@@ -490,7 +491,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     await _interrupt(state)
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             await client.post(
                 f"{AGENT_API_URL}/api/chat/reset",
@@ -512,7 +513,7 @@ async def new_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     name = " ".join(context.args) if context.args else "New session"
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             resp = await client.post(
                 f"{AGENT_API_URL}/api/sessions",
@@ -540,7 +541,7 @@ async def sessions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             resp = await client.get(
                 f"{AGENT_API_URL}/api/sessions",
@@ -571,7 +572,7 @@ async def files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=10, headers=_headers) as client:
             resp = await client.get(
                 f"{AGENT_API_URL}/api/workspace/files",
@@ -635,7 +636,7 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     parsed = _parse_meeting_url(meeting_url)
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=30, headers=_headers) as client:
             body = {"meeting_url": meeting_url}
             if parsed:
@@ -676,7 +677,7 @@ async def stop_meeting_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=15, headers=_headers) as client:
             resp = await client.delete(f"{GATEWAY_URL}/bots/{state.active_meeting}")
             meeting_ref = state.active_meeting
@@ -707,7 +708,7 @@ async def speak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     text_to_speak = " ".join(context.args)
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=30, headers=_headers) as client:
             resp = await client.post(
                 f"{GATEWAY_URL}/bots/{state.active_meeting}/speak",
@@ -733,7 +734,7 @@ async def transcript_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     try:
-        _headers = {"X-API-Key": state.token} if state.token else {}
+        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=15, headers=_headers) as client:
             resp = await client.get(f"{GATEWAY_URL}/transcripts/{state.active_meeting}")
             if resp.status_code == 200:
