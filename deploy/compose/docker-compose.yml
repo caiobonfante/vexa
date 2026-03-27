@@ -65,6 +65,8 @@ services:
       context: ../../packages/runtime-api
       dockerfile: Dockerfile
     mem_limit: 512m
+    group_add:
+      - "${DOCKER_GID:-998}"
     expose:
       - "8090"
     environment:
