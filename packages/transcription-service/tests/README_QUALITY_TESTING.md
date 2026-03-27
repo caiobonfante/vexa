@@ -15,7 +15,7 @@ It is separate from the existing **load/perf** tools.
 
 ### 1) Start the service
 
-From `services/transcription-service/`:
+From `packages/transcription-service/`:
 
 ```bash
 docker-compose up -d --build

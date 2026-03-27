@@ -7,10 +7,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
-COPY services/tts-service/requirements.txt .
+COPY packages/tts-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/tts-service/main.py .
+COPY packages/tts-service/main.py .
 
 # Voice models directory — will be auto-populated on first use,
 # or mount a volume with pre-downloaded voices for faster startup.

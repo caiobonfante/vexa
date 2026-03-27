@@ -38,7 +38,7 @@ bash tests/run_unit.sh
 Each service has tests in `services/<name>/tests/`. Run a single service:
 
 ```bash
-cd services/transcription-service && pytest tests/
+cd packages/transcription-service && pytest tests/
 ```
 
 ### Layer 1: Integration tests

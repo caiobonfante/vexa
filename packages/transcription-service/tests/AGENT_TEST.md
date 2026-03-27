@@ -3,7 +3,7 @@
 A standalone, general-purpose transcription service with OpenAI-compatible API. Tests verify it transcribes accurately, handles load, and maintains quality across languages.
 
 ## Prerequisites
-- Service running: `cd services/transcription-service && docker compose up -d`
+- Service running: `cd packages/transcription-service && docker compose up -d`
 - Wait for "Model loaded successfully" in logs
 - Port: read from `docker-compose.yml` (default 8083)
 - Test audio: `tests/test_audio.wav`

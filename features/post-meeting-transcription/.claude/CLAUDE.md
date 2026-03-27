@@ -36,7 +36,7 @@ Dashboard → renders segments + audio player with click-to-seek
 ```
 
 ### Counterparts
-- Service agents: `services/bot-manager`, `services/transcription-service`, `services/transcription-collector`, `services/dashboard`
+- Service agents: `services/bot-manager`, `packages/transcription-service`, `services/transcription-collector`, `services/dashboard`
 - Related features: realtime-transcription (live version), audio-recording (recording source)
 
 ## How to test

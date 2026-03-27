@@ -25,7 +25,7 @@ See [helm/README.md](helm/README.md).
 ### Transcription service
 All self-hosted deployments need a transcription service:
 - **Ready to go:** Use Vexa transcription — sign up at [vexa.ai](https://vexa.ai), get a transcription API key. No GPU needed.
-- **Self-host:** Run [services/transcription-service](../services/transcription-service/) on your own GPU for full data sovereignty.
+- **Self-host:** Run [packages/transcription-service](../packages/transcription-service/) on your own GPU for full data sovereignty.
 
 ## How
 

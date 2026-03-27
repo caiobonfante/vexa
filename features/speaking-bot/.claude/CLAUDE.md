@@ -22,7 +22,7 @@ Your README links to your docs pages. Run the docs gate ([agents.md](../../../.c
 client → api-gateway → bot-manager → bot → tts-service → bot → PulseAudio → meeting audio
 
 ### Counterparts
-- Service agents: `services/tts-service`, `services/bot-manager`, `services/api-gateway`
+- Service agents: `packages/tts-service`, `services/bot-manager`, `services/api-gateway`
 - Related features: chat (another interactive bot capability)
 
 ## How to test

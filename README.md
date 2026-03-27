@@ -418,8 +418,8 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | Service | Purpose |
 |---------|---------|
 | [vexa-bot](./services/vexa-bot) | Joins meetings, captures per-speaker audio, transcribes, interactive controls |
-| [transcription-service](./services/transcription-service) | GPU inference — OpenAI-compatible Whisper API |
-| [tts-service](./services/tts-service) | Text-to-speech for bot voice |
+| [transcription-service](./packages/transcription-service) | GPU inference — OpenAI-compatible Whisper API |
+| [tts-service](./packages/tts-service) | Text-to-speech for bot voice |
 | [mcp](./services/mcp) | 17-tool MCP server for AI agents (Claude, Cursor, etc.) |
 
 **Frontends & clients:**

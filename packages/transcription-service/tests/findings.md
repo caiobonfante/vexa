@@ -7,7 +7,7 @@
 
 ### Riskiest Thing
 
-**Config drift between repo and running deployment.** The running service on port 8085 is deployed from `/home/dima/prod/prod-transcription-service/`, not from the repo at `/home/dima/dev/vexa/services/transcription-service/`. Key differences:
+**Config drift between repo and running deployment.** The running service on port 8085 is deployed from `/home/dima/prod/prod-transcription-service/`, not from the repo at `/home/dima/dev/vexa/packages/transcription-service/`. Key differences:
 
 | Setting | Repo (dev) | Running (prod) |
 |---------|-----------|----------------|

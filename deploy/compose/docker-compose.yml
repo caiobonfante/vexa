@@ -203,7 +203,7 @@ services:
   tts-service:
     build:
       context: ../..
-      dockerfile: services/tts-service/Dockerfile
+      dockerfile: packages/tts-service/Dockerfile
     mem_limit: 1g
     expose:
       - "8002"

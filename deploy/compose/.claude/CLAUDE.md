@@ -94,7 +94,7 @@ You don't own any service — you own the edges between them. For each counterpa
   - Port :18888 (internal) — responds to MCP protocol
 
 #### tts-service
-- **CLAUDE.md:** `services/tts-service/.claude/CLAUDE.md`
+- **CLAUDE.md:** `packages/tts-service/.claude/CLAUDE.md`
 - **Requirements:**
   - Port :8002 (internal) — ready for TTS requests
   - meeting-api → tts-service connected
@@ -111,7 +111,7 @@ You don't own any service — you own the edges between them. For each counterpa
   - Spawned by Runtime API, reports status back via callback to meeting-api
 
 #### transcription-service (external)
-- **CLAUDE.md:** `services/transcription-service/.claude/CLAUDE.md`
+- **CLAUDE.md:** `packages/transcription-service/.claude/CLAUDE.md`
 - **Requirements:**
   - Reachable at `TRANSCRIPTION_SERVICE_URL`
   - Returns transcription text for speech audio

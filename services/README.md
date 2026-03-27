@@ -98,7 +98,7 @@ These live in `packages/` and are designed to be independently publishable with 
 
 | Service | Port | Description |
 |---------|------|-------------|
-| [transcription-service](transcription-service/) | 8083 | Whisper API — speech-to-text |
+| [transcription-service](../packages/transcription-service/) | 8083 | Whisper API — speech-to-text (in `packages/`) |
 | [transcription-collector](transcription-collector/) | 8002 | Consumes Redis streams, writes segments to DB |
 | [transcript-rendering](transcript-rendering/) | — | TypeScript library for dedup, grouping, timestamps |
 
@@ -106,7 +106,7 @@ These live in `packages/` and are designed to be independently publishable with 
 
 | Service | Port | Description |
 |---------|------|-------------|
-| [tts-service](tts-service/) | 8084 | Text-to-speech for voice agent participation |
+| [tts-service](../packages/tts-service/) | 8084 | Text-to-speech for voice agent participation (in `packages/`) |
 | [mcp](mcp/) | 8010 | Model Context Protocol server for AI tool integration |
 | [calendar-service](calendar-service/) | 8085 | Google Calendar sync, auto-join scheduling |
 | [telegram-bot](telegram-bot/) | — | Telegram interface for mobile meeting management |

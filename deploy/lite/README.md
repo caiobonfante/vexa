@@ -8,7 +8,7 @@ The standard Docker Compose deployment requires Docker socket access, multiple c
 
 Single Docker container that runs the full Vexa stack. Needs external Postgres and a transcription service.
 
-**Transcription service:** Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host [transcription-service](../../services/transcription-service/) on your own GPU for full data sovereignty.
+**Transcription service:** Use Vexa transcription (sign up at [vexa.ai](https://vexa.ai) for a transcription API key — ready to go, no GPU needed), or self-host [transcription-service](../../packages/transcription-service/) on your own GPU for full data sovereignty.
 
 **Note:** This deployment includes Redis server inside the container. Only PostgreSQL needs to be provided externally.
 

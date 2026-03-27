@@ -31,7 +31,7 @@ except ImportError:
 
 
 DEFAULT_URL = "http://localhost:8080/v1/audio/transcriptions"
-DEFAULT_AUDIO = "services/transcription-service/tests/test_audio.wav"
+DEFAULT_AUDIO = "packages/transcription-service/tests/test_audio.wav"
 RESULTS_DIR = Path(__file__).parent / "results"
 
 

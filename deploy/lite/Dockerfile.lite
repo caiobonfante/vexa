@@ -135,7 +135,7 @@ COPY packages/meeting-api/ /app/meeting-api/
 COPY services/mcp/ /app/mcp/
 
 # TTS Service
-COPY services/tts-service/ /app/tts-service/
+COPY packages/tts-service/ /app/tts-service/
 
 # Alembic migrations
 COPY alembic.ini /app/alembic.ini

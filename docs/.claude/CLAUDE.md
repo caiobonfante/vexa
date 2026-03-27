@@ -41,7 +41,7 @@ Every edge is: `service README ←→ docs/*.mdx pages`. You validate that both 
 | bot-manager | services/bot-manager/README.md | bot-overview, api/bots, interactive-bots, api/interactive-bots |
 | vexa-bot | services/vexa-bot/README.md | bot-overview, meeting-ids, platforms/google-meet, platforms/microsoft-teams, platforms/zoom |
 | transcription-collector | services/transcription-collector/README.md | api/transcripts, api/meetings, speaker-events, deferred-transcription, per-speaker-audio |
-| transcription-service | services/transcription-service/README.md | concepts, recording-storage |
+| transcription-service | packages/transcription-service/README.md | concepts, recording-storage |
 | admin-api | services/admin-api/README.md | self-hosted-management, api/settings |
 | dashboard | services/dashboard/README.md | ui-dashboard, zoom-app-setup |
 | mcp | services/mcp/README.md | vexa-mcp |

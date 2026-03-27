@@ -72,7 +72,7 @@ cd libs/shared-models && python -m pytest shared_models/test_*.py -v
 **WHY:** Transcription logic -- hallucination detection, silence filtering, config parsing.
 **Gates:** 30 unit tests + README with WHY/WHAT/HOW.
 ```bash
-cd services/transcription-service && pytest tests/ -v
+cd packages/transcription-service && pytest tests/ -v
 ```
 
 **1.2b Hot isolation test**
@@ -112,7 +112,7 @@ cd services/vexa-bot/core && npx tsx src/services/__tests__/speaker-streams.test
 ```bash
 # Start backend
 docker compose up -d redis
-cd services/transcription-service && docker compose up -d
+cd packages/transcription-service && docker compose up -d
 
 # Serve mock meeting (3 speakers: Alice, Bob, Carol -- Edge TTS audio)
 cd services/vexa-bot/tests/mock-meeting && bash serve.sh
@@ -365,7 +365,7 @@ open dashboard -> log in -> see meetings -> click meeting -> see live transcript
 
 ### 5.1 transcription-service capacity
 ```bash
-cd services/transcription-service && bash tests/test_stress.sh
+cd packages/transcription-service && bash tests/test_stress.sh
 ```
 **Baselines:** Single: ~0.17s GPU. 40 concurrent (2 workers): 100% success.
 

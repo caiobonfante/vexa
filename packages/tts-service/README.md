@@ -35,7 +35,7 @@ Supported formats: `pcm`, `mp3`, `opus`, `aac`, `wav`, `flac`
 docker compose up tts-service
 
 # Standalone
-cd services/tts-service
+cd packages/tts-service
 uvicorn main:app --host 0.0.0.0 --port 8002
 ```
 

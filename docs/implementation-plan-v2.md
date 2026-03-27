@@ -12,8 +12,8 @@
 | admin-api | `services/admin-api/` | User, APIToken, Meeting, Transcription, MeetingSession | ADMIN_API_TOKEN env var |
 | api-gateway | `services/api-gateway/` | None (imports schemas for OpenAPI docs) | Pass-through (forwards X-API-Key) |
 | transcription-collector | `services/transcription-collector/` | User, Meeting, Transcription, MeetingSession, APIToken | JWT meeting token + DB queries |
-| transcription-service | `services/transcription-service/` | None | API_TOKEN env var |
-| tts-service | `services/tts-service/` | None | TTS_API_TOKEN env var |
+| transcription-service | `packages/transcription-service/` | None | API_TOKEN env var |
+| tts-service | `packages/tts-service/` | None | TTS_API_TOKEN env var |
 | shared-models | `packages/shared-models/` | All models, database.py, schemas.py, token_scope.py, webhook_delivery.py, storage.py | N/A |
 
 **Key insight:** runtime-api, agent-api, transcription-service, and tts-service are already standalone (no Postgres). The heavy lifting is meeting-api (absorbs meeting models + TC) and admin-api (keeps user models).

@@ -34,7 +34,7 @@ All services should be running. If not: `docker compose up -d`
 ### 3. Verify transcription-service (separate GPU stack)
 
 ```bash
-cd services/transcription-service && docker compose ps
+cd packages/transcription-service && docker compose ps
 ```
 
 Should show `transcription-api` (nginx) + `transcription-worker-1`. If not: `docker compose up -d`

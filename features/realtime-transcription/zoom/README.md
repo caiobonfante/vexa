@@ -202,7 +202,7 @@ Same pipeline stages as the parent feature (see [realtime-transcription data sta
 |-----------|------|----------|
 | **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
 | **transcription-client** | HTTP POST WAV to transcription-service | `services/vexa-bot/core/src/services/transcription-client.ts` |
-| **transcription-service** | faster-whisper inference | `services/transcription-service/main.py` |
+| **transcription-service** | faster-whisper inference | `packages/transcription-service/main.py` |
 | **segment-publisher** | Redis XADD + PUBLISH | `services/vexa-bot/core/src/services/segment-publisher.ts` |
 | **transcription-collector** | Consumes Redis stream, persists to Postgres | `services/transcription-collector/main.py` |
 

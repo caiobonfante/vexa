@@ -24,7 +24,7 @@ All platforms feed into the same shared transcription pipeline.
 - Per-speaker audio capture: each participant = separate audio stream.
 - Screen share tracks (unmapped to a participant tile) labeled "Presentation".
 - Silero VAD filters silence before transcription (saves compute).
-- Direct HTTP POST to [transcription-service](../transcription-service/README.md).
+- Direct HTTP POST to [transcription-service](../../packages/transcription-service/README.md).
 - Per-speaker language detection: auto-detect on first chunk, lock language
   after high-confidence detection so subsequent chunks skip detection overhead.
 - Confirmation-based buffer: resubmits full buffer every 2s, publishes
@@ -116,7 +116,7 @@ A mock meeting page simulates multiple participants without a real meeting:
 ```bash
 # Start backend
 docker compose up -d redis
-cd services/transcription-service && docker compose up -d
+cd packages/transcription-service && docker compose up -d
 
 # Serve mock meeting (3 speakers: Alice, Bob, Carol)
 cd services/vexa-bot/tests/mock-meeting && bash serve.sh

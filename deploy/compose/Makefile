@@ -59,12 +59,12 @@ up: check_docker
 	$(COMPOSE_CMD) up -d
 	@if grep -qE '^LOCAL_TRANSCRIPTION=true' $(ENV_FILE) 2>/dev/null; then \
 		echo "LOCAL_TRANSCRIPTION=true — starting transcription-service..."; \
-		cd $(ROOT)/services/transcription-service && docker compose up -d; \
+		cd $(ROOT)/packages/transcription-service && docker compose up -d; \
 	fi
 
 down: check_docker
 	$(COMPOSE_CMD) down
-	@cd $(ROOT)/services/transcription-service && docker compose down 2>/dev/null || true
+	@cd $(ROOT)/packages/transcription-service && docker compose down 2>/dev/null || true
 
 # --- Status ---
 ps: check_docker

@@ -48,7 +48,7 @@ You own `Dockerfile.lite`, `supervisord.conf`, `entrypoint.sh`, and `requirement
 | `services/bot-manager/app/` | `/app/bot-manager/app/` | bot-manager |
 | `services/transcription-collector/` | `/app/transcription-collector/` | transcription-collector |
 | `services/mcp/` | `/app/mcp/` | mcp |
-| `services/tts-service/` | `/app/tts-service/` | tts-service |
+| `packages/tts-service/` | `/app/tts-service/` | tts-service |
 | `services/vexa-bot/core/` | `/app/vexa-bot/` (npm ci + build) | vexa-bot |
 | `libs/shared-models/alembic/` | `/app/alembic/` | shared-models |
 
@@ -168,7 +168,7 @@ These are the component agents you depend on. You don't own any service — you 
   - SPLM: after meeting ends, runs deferred transcription on combined recording, maps speakers with ≥70% accuracy vs source speaker events
 
 #### transcription-service (external)
-- **CLAUDE.md:** `services/transcription-service/.claude/CLAUDE.md`
+- **CLAUDE.md:** `packages/transcription-service/.claude/CLAUDE.md`
 - **Requirements:**
   - Running and reachable at `TRANSCRIBER_URL`
   - `POST /v1/audio/transcriptions` accepts `file` (WAV/WebM), returns `{text, language, duration, segments: [{start, end, text}]}`

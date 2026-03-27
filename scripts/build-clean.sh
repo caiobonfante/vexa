@@ -166,7 +166,7 @@ commit_group "$DIMA" \
 Transcription collector with streaming consumer, DB writer, filters.
 Transcription service with WhisperLive integration, remote transcriber.
 Hallucination filtering (en, es, pt, ru). Speaker mapping and identity." \
-  "services/transcription-collector/" "services/transcription-service/" "services/WhisperLive/"
+  "services/transcription-collector/" "packages/transcription-service/" "services/WhisperLive/"
 
 # 5. Vexa bot — platforms
 commit_group "$DIMA" \
@@ -184,7 +184,7 @@ commit_group "$DIMA" \
 
 Text-to-speech service with OpenAI integration. TTS playback service
 in the bot for real-time meeting participation." \
-  "services/tts-service/"
+  "packages/tts-service/"
 
 # 7. Dashboard — agrogov contributions (PRs #2-6)
 commit_group "$AGROGOV" \
