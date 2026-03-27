@@ -57,9 +57,9 @@ Vexa is a dozen services, not a monolith. Each service owns one concern (transcr
          │  Redis streams  │
          ▼                 ▼
 ┌──────────────┐  ┌─────────────────┐
-│Transcription │  │ Transcription   │
-│  Collector   │  │   Service       │
-│  (→ DB)      │  │ (Whisper API)   │
+│  Meeting API │  │ Transcription   │
+│  (collector  │  │   Service       │
+│   built-in)  │  │ (Whisper API)   │
 └──────────────┘  └─────────────────┘
 ```
 
