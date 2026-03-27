@@ -1,8 +1,8 @@
 {
-  "iteration": 6,
-  "status": "complete",
-  "mission": "telegram-chat: token refresh, concurrent users, group chat",
-  "last_batch": "2026-03-27",
+  "iteration": 0,
+  "status": "pending",
+  "mission": "<what to work on>",
+  "last_batch": null,
   "features": {
     "agentic-runtime": {
       "score": 85
@@ -65,11 +65,6 @@
       "score": 60
     }
   },
-  "score_history": [
-    {"iteration": 2, "telegram-chat": 95, "note": "E2E validation, 2 bugs fixed, 15 checks"},
-    {"iteration": 3, "telegram-chat": 95, "note": "3 gaps fixed (token refresh, concurrency, group chat), 52 unit tests"},
-    {"iteration": 5, "telegram-chat": 95, "note": "3 new E2E checks (TTL, re-auth, concurrent sessions), 18 E2E total"},
-    {"iteration": 6, "telegram-chat": 95, "note": "Verified + committed: 52 unit tests pass, 18 E2E pass, all changes committed (e35a5b49)"}
-  ],
+  "score_history": [],
   "plateau_counter": 0
 }
