@@ -216,6 +216,10 @@ def build_dashboard():
         if feat not in dashboard["scores"] or score > dashboard["scores"][feat]:
             dashboard["scores"][feat] = score
 
+    # Include plan log if in PLAN phase
+    if dashboard.get("phase") == "plan":
+        dashboard["plan_log"] = get_plan_log()
+
     return dashboard
 
 
@@ -332,6 +336,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/dashboard":
             self._json(build_dashboard())
+
+        elif path == "/api/plan-log":
+            self._text(get_plan_log())
 
         elif path.startswith("/api/logs/"):
             mission_name = unquote(path[len("/api/logs/"):])
@@ -605,6 +612,36 @@ def get_mission_evaluator(name):
         if p.exists():
             return p.read_text()
     return f"No evaluator verdict found for mission '{name}'"
+
+
+def get_plan_log(lines=50):
+    """Get the latest PLAN stage activity from plan-log.jsonl."""
+    plan_log = CONDUCTOR_DIR / "plan-log.jsonl"
+    if not plan_log.exists():
+        return "(no plan activity yet)"
+    all_lines = plan_log.read_text().strip().split("\n")
+    result = []
+    for line in all_lines[-lines:]:
+        try:
+            import json as _json
+            entry = _json.loads(line)
+            rule = entry.get("rule", "")
+            doing = entry.get("doing", "")
+            why = entry.get("why", "")
+            finding = entry.get("finding", "")
+            parts = []
+            if rule:
+                parts.append(f"RULE: {rule}")
+            if doing:
+                parts.append(f"DOING: {doing}")
+            if why:
+                parts.append(f"WHY: {why}")
+            if finding:
+                parts.append(f"FINDING: {finding}")
+            result.append("\n".join(parts))
+        except Exception:
+            result.append(line)
+    return "\n\n".join(result) if result else "(no plan activity yet)"
 
 
 def run_web(port=8899):

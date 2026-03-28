@@ -175,11 +175,13 @@
     </div>
     <div class="center-bottom">
       <div class="panel-tabs">
-        <div class="panel-tab active" onclick="switchTab('batch')" id="tab-batch">Batch Output</div>
+        <div class="panel-tab active" onclick="switchTab('plan')" id="tab-plan">Plan</div>
+        <div class="panel-tab" onclick="switchTab('batch')" id="tab-batch">Batch Output</div>
         <div class="panel-tab" onclick="switchTab('log')" id="tab-log">Conductor Log</div>
         <div class="panel-tab" onclick="switchTab('evaluator')" id="tab-evaluator">Evaluator</div>
       </div>
-      <div id="batch-output" class="output-panel"><div class="empty">Click a mission to see output</div></div>
+      <div id="plan-output" class="output-panel"><div class="empty">No plan activity yet</div></div>
+      <div id="batch-output" class="output-panel" style="display:none"><div class="empty">Click a mission to see output</div></div>
       <div id="log-output" class="output-panel" style="display:none"><div class="empty">Click a mission to see logs</div></div>
       <div id="evaluator-output" class="output-panel" style="display:none"><div class="empty">No evaluator verdict yet</div></div>
     </div>
@@ -245,12 +247,10 @@ function phaseClass(phase) {
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('tab-batch').className = 'panel-tab' + (tab === 'batch' ? ' active' : '');
-  document.getElementById('tab-log').className = 'panel-tab' + (tab === 'log' ? ' active' : '');
-  document.getElementById('tab-evaluator').className = 'panel-tab' + (tab === 'evaluator' ? ' active' : '');
-  document.getElementById('batch-output').style.display = tab === 'batch' ? '' : 'none';
-  document.getElementById('log-output').style.display = tab === 'log' ? '' : 'none';
-  document.getElementById('evaluator-output').style.display = tab === 'evaluator' ? '' : 'none';
+  ['plan','batch','log','evaluator'].forEach(t => {
+    document.getElementById('tab-' + t).className = 'panel-tab' + (tab === t ? ' active' : '');
+    document.getElementById(t + '-output').style.display = tab === t ? '' : 'none';
+  });
 }
 
 function render(d) {
@@ -405,11 +405,38 @@ async function loadEvaluator(name) {
   }
 }
 
+async function loadPlanLog() {
+  try {
+    const r = await fetch('/api/plan-log');
+    const text = await r.text();
+    const el = document.getElementById('plan-output');
+    const wasAtBottom = isNearBottom(el);
+    if (!text || text.startsWith('(no plan')) {
+      el.innerHTML = '<div class="empty">No plan activity yet</div>';
+    } else {
+      el.innerHTML = text.split('\n').map(line => {
+        let cls = '';
+        if (line.startsWith('RULE:')) cls = 'info';
+        else if (line.startsWith('DOING:')) cls = 'bash';
+        else if (line.startsWith('WHY:')) cls = 'read';
+        else if (line.startsWith('FINDING:')) cls = 'success';
+        return `<div class="line ${cls}">${escHtml(line)}</div>`;
+      }).join('');
+      if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    }
+  } catch(e) {}
+}
+
 async function refresh() {
   try {
     const r = await fetch('/api/dashboard');
     const d = await r.json();
     render(d);
+    // Auto-switch to plan tab when in plan phase
+    if (d.phase === 'plan' && activeTab !== 'plan') switchTab('plan');
+    if (d.phase === 'deliver' && activeTab === 'plan') switchTab('batch');
+    // Load plan log during plan phase
+    if (d.phase === 'plan') await loadPlanLog();
     if (selectedMission) {
       await Promise.all([
         loadTeamMessages(selectedMission),

@@ -10,15 +10,16 @@ You are the conductor operator. The user manages missions from this chat.
 - **WHY**: why this step matters
 - **FINDING**: what you found (after doing it)
 
-Example:
-```
-RULE: Pre-delivery checklist item 1 — feature README must exist and be complete
-DOING: Reading features/realtime-transcription/ms-teams/README.md
-WHY: Need to check if Design section has data flow, constraints, quality bar before delivery
-FINDING: README exists but missing Constraints section — need to scaffold before launch
-```
-
 Keep it concise — one line per point, not paragraphs. The user is watching in real-time.
+
+**Log to plan-log.jsonl** so the dashboard can show PLAN activity:
+```python
+import json, time
+def log_plan(rule, doing, why, finding=""):
+    with open("conductor/plan-log.jsonl", "a") as f:
+        f.write(json.dumps({"ts": time.time(), "rule": rule, "doing": doing, "why": why, "finding": finding}) + "\n")
+```
+Call this for every step. The dashboard reads this file to show live PLAN progress.
 
 ## On entry
 
