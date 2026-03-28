@@ -24,6 +24,17 @@ Architecture decisions live in docs that are months old. Test results are in fin
 
 Claude runs for 10 minutes, makes progress, stops. The next session starts from zero. Context is lost. The agent re-discovers what the previous session already found. There's no institutional memory — each session is isolated.
 
+### What we actually want
+
+An agent that:
+- **Works toward the real objective** — not the easiest thing it can find. If the mission is "live transcripts in the dashboard," don't stop at "tests pass." Stop when the user opens the dashboard and sees live transcripts.
+- **Respects the framework** — reads the READMEs, follows the constraints, updates the state honestly. Not because the prompt says so, but because the system makes it mechanically impossible to skip.
+- **Solves real problems** — diagnoses root causes, fixes them, deploys, verifies against the running system. Not "code looks correct" — actually run it and prove it works.
+- **Gets more independent over time** — each session leaves the codebase better documented, better tested, with fewer unknowns. The next agent starts from a higher baseline, not from scratch.
+- **Doesn't take shortcuts** — if the pipeline needs 2 minutes to produce results, wait 2 minutes. If the fix requires rebuilding a container, rebuild it. If the README says "all calls go through the gateway," don't import the service directly.
+
+The gap between what we want and what we get is the subject of everything below.
+
 ## What we tried and what we learned
 
 ## Claude will always take the shortest path
