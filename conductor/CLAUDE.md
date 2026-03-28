@@ -4,7 +4,7 @@
 
 Team: conductor + researcher + validator. One pass, not a loop.
 
-1. **Business DoD** — what does the user need to work? In their words. Not scores. "I open Telegram, send a message, agent knows about my meeting." That's the gate.
+1. **Business DoD** — ask the user: what does "done" look like? In their words, not technical language. Something they can verify themselves by doing the thing.
 
 2. **Researcher** investigates: read the code, check what exists, what's missing, what's the gap between Design README (what we want) and State (what we got).
 
