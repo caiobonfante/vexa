@@ -1,5 +1,7 @@
 # Post-Meeting Transcription
 
+<!-- DESIGN: what we want. Can be ahead of code. Updated before implementation. -->
+
 ## Why
 
 Meetings produce recordings and speaker events, but raw audio isn't useful — users need a searchable transcript with speaker labels. Post-meeting transcription takes the recording after a meeting ends, runs it through Whisper, maps speakers using the collected events, and serves it through the dashboard with click-to-seek playback. This is the core value prop for users who couldn't attend or want to review.
@@ -99,6 +101,10 @@ services/transcription-collector           → segment persistence, GET /transcr
 services/dashboard                         → transcript viewer, audio player, seek
 libs/shared-models                         → Transcription, Recording, MediaFile models
 ```
+
+---
+
+<!-- STATE: what we have. Only updated with execution evidence. Never optimistic. -->
 
 ## Quality Bar
 

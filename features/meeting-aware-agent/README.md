@@ -1,5 +1,7 @@
 # Meeting-Aware Agent
 
+<!-- DESIGN: what we want. Can be ahead of code. Updated before implementation. -->
+
 ## Why
 
 The agent (via Telegram, dashboard, or MCP) has no knowledge of the user's meetings. Users have to manually ask "what meetings do I have?" or paste meeting IDs. When meeting_aware is enabled on a bot session, the agent automatically knows about the user's active meetings — who's in them, what's been said, what the status is. This makes the agent useful as a real-time meeting companion, not just a chatbot.
@@ -85,6 +87,10 @@ packages/agent-api                → session config (meeting_aware flag), conte
 packages/meeting-api              → GET /bots?user_id=&status= endpoint (may exist)
 services/transcription-collector  → GET /transcripts with limit (exists)
 ```
+
+---
+
+<!-- STATE: what we have. Only updated with execution evidence. Never optimistic. -->
 
 ## Quality Bar
 

@@ -273,7 +273,11 @@ async def _stream_response(
     current_activity = ""
 
     try:
-        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
+        # Use user's token for gateway (it validates via admin-api), service token for direct agent-api
+        if state.meeting_aware_session_id and state.token:
+            _headers = {"X-API-Key": state.token}
+        else:
+            _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
         async with httpx.AsyncClient(timeout=None, headers=_headers) as client:
             async with client.stream("POST", chat_url, json=payload) as resp:
                 if resp.status_code == 403 and not _retried and state.tg_user_id:

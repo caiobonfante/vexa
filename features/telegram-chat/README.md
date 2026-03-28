@@ -1,5 +1,7 @@
 # Telegram Chat
 
+<!-- DESIGN: what we want. Can be ahead of code. Updated before implementation. -->
+
 ## Why
 
 Users want to interact with their meeting AI agent from Telegram — ask questions about past meetings, join/stop bots, manage sessions — without opening the dashboard. Telegram is where they already are. The bot bridges Telegram to the agent-api, streaming responses progressively so the conversation feels real-time.
@@ -87,6 +89,10 @@ packages/agent-api               → chat SSE, sessions, workspace API
 packages/runtime-api             → container lifecycle for agent sessions
 services/admin-api               → user creation, token minting
 ```
+
+---
+
+<!-- STATE: what we have. Only updated with execution evidence. Never optimistic. -->
 
 ## Quality Bar
 
