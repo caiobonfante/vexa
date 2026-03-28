@@ -121,8 +121,8 @@ def check_mission_met(state, mission):
     """Check if the mission target is met based on state and mission definition.
 
     For score-based targets (e.g., "score >= 80"), check the relevant feature score.
-    For descriptive targets, search broadly: feature findings, orchestrator-log,
-    top-level findings, and evaluator verdicts.
+    For descriptive targets, require explicit completion evidence in the evaluator
+    verdict file — not generic positive words scattered across findings files.
     """
     target = mission.get("target", "")
     focus = mission.get("focus", "")
@@ -138,59 +138,26 @@ def check_mission_met(state, mission):
                     return True
         return False
 
-    # For descriptive targets: extract key phrases from target and search broadly
-    target_lower = target.lower()
+    # For descriptive targets: check the evaluator verdict file for explicit
+    # completion signals. We do NOT scan all findings files for generic words
+    # like "pass" or "working" — those cause false positives.
+    verdict_file = CONDUCTOR_DIR / "evaluator-verdict.md"
+    completion_patterns = [
+        r"mission\s+(target\s+)?met",
+        r"mission\s+accomplished",
+        r"all\s+targets?\s+met",
+        r"definition\s+of\s+done\s*:?\s*(met|satisfied|complete)",
+        r"target\s+(is\s+)?met",
+        r"accept\s+\d+",  # validator accept with score
+    ]
 
-    # Build search terms from the target description
-    search_terms = []
-    if "verified in browser" in target_lower or "browser" in target_lower:
-        search_terms.append("verified in browser")
-        search_terms.append("playwright")
-        search_terms.append("screenshot")
-    if "bot" in target_lower and "create" in target_lower:
-        search_terms.append("bot create")
-        search_terms.append("post /bots")
-    if "bot" in target_lower and "stop" in target_lower:
-        search_terms.append("bot stop")
-        search_terms.append("delete /bots")
-    if "end-to-end" in target_lower or "e2e" in target_lower:
-        search_terms.append("e2e")
-        search_terms.append("end-to-end")
-    # Generic pass/verified
-    search_terms.extend(["mission.*pass", "target.*met", "mission.*accomplished"])
-
-    # Search in multiple locations (broader than just feature name match)
-    search_files = []
-
-    # 1. Feature findings matching focus
-    for name in state.get("features", {}):
-        if focus.lower() in name.lower():
-            search_files.append(FEATURES_DIR / name / "tests" / "findings.md")
-
-    # 2. Orchestrator log (captures mission results)
-    search_files.append(FEATURES_DIR / "orchestrator-log.md")
-
-    # 3. Top-level system findings
-    search_files.append(FEATURES_DIR / "tests" / "findings.md")
-
-    # 4. Evaluator verdict
-    search_files.append(CONDUCTOR_DIR / "evaluator-verdict.md")
-
-    # 5. All feature findings (mission focus may not match a feature name)
-    for path in FEATURES_DIR.glob("*/tests/findings.md"):
-        if path not in search_files:
-            search_files.append(path)
-
-    for fpath in search_files:
-        if not fpath.exists():
-            continue
-        content = fpath.read_text().lower()
-        # Check if content matches search terms
-        for term in search_terms:
-            if re.search(term, content):
-                # Found a match — but also need "pass" or positive signal nearby
-                if any(w in content for w in ["pass", "confirmed", "working", "verified", "accomplished"]):
-                    return True
+    # Only check the verdict file — the single authoritative source
+    if verdict_file.exists():
+        content = verdict_file.read_text()
+        content_lower = content.lower()
+        for pattern in completion_patterns:
+            if re.search(pattern, content_lower):
+                return True
 
     return False
 
