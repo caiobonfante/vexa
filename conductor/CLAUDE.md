@@ -64,29 +64,13 @@ You do NOT:
 
 If you find blockers (broken infra, missing ports, stale config), **document them** — don't fix them. Blockers become separate conductor cycles:
 
-```
-User asks: "validate MS Teams realtime"
-    |
-    v
-PLAN finds blockers:
-    blocker 1: admin-api port not exposed (infra)
-    blocker 2: e2e test scripts reference wrong ports (code fix)
-    blocker 3: no live meeting to test against (needs hosting)
-    |
-    v
-Conductor creates missions for each:
-    missions/fix-admin-port.md       → infra fix, 1 iteration
-    missions/fix-e2e-scripts.md      → code fix, 1 iteration
-    missions/ms-teams-validate.md    → main validation, depends on above
-    |
-    v
-Run them in order (or parallel if independent):
-    1. fix-admin-port     → DELIVER → merge
-    2. fix-e2e-scripts    → DELIVER → merge
-    3. ms-teams-validate  → DELIVER → merge (now unblocked)
-```
+Each blocker becomes its own PLAN → DELIVER → EVALUATE cycle. The conductor manages the dependency chain. Small focused missions, not one giant mission that tries to fix everything.
 
-Each blocker is its own PLAN → DELIVER → EVALUATE cycle. The conductor manages the dependency chain. Small focused missions, not one giant mission that tries to fix everything.
+Blocker types:
+- **Infra**: port not exposed, service not running, env var missing → infra fix mission
+- **Code**: wrong config, stale references, missing handler → code fix mission
+- **Human**: needs credentials, manual testing, external access → document and ask user
+- **Dependency**: feature A needs feature B first → order the missions
 
 Before DELIVER can start, everything must be in place. This is YOUR job — not the human's. The human describes what they want. You make sure the system is ready.
 
