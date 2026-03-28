@@ -73,8 +73,10 @@ Create missions/{name}.md:
 Show user: "Mission: {target}. Ready?"
     |
     v
-User says "go" → launch ./run.sh --mission {name}
+User says "go" or "deliver" → launch ./run.sh --mission {name}
 ```
+
+**The user may say "deliver" explicitly** — that means skip to DELIVER immediately. Create the mission file and launch.
 
 **Do NOT:**
 - Spawn research teams during PLAN (DELIVER team researches)
