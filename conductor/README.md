@@ -129,24 +129,23 @@ vs current (sequential):
     dev: runs another 30 min to fix one line
 ```
 
-**Constraint:** TeamCreate only works in interactive sessions, not `claude -p`. Two paths:
+**Verified:** TeamCreate + Agent + SendMessage all work in `claude -p` (headless mode). Tested 2026-03-28, $0.46, agents exchanged messages successfully.
 
 ```
-Path A: Interactive control room
-    user runs: cd conductor && claude
-    CLAUDE.md creates team with TeamCreate
-    team works collaboratively
-    bash run.sh handles worktrees + state only (not agent spawning)
-
-Path B: Sequential with session persistence
-    run.sh spawns claude -p for dev (captures session_id)
-    run.sh spawns claude -p --resume for validator (same session, full context)
-    not truly parallel, but validator has dev's full context
-    bash run.sh handles everything
+bash run.sh (dumb loop):
+    each iteration:
+        claude -p "Create team, run mission, exit when team agrees"
+            → TeamCreate creates "mission-{name}" team
+            → Agent spawns dev (full tools) + validator (read + bash)
+            → dev implements, sends progress via SendMessage
+            → validator reviews, sends issues back via SendMessage
+            → they iterate until validator says ACCEPT {score}
+            → coordinator session exits
+        check-completion.py → target met? → stop or loop
 ```
 
-Path A is better (real collaboration) but requires interactive session.
-Path B works today (no new features needed) but is still sequential.
+The bash loop pushes. The team collaborates. Nobody can stop the loop
+except completion, plateau, iteration limit, or stop signal.
 
 ### Stage 3: EVALUATE (human-driven)
 
@@ -504,7 +503,7 @@ Chat interface (cd conductor && claude):
 ## Quality Bar
 
 ```
-Team-based execution (TeamCreate)     dev + validator collaborate     FAIL (sequential today)
+Team-based execution (TeamCreate)     dev + validator collaborate     FAIL (verified possible in -p, not wired)
 Constraint enforcement                README constraints in prompt    PASS (auto-appended)
 Adversarial validation                evaluator catches real bugs     PASS (caught 4+ bugs)
 Live activity streaming               see tool calls as they happen  PASS (parse-stream.py)
@@ -527,7 +526,7 @@ Dashboard serves live data            90   HTML + JSON API on :8899             
 Stream output parsed                  80   activity log with tool calls             2026-03-28
 Cost tracking                         80   $4.59 + $0.83 captured from stream-json  2026-03-28
 Pre-merge gate                        70   5 checks, stale verdict bug found        2026-03-28
-Team-based execution                   0   not implemented (sequential today)       —
+Team-based execution                  30   TeamCreate works in -p (verified), not wired into run.sh  2026-03-28
 Human intervention via chat            0   stop file only, no mid-run redirect      —
 Completion check accuracy             30   descriptive targets too permissive       2026-03-28
 ```
