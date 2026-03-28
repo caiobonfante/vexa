@@ -58,6 +58,7 @@ export function getAuthenticatedBrowserArgs(): string[] {
     '--use-fake-ui-for-media-stream',
     '--use-file-for-fake-video-capture=/dev/null',
     '--disable-features=VizDisplayCompositor',
+    '--password-store=basic',
   ];
 }
 
@@ -77,5 +78,6 @@ export function getBrowserSessionArgs(): string[] {
     '--remote-debugging-port=9222',
     '--remote-debugging-address=0.0.0.0',
     '--remote-allow-origins=*',
+    '--password-store=basic',
   ];
 }
