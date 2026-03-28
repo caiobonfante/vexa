@@ -238,10 +238,63 @@ What this prevents:
         → pre-merge gate checks cross-service imports → blocks merge
 ```
 
-What this does NOT prevent (yet):
-    → constraints that aren't in any README (undocumented rules)
-    → agent reads the constraint but decides to ignore it anyway
-    → constraint is in README but too vague to enforce ("keep it clean")
+### Mechanical constraint checking
+
+Prompt injection tells the agent the rules. But agents can ignore prompts. For constraints that can be checked programmatically, `check-constraints.py` reads the README and runs automated checks.
+
+**Two tiers:**
+
+```
+Tier 1: mechanical — parsed from README, checked by script
+    Tagged with <!-- CHECK: pattern args --> in the README
+    Produces WARNINGS (not errors — never crashes execution)
+    Warnings visible to validator and human
+
+Tier 2: prompt-based — in the README, read by agents
+    Everything without a CHECK tag
+    Relies on agent discipline + validator judgment
+```
+
+**How it works:**
+
+```
+README Constraints section:
+
+    <!-- CHECK: no-cross-import services/ -->
+    - No Python imports across service boundaries
+
+    <!-- CHECK: no-direct-call localhost:8100 localhost:8080 -->
+    - All API calls go through api-gateway
+
+    - Speaker mapping runs inside bot-manager
+      (no CHECK tag — judgment call, validator handles it)
+```
+
+```
+check-constraints.py reads README
+    → parses <!-- CHECK: ... --> tags
+    → runs each check against changed files
+    → produces warnings:
+        WARNING: cross-service import in services/telegram-bot/bot.py:674
+            imports from packages/agent-api — constraint says no cross-service imports
+    → warnings are NOT fatal — they don't crash the iteration
+```
+
+```
+During delivery:
+    dev makes changes → checker runs → warnings produced
+    warnings injected into validator context
+    validator uses warnings to inform ACCEPT/REJECT verdict
+    dev sees warnings → can fix before validator rejects
+
+At merge time:
+    checker runs again → same warnings shown to human
+    human decides: real blocker or acceptable exception?
+```
+
+**Self-managing:** agents maintain the constraints in the README. The checker reads them. Add a constraint → automatically checked. Remove a constraint → diff is visible, validator catches it. The agents own the rules AND the enforcement.
+
+**Never blocks execution.** A constraint violation is a warning, not a crash. $5 iterations don't die because of a grep match. The validator and human decide what matters.
 
 ### Documentation flow
 
