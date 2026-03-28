@@ -13,11 +13,6 @@ if [[ "$STOP_ACTIVE" == "true" ]]; then
   exit 0
 fi
 
-# Only block delivery sessions (conductor sets CONDUCTOR_MISSION before launch)
-if [[ -z "${CONDUCTOR_MISSION:-}" ]]; then
-  exit 0
-fi
-
 # Find conductor dir
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 CONDUCTOR_DIR="${CWD}/conductor"
@@ -25,9 +20,27 @@ if [[ ! -d "$CONDUCTOR_DIR" ]]; then
   CONDUCTOR_DIR="$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)/conductor"
 fi
 
-MISSION_FILE="$CONDUCTOR_DIR/missions/${CONDUCTOR_MISSION}.md"
+# Check if there's an active mission in state.json
+MISSION=$(python3 -c "
+import json
+from pathlib import Path
+s = Path('$CONDUCTOR_DIR/state.json')
+if s.exists():
+    d = json.loads(s.read_text())
+    m = d.get('mission','')
+    status = d.get('status','')
+    if m and status in ('running','delivering'):
+        print(m)
+" 2>/dev/null || true)
+
+# No active mission — allow stop
+if [[ -z "$MISSION" ]]; then
+  exit 0
+fi
+
+MISSION_FILE="$CONDUCTOR_DIR/missions/${MISSION}.md"
 if [[ ! -f "$MISSION_FILE" ]]; then
-  exit 0  # No mission file — allow stop
+  exit 0
 fi
 
 # Check completion
