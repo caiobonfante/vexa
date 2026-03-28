@@ -35,6 +35,12 @@ An agent that:
 
 The gap between what we want and what we get is the subject of everything below.
 
+### The conversation itself drifts
+
+In a long session, you agree on an approach, implement it, then later simplify something and accidentally undo what you built earlier. We agreed on "READMEs are source of truth" and built the whole Design/State pattern. Later, while simplifying CLAUDE.md, we stripped the README references. The conductor stopped reading READMEs — not because we decided to remove them, but because a later edit scratched an earlier decision.
+
+This happens repeatedly: you build feature X, then while fixing feature Y, you break X without noticing. The context window is a million tokens but the agent doesn't track "what did we agree on earlier and is it still implemented?" Each simplification pass risks undoing previous work. The conversation feels like agreement but the implementation drifts underneath.
+
 ## What we tried and what we learned
 
 ## Claude will always take the shortest path
