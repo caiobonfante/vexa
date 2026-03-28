@@ -54,17 +54,16 @@ Show user: "Mission: {target}. Resources verified. Say go."
 User says "go" or "deliver"
     |
     v
-Launch delivery — NEVER in background. You must see the output:
+Give the user the command to run in another terminal:
 
-    CONDUCTOR_MISSION={name} claude --worktree {name} -p "do the work" \
-        --append-system-prompt-file batches/{name}-prompt.txt
+    CONDUCTOR_MISSION={name} claude --worktree {name} \
+        --append-system-prompt-file conductor/batches/{name}-prompt.txt
 
-Do NOT use `run_in_background`. The user must see delivery output in real-time.
-If the Bash call blocks, that's correct — the user sees nothing until it finishes,
-but at least they know it's running (not silently abandoned).
+The user runs it themselves. They see everything. They can talk to it.
+Stop hook keeps it going until target met. Prompt file has full context.
+
+Do NOT run claude inside claude. Do NOT use -p. Do NOT background anything.
 ```
-
-The Stop hook checks: is CONDUCTOR_MISSION set? Is the target met? If not, forces continuation. When target is met (or hard blocker), session exits and control returns to you.
 
 **PLAN is read-only.** No code edits, no tests. Only: read, check resources, create mission, launch.
 
