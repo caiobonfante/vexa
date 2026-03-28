@@ -673,53 +673,41 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
   local batch_stream="$BATCH_DIR/stream-${iteration}.jsonl"
   local batch_meta="$BATCH_DIR/meta-${iteration}.json"
 
-  # Build team prompt: coordinator creates dev + validator team
-  local team_prompt_file="$BATCH_DIR/team-prompt-${iteration}.txt"
-  cat > "$team_prompt_file" <<'TEAMEOF'
-You are the mission coordinator. Your job:
-
-1. Create a team with TeamCreate named "mission-iter-ITER"
-2. Spawn a dev agent (general-purpose) with this prompt:
-   "You are the dev agent. Read conductor/mission.md and the system prompt for context.
-    Diagnose → fix → deploy → verify. Send progress to validator after each major step.
-    When done, send your final score claim to validator and wait for verdict.
-    CRITICAL RULES:
-    - NEVER use sleep for more than 10 seconds. Poll instead: check status in a loop.
-    - When waiting for bots/containers/tests: check every 10s if they're still alive.
-    - If a container dies or a test fails, detect it immediately and adapt.
-    - If something is stuck for 60s with no progress, report the failure and move on.
-    - Always verify your assumptions: did the bot actually join? is audio flowing? are segments appearing?"
-3. Spawn a validator agent (general-purpose) with this prompt:
-   "You are the validator. Read .claude/agents/evaluator.md for your protocol.
-    Review dev's work as it arrives via messages. Check constraints, evidence, regressions.
-    Send issues back to dev during implementation — don't wait until the end.
-    When dev claims done, verify INDEPENDENTLY: run the checks yourself, don't trust dev's output.
-    Write verdict to conductor/evaluator-verdict.md.
-    Respond with ACCEPT {score} or REJECT (iterate) with specific fixable issues."
-4. Monitor the team. When validator sends ACCEPT or REJECT, shut down the team.
-5. Write a summary of what happened to conductor/batches/batch-ITER.log
-6. Update conductor/state.json and features findings.
-
-Replace ITER with the current iteration number from conductor/state.json.
-Do NOT ask the human anything. You are autonomous.
-TEAMEOF
-
-  # Replace ITER placeholder
-  sed -i "s/ITER/$iteration/g" "$team_prompt_file"
-
-  # Combine: system context (READMEs) + team instructions
-  cat "$team_prompt_file" >> "$prompt_file"
-
-  # Run claude with team coordination
-  # Use --add-dir to ensure claude operates in the correct directory
-  claude -p "Read the system prompt. Create the team and run the mission." \
+  # --- DEV: do the work ---
+  claude -p "Read conductor/mission.md. Read the system prompt — it has the feature README and service READMEs with constraints. Do the work: diagnose, fix, deploy, verify. Update findings.md with evidence. Update the README State section. Be autonomous — don't ask questions." \
     --append-system-prompt-file "$prompt_file" \
-    --add-dir "$REPO" \
     --permission-mode auto \
     --output-format stream-json \
     --verbose \
     $budget_flag \
     > "$batch_stream" 2>&1
+  local dev_exit=$?
+
+  # Parse dev output
+  if [[ -s "$batch_stream" ]]; then
+    python3 "$CONDUCTOR_DIR/parse-stream.py" "$batch_stream" "$batch_log" "$batch_meta" "$iteration" 2>/dev/null || true
+  fi
+
+  # --- VALIDATOR: check the work ---
+  local eval_stream="$BATCH_DIR/eval-stream-${iteration}.jsonl"
+  local eval_log="$BATCH_DIR/eval-${iteration}.log"
+  local eval_meta="$BATCH_DIR/eval-meta-${iteration}.json"
+
+  log "running validator"
+
+  claude -p "Read .claude/agents/evaluator.md for your protocol. The dev agent just finished an iteration. Review what changed: git diff, findings.md, README State section. Check constraints, evidence, regressions. Verify independently — run checks yourself. Write verdict to conductor/evaluator-verdict.md." \
+    --append-system-prompt-file "$prompt_file" \
+    --agent evaluator \
+    --permission-mode auto \
+    --output-format stream-json \
+    --verbose \
+    > "$eval_stream" 2>&1
+
+  if [[ -s "$eval_stream" ]]; then
+    python3 "$CONDUCTOR_DIR/parse-stream.py" "$eval_stream" "$eval_log" "$eval_meta" "$iteration" 2>/dev/null || true
+  fi
+
+  log "validator done"
   local exit_code=$?
   set -e
 
