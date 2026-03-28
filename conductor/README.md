@@ -108,6 +108,48 @@ Trust:   nobody — adversarial by design
 
 The dumb loop can't be talked out of continuing. The smart team can't avoid scrutiny. Dev and validator have opposing incentives — progress requires both to agree.
 
+### How the team collaborates (TeamCreate)
+
+Today dev and validator are sequential — dev runs to completion, then validator reviews the finished work. Issues are caught too late, after 30 minutes and $5 of work built on a broken foundation.
+
+With TeamCreate, they work as a real team:
+
+```
+run.sh spawns a claude session that creates a team:
+
+    TeamCreate("mission-{name}")
+        |
+        ├── spawn dev agent (general-purpose, full tools)
+        │     gets: feature README + service READMEs + mission as system prompt
+        │     task: diagnose → fix → deploy → verify → update findings
+        │
+        └── spawn validator agent (evaluator role, read-only + Bash)
+              gets: same READMEs + constraint checker warnings
+              task: review dev's work, check constraints, verify evidence
+
+Dev and validator communicate via SendMessage:
+
+    dev: "Fixed auth bug in /join handler, rebuilding container"
+    validator: "Confirmed fix in bot.py:674. But /stop on line 726 has same bug."
+    dev: "Good catch, fixing /stop too"
+    validator: "Both fixed. Testing: curl shows 200. ACCEPT at 85."
+
+vs today (sequential):
+
+    dev: runs 30 min, claims 90, exits
+    validator: finds /stop bug, REJECTS
+    dev: runs another 30 min to fix one line
+    validator: finds something else...
+
+The difference:
+    Sequential: issues found AFTER the work → wasted iterations
+    TeamCreate: issues found DURING the work → fixed in the same iteration
+```
+
+The team shares a task list (TaskCreate/TaskUpdate). Dev claims tasks, validator reviews completed ones. The coordinator (chat session or dumb loop) monitors progress and can intervene.
+
+When the team agrees (dev says done + validator says ACCEPT), the iteration ends. The dumb loop checks completion and decides whether to spawn another team or stop.
+
 ### Stage 3: EVALUATE (human-driven)
 
 ```
