@@ -95,8 +95,7 @@ import { DecisionsPanel } from "@/components/decisions/decisions-panel";
 import { MeetingAgentPanel } from "@/components/agent/meeting-agent-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
 import { BrowserSessionView } from "@/components/meetings/browser-session-view";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_VEXA_PUBLIC_API_URL || "https://api.vexa.ai";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -124,12 +123,17 @@ export default function MeetingDetailPage() {
     clearCurrentMeeting,
   } = useMeetingsStore();
   const authToken = useAuthStore((s) => s.token);
+  const { config: runtimeConfig } = useRuntimeConfig();
+  const apiBaseUrl = runtimeConfig?.publicApiUrl || runtimeConfig?.apiUrl || "";
 
   // Decisions panel state
   const [decisionsOpen, setDecisionsOpen] = useState(false);
 
   // Agent panel state
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+
+  // Browser view mode state
+  const [viewMode, setViewMode] = useState<'transcript' | 'browser'>('transcript');
 
   // API view toggle state — default ON when coming from onboarding (?apiView=1)
   const [apiViewOpen, setApiViewOpen] = useState(() => searchParams?.get("apiView") === "1");
@@ -821,6 +825,59 @@ export default function MeetingDetailPage() {
     return <BrowserSessionView meeting={currentMeeting} />;
   }
 
+  // Browser view available for any active meeting bot (VNC runs in all bot containers)
+  const hasBrowserView = !!(['requested', 'joining', 'awaiting_admission', 'active'].includes(currentMeeting?.status));
+
+  const browserViewIframe = hasBrowserView && viewMode === 'browser' ? (() => {
+    const meetingId = currentMeeting.id;
+    const vncUrl = `${apiBaseUrl}/b/${meetingId}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${meetingId}/vnc/websockify`;
+    return (
+      <div className="flex-1 overflow-hidden">
+        <iframe
+          src={vncUrl}
+          className="w-full h-full border-0"
+          allow="clipboard-read; clipboard-write"
+        />
+      </div>
+    );
+  })() : null;
+
+  // When browser view is active, render full-screen layout (like BrowserSessionView)
+  if (browserViewIframe) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-64px)] -m-4 md:-m-6 relative z-10">
+        {/* Minimal toolbar */}
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-background">
+          <Button variant="ghost" size="sm" asChild className="h-8 px-2 text-muted-foreground hover:text-foreground">
+            <Link href="/meetings">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <span className="text-sm font-medium truncate">{currentMeeting.data?.name || currentMeeting.platform_specific_id}</span>
+          <Badge className={cn("shrink-0", statusConfig.bgColor, statusConfig.color)}>
+            {statusConfig.label}
+          </Badge>
+          <div className="flex-1" />
+          <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-8">
+            <Button variant="ghost" size="sm" className={cn("rounded-r-none h-full gap-1.5 text-xs", viewMode === 'transcript' && "bg-muted")} onClick={() => setViewMode('transcript')}>
+              <FileText className="h-3.5 w-3.5" />
+              Transcript
+            </Button>
+            <Button variant="ghost" size="sm" className={cn("rounded-l-none h-full gap-1.5 text-xs", viewMode === 'browser' && "bg-muted")} onClick={() => setViewMode('browser')}>
+              <Monitor className="h-3.5 w-3.5" />
+              Browser
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" className="h-8" onClick={() => { const mid = currentMeeting.id; const url = `${apiBaseUrl}/b/${mid}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${mid}/vnc/websockify`; window.open(url, "_blank"); }}>
+            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+            Fullscreen
+          </Button>
+        </div>
+        {browserViewIframe}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2 lg:space-y-6 h-full flex flex-col">
       {/* Desktop Header */}
@@ -924,6 +981,28 @@ export default function MeetingDetailPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {hasBrowserView && (
+            <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-9">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("rounded-r-none h-full gap-1.5", viewMode === 'transcript' && "bg-muted")}
+                onClick={() => setViewMode('transcript')}
+              >
+                <FileText className="h-4 w-4" />
+                Transcript
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("rounded-l-none h-full gap-1.5", viewMode === 'browser' && "bg-muted")}
+                onClick={() => setViewMode('browser')}
+              >
+                <Monitor className="h-4 w-4" />
+                Browser
+              </Button>
+            </div>
+          )}
           {(currentMeeting.status === "active" || currentMeeting.status === "completed") && transcripts.length > 0 && (
             <div className="flex items-center gap-2">
               <AIChatPanel
@@ -1086,7 +1165,7 @@ export default function MeetingDetailPage() {
                         <span className="text-gray-300"> \</span>
                       </div>
                       <div className="pl-4">
-                        <span className="text-[#6ee7b7]">{API_BASE_URL}/bots/{currentMeeting.platform}/{currentMeeting.platform_specific_id}</span>
+                        <span className="text-[#6ee7b7]">{apiBaseUrl}/bots/{currentMeeting.platform}/{currentMeeting.platform_specific_id}</span>
                         <span className="text-gray-300"> \</span>
                       </div>
                       <div className="pl-4">
@@ -1305,6 +1384,19 @@ export default function MeetingDetailPage() {
               <Badge className={cn("text-[9px] h-4 px-1 shrink-0", statusConfig.bgColor, statusConfig.color)}>
                 {statusConfig.label}
               </Badge>
+
+              {/* Browser view toggle - Mobile */}
+              {hasBrowserView && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn("h-7 w-7", viewMode === 'browser' && "bg-muted")}
+                  onClick={() => setViewMode(viewMode === 'browser' ? 'transcript' : 'browser')}
+                  title={viewMode === 'browser' ? 'Show transcript' : 'Show browser view'}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                </Button>
+              )}
 
               {/* Language Selector - Mobile (only when active) */}
               {currentMeeting.status === "active" && (
@@ -1551,9 +1643,10 @@ export default function MeetingDetailPage() {
       )}
 
       {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-        {/* Transcript or Status Indicator */}
-        <div className="lg:col-span-2 order-2 lg:order-1 flex flex-col min-h-0 flex-1">
+      <div className={cn("grid grid-cols-1 gap-6 flex-1 min-h-0", browserViewIframe ? "" : "lg:grid-cols-3")}>
+        {/* Transcript or Browser View */}
+        <div className={cn("order-2 lg:order-1 flex flex-col min-h-0 flex-1", browserViewIframe ? "col-span-full" : "lg:col-span-2")}>
+          {browserViewIframe ? browserViewIframe : (<>
           {/* Show bot status for early states */}
           {(currentMeeting.status === "requested" ||
             currentMeeting.status === "joining" ||
@@ -1593,7 +1686,7 @@ export default function MeetingDetailPage() {
                       const sessionToken = escalation?.session_token as string
                         || currentMeeting.data?.session_token as string;
                       if (!sessionToken) return null;
-                      const vncUrl = `${API_BASE_URL}/b/${sessionToken}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${sessionToken}/vnc/websockify`;
+                      const vncUrl = `${apiBaseUrl}/b/${sessionToken}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${sessionToken}/vnc/websockify`;
                       return (
                         <Button
                           variant="default"
@@ -1618,7 +1711,7 @@ export default function MeetingDetailPage() {
                           className="gap-2"
                           onClick={async () => {
                             try {
-                              const response = await fetch(`${API_BASE_URL}/b/${sessionToken}/save`, {
+                              const response = await fetch(`${apiBaseUrl}/b/${sessionToken}/save`, {
                                 method: "POST",
                               });
                               if (!response.ok) throw new Error(await response.text());
@@ -1690,6 +1783,7 @@ export default function MeetingDetailPage() {
               }}
             />
           )}
+          </>)}
 
         </div>
 

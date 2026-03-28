@@ -575,13 +575,11 @@ async def request_bot(
         await db.commit()
         await db.refresh(new_meeting)
 
-        # Store session token in Redis
+        # Store in Redis for gateway proxy (by session_token for backward compat + by meeting ID)
         if redis_client:
-            await redis_client.set(
-                f"browser_session:{session_token}",
-                json.dumps({"container_name": result.get("name"), "meeting_id": new_meeting.id, "user_id": current_user.id}),
-                ex=86400,
-            )
+            container_info = json.dumps({"container_name": result.get("name"), "meeting_id": new_meeting.id, "user_id": current_user.id})
+            await redis_client.set(f"browser_session:{session_token}", container_info, ex=86400)
+            await redis_client.set(f"browser_session:{new_meeting.id}", container_info, ex=86400)
 
         return MeetingResponse.model_validate(new_meeting)
 
@@ -711,9 +709,9 @@ async def request_bot(
         "transcriptionTier": req.transcription_tier or "realtime",
         "redisUrl": REDIS_URL,
         "automaticLeave": {
-            "waitingRoomTimeout": 300000,
-            "noOneJoinedTimeout": 120000,
-            "everyoneLeftTimeout": 60000,
+            "waitingRoomTimeout": 900000,    # 15 min
+            "noOneJoinedTimeout": 120000,    # 2 min
+            "everyoneLeftTimeout": 300000,   # 5 min
         },
         "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
         "recordingEnabled": user_recording_config.get("enabled", os.getenv("RECORDING_ENABLED", "false").lower() == "true"),
@@ -723,6 +721,14 @@ async def request_bot(
         "transcriptionServiceUrl": os.getenv("TRANSCRIPTION_SERVICE_URL"),
         "transcriptionServiceToken": os.getenv("TRANSCRIPTION_SERVICE_TOKEN"),
     }
+    if req.automatic_leave:
+        al = bot_config["automaticLeave"]
+        if req.automatic_leave.waiting_room_timeout is not None:
+            al["waitingRoomTimeout"] = req.automatic_leave.waiting_room_timeout
+        if req.automatic_leave.everyone_left_timeout is not None:
+            al["everyoneLeftTimeout"] = req.automatic_leave.everyone_left_timeout
+        if req.automatic_leave.no_one_joined_timeout is not None:
+            al["noOneJoinedTimeout"] = req.automatic_leave.no_one_joined_timeout
     if req.recording_enabled is not None:
         bot_config["recordingEnabled"] = bool(req.recording_enabled)
     if req.voice_agent_enabled is not None:
@@ -733,6 +739,17 @@ async def request_bot(
         bot_config["showAvatar"] = False
     if meeting_data.get("capture_modes"):
         bot_config["captureModes"] = meeting_data["capture_modes"]
+    if req.authenticated:
+        minio_endpoint = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+        minio_secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+        s3_endpoint_url = f"{'https' if minio_secure else 'http'}://{minio_endpoint}"
+        s3_bucket = os.environ.get("MINIO_BUCKET", "vexa-recordings")
+        bot_config["authenticated"] = True
+        bot_config["userdataS3Path"] = f"users/{current_user.id}/browser-userdata"
+        bot_config["s3Endpoint"] = s3_endpoint_url
+        bot_config["s3Bucket"] = s3_bucket
+        bot_config["s3AccessKey"] = os.environ.get("MINIO_ACCESS_KEY", "")
+        bot_config["s3SecretKey"] = os.environ.get("MINIO_SECRET_KEY", "")
     # Remove None values
     bot_config = {k: v for k, v in bot_config.items() if v is not None}
 
@@ -793,6 +810,14 @@ async def request_bot(
     new_meeting.bot_container_id = result.get("container_id") or container_name
     await db.commit()
     await db.refresh(new_meeting)
+
+    # Register container in Redis for gateway VNC proxy (keyed by meeting ID)
+    if redis_client:
+        await redis_client.set(
+            f"browser_session:{meeting_id}",
+            json.dumps({"container_name": container_name, "meeting_id": meeting_id, "user_id": current_user.id}),
+            ex=86400,
+        )
 
     return MeetingResponse.model_validate(new_meeting)
 

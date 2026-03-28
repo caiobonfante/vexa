@@ -1,8 +1,8 @@
-# Remote Browser
+# Bot Browser View
 
-> **Confidence: 0** — RESET after architecture refactoring. Browser session creation path changed (meeting-api to runtime-api). VNC session tokens may not work with new auth.
-> **Tested:** Container builds with VNC packages, browser starts in session mode, VNC accessible via URL, CDP connection works.
-> **Not tested:** MinIO persistence (save/restore browser state), authenticated bot flow, agent + human simultaneous control in production.
+> **Confidence: 0** — RESET: unified bot/browser architecture. Every bot now has VNC. Gateway routes by meeting ID, not session_token.
+> **Tested:** Container builds with VNC packages, browser starts in all modes, VNC accessible via meeting ID.
+> **Not tested:** Meeting-ID-based gateway routing (implementation pending), MinIO persistence, authenticated bot flow.
 > **Contributions welcome:** MinIO sync for browser profiles, authenticated meeting join flow, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).
 
 ## Why

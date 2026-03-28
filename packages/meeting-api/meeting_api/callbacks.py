@@ -350,19 +350,18 @@ async def bot_status_change_callback(
             d = dict(meeting.data)
             escalation_reason = payload.reason or "unknown"
             escalated_at = payload.timestamp or datetime.utcnow().isoformat()
-            session_token = secrets.token_urlsafe(24)
             d["escalation"] = {
                 "reason": escalation_reason,
                 "escalated_at": escalated_at,
-                "vnc_url": f"/b/{session_token}",
-                "session_token": session_token,
+                "vnc_url": f"/b/{meeting.id}",
             }
             meeting.data = d
             attributes.flag_modified(meeting, "data")
 
+            # Ensure container is registered in Redis for gateway VNC proxy (by meeting ID)
             if redis_client:
                 await redis_client.set(
-                    f"browser_session:{session_token}",
+                    f"browser_session:{meeting.id}",
                     json.dumps({"container_name": payload.container_id or meeting.bot_container_id, "meeting_id": meeting.id, "user_id": meeting.user_id, "escalation": True}),
                     ex=3600,
                 )

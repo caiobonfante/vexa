@@ -101,6 +101,22 @@ FBAPPS
   # Keep alive so VNC + websockify remain accessible
   wait
 else
-  # Meeting mode — run the bot using the built production wrapper
+  # Meeting mode — start VNC for browser view on dashboard
+  echo "[entrypoint] Meeting mode — starting VNC for browser view"
+  mkdir -p /root/.fluxbox
+  cat > /root/.fluxbox/apps <<'FBAPPS'
+[app] (name=.*) (class=.*)
+  [Maximized]  {yes}
+[end]
+FBAPPS
+  fluxbox &
+  x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
+  if [ -d /usr/share/novnc ]; then
+    websockify --web /usr/share/novnc 6080 localhost:5900 &
+  else
+    websockify 6080 localhost:5900 &
+  fi
+
+  # Run the bot
   node dist/docker.js
 fi
