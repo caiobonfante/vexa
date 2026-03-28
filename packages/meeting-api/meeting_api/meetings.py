@@ -342,7 +342,10 @@ async def _get_running_bots_from_runtime(user_id: int) -> list:
                     meeting_id_from_name = parts[2]
                     meeting_id_int = int(meeting_id_from_name)
             except (ValueError, IndexError):
-                # Try metadata
+                pass
+
+            # Always try metadata if name parsing didn't yield a meeting_id
+            if meeting_id_int is None:
                 meta = c.get("metadata", {})
                 if meta.get("meeting_id"):
                     try:

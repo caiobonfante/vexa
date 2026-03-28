@@ -47,39 +47,19 @@ Show user: "Mission: {target}. Resources verified. Say go."
 User says "go" or "deliver"
     |
     v
-Execute this in a single Bash call:
+Launch delivery (CONDUCTOR_MISSION env var activates the Stop hook):
 
-    # 1. Set phase
-    python3 -c "
-    import json
-    s = json.loads(open('state.json').read())
-    s['phase'] = 'deliver'
-    s['mission'] = '{name}'
-    s['status'] = 'running'
-    open('state.json','w').write(json.dumps(s, indent=2))
-    "
-
-    # 2. Run dev+validator team (Stop hook keeps it going)
-    claude --worktree {name} -p "do the work" \
+    CONDUCTOR_MISSION={name} claude --worktree {name} -p "do the work" \
         --append-system-prompt-file batches/{name}-prompt.txt
-
-    # 3. When session exits → transition to evaluate
-    python3 -c "
-    import json
-    s = json.loads(open('state.json').read())
-    s['phase'] = 'evaluate'
-    s['status'] = 'complete'
-    open('state.json','w').write(json.dumps(s, indent=2))
-    "
 ```
 
-The Bash call blocks until the worktree session finishes. Phase transitions happen automatically. Stop hook prevents premature exit during step 2.
+The Stop hook checks: is CONDUCTOR_MISSION set? Is the target met? If not, forces continuation. When target is met (or hard blocker), session exits and control returns to you.
 
 **PLAN is read-only.** No code edits, no tests. Only: read, check resources, create mission, launch.
 
 ## DELIVER — what happens inside
 
-The worktree session creates a team (dev + validator) and they work together. Stop hook keeps the session alive until target is met. When it exits, control returns to the conductor.
+The session works until done. Stop hook keeps it going. When it exits, show results to user.
 
 ## EVALUATE — show results
 

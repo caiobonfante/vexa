@@ -35,6 +35,8 @@ async function proxyRequest(
       if (statusResp.ok) {
         const data = await statusResp.json();
         for (const b of data.running_bots || []) {
+          // Skip bots without platform/native_meeting_id — they can't be subscribed to
+          if (!b.platform || !b.native_meeting_id) continue;
           const id = b.meeting_id_from_name || b.container_name;
           seenIds.add(id);
           meetings.push({

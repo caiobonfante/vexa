@@ -1,63 +1,43 @@
 #!/bin/bash
 # Stop hook: checks if the current mission target is met.
-# If not, blocks Claude from stopping and injects what's missing.
-#
-# Called by Claude Code's Stop hook mechanism.
-# Input: JSON on stdin with session_id, transcript_path, cwd, stop_hook_active
-# Output: JSON with decision: "block" or nothing (exit 0 = allow)
+# Only fires when CONDUCTOR_MISSION env var is set (delivery sessions).
+# Returns {"decision":"block","reason":"..."} to force continuation.
 
 set -euo pipefail
 
 INPUT=$(cat)
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')
 
-# Prevent infinite loop — if we already forced continuation once, let it stop
+# Already forced once — let it stop (prevent infinite loop)
 if [[ "$STOP_ACTIVE" == "true" ]]; then
   exit 0
 fi
 
-# Only block during DELIVER phase — don't interfere with interactive conductor or PLAN
-CONDUCTOR_DIR="${CWD}/conductor"
-if [[ ! -d "$CONDUCTOR_DIR" ]]; then
-  CONDUCTOR_DIR="$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)/conductor"
-fi
-
-PHASE=$(python3 -c "import json; print(json.loads(open('$CONDUCTOR_DIR/state.json').read()).get('phase',''))" 2>/dev/null || echo "")
-if [[ "$PHASE" != "deliver" ]]; then
-  exit 0  # Not in delivery — allow stop
-fi
-
-# Find the active mission file
-CONDUCTOR_DIR="${CWD}/conductor"
-if [[ ! -d "$CONDUCTOR_DIR" ]]; then
-  # Maybe we're in a worktree — check parent
-  CONDUCTOR_DIR="$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)/conductor"
-fi
-
-# Find mission file — check state.json for active mission, or find newest mission file
-MISSION_FILE=""
-if [[ -f "$CONDUCTOR_DIR/state.json" ]]; then
-  MISSION=$(python3 -c "import json; print(json.loads(open('$CONDUCTOR_DIR/state.json').read()).get('mission','') or '')" 2>/dev/null)
-  if [[ -n "$MISSION" ]]; then
-    MISSION_FILE="$CONDUCTOR_DIR/missions/${MISSION}.md"
-  fi
-fi
-
-# No mission = allow stop
-if [[ -z "$MISSION_FILE" || ! -f "$MISSION_FILE" ]]; then
+# Only block delivery sessions (conductor sets CONDUCTOR_MISSION before launch)
+if [[ -z "${CONDUCTOR_MISSION:-}" ]]; then
   exit 0
 fi
 
-# Run completion check
+# Find conductor dir
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+CONDUCTOR_DIR="${CWD}/conductor"
+if [[ ! -d "$CONDUCTOR_DIR" ]]; then
+  CONDUCTOR_DIR="$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)/conductor"
+fi
+
+MISSION_FILE="$CONDUCTOR_DIR/missions/${CONDUCTOR_MISSION}.md"
+if [[ ! -f "$MISSION_FILE" ]]; then
+  exit 0  # No mission file — allow stop
+fi
+
+# Check completion
 RESULT=$(python3 "$CONDUCTOR_DIR/check-completion.py" --check --mission "$MISSION_FILE" --state "$CONDUCTOR_DIR/state.json" 2>&1 || true)
 
 if echo "$RESULT" | grep -q "^DONE\|^STOP"; then
-  # Target met — allow stop
-  exit 0
+  exit 0  # Target met — allow stop
 fi
 
-# Not done — block stop and tell agent what's missing
+# Not done — block and tell agent what's missing
 REASON=$(echo "$RESULT" | head -5)
 jq -n --arg reason "$REASON" '{
   decision: "block",
