@@ -248,6 +248,24 @@ Chat interface:
     → "merge" → run pre-merge gate
 ```
 
+## Constraints
+
+- The dumb loop (run.sh) never makes decisions — it only asks "are we done?" and respawns
+- All intelligence is in the team (dev + validator) — the loop is stateless between iterations
+- State persists in files (state.json, conductor.log, findings.md, READMEs) — never in memory
+- Each mission runs in its own git worktree — no shared mutable state between missions
+- Dev and validator are separate agents with separate prompts — dev can't self-validate
+- Feature + service READMEs are injected into the agent's system prompt — can't claim ignorance
+- Evaluator can reject but can't fix — it only writes verdicts
+- Human controls PLAN and EVALUATE stages — machine only controls DELIVER
+- README Design section is updated in PLAN stage (before code), State section in DELIVER (after evidence)
+
+## Gate
+
+**PASS**: User describes mission in chat → team (dev + validator) runs autonomously → validator catches real issues during implementation → scores move with evidence → human reviews and merges.
+
+**FAIL**: Team ignores constraints, validator misses violations, scores inflate without evidence, human can't see what's happening, or loop doesn't stop when it should.
+
 ---
 
 <!-- STATE -->
