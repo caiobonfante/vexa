@@ -11,7 +11,7 @@ profiles:
       memory_limit: "2Gi"
       shm_size: 2147483648   # 2GB shared memory (Chrome/Chromium)
     idle_timeout: 0           # managed by meeting-api, not idle loop
-    auto_remove: true
+    auto_remove: false
     network: "${DOCKER_NETWORK:-vexa-network}"
     ports:
       "9222/tcp": {}          # CDP remote debugging

@@ -1,8 +1,8 @@
 {
   "iteration": 0,
-  "phase": "plan",
-  "status": "pending",
-  "mission": null,
+  "phase": "deliver",
+  "status": "running",
+  "mission": "teams-revalidation",
   "last_batch": "2026-03-28T02:20:00+03:00",
   "features": {
     "agentic-runtime": {
@@ -63,7 +63,7 @@
       "score": 90
     },
     "realtime-transcription/ms-teams": {
-      "score": 90
+      "score": 75
     },
     "realtime-transcription/zoom": {
       "score": 60

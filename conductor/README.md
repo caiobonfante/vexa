@@ -4,189 +4,165 @@
 
 ## Why
 
-Software systems grow beyond what one person can hold in their head. AI agents can work on them, but unsupervised agents drift — they write code that works but violates the design, claim progress without evidence, ignore constraints, and celebrate prematurely.
+Software systems grow beyond what one person can hold in their head. AI agents can work on them, but unsupervised agents drift — they write code that works but violates the design, claim progress without evidence, ignore constraints, and stop before the job is done.
 
-The conductor is a framework for autonomous software improvement that solves this through four principles:
+The conductor solves this with:
 
-**Constraint-aware.** Every feature and service has a README that declares its design (data flow, ownership, constraints). The agent reads these before touching code. It knows what it's allowed to change and what it must preserve.
+**Constraint-aware.** Feature and service READMEs declare design, constraints, and quality bar. These are injected into the agent's system prompt — the agent can't claim ignorance.
 
-**Autonomous with boundaries.** The agent runs until it reaches the goal or hits a real blocker. It doesn't stop for convenience or declare partial success. It diagnoses, fixes, deploys, verifies — the full cycle in every iteration. When blocked by infrastructure it can't fix, it documents the blocker and stops honestly.
+**Won't stop until done.** A Stop hook checks completion after every agent turn. If the mission target isn't met, it forces the agent to continue with specific feedback about what's missing. The agent can't declare victory early.
 
-**Adversarial.** Generation and validation are separate roles with opposing incentives. The dev agent implements. The validator agent tries to disprove the claims. They work as a team — the validator catches issues during implementation, not after. Neither can override the other. Progress requires both to agree.
+**Adversarial.** Dev and evaluator are separate sessions. Dev does the work. Evaluator reviews independently. Neither can override the other.
 
-**Human interface.** The user manages everything from chat. Describe a mission → the framework runs it. Check progress → the dashboard shows live activity, costs, scores. Intervene → redirect the team mid-work. The user never edits config files, runs scripts manually, or reads raw logs.
+**Human-managed from chat.** User runs `cd conductor && claude`. Describes mission. Conductor launches it. Status line on every message.
+
+## How It Works
+
+```
+User: "deliver ms-teams-revalidation"
+    |
+    v
+Conductor creates mission file + builds prompt
+    (feature README + service READMEs + mission)
+    |
+    v
+claude --worktree {name} -p "do the work"
+    --append-system-prompt-file prompt.txt
+    |
+    v
+Dev agent works naturally
+    reads README, understands pipeline, diagnoses, fixes, deploys, tests
+    no micro-managing rules — agent decides how to work
+    |
+    v
+Agent tries to stop → Stop hook fires
+    |
+    v
+check-completion.py:
+    mission target met? → evidence in findings.md?
+        |
+        yes → allow stop → session ends
+        no  → block: "Still missing: {specific gaps}"
+              → agent continues with this feedback
+              → tries to stop again → hook fires again → loop
+    |
+    v
+Dev session ends (target met or max turns)
+    |
+    v
+claude --worktree {name} -p "evaluate what dev did"
+    --agent evaluator
+    --append-system-prompt-file same-prompt.txt
+    |
+    v
+Evaluator reviews independently
+    checks evidence, constraints, regressions
+    writes verdict: ACCEPT {score} or REJECT
+    |
+    v
+Conductor reports results to user
+    user decides: merge or reject
+```
 
 ## Three Stages
 
-```
-PLAN → DELIVER → EVALUATE
-```
-
-Each stage has different roles, different outputs, and different trust models.
-
-### Stage 1: PLAN (human-driven)
+### PLAN (30 seconds, human-driven)
 
 ```
-Roles: human + conductor + researcher
+User says what they want
+    → conductor reads feature README (score, quality bar)
+    → hard blocker? → report, stop
+    → create missions/{name}.md
+    → build prompt (feature README + service READMEs + mission)
+    → launch
+```
 
-Human describes what they want
+PLAN is read-only. No code edits, no tests, no research teams.
+
+### DELIVER (autonomous, Stop hook keeps it going)
+
+```
+claude --worktree {name} → dev works → Stop hook checks → loop until done
+claude --worktree {name} → evaluator reviews → writes verdict
+```
+
+The Stop hook is the dumb loop. It can't be talked out of continuing. The agent can't declare victory without evidence.
+
+### EVALUATE (human-driven)
+
+```
+Conductor shows: what changed, verdict, score, cost
+User: merge / reject / close
+```
+
+## Stop Hook
+
+The core mechanism. Configured in `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "conductor/hooks/mission-check.sh",
+        "timeout": 60
+      }
+    ]
+  }
+}
+```
+
+The hook:
+```
+Agent tries to stop
     |
     v
-Conductor reads existing READMEs
-    → what's the current state?
-    → what's already designed vs what's missing?
+mission-check.sh fires
+    → reads mission target from conductor/missions/{name}.md
+    → runs check-completion.py
+    → checks findings.md for execution evidence
+    |
+    target met with evidence → exit 0 (allow stop)
+    not met → return {"decision":"block","reason":"Still missing: X, Y, Z"}
+    → agent gets: "You wanted to stop but: Still missing: X, Y, Z"
+    → agent continues
+```
+
+The hook prevents:
+- "I'm done" without evidence
+- Stopping after diagnosis without fixing
+- Stopping after fixing without verifying
+- Declaring score without execution proof
+
+## How Agents Get Context
+
+```
+Mission says: Focus = meeting-aware-agent
     |
     v
-Researcher investigates (if needed)
-    Internal:
-        → read code to understand current behavior
-        → check existing endpoints, services, infra
-        → find dependencies, version constraints
-    External:
-        → industry best practices (how do competitors solve this?)
-        → platform docs (Zoom SDK, Teams API, Google Meet Media API)
-        → library/framework docs (FastAPI patterns, Playwright APIs)
-        → known issues and workarounds (GitHub issues, Stack Overflow)
-    → report findings with sources
+Conductor reads features/meeting-aware-agent/README.md
+    → Code Ownership section lists:
+        services/api-gateway
+        packages/agent-api
     |
     v
-Human + conductor update READMEs
-    → scaffold new feature README (Design section: why, data flow, constraints)
-    → update service READMEs if new contracts needed
-    → all quality bar items = FAIL, all certainty = 0
+Conductor reads each service README
     |
     v
-Create mission file
-    → focus, target (from README quality bar FAILs), constraints, iteration limit
-    → human approves before launch
-
-Output:  updated READMEs (Design), mission file, worktree
-Trust:   human is the authority
-```
-
-### Stage 2: DELIVER (autonomous, adversarial)
-
-```
-Roles: dev agent + validator agent, inside a dumb loop
-
-DUMB LOOP (bash — keeps going, never makes decisions):
-┌─────────────────────────────────────────────────────────┐
-│                                                         │
-│   read mission + state → where are we?                  │
-│   plateau? → inject alert                               │
-│   last iteration rejected? → inject context             │
-│                                                         │
-│   SMART TEAM (TeamCreate — dev + validator):            │
-│   ┌───────────────────────────────────────────────────┐ │
-│   │                                                   │ │
-│   │  Dev agent                                        │ │
-│   │    reads feature + service READMEs                │ │
-│   │    diagnoses → fixes → deploys → verifies         │ │
-│   │    sends progress to validator as it works         │ │
-│   │                                                   │ │
-│   │  Validator agent                                  │ │
-│   │    reviews in real-time (not after)               │ │
-│   │    checks constraints, evidence, regressions      │ │
-│   │    sends issues back DURING implementation        │ │
-│   │    writes verdict: ACCEPT or REJECT               │ │
-│   │                                                   │ │
-│   └───────────────────────────────────────────────────┘ │
-│                                                         │
-│   team finishes → update README State section            │
-│   check-completion.py: target met?                      │
-│       yes → STOP                                        │
-│       no  → LOOP (spawn team again with rejection context) │
-│                                                         │
-│   stop signals: mission.stop file, iteration limit,     │
-│                 plateau (same scores 3x)                │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-
-Output:  code changes, updated READMEs (State section), findings.md
-Trust:   nobody — adversarial by design
-```
-
-The dumb loop can't be talked out of continuing. The smart team can't avoid scrutiny. Dev and validator have opposing incentives — progress requires both to agree.
-
-### How the team collaborates
-
-**Current state (what we have):** Sequential. run.sh spawns `claude -p` for dev, waits, spawns `claude -p` for evaluator, waits. They never talk to each other. Issues caught after 30 min of work built on a broken foundation.
-
-**Target state (what we want):** Collaborative. Dev and validator work together via TeamCreate + SendMessage. Issues caught during implementation, fixed in the same iteration.
-
-```
-Target collaboration (TeamCreate):
-
-    dev: "Fixed auth bug in /join handler, rebuilding container"
-    validator: "Confirmed fix in bot.py:674. But /stop on line 726 has same bug."
-    dev: "Good catch, fixing /stop too"
-    validator: "Both fixed. Testing: curl shows 200. ACCEPT at 85."
-
-vs current (sequential):
-
-    dev: runs 30 min, claims 90, exits
-    validator: finds /stop bug, REJECTS
-    dev: runs another 30 min to fix one line
-```
-
-**Verified:** TeamCreate + Agent + SendMessage all work in `claude -p` (headless mode). Tested 2026-03-28, $0.46, agents exchanged messages successfully.
-
-```
-bash run.sh (dumb loop):
-    each iteration:
-        claude -p "Create team, run mission, exit when team agrees"
-            → TeamCreate creates "mission-{name}" team
-            → Agent spawns dev (full tools) + validator (read + bash)
-            → dev implements, sends progress via SendMessage
-            → validator reviews, sends issues back via SendMessage
-            → they iterate until validator says ACCEPT {score}
-            → coordinator session exits
-        check-completion.py → target met? → stop or loop
-```
-
-The bash loop pushes. The team collaborates. Nobody can stop the loop
-except completion, plateau, iteration limit, or stop signal.
-
-### Stage 3: EVALUATE (human-driven)
-
-```
-Roles: human + conductor
-
-Conductor reports:
-    → what files changed (git diff)
-    → what the dev claimed vs what the validator found
-    → cost, tokens, iterations
-    → quality bar: what moved from FAIL → PASS
-    → what's still broken (known issues)
+Builds prompt.txt:
+    1. Mission file (focus, target, constraints)
+    2. Feature README (why, data flow, quality bar, constraints)
+    3. Service READMEs (constraints, boundaries)
     |
     v
-Human reviews
-    → does this actually work? (manual testing in the wild)
-    → do the README changes make sense?
-    → are the constraints still right?
-    |
-    v
-Decision:
-    merge   → pre-merge gate (constraints, regressions, evidence)
-              → merge worktree branch into main
-    reject  → update mission with feedback, re-run DELIVER
-    close   → not worth pursuing, clean up worktree
-
-Output:  merged code or rejection with reasons
-Trust:   human is the authority
+claude --worktree {name} --append-system-prompt-file prompt.txt
+    → agent has FULL context before starting
 ```
 
-### Why three stages
+## README as Source of Truth
 
-Plan and Evaluate are human-driven. Delivery is autonomous. The human bookends the work — sets direction, then judges the result. The machine runs in between.
-
-The machine never decides WHAT to build (Plan) or WHETHER it's good enough (Evaluate). It only decides HOW to build it (Deliver) — and even then, it's adversarial.
-
-## Principles
-
-### README is the single source of truth
-
-Every feature and service has a README with two sections:
+Every feature/service README has:
 
 ```
 <!-- DESIGN: what we want. Can be ahead of code. -->
@@ -198,303 +174,48 @@ Why, Data Flow, Code Ownership, Constraints, Gate
 Quality Bar, Certainty, Known Issues
 ```
 
-Design is the spec — it can be aspirational. State is the proof — it's never optimistic. They converge when the feature is done. The evaluator checks State against code, not Design against code.
+Design = spec (aspirational). State = proof (never optimistic).
 
-### Evidence-based progress
-
-Scores only move with execution evidence:
-
+Documentation flow:
 ```
-VALID evidence:    command + stdout ("curl returned 200, body contains 6 segments")
-INVALID evidence:  prose ("the code looks correct", "should work based on review")
-```
-
-Quality bar items stay FAIL until proven. Certainty scores require specific evidence with dates. The evaluator rejects claims without proof.
-
-### Adversarial validation
-
-Dev and validator have opposing incentives:
-
-```
-Dev's goal:        make progress, advance scores, ship features
-Validator's goal:  find what's wrong, reject inflated claims, catch drift
-
-Neither can override the other:
-    dev says PASS + validator says PASS → accepted
-    dev says PASS + validator says FAIL → rejected (validator explains why)
-    dev can't skip validation
-    validator can't make changes
-```
-
-### How agents get context and constraints
-
-The team doesn't discover constraints by reading files during execution. Constraints are **injected into the system prompt before the agent starts**. The mechanism:
-
-```
-Mission says: Focus = meeting-aware-agent
-    |
-    v
-run.sh reads features/meeting-aware-agent/README.md
-    → finds Code Ownership section:
-        services/api-gateway
-        packages/agent-api
-        packages/runtime-api
-        services/admin-api
-    |
-    v
-for each owned directory:
-    read {dir}/README.md (if it exists)
-    |
-    v
-concatenate into prompt file:
-    1. Orchestrator instructions (diagnose → fix → deploy → verify → update)
-    2. Mission file (focus, target, constraints)
-    3. Feature README (Design: data flow, constraints, gate)
-    4. Service README: api-gateway (constraints: "validates tokens, injects headers")
-    5. Service README: agent-api (constraints: "accepts calls from gateway only")
-    6. Service README: runtime-api (constraints: "never exposed directly")
-    7. Service README: admin-api (constraints: "owns users and tokens")
-    |
-    v
-claude -p --append-system-prompt-file prompt.txt
-    → agent starts with FULL context in system prompt
-    → can't claim "I didn't know gateway validates tokens"
-    → every constraint from every relevant README is in the prompt
-```
-
-The **dev agent** gets this full prompt → implements with constraints in mind.
-
-The **validator agent** gets the same README content → checks code changes against it.
-
-Neither agent has to go find the constraints. They're pre-loaded.
-
-```
-What this prevents:
-    Feature README says: "all API calls go through gateway"
-    Service README says: "agent-api accepts calls from gateway only"
-        → dev imports agent-api directly → KNOWS this violates the constraint
-        → validator sees the same constraint → catches it if dev ignores it
-        → pre-merge gate checks cross-service imports → blocks merge
-```
-
-### Mechanical constraint checking
-
-Prompt injection tells the agent the rules. But agents can ignore prompts. For constraints that can be checked programmatically, `check-constraints.py` reads the README and runs automated checks.
-
-**Two tiers:**
-
-```
-Tier 1: mechanical — parsed from README, checked by script
-    Tagged with <!-- CHECK: pattern args --> in the README
-    Produces WARNINGS (not errors — never crashes execution)
-    Warnings visible to validator and human
-
-Tier 2: prompt-based — in the README, read by agents
-    Everything without a CHECK tag
-    Relies on agent discipline + validator judgment
-```
-
-**How it works:**
-
-```
-README Constraints section:
-
-    <!-- CHECK: no-cross-import services/ -->
-    - No Python imports across service boundaries
-
-    <!-- CHECK: no-direct-call localhost:8100 localhost:8080 -->
-    - All API calls go through api-gateway
-
-    - Speaker mapping runs inside bot-manager
-      (no CHECK tag — judgment call, validator handles it)
-```
-
-```
-check-constraints.py reads README
-    → parses <!-- CHECK: ... --> tags
-    → runs each check against changed files
-    → produces warnings:
-        WARNING: cross-service import in services/telegram-bot/bot.py:674
-            imports from packages/agent-api — constraint says no cross-service imports
-    → warnings are NOT fatal — they don't crash the iteration
-```
-
-```
-During delivery:
-    dev makes changes → checker runs → warnings produced
-    warnings injected into validator context
-    validator uses warnings to inform ACCEPT/REJECT verdict
-    dev sees warnings → can fix before validator rejects
-
-At merge time:
-    checker runs again → same warnings shown to human
-    human decides: real blocker or acceptable exception?
-```
-
-**Self-managing:** agents maintain the constraints in the README. The checker reads them. Add a constraint → automatically checked. Remove a constraint → diff is visible, validator catches it. The agents own the rules AND the enforcement.
-
-**Never blocks execution.** A constraint violation is a warning, not a crash. $5 iterations don't die because of a grep match. The validator and human decide what matters.
-
-### Documentation flow
-
-```
-Before implementation:
-    1. Scaffold feature README (Design section: why, data flow, constraints)
-    2. Scaffold service READMEs if needed (new contracts)
-    3. All quality bar items = FAIL, all certainty = 0
-
-During implementation:
-    4. Dev agent reads READMEs → implements to match Design
-    5. Validator reviews against README constraints in real-time
-
-After implementation:
-    6. Update README State section (quality bar, certainty, known issues)
-    7. Only FAIL → PASS where execution evidence exists
-    8. Known issues: add discoveries, remove fixes
-    9. Design section: only change if architecture actually changed
+Before: README Design section written (PLAN stage)
+During: dev works to match Design, updates State with evidence
+After:  evaluator checks State matches code, README honest
 ```
 
 ## Architecture
 
-### Repo structure
-
 ```
-vexa-agentic-runtime/
-    │
-    ├── conductor/                      ← THIS FRAMEWORK
-    │   ├── README.md                      system design (this file)
-    │   ├── CLAUDE.md                      control room (interactive sessions)
-    │   ├── run.sh                         dumb loop (worktrees, state, iteration)
-    │   ├── check-completion.py            score parsing, plateau, completion
-    │   ├── parse-stream.py                stream-json → activity log
-    │   ├── dashboard.py                   web dashboard server :8899
-    │   ├── dashboard.html                 web UI
-    │   ├── Makefile                       make targets
-    │   ├── state.json                     current scores (seeded from findings)
-    │   ├── missions/                      per-job mission files
-    │   │   └── {name}.md                     focus, target, constraints
-    │   └── batches/                       per-iteration output (ephemeral)
-    │
-    ├── features/                       ← WHAT WE BUILD
-    │   ├── .readme-template.md            standard README template
-    │   ├── {feature}/
-    │   │   ├── README.md                  system design (Design + State sections)
-    │   │   └── tests/
-    │   │       └── findings.md            execution evidence, certainty scores
-    │   └── ...
-    │
-    ├── services/                       ← RUNNING SERVICES (each has README.md)
-    │   ├── api-gateway/
-    │   ├── admin-api/
-    │   ├── telegram-bot/
-    │   ├── dashboard/
-    │   ├── vexa-bot/
-    │   └── ...
-    │
-    ├── packages/                       ← SHARED LIBRARIES (each has README.md)
-    │   ├── agent-api/
-    │   ├── meeting-api/
-    │   ├── runtime-api/
-    │   └── ...
-    │
-    ├── libs/                           ← DATA MODELS
-    │   └── shared-models/
-    │
-    ├── .claude/                        ← AGENT DEFINITIONS (lean)
-    │   ├── agents/
-    │   │   ├── evaluator.md               adversarial validator
-    │   │   └── researcher.md              internal + external research
-    │   ├── commands/
-    │   │   ├── collect.md                 data collection (realtime-transcription)
-    │   │   ├── deliver.md                 browser validation (dashboard)
-    │   │   ├── env-setup.md               infra setup
-    │   │   ├── expand.md                  scenario expansion
-    │   │   ├── host-teams-meeting-auto.md create live meetings
-    │   │   ├── iterate.md                 sandbox iteration
-    │   │   └── replay-teams-meeting.md    replay transcripts
-    │   └── settings.local.json            Claude Code config
-    │
-    ├── .worktrees/                     ← EPHEMERAL (gitignored)
-    │   └── {mission-name}/                isolated branch per mission
-    │
-    └── deploy/                         ← INFRASTRUCTURE
-        ├── compose/                       docker-compose + Makefile
-        └── env/                           env templates
+conductor/
+    CLAUDE.md                  → control room (this is the conductor)
+    README.md                  → system design (this file)
+    missions/                  → per-job mission files
+    check-completion.py        → completion checker (Stop hook calls this)
+    hooks/mission-check.sh     → Stop hook script
+    state.json                 → scores (seeded from findings)
+
+.claude/
+    agents/evaluator.md        → skeptical evaluator
+    agents/researcher.md       → research agent
+    settings.json              → Stop hook config
+
+features/{name}/
+    README.md                  → Design + State
+    tests/findings.md          → execution evidence
 ```
 
-### What goes where
-
-```
-Question                                    Answer
-──────────────────────────────────────────  ──────────────────────────────
-Where is the system design for a feature?   features/{name}/README.md (Design section)
-Where is the current state of a feature?    features/{name}/README.md (State section)
-Where is the execution evidence?            features/{name}/tests/findings.md
-Where are service boundaries defined?       services/{name}/README.md or packages/{name}/README.md
-Where is a mission defined?                 conductor/missions/{name}.md
-Where are agent roles defined?              .claude/agents/{role}.md
-Where are testing tools?                    .claude/commands/{tool}.md
-Where is ephemeral mission state?           .worktrees/{name}/conductor/
-Where are infra configs?                    deploy/
-```
-
-### Rules for keeping it clean
-
-```
-1. One README per feature, service, and package — no CLAUDE.md duplicates
-2. README has Design (spec) and State (proof) — separated by ---
-3. Feature README lists code ownership → conductor follows the chain
-4. .claude/agents/ has only active roles — evaluator + researcher
-5. .claude/commands/ has only reusable tools — not one-off scripts
-6. No agent memory files in .claude/ — research results go in feature findings
-7. No stale lock files, no empty files, no dead configs
-8. .worktrees/ is gitignored — ephemeral, cleaned after merge
-9. conductor/batches/ is ephemeral — mission output, not permanent state
-10. Permanent state is in README (State section) + findings.md — nowhere else
-```
-
-## Observability
-
-```
-Web dashboard (http://localhost:8899):
-    WORKING:
-        → mission cards: status, duration                    (cost shows when stream-json used)
-        → batch output: live activity log (▶ BASH, ◀ READ, ✎ EDIT)
-        → conductor log: iteration decisions
-        → feature scores: bar chart
-    PARTIAL:
-        → cost/tokens: captured in meta-N.json but not always displayed
-        → evaluator verdict: shows but sometimes stale from previous missions
-    NOT WORKING:
-        → real-time streaming (dashboard polls every 5s, not true streaming)
-
-Chat interface (cd conductor && claude):
-    WORKING:
-        → "how's it going?" → check logs manually
-        → "merge" → run pre-merge gate
-    NOT WORKING:
-        → "stop" → only via mission.stop file, not chat command
-        → "focus on X instead" → can't redirect mid-run
-        → live team monitoring → teams not implemented yet
-```
+No run.sh. No dashboard. No parse-stream.py. No worktree setup code.
+Native `claude --worktree` for isolation. Stop hook for the loop.
 
 ## Constraints
 
-- The dumb loop (run.sh) never makes decisions — it only asks "are we done?" and respawns
-- All intelligence is in the team (dev + validator) — the loop is stateless between iterations
-- State persists in files (state.json, conductor.log, findings.md, READMEs) — never in memory
-- Each mission runs in its own git worktree — no shared mutable state between missions
-- Dev and validator are separate agents with separate prompts — dev can't self-validate
-- Feature + service READMEs are injected into the agent's system prompt — can't claim ignorance
-- Evaluator can reject but can't fix — it only writes verdicts
-- Human controls PLAN and EVALUATE stages — machine only controls DELIVER
-- README Design section is updated in PLAN stage (before code), State section in DELIVER (after evidence)
-
-## Gate
-
-**PASS**: User describes mission in chat → team (dev + validator) runs autonomously → validator catches real issues during implementation → scores move with evidence → human reviews and merges.
-
-**FAIL**: Team ignores constraints, validator misses violations, scores inflate without evidence, human can't see what's happening, or loop doesn't stop when it should.
+- Stop hook is the ONLY loop mechanism — no bash loops
+- Agent gets full README context via --append-system-prompt-file
+- Dev and evaluator are separate sessions — dev can't self-validate
+- Evaluator can reject but can't fix
+- Human controls PLAN and EVALUATE — machine controls DELIVER
+- README State section only updated with execution evidence
+- Native --worktree for isolation — no custom worktree code
 
 ---
 
@@ -503,60 +224,28 @@ Chat interface (cd conductor && claude):
 ## Quality Bar
 
 ```
-Constraint enforcement                README constraints in prompt              PASS
-Adversarial validation                evaluator catches real bugs               PASS (caught 4+ bugs)
-Cost tracking                         $/tokens per iteration                    PASS ($5.73 captured)
-README auto-append to prompt          feature + service READMEs                 PASS
-Pre-merge gate                        blocks on violations                      PASS (5 checks)
-Live activity streaming               see tool calls as they happen             PASS (parse-stream.py)
-Team-based execution (TeamCreate)     dev + validator collaborate               FAIL (see findings)
-Team collaboration visible            see dev↔validator conversation            FAIL (black box)
-Worktree isolation                    changes only in worktree                  FAIL (cwd bug)
-PLAN stage speed                      30 seconds not 7 minutes                  FAIL
-Conductor follows own protocol        doesn't bypass run.sh, doesn't edit code  FAIL
-Dev agent polling                     poll not sleep, detect failures            FAIL
-Completion check accuracy             no false positives                        FAIL
-Dashboard shows plan activity         plan-log in dashboard                     PARTIAL
+Stop hook forces continuation         native, no bash loop              NOT IMPLEMENTED
+Native worktree isolation             claude --worktree                 NOT IMPLEMENTED
+Context injection via prompt file     feature + service READMEs         PASS
+Adversarial validation                separate evaluator session        PASS
+Completion check                      check-completion.py               PASS (rewritten)
+README as source of truth             Design/State split                PASS
+Status line in chat                   PLAN/DELIVER/EVALUATE prefix      PASS
 ```
 
 ## Certainty
 
 ```
-Orchestrator runs autonomously        80   missions complete, but ignores protocol       2026-03-28
-Evaluator catches false claims        90   rejected inflated scores, auth bugs           2026-03-28
-Score parsing from findings           80   median + Overall: pattern                     2026-03-27
-Worktree isolation                    30   --add-dir doesn't work, writes to main repo   2026-03-28
-Dashboard serves live data            70   works but shows nothing during PLAN/team      2026-03-28
-Stream output parsed                  80   activity log with tool calls                  2026-03-28
-Cost tracking                         80   $5.73 captured from stream-json               2026-03-28
-Pre-merge gate                        70   5 checks, stale verdict bug                   2026-03-28
-Team-based execution                  20   TeamCreate spawns but coordination fails      2026-03-28
-Team collaboration visible             0   dev↔validator messages not in stream           2026-03-28
-PLAN stage speed                      20   spawned 3 research agents, took 7 min          2026-03-28
-Conductor protocol compliance         20   bypassed run.sh, edited code in PLAN           2026-03-28
-Dev agent polling                      0   sleeps 180s, doesn't detect dead containers    2026-03-28
-Completion check accuracy             50   fixed in conductor-v2 but not tested broadly   2026-03-28
+check-completion.py works              80   rewritten, tested             2026-03-28
+Evaluator catches false claims         90   caught 4+ bugs                2026-03-28
+README context auto-appended           80   code ownership chain works    2026-03-28
+Stop hook mechanism                     0   not implemented               —
+Native worktree                         0   not tested with conductor     —
 ```
 
-## Known Issues — from 2026-03-28 testing
+## Known Issues
 
-### Critical (framework doesn't work as designed)
-
-- **Team collaboration is a black box.** Dev↔validator SendMessage traffic is invisible in stream-json. Only coordinator tool calls visible. Can't see if validator actually caught anything. The adversarial model is unverifiable.
-- **Worktree isolation broken.** `--add-dir $REPO` doesn't prevent writes to main repo. Dev agent edits files in main repo AND worktree simultaneously. profiles.yaml changed in main repo during a worktree mission.
-- **Conductor ignores its own CLAUDE.md.** Bypassed run.sh (did DELIVER inline), edited code during PLAN (read-only stage), spawned research teams (PLAN says don't). Instructions are clear but Claude overrides them.
-- **Dev agent sleeps instead of polling.** `sleep 180` while bot containers die. Doesn't detect failures. Wastes 3 minutes per dead-container cycle.
-
-### High (framework partially works but unreliable)
-
-- **PLAN stage too slow.** Spawns research teams, takes 7 minutes for what should be 30 seconds of README reading. CLAUDE.md now says "be fast" but untested.
-- **TeamCreate shutdown broken.** Coordinator sends 15+ shutdown requests, agents ignore them. Burns $1+ on shutdown loops. No force-kill mechanism.
-- **Conductor monitoring contradicts itself.** Says "bots died" then "bots alive and working" 30 seconds later. Sent stop signal while test was succeeding. Can't distinguish "waiting" from "stuck."
-- **Stale evaluator verdicts.** Verdict file from previous mission is read by next mission's pre-merge gate. Causes false rejections.
-
-### Medium (annoyances)
-
-- **Dashboard shows nothing during PLAN.** Plan-log.jsonl added but conductor only writes 2 entries in 7 minutes.
-- **Dashboard shows nothing during team execution.** Only coordinator activity visible, not dev/validator work.
-- **Completion check false positives.** Fixed in conductor-v2 run but not validated broadly.
-- **profiles.yaml changed globally.** auto_remove: true→false for browser bots. Affects all bots, not just test. Done in main repo without review.
+- Stop hook not implemented yet (this is the next step)
+- Need to test claude --worktree with --append-system-prompt-file
+- Team conversation in subagent .jsonl files — accessible but not wired into monitoring
+- check-completion.py needs to work as a Stop hook (read mission from env/file, return JSON)

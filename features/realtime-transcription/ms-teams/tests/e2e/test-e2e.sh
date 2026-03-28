@@ -92,12 +92,23 @@ send_teams_bot() {
   echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id','ERR'))" 2>/dev/null
 }
 
+get_bot_container() {
+  # Look up container name from DB using bot_container_id (first 12 chars)
+  local bot_id=$1
+  local cid
+  cid=$(PGPASSWORD=postgres psql -h localhost -p 5438 -U postgres -d vexa -t -c \
+    "SELECT bot_container_id FROM meetings WHERE id=$bot_id;" 2>/dev/null | tr -d ' ')
+  if [ -n "$cid" ] && [ "$cid" != "" ]; then
+    docker ps --format "{{.Names}}" --filter "id=${cid:0:12}" 2>/dev/null | head -1
+  fi
+}
+
 wait_for_bot() {
   local bot_id=$1 timeout=${2:-120}
   local start=$SECONDS
   while (( SECONDS - start < timeout )); do
     local container
-    container=$(docker ps --format "{{.Names}}" | grep "vexa-bot-${bot_id}-" 2>/dev/null || true)
+    container=$(get_bot_container "$bot_id")
     if [ -n "$container" ]; then
       local in_meeting
       in_meeting=$(docker logs "$container" 2>&1 | grep -c "verified to be in meeting" || true)
@@ -122,9 +133,9 @@ speak_teams() {
 
 stop_bot() {
   local bot_id=$1
-  local c=$(docker ps --format "{{.Names}}" | grep "vexa-bot-${bot_id}-" 2>/dev/null || true)
+  local c=$(get_bot_container "$bot_id")
   [ -n "$c" ] && docker stop "$c" 2>/dev/null || true
-  PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore -c \
+  PGPASSWORD=postgres psql -h localhost -p 5438 -U postgres -d vexa -c \
     "UPDATE meetings SET status='stopped', end_time=NOW() WHERE id=$bot_id AND status IN ('requested','active');" 2>/dev/null || true
 }
 
@@ -150,7 +161,7 @@ log "  Recorder joined: $RECORDER_CONTAINER"
 
 # Get session_uid
 sleep 5
-SESSION_UID=$(PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore -t -c \
+SESSION_UID=$(PGPASSWORD=postgres psql -h localhost -p 5438 -U postgres -d vexa -t -c \
   "SELECT session_uid FROM meeting_sessions WHERE meeting_id=$RECORDER_ID ORDER BY id DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 log "  Session UID: $SESSION_UID"
 echo "$SESSION_UID" > "$RESULTS/session-uid.txt"
@@ -204,7 +215,7 @@ sleep 35
 
 log "Fetching segments from Postgres..."
 if [ -n "$SESSION_UID" ]; then
-  PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore \
+  PGPASSWORD=postgres psql -h localhost -p 5438 -U postgres -d vexa \
     -c "COPY (
       SELECT segment_id, speaker, text, start_time, end_time, language, created_at
       FROM transcriptions
