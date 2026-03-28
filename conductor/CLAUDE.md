@@ -64,13 +64,15 @@ You do NOT:
 
 If you find blockers (broken infra, missing ports, stale config), **document them** — don't fix them. Blockers become separate conductor cycles:
 
-Each blocker becomes its own PLAN → DELIVER → EVALUATE cycle. The conductor manages the dependency chain. Small focused missions, not one giant mission that tries to fix everything.
+Blockers are things **outside the mission's scope** that prevent delivery. If it's in scope, it's not a blocker — the DELIVER team handles it.
 
-Blocker types:
-- **Infra**: port not exposed, service not running, env var missing → infra fix mission
-- **Code**: wrong config, stale references, missing handler → code fix mission
-- **Human**: needs credentials, manual testing, external access → document and ask user
-- **Dependency**: feature A needs feature B first → order the missions
+```
+In scope (DELIVER handles):     fixing feature code, writing tests, updating README
+Blocker (separate mission):     different service's infra broken, missing port mapping
+Blocker (human action):         needs credentials, needs manual testing, needs external access
+```
+
+Each blocker becomes its own PLAN → DELIVER → EVALUATE cycle managed by the conductor.
 
 Before DELIVER can start, everything must be in place. This is YOUR job — not the human's. The human describes what they want. You make sure the system is ready.
 
