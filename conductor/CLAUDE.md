@@ -47,11 +47,13 @@ Show user: "Mission: {target}. Resources verified. Say go."
 User says "go" or "deliver"
     |
     v
-Step 1 — dev agent (Stop hook keeps it going until target met):
-    claude --worktree {name} -p "do the work" --append-system-prompt-file prompt.txt
+claude --worktree {name} -p "..." --append-system-prompt-file prompt.txt
 
-Step 2 — evaluator (reviews what dev did):
-    claude --worktree {name} -p "evaluate" --append-system-prompt-file prompt.txt --agent evaluator
+Inside the session, create a team (dev + validator):
+    → dev does the work, talks to validator as it goes
+    → validator reviews in real-time, pushes back
+    → when they agree, validator writes verdict
+    → Stop hook checks: target met? if not, forces continuation
 ```
 
 **PLAN is read-only.** No code edits, no tests. Only: read, check resources, create mission, launch.
