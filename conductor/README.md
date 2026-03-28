@@ -315,17 +315,103 @@ After implementation:
     9. Design section: only change if architecture actually changed
 ```
 
-## Components
+## Architecture
+
+### Repo structure
 
 ```
-conductor/CLAUDE.md          → control room (interactive sessions, team management)
-conductor/run.sh             → worktree setup, state management, iteration loop
-conductor/check-completion.py → score parsing, plateau detection, completion check
-conductor/parse-stream.py    → stream-json → activity log
-conductor/dashboard.py       → web dashboard :8899 (JSON API + HTML)
-conductor/dashboard.html     → web UI (auto-refresh, live activity log)
-conductor/missions/          → per-job mission files
-.claude/agents/evaluator.md  → skeptical evaluator agent definition
+vexa-agentic-runtime/
+    │
+    ├── conductor/                      ← THIS FRAMEWORK
+    │   ├── README.md                      system design (this file)
+    │   ├── CLAUDE.md                      control room (interactive sessions)
+    │   ├── run.sh                         dumb loop (worktrees, state, iteration)
+    │   ├── check-completion.py            score parsing, plateau, completion
+    │   ├── parse-stream.py                stream-json → activity log
+    │   ├── dashboard.py                   web dashboard server :8899
+    │   ├── dashboard.html                 web UI
+    │   ├── Makefile                       make targets
+    │   ├── state.json                     current scores (seeded from findings)
+    │   ├── missions/                      per-job mission files
+    │   │   └── {name}.md                     focus, target, constraints
+    │   └── batches/                       per-iteration output (ephemeral)
+    │
+    ├── features/                       ← WHAT WE BUILD
+    │   ├── .readme-template.md            standard README template
+    │   ├── {feature}/
+    │   │   ├── README.md                  system design (Design + State sections)
+    │   │   └── tests/
+    │   │       └── findings.md            execution evidence, certainty scores
+    │   └── ...
+    │
+    ├── services/                       ← RUNNING SERVICES (each has README.md)
+    │   ├── api-gateway/
+    │   ├── admin-api/
+    │   ├── telegram-bot/
+    │   ├── dashboard/
+    │   ├── vexa-bot/
+    │   └── ...
+    │
+    ├── packages/                       ← SHARED LIBRARIES (each has README.md)
+    │   ├── agent-api/
+    │   ├── meeting-api/
+    │   ├── runtime-api/
+    │   └── ...
+    │
+    ├── libs/                           ← DATA MODELS
+    │   └── shared-models/
+    │
+    ├── .claude/                        ← AGENT DEFINITIONS (lean)
+    │   ├── agents/
+    │   │   ├── evaluator.md               adversarial validator
+    │   │   └── researcher.md              internal + external research
+    │   ├── commands/
+    │   │   ├── collect.md                 data collection (realtime-transcription)
+    │   │   ├── deliver.md                 browser validation (dashboard)
+    │   │   ├── env-setup.md               infra setup
+    │   │   ├── expand.md                  scenario expansion
+    │   │   ├── host-teams-meeting-auto.md create live meetings
+    │   │   ├── iterate.md                 sandbox iteration
+    │   │   └── replay-teams-meeting.md    replay transcripts
+    │   └── settings.local.json            Claude Code config
+    │
+    ├── .worktrees/                     ← EPHEMERAL (gitignored)
+    │   └── {mission-name}/                isolated branch per mission
+    │
+    └── deploy/                         ← INFRASTRUCTURE
+        ├── compose/                       docker-compose + Makefile
+        └── env/                           env templates
+```
+
+### What goes where
+
+```
+Question                                    Answer
+──────────────────────────────────────────  ──────────────────────────────
+Where is the system design for a feature?   features/{name}/README.md (Design section)
+Where is the current state of a feature?    features/{name}/README.md (State section)
+Where is the execution evidence?            features/{name}/tests/findings.md
+Where are service boundaries defined?       services/{name}/README.md or packages/{name}/README.md
+Where is a mission defined?                 conductor/missions/{name}.md
+Where are agent roles defined?              .claude/agents/{role}.md
+Where are testing tools?                    .claude/commands/{tool}.md
+Where is ephemeral mission state?           .worktrees/{name}/conductor/
+Where are infra configs?                    deploy/
+```
+
+### Rules for keeping it clean
+
+```
+1. One README per feature, service, and package — no CLAUDE.md duplicates
+2. README has Design (spec) and State (proof) — separated by ---
+3. Feature README lists code ownership → conductor follows the chain
+4. .claude/agents/ has only active roles — evaluator + researcher
+5. .claude/commands/ has only reusable tools — not one-off scripts
+6. No agent memory files in .claude/ — research results go in feature findings
+7. No stale lock files, no empty files, no dead configs
+8. .worktrees/ is gitignored — ephemeral, cleaned after merge
+9. conductor/batches/ is ephemeral — mission output, not permanent state
+10. Permanent state is in README (State section) + findings.md — nowhere else
 ```
 
 ## Observability
