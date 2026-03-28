@@ -672,9 +672,39 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
   local batch_stream="$BATCH_DIR/stream-${iteration}.jsonl"
   local batch_meta="$BATCH_DIR/meta-${iteration}.json"
 
-  # Run claude with stream-json — every tool call, edit, bash command is an event
-  # Use --add-dir to ensure claude operates in the correct directory (worktree or main repo)
-  claude -p "Execute the mission. Read conductor/mission.md and conductor/state.json first." \
+  # Build team prompt: coordinator creates dev + validator team
+  local team_prompt_file="$BATCH_DIR/team-prompt-${iteration}.txt"
+  cat > "$team_prompt_file" <<'TEAMEOF'
+You are the mission coordinator. Your job:
+
+1. Create a team with TeamCreate named "mission-iter-ITER"
+2. Spawn a dev agent (general-purpose) with this prompt:
+   "You are the dev agent. Read conductor/mission.md and the system prompt for context.
+    Diagnose → fix → deploy → verify. Send progress to validator after each major step.
+    When done, send your final score claim to validator and wait for verdict."
+3. Spawn a validator agent (general-purpose) with this prompt:
+   "You are the validator. Read .claude/agents/evaluator.md for your protocol.
+    Review dev's work as it arrives via messages. Check constraints, evidence, regressions.
+    Send issues back to dev during implementation — don't wait until the end.
+    When dev claims done, verify and write verdict to conductor/evaluator-verdict.md.
+    Respond with ACCEPT {score} or REJECT (iterate) with reasons."
+4. Monitor the team. When validator sends ACCEPT or REJECT, shut down the team.
+5. Write a summary of what happened to conductor/batches/batch-ITER.log
+6. Update conductor/state.json and features findings.
+
+Replace ITER with the current iteration number from conductor/state.json.
+Do NOT ask the human anything. You are autonomous.
+TEAMEOF
+
+  # Replace ITER placeholder
+  sed -i "s/ITER/$iteration/g" "$team_prompt_file"
+
+  # Combine: system context (READMEs) + team instructions
+  cat "$team_prompt_file" >> "$prompt_file"
+
+  # Run claude with team coordination
+  # Use --add-dir to ensure claude operates in the correct directory
+  claude -p "Read the system prompt. Create the team and run the mission." \
     --append-system-prompt-file "$prompt_file" \
     --add-dir "$REPO" \
     --permission-mode auto \
@@ -889,11 +919,26 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
     python3 "$CHECK_SCRIPT" --snapshot --state "$STATE_FILE" >/dev/null
     log "Score snapshot taken after iteration $iteration"
 
-    # Run evaluator
-    if run_evaluator "$iteration"; then
-      log "Evaluation passed for iteration $iteration"
+    # Check validator verdict (written by validator agent inside the team)
+    if [[ -f "$VERDICT_FILE" ]]; then
+      if grep -qi "ACCEPT" "$VERDICT_FILE"; then
+        local accepted_score
+        accepted_score=$(grep -oi "ACCEPT [0-9]*" "$VERDICT_FILE" | head -1 | grep -o "[0-9]*" || echo "?")
+        log "Validator ACCEPTED at score $accepted_score for iteration $iteration"
+      elif grep -qi "REJECT" "$VERDICT_FILE"; then
+        log "Validator REJECTED iteration $iteration — next iteration will address"
+        python3 -c "
+import json
+from pathlib import Path
+state_path = Path('$STATE_FILE')
+state = json.loads(state_path.read_text())
+state['last_evaluation'] = 'rejected'
+state['evaluation_context'] = Path('$VERDICT_FILE').read_text()[:500]
+state_path.write_text(json.dumps(state, indent=2) + '\n')
+"
+      fi
     else
-      log "Evaluation REJECTED for iteration $iteration — next iteration will address rejections"
+      log "No validator verdict file — team may not have completed evaluation"
     fi
 
     # Check completion
