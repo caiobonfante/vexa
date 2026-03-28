@@ -24,14 +24,14 @@ source "$ENV_FILE"
 
 MEETING_ID="${MEETING_ID:-}"
 CDP_URL="${CDP_URL:-}"
-REDIS_URL="${REDIS_URL:-redis://172.25.0.2:6379}"
-API_URL="${API_GATEWAY_URL:-http://localhost:8066}"
-PG_URL="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5448/vexa_restore}"
+REDIS_URL="${REDIS_URL:-redis://:vexa-redis-dev@localhost:6379}"
+API_URL="${API_GATEWAY_URL:-http://localhost:8056}"
+PG_URL="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5438/vexa}"
 
 TOKEN_RECORDER="${API_TOKEN}"
-TOKEN_ALICE="${TOKEN_ALICE:-vxa_user_JbJzIlIz5R60I4v4orayS02Pz3iW7lLFE4Mc3hVS}"
-TOKEN_BOB="${TOKEN_BOB:-vxa_user_MTHCuOGLJXJj5xDLpmGjPbLRN784SzIsImuX8OcQ}"
-TOKEN_CHARLIE="${TOKEN_CHARLIE:-vxa_user_6XwdTtVpZon3MvuYo5R568AFYTv6YOA9gfTkAEMq}"
+TOKEN_ALICE="${TOKEN_ALICE:-vxa_user_AliceTTSbot00000000000000000000000000}"
+TOKEN_BOB="${TOKEN_BOB:-vxa_user_BobTTSbot0000000000000000000000000000}"
+TOKEN_CHARLIE="${TOKEN_CHARLIE:-vxa_user_CharlieTTSbot000000000000000000000000}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -65,20 +65,30 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 send_bot() {
-  local name=$1 token=$2 meeting=$3 transcribe=${4:-false}
+  local name=$1 token=$2 meeting=$3 transcribe=${4:-false} voice_agent=${5:-false}
   curl -s -X POST "$API_URL/bots" \
     -H "X-API-Key: $token" \
     -H "Content-Type: application/json" \
-    -d "{\"platform\":\"google_meet\",\"native_meeting_id\":\"$meeting\",\"bot_name\":\"$name\",\"transcribe_enabled\":$transcribe}" \
+    -d "{\"platform\":\"google_meet\",\"native_meeting_id\":\"$meeting\",\"bot_name\":\"$name\",\"transcribe_enabled\":$transcribe,\"voice_agent_enabled\":$voice_agent}" \
     | python3 -c "import sys,json; print(json.load(sys.stdin).get('id','ERR'))" 2>/dev/null
 }
 
 wait_for_bot() {
   local bot_id=$1 timeout=${2:-90}
   local start=$SECONDS
+  # Look up container ID from DB
+  local cid
+  cid=$(psql "$PG_URL" -t -c "SELECT bot_container_id FROM meetings WHERE id=$bot_id;" 2>/dev/null | tr -d ' ')
   while (( SECONDS - start < timeout )); do
     local container
-    container=$(docker ps --format "{{.Names}}" | grep "vexa-bot-${bot_id}-" 2>/dev/null || true)
+    if [ -n "$cid" ]; then
+      container=$(docker ps --format "{{.Names}}" --filter "id=$cid" 2>/dev/null | head -1)
+    fi
+    if [ -z "$container" ]; then
+      # Fallback: re-query DB in case container was created after initial lookup
+      cid=$(psql "$PG_URL" -t -c "SELECT bot_container_id FROM meetings WHERE id=$bot_id;" 2>/dev/null | tr -d ' ')
+      container=$(docker ps --format "{{.Names}}" --filter "id=$cid" 2>/dev/null | head -1)
+    fi
     if [ -n "$container" ]; then
       local in_meeting
       in_meeting=$(docker logs "$container" 2>&1 | grep -c "verified to be in meeting" || true)
@@ -93,7 +103,7 @@ wait_for_bot() {
   return 1
 }
 
-REDIS_MODULE_PATH="$(find /home/dima/dev/vexa-restore/services -path '*/node_modules/redis/dist/index.js' -maxdepth 5 | head -1 | xargs dirname | xargs dirname)"
+REDIS_MODULE_PATH="$(find /home/dima/dev/vexa-agentic-runtime/services -path '*/node_modules/redis/dist/index.js' -maxdepth 5 | head -1 | xargs dirname | xargs dirname)"
 
 send_command() {
   local meeting_id=$1 payload=$2
@@ -112,10 +122,11 @@ stop_bot() {
   local bot_id=$1
   send_command "$bot_id" '{"action":"leave"}' 2>/dev/null || true
   sleep 2
-  local c=$(docker ps --format "{{.Names}}" | grep "vexa-bot-${bot_id}-" 2>/dev/null || true)
+  local cid=$(psql "$PG_URL" -t -c "SELECT bot_container_id FROM meetings WHERE id=$bot_id;" 2>/dev/null | tr -d ' ')
+  local c=$(docker ps --format "{{.Names}}" --filter "id=$cid" 2>/dev/null | head -1)
   [ -n "$c" ] && docker stop "$c" 2>/dev/null || true
-  PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore -c \
-    "UPDATE meetings SET status='stopped', end_time=NOW() WHERE id=$bot_id AND status IN ('requested','active');" 2>/dev/null || true
+  psql "$PG_URL" -c \
+    "UPDATE meetings SET status='stopped', end_time=NOW() WHERE id=$bot_id AND status IN ('requested','active','awaiting_admission','joining');" 2>/dev/null || true
 }
 
 # ─── Meeting setup ────────────────────────────────────────────────────────────
@@ -156,16 +167,16 @@ log "  Recorder joined: $RECORDER_CONTAINER"
 sleep 5
 SESSION_UID=$(docker logs "$RECORDER_CONTAINER" 2>&1 | grep -oP 'session_uid[=: ]+\K[a-f0-9-]+' | head -1 || true)
 if [ -z "$SESSION_UID" ]; then
-  SESSION_UID=$(PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore -t -c \
+  SESSION_UID=$(psql "$PG_URL" -t -c \
     "SELECT session_uid FROM meeting_sessions WHERE meeting_id=$RECORDER_ID ORDER BY id DESC LIMIT 1;" 2>/dev/null | tr -d ' ')
 fi
 log "  Session UID: $SESSION_UID"
 echo "$SESSION_UID" > "$RESULTS/session-uid.txt"
 
 log "Sending speaker bots..."
-ALICE_ID=$(send_bot "Alice" "$TOKEN_ALICE" "$MEETING_ID" false)
-BOB_ID=$(send_bot "Bob" "$TOKEN_BOB" "$MEETING_ID" false)
-CHARLIE_ID=$(send_bot "Charlie" "$TOKEN_CHARLIE" "$MEETING_ID" false)
+ALICE_ID=$(send_bot "Alice" "$TOKEN_ALICE" "$MEETING_ID" false true)
+BOB_ID=$(send_bot "Bob" "$TOKEN_BOB" "$MEETING_ID" false true)
+CHARLIE_ID=$(send_bot "Charlie" "$TOKEN_CHARLIE" "$MEETING_ID" false true)
 log "  Alice=$ALICE_ID Bob=$BOB_ID Charlie=$CHARLIE_ID"
 
 wait_for_bot "$ALICE_ID" 90 > /dev/null
@@ -212,7 +223,7 @@ log "Waiting 35s for immutability threshold (30s + buffer)..."
 sleep 35
 
 log "Fetching segments from Postgres..."
-PGPASSWORD=postgres psql -h localhost -p 5448 -U postgres -d vexa_restore \
+psql "$PG_URL" \
   -c "COPY (
     SELECT segment_id, speaker, text, start_time, end_time, language, created_at
     FROM transcriptions

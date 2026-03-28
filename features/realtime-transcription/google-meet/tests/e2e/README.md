@@ -28,7 +28,16 @@ Both scripts send TTS bots to speak, wait for pipeline completion, then dump out
 | Completeness | >= 80% |
 | WER | <= 30% |
 
-## Results (2026-03-22)
+## Results (2026-03-28)
+
+| Test | Matched | Speaker | WER (bot) | WER (DB) | Result |
+|------|---------|---------|-----------|----------|--------|
+| Basic (9 utterances) | 9/9 | 100% | 3% | 7% | PASS |
+
+Validated by independent reviewer. 14 segments in Postgres, 0 whisper failures, correct speaker attribution.
+Results: `results/e2e-2026-03-28-193707/`
+
+### Prior Results (2026-03-22)
 
 | Test | Matched | Speaker | WER | Result |
 |------|---------|---------|-----|--------|

@@ -102,14 +102,41 @@ export function useVexaWebSocket(
         const message: WebSocketIncomingMessage = JSON.parse(event.data);
 
         switch (message.type) {
+          case "transcript": {
+            // New format: per-speaker bundle with confirmed + pending arrays
+            const speaker = (message as any).speaker || "";
+            const allSegs = [
+              ...((message as any).confirmed || []),
+              ...((message as any).pending || []),
+            ];
+            for (const seg of allSegs) {
+              if (!seg.text?.trim()) continue;
+              const segment: TranscriptSegment = {
+                id: seg.segment_id || seg.absolute_start_time,
+                meeting_id: nativeId,
+                start_time: seg.start || seg.start_time || 0,
+                end_time: seg.end || seg.end_time || 0,
+                absolute_start_time: seg.absolute_start_time,
+                absolute_end_time: seg.absolute_end_time,
+                text: seg.text,
+                speaker: seg.speaker || speaker,
+                language: seg.language || "en",
+                completed: seg.completed ?? false,
+                session_uid: seg.session_uid || "",
+                created_at: seg.absolute_start_time,
+                updated_at: seg.updated_at,
+                segment_id: seg.segment_id,
+              };
+              addLiveTranscript(segment);
+              onTranscript?.(segment);
+            }
+            break;
+          }
           case "transcript.mutable":
-            // Process all segments from the payload (Vexa sends segments array)
+            // Legacy format: segments array in payload
             if (message.payload?.segments) {
               for (const seg of message.payload.segments) {
-                // Skip empty segments or those missing required fields
                 if (!seg.text?.trim() || !seg.absolute_start_time) continue;
-
-                // Convert WebSocket segment to TranscriptSegment format
                 const segment: TranscriptSegment = {
                   id: seg.segment_id || seg.absolute_start_time,
                   meeting_id: nativeId,

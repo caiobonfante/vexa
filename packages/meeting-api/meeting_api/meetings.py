@@ -333,31 +333,35 @@ async def _get_running_bots_from_runtime(user_id: int) -> list:
             name = c.get("name", "")
             meeting_id_from_name = "unknown"
             meeting_id_int = None
-            try:
-                parts = name.split("-")
-                if len(parts) > 2 and parts[0] == "meeting":
-                    meeting_id_from_name = parts[2]
-                    meeting_id_int = int(meeting_id_from_name)
-                elif len(parts) > 2 and parts[0] == "vexa" and parts[1] == "bot":
-                    meeting_id_from_name = parts[2]
-                    meeting_id_int = int(meeting_id_from_name)
-            except (ValueError, IndexError):
-                pass
 
-            # Always try metadata if name parsing didn't yield a meeting_id
+            # Primary: metadata.meeting_id (set at spawn time)
+            meta = c.get("metadata", {})
+            if meta.get("meeting_id"):
+                try:
+                    meeting_id_int = int(meta["meeting_id"])
+                    meeting_id_from_name = str(meeting_id_int)
+                except (ValueError, TypeError):
+                    pass
+
+            # Fallback: parse container name (meeting-{user_id}-{hash} or vexa-bot-{id}-...)
             if meeting_id_int is None:
-                meta = c.get("metadata", {})
-                if meta.get("meeting_id"):
-                    try:
-                        meeting_id_int = int(meta["meeting_id"])
-                        meeting_id_from_name = str(meeting_id_int)
-                    except (ValueError, TypeError):
-                        pass
+                try:
+                    parts = name.split("-")
+                    if len(parts) > 2 and parts[0] == "meeting":
+                        # Name format: meeting-{user_id}-{hash} — parts[1] is user_id, not meeting_id
+                        # Can't reliably extract meeting_id from name alone
+                        meeting_id_from_name = parts[2]
+                    elif len(parts) > 2 and parts[0] == "vexa" and parts[1] == "bot":
+                        meeting_id_from_name = parts[2]
+                        meeting_id_int = int(meeting_id_from_name)
+                except (ValueError, IndexError):
+                    pass
 
             platform = None
             native_meeting_id = None
             meeting_data = {}
             meeting_start_time = None
+            meeting_status = None
 
             if meeting_id_int is not None:
                 try:
@@ -367,6 +371,7 @@ async def _get_running_bots_from_runtime(user_id: int) -> list:
                         native_meeting_id = meeting.platform_specific_id
                         meeting_data = meeting.data or {}
                         meeting_start_time = meeting.start_time.isoformat() if meeting.start_time else None
+                        meeting_status = meeting.status
                 except Exception as e:
                     logger.error(f"DB error fetching meeting {meeting_id_int}: {e}")
 
@@ -388,6 +393,7 @@ async def _get_running_bots_from_runtime(user_id: int) -> list:
                 "start_time": meeting_start_time,
                 "labels": {},
                 "meeting_id_from_name": meeting_id_from_name,
+                "meeting_status": meeting_status,
                 "data": meeting_data,
             })
 

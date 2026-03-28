@@ -110,9 +110,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_SSL_MODE=${DB_SSL_MODE:-disable}
       - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
-      - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL}
+      - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-http://transcription-lb/v1/audio/transcriptions}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
-      - ADMIN_TOKEN=${ADMIN_API_TOKEN}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
       # Collector (formerly transcription-collector)
       - REDIS_STREAM_NAME=transcription_segments
       - REDIS_CONSUMER_GROUP=collector_group

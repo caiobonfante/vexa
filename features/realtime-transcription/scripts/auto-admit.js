@@ -18,22 +18,30 @@ async function tryAdmitGoogleMeet(page) {
       return 'dialog_confirmed';
     }
 
-    // Google Meet: individual Admit buttons
-    const buttons = document.querySelectorAll('button');
+    // Google Meet: individual Admit / Admit all buttons (check deepest matches first)
+    const buttons = document.querySelectorAll('button, div[role="button"], span[role="button"]');
     for (const btn of buttons) {
-      if (btn.textContent.trim() === 'Admit' && btn.offsetParent) {
+      const text = (btn.textContent || '').trim();
+      if (btn.offsetParent && (text === 'Admit' || text === 'Admit all' || /^Admit \d+ guest/.test(text))) {
         btn.click();
-        return 'admitted';
+        return text === 'Admit' ? 'admitted' : 'pill_clicked';
       }
     }
 
-    // Google Meet: "Admit N guest(s)" pill
-    const roleButtons = document.querySelectorAll('div[role="button"]');
-    for (const el of roleButtons) {
-      if (/Admit \d+ guest/.test(el.textContent || '') && el.offsetParent) {
-        el.click();
-        return 'pill_clicked';
+    // Google Meet: "Admit N guest(s)" pill — search all divs, pick smallest matching element
+    let bestPill = null;
+    let bestLen = Infinity;
+    const divs = document.querySelectorAll('div, span');
+    for (const el of divs) {
+      const text = (el.textContent || '').trim();
+      if (/^Admit \d+ guest/.test(text) && el.offsetParent && text.length < bestLen) {
+        bestPill = el;
+        bestLen = text.length;
       }
+    }
+    if (bestPill) {
+      bestPill.click();
+      return 'pill_clicked';
     }
 
     return 'none';

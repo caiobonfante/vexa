@@ -1800,8 +1800,14 @@ async def websocket_multiplex(ws: WebSocket):
                         continue
 
                     url = f"{TRANSCRIPTION_COLLECTOR_URL}/ws/authorize-subscribe"
-                    headers = {"X-API-Key": api_key}
-                    resp = await app.state.http_client.post(url, headers=headers, json={"meetings": payload_meetings})
+                    # Resolve token to user_id so downstream auth works correctly
+                    auth_headers: Dict[str, str] = {"X-API-Key": api_key}
+                    user_data = await _resolve_token(app.state.http_client, api_key)
+                    if user_data:
+                        auth_headers["x-user-id"] = str(user_data["user_id"])
+                        auth_headers["x-user-scopes"] = ",".join(user_data.get("scopes", []))
+                        auth_headers["x-user-limits"] = str(user_data.get("max_concurrent_bots", 1))
+                    resp = await app.state.http_client.post(url, headers=auth_headers, json={"meetings": payload_meetings})
                     if resp.status_code != 200:
                         await ws.send_text(json.dumps({"type": "error", "error": "authorization_service_error", "status": resp.status_code, "detail": resp.text}))
                         continue

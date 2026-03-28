@@ -740,6 +740,7 @@ class BotStatus(BaseModel):
     start_time: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
     meeting_id_from_name: Optional[str] = None
+    meeting_status: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
 
     @field_validator('normalized_status')

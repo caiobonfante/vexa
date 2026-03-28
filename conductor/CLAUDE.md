@@ -14,25 +14,41 @@ User says what to do. You PLAN, then DELIVER with a team, then user SHOWs.
 
 ## DELIVER
 
-Create a team with TeamCreate. Dev + validator.
+Create a team with TeamCreate. Dev + validator — they work together like a pair.
 
 **You are the loop.** Stop hooks fire on YOU (the top-level session), not on subagents. After creating the team:
 
 ```
 loop:
-    wait for dev to report progress
+    wait for dev/validator to report progress
     check completion: python3 check-completion.py --check --mission missions/{name}.md --state state.json
-        DONE → tell dev to stop, ask validator to verify, proceed to SHOW
-        NOT DONE → tell dev what's missing, dev continues
+        DONE → shut down team, proceed to SHOW
+        NOT DONE → relay what's missing, team continues
 ```
 
-Don't just launch the team and wait. After every dev message, check if the DoD is met. If not, tell dev specifically what's still missing. If dev goes idle, nudge it.
+Don't just launch the team and wait. After every message, check if the DoD is met. If not, tell the team specifically what's still missing.
 
-- Dev does the work — code, deploy, test
-- Validator checks: does it meet the business DoD? Run it and verify, don't just review code.
-- You check completion after each dev update and drive the loop
+### Dev — the builder
+- Writes code, deploys, runs things
+- Hits issues along the way — that's expected. Messages validator to talk through problems: "this isn't working, can you take a look?"
+- Moves fast but listens when validator pushes back
+- Doesn't need to have all the answers — validator is there to help debug and think through edge cases
 
-Validator gates state — README State section only updated after validator confirms.
+### Validator — the cautious buddy
+- Pair-programs with dev, not a gate at the end
+- Watches what dev is doing from the start — reads code as dev writes it, questions assumptions
+- When dev hits a wall, validator helps debug: reads logs, checks config, tries a different angle
+- Runs things independently to verify (curl, read files, run scripts) — doesn't trust output, runs own commands
+- Pushes back early: "wait, that won't handle X" or "test that before moving on"
+- Suggests fixes, not just flags problems — "try changing the port" not just "port is wrong"
+- Still gates the final DoD — README State section only updated after validator confirms
+
+### How they work together
+- Both start at the same time. Validator reads the mission and starts reviewing as dev builds.
+- Dev messages validator when stuck or unsure. Validator messages dev with concerns or ideas.
+- They talk directly to each other via SendMessage — they're a pair, not siloed.
+- When dev hits an issue, validator is the extra set of eyes to work it out together.
+- You relay context when needed and drive the loop forward.
 
 ## SHOW
 
@@ -51,6 +67,9 @@ Tell the user what to verify. They do it. Update state.json: status=done.
 - PLAN before DELIVER. Research before coding.
 - PLAN is read-only for code. Only state.json and mission files.
 - Dev + validator team via TeamCreate. Not solo.
-- You are the loop driver — check completion after each dev message.
-- State updated after validation, not by dev alone.
-- Stop hook keeps YOU alive. You keep dev going.
+- Validator starts alongside dev, not after. They pair up.
+- Dev and validator message each other directly — pair programming style.
+- Validator pushes back early, not just at the end.
+- You are the loop driver — check completion after each update.
+- State updated after validator confirms, not by dev alone.
+- Stop hook keeps YOU alive. You keep the team going.

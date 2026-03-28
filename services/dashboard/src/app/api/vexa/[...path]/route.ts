@@ -43,7 +43,7 @@ async function proxyRequest(
             id: parseInt(id) || 0,
             platform: b.platform,
             native_meeting_id: b.native_meeting_id,
-            status: "active",
+            status: b.meeting_status || "active",
             start_time: b.start_time || b.created_at,
             end_time: null,
             bot_container_id: b.container_id,

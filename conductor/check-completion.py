@@ -370,6 +370,30 @@ def main():
             print("No mission file found. Nothing to check.", file=sys.stderr)
             sys.exit(2)
 
+        # Special-case: test-loop mission checks file directly
+        mission_name = mission_path.stem
+        if mission_name == "test-loop":
+            conductor_dir = state_path.parent
+            output = conductor_dir / "test-loop-output.md"
+            if not output.exists():
+                print("NOT DONE: conductor/test-loop-output.md does not exist yet")
+                sys.exit(1)
+            text = output.read_text()
+            attempts = re.findall(r"## Attempt (\d+)", text)
+            found = sorted(set(attempts))
+            if found == ["1", "2", "3"]:
+                timestamps = re.findall(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", text)
+                if len(set(timestamps)) >= 3:
+                    print("DONE: all 3 attempts present with distinct timestamps")
+                    sys.exit(0)
+                else:
+                    print(f"NOT DONE: need 3 different timestamps, found {len(set(timestamps))} unique")
+                    sys.exit(1)
+            else:
+                missing = [str(i) for i in [1, 2, 3] if str(i) not in found]
+                print(f"NOT DONE: missing Attempt section(s): {', '.join(missing)}. Found so far: {found}")
+                sys.exit(1)
+
         # Check stop conditions
         should_stop, reason = check_stop_condition(state, mission)
         if should_stop:

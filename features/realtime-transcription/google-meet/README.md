@@ -262,3 +262,28 @@ Real live Google Meet meetings. No mocks — real platform behavior, real audio,
 
 - **[`tests/speaker-voting/`](tests/speaker-voting/)** — Speaker identity unit/integration tests. 9 scenarios, 41 segments, 0 misattributed, 100% speaker accuracy.
 - **[`tests/e2e/`](tests/e2e/)** — End-to-end pipeline validation: TTS bots speak into live Google Meet, audio flows through Whisper, segments persist to Postgres. Stress test: 18/20 segments found, 100% speaker accuracy, 15% WER.
+
+---
+
+## State
+
+**Last validated:** 2026-03-28 (session 49115cf8, run e2e-2026-03-28-193707)
+
+| Metric | Threshold | Bot-Level | DB-Level |
+|--------|-----------|-----------|----------|
+| Speaker accuracy | ≥90% | **100%** (9/9) | **100%** (9/9) |
+| Completeness | ≥80% | **100%** (9/9) | **100%** (9/9) |
+| WER | ≤30% | **3%** | **7%** |
+
+- 14 segments persisted to Postgres, 0 whisper failures (44 successful calls)
+- Full pipeline validated: TTS → Google Meet → Recorder → Speaker Identity → Whisper → Redis → Collector → Postgres
+- Results stored: `tests/e2e/results/e2e-2026-03-28-193707/`
+
+**Fixes applied this run:**
+- `.env`: transcription service URL fixed (`transcription-lb` not `transcription-service`), token added
+- `test-e2e.sh`: stale DB config, Redis URL, tokens, container name patterns updated
+- `auto-admit.js`: pill detection improved (still intermittent — manual admit needed in some cases)
+
+**Open issues:**
+- Auto-admit unreliable for "Admit N guests" pill — not a pipeline issue, but friction for fully autonomous testing
+- Minor ASR artifacts: "APVI" for "API", one echo segment (pipeline artifact)
