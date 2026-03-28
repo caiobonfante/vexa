@@ -16,72 +16,125 @@ The conductor is a framework for autonomous software improvement that solves thi
 
 **Human interface.** The user manages everything from chat. Describe a mission → the framework runs it. Check progress → the dashboard shows live activity, costs, scores. Intervene → redirect the team mid-work. The user never edits config files, runs scripts manually, or reads raw logs.
 
-## How It Works
-
-Two layers: a dumb outer loop and a smart inner team.
+## Three Stages
 
 ```
-OUTER LOOP (run.sh — bash, dumb, never makes decisions)
+PLAN → DELIVER → EVALUATE
+```
+
+Each stage has different roles, different outputs, and different trust models.
+
+### Stage 1: PLAN (human-driven)
+
+```
+Roles: human + conductor + researcher
+
+Human describes what they want
     |
     v
-create worktree for mission (isolated git branch)
+Conductor reads existing READMEs
+    → what's the current state?
+    → what's already designed vs what's missing?
     |
     v
+Researcher investigates (if needed)
+    → read code to understand current behavior
+    → check existing endpoints, services, infra
+    → report findings
+    |
+    v
+Human + conductor update READMEs
+    → scaffold new feature README (Design section: why, data flow, constraints)
+    → update service READMEs if new contracts needed
+    → all quality bar items = FAIL, all certainty = 0
+    |
+    v
+Create mission file
+    → focus, target (from README quality bar FAILs), constraints, iteration limit
+    → human approves before launch
+
+Output:  updated READMEs (Design), mission file, worktree
+Trust:   human is the authority
+```
+
+### Stage 2: DELIVER (autonomous, adversarial)
+
+```
+Roles: dev agent + validator agent, inside a dumb loop
+
+DUMB LOOP (bash — keeps going, never makes decisions):
 ┌─────────────────────────────────────────────────────────┐
-│ ITERATION (repeats until goal met, plateau, or limit)   │
 │                                                         │
-│   read mission.md → what's the target?                  │
-│   read state.json → where are we?                       │
+│   read mission + state → where are we?                  │
 │   plateau? → inject alert                               │
-│   last iteration rejected? → inject rejection context   │
+│   last iteration rejected? → inject context             │
 │                                                         │
-│   spawn claude session that creates:                    │
+│   SMART TEAM (TeamCreate — dev + validator):            │
 │   ┌───────────────────────────────────────────────────┐ │
-│   │ INNER TEAM (TeamCreate — smart, collaborative)    │ │
 │   │                                                   │ │
 │   │  Dev agent                                        │ │
-│   │    reads feature README (design) + service READMEs│ │
+│   │    reads feature + service READMEs                │ │
 │   │    diagnoses → fixes → deploys → verifies         │ │
 │   │    sends progress to validator as it works         │ │
 │   │                                                   │ │
 │   │  Validator agent                                  │ │
-│   │    reviews dev's work in real-time                │ │
+│   │    reviews in real-time (not after)               │ │
 │   │    checks constraints, evidence, regressions      │ │
 │   │    sends issues back DURING implementation        │ │
 │   │    writes verdict: ACCEPT or REJECT               │ │
 │   │                                                   │ │
-│   │  Coordinator (chat session)                       │ │
-│   │    monitors, relays to user                       │ │
-│   │    user intervenes: "focus on X", "stop"          │ │
 │   └───────────────────────────────────────────────────┘ │
 │                                                         │
-│   team finishes → update state files                    │
+│   team finishes → update README State section            │
 │   check-completion.py: target met?                      │
 │       yes → STOP                                        │
-│       no  → LOOP                                        │
+│       no  → LOOP (spawn team again with rejection context) │
 │                                                         │
-│   stop signal? (mission.stop file) → STOP               │
-│   iteration limit? → STOP                               │
-│   plateau? (same scores 3x) → STOP with diagnosis       │
+│   stop signals: mission.stop file, iteration limit,     │
+│                 plateau (same scores 3x)                │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
-    |
-    v
-MERGE (when ready)
-    pre-merge gate:
-        evaluator accepted?
-        constraints not violated?
-        no regressions?
-        tests pass?
-    all pass → merge worktree branch into main
-    any fail → BLOCKED, show what failed
+
+Output:  code changes, updated READMEs (State section), findings.md
+Trust:   nobody — adversarial by design
 ```
 
-**The outer loop is deliberately dumb.** It doesn't understand the codebase, doesn't make decisions about what to fix, doesn't evaluate quality. It only asks: "are we done?" If not, it spawns the team again with context about what went wrong last time.
+The dumb loop can't be talked out of continuing. The smart team can't avoid scrutiny. Dev and validator have opposing incentives — progress requires both to agree.
 
-**The inner team is deliberately smart.** Dev and validator collaborate in real-time. The validator catches issues during implementation — not hours later in a separate review. The user can intervene through the coordinator at any point.
+### Stage 3: EVALUATE (human-driven)
 
-**The separation matters.** The dumb loop can't be talked out of continuing. The smart team can't avoid scrutiny. The human can steer without micromanaging.
+```
+Roles: human + conductor
+
+Conductor reports:
+    → what files changed (git diff)
+    → what the dev claimed vs what the validator found
+    → cost, tokens, iterations
+    → quality bar: what moved from FAIL → PASS
+    → what's still broken (known issues)
+    |
+    v
+Human reviews
+    → does this actually work? (manual testing in the wild)
+    → do the README changes make sense?
+    → are the constraints still right?
+    |
+    v
+Decision:
+    merge   → pre-merge gate (constraints, regressions, evidence)
+              → merge worktree branch into main
+    reject  → update mission with feedback, re-run DELIVER
+    close   → not worth pursuing, clean up worktree
+
+Output:  merged code or rejection with reasons
+Trust:   human is the authority
+```
+
+### Why three stages
+
+Plan and Evaluate are human-driven. Delivery is autonomous. The human bookends the work — sets direction, then judges the result. The machine runs in between.
+
+The machine never decides WHAT to build (Plan) or WHETHER it's good enough (Evaluate). It only decides HOW to build it (Deliver) — and even then, it's adversarial.
 
 ## Principles
 
