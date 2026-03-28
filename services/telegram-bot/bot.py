@@ -671,7 +671,8 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     parsed = _parse_meeting_url(meeting_url)
 
     try:
-        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
+        # Use user's own token for gateway auth (gateway validates via admin-api)
+        _headers = {"X-API-Key": state.token} if state.token else {}
         async with httpx.AsyncClient(timeout=30, headers=_headers) as client:
             body = {"meeting_url": meeting_url}
             if parsed:
@@ -725,7 +726,7 @@ async def stop_meeting_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     try:
-        _headers = {"X-API-Key": AGENT_API_TOKEN} if AGENT_API_TOKEN else {}
+        _headers = {"X-API-Key": state.token} if state.token else {}
         async with httpx.AsyncClient(timeout=15, headers=_headers) as client:
             resp = await client.delete(f"{GATEWAY_URL}/bots/{state.active_meeting}")
             meeting_ref = state.active_meeting
