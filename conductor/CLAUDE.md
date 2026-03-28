@@ -84,12 +84,48 @@ User says "go" or "deliver" → launch ./run.sh --mission {name}
 - Run E2E tests (that's DELIVER)
 - Spend minutes investigating — spend seconds checking
 
-## DELIVER stage (autonomous)
+## DELIVER stage (you actively monitor)
 
-The conductor handles this via run.sh. You monitor and can intervene:
-- `tail -f .worktrees/{name}/conductor/conductor.log`
-- Dashboard: http://localhost:8899
-- Stop: `touch .worktrees/{name}/conductor/mission.stop`
+After launching run.sh, you do NOT sit idle. You poll every 30-60 seconds and report:
+
+```
+while delivery is running:
+    check stream size — is it growing? (stalled = problem)
+    check processes — are claude processes alive?
+    check containers — are bot containers still running? (died = test failed)
+    check conductor.log — did iteration complete?
+    |
+    if stalled or failure detected:
+        report to user immediately: "Bots died, test failing, dev agent sleeping"
+        intervene: kill stuck process, inject context, or stop mission
+    |
+    if progress:
+        brief update to user: "Iteration 1, E2E running, 3 bots active, $X spent"
+    |
+    sleep 30s
+```
+
+**Do NOT wait for the user to ask "what's happening?"**
+You are the monitor. Proactively report progress and failures.
+
+Commands for monitoring:
+```bash
+# Stream growing?
+wc -c .worktrees/{name}/conductor/batches/stream-1.jsonl
+
+# Processes alive?
+ps aux | grep "claude" | grep -v grep | wc -l
+
+# Bot containers alive?
+docker ps --format "{{.Names}}\t{{.Status}}" | grep "meeting-"
+
+# Conductor log progress?
+tail -5 .worktrees/{name}/conductor/conductor.log
+
+# Parse latest activity?
+python3 conductor/parse-stream.py .worktrees/{name}/conductor/batches/stream-1.jsonl /tmp/status.log /tmp/status.json 1
+tail -10 /tmp/status.log
+```
 
 ## EVALUATE stage (you + human)
 
