@@ -125,7 +125,9 @@ export class RecordingService {
     const fileData = await fs.promises.readFile(filePath);
     const fileStats = await fs.promises.stat(filePath);
     const format = path.extname(filePath).slice(1) || 'wav';
-    const durationSeconds = format === 'wav' ? this.totalSamples / this.sampleRate : undefined;
+    const durationSeconds = format === 'wav'
+      ? this.totalSamples / this.sampleRate
+      : (this.startTime > 0 ? (Date.now() - this.startTime) / 1000 : undefined);
 
     log(`[Recording] Uploading ${fileStats.size} bytes to ${callbackUrl}`);
 

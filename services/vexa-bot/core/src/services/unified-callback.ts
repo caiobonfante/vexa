@@ -148,6 +148,7 @@ export function mapExitReasonToStatus(
     // Successful exits (completed)
     switch (reason) {
       case "admission_failed":
+      case "admission_timeout":
         return { status: "completed", completionReason: "awaiting_admission_timeout" };
       case "self_initiated_leave":
         return { status: "completed", completionReason: "stopped" };

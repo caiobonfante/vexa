@@ -100,7 +100,7 @@ async def _find_meeting_data_recording(db: AsyncSession, user_id: int, recording
             Meeting.data["recordings"].cast(JSONB).isnot(None),
         )
         .where(
-            text("data->'recordings' @> :pattern").bindparams(
+            text("data->'recordings' @> cast(:pattern as jsonb)").bindparams(
                 pattern=json.dumps([{"id": recording_id}])
             )
         )

@@ -109,13 +109,13 @@ libs/shared-models                         → Transcription, Recording, MediaFi
 ## Quality Bar
 
 ```
-Capture rate (2 speakers)       >= 90%     current: 100%      PASS
-Capture rate (3+ speakers)      >= 80%     current: 92%       PASS
-Speaker accuracy (2 speakers)   >= 70%     current: 100%      PASS
-Speaker accuracy (3+ speakers)  >= 70%     current: 82%       PASS
-WER                             <= 25%     current: 6.6%      PASS
-Dashboard renders transcript    renders    current: untested   FAIL
-Click segment → audio seeks     < 3s       current: untested   FAIL
+Capture rate (2 speakers)       >= 90%     current: 100%      PASS   2026-03-28
+Capture rate (3+ speakers)      >= 80%     current: 92%       PASS   2026-03-23
+Speaker accuracy (2 speakers)   >= 70%     current: 100%      PASS   2026-03-28
+Speaker accuracy (3+ speakers)  >= 70%     current: 82%       PASS   2026-03-23
+WER                             <= 25%     current: 6.6%      PASS   2026-03-23
+Dashboard renders transcript    renders    current: renders    PASS   2026-03-28
+Click segment → audio seeks     < 3s       current: <1s       PASS   2026-03-28
 Video playback                  renders    current: untested   FAIL
 ```
 
@@ -128,15 +128,16 @@ Video playback                  renders    current: untested   FAIL
 ## Certainty
 
 ```
-Recording uploaded to MinIO         90   webm downloaded (551KB)                 2026-03-23
-Speaker events persisted            90   15 events in meeting.data               2026-03-23
-POST /transcribe succeeds           90   6 segments, language=en                 2026-03-23
-Speaker mapping >= 70%              90   82% on 3 speakers                       2026-03-23
-GET /transcripts returns segments   80   works with vxa_user_ token              2026-03-23
-Dashboard renders transcript        30   not browser-tested                      2026-03-23
-Dashboard playback seeks correctly  30   duration_seconds=null may break         2026-03-23
+Recording uploaded to MinIO         95   2MB webm in MinIO, downloadable         2026-03-28
+Speaker events persisted            95   150 events, 2 speakers in JSONB         2026-03-28
+Real-time transcription segments    95   6 segments with timestamps in Postgres  2026-03-28
+Speaker mapping >= 70%              95   100% on 2-speaker meeting (6/6)         2026-03-28
+GET /transcripts returns segments   95   6 segments via api-gateway with auth    2026-03-28
+Dashboard renders transcript        90   browser-verified via CDP, segments show 2026-03-28
+Dashboard playback seeks correctly  90   click-to-seek works (<1s accuracy)      2026-03-28
 Video playback in dashboard         30   3 bugs fixed, container rebuild needed  2026-03-24
 3+ speaker stress test              90   82% speaker, 92% capture               2026-03-23
+POST /transcribe endpoint           20   405 — not implemented in meeting-api    2026-03-28
 ```
 
 ## Constraints
@@ -153,8 +154,10 @@ Video playback in dashboard         30   3 bugs fixed, container rebuild needed 
 
 ## Known Issues
 
-- `duration_seconds=null` on recordings may break audio seek
+- `duration_seconds=null` on recordings — audio still plays and seek works, but duration display broken
+- `POST /meetings/{id}/transcribe` returns 405 — endpoint not implemented in meeting-api; real-time transcription covers same path
 - Short utterances (1 word) get "Unknown" speaker
 - Rapid speaker turns misattribute due to event boundary lag
 - Whisper splits long monologues → scorer can't match 1:N
 - Video needs container rebuild (ffmpeg added to runtime Dockerfile)
+- Bot only captures other participants' audio (echo cancellation) — single-bot meetings produce no transcription
