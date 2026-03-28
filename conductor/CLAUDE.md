@@ -1,35 +1,36 @@
 # Conductor
 
-How to run a mission. Three steps.
+## PLAN (this conversation)
 
-## 1. PLAN (this conversation)
+1. **Acceptance criteria** — what does the user actually need to work? Not scores, not quality bars. Real thing: "I open the dashboard, click a meeting, see live transcripts." That's the gate.
 
-```
-Read feature README → score, quality bar, constraints
-Quick resource check → services up? env set?
-Create missions/{name}.md
-Build batches/{name}-prompt.txt:
-    cat missions/{name}.md > batches/{name}-prompt.txt
-    cat features/{focus}/README.md >> batches/{name}-prompt.txt
-    # append service READMEs from Code Ownership section
-```
+2. **Resource check** — are the services needed for this actually running? Quick curl, docker ps. If something critical is down, say so and stop. Don't launch into a broken environment.
 
-## 2. DELIVER (user runs this)
+3. **Build prompt file** — mission + feature README + service READMEs → `batches/{name}-prompt.txt`
 
+4. **Give the user the command:**
 ```bash
 CONDUCTOR_MISSION={name} claude --worktree {name} \
     --append-system-prompt-file conductor/batches/{name}-prompt.txt
 ```
 
-One terminal. Interactive. User sees everything. Stop hook keeps it going until target met.
+## DELIVER (user runs the command)
 
-## 3. EVALUATE (this or any conversation)
+Interactive Claude session. User sees everything. Stop hook keeps it going.
 
-Review what changed. Merge or reject.
+Inside the session, a team:
+- **Dev** does the work
+- **Evaluator** checks: are we meeting the REAL acceptance criteria? Not "code looks right" — actually run it and verify. If dev claims "fixed" but the dashboard still shows stale data, evaluator rejects.
+
+The loop: dev works → evaluator checks against acceptance criteria → not met → dev continues. Stop hook enforces this. Session doesn't end until acceptance criteria pass or hard blocker (infra down, missing credentials, needs human action).
+
+## SHOW (user validates)
+
+User checks it themselves. Opens the dashboard. Clicks the meeting. Sees live transcripts. Either it works or it doesn't. No scores, no findings — just: does the thing work?
 
 ## Rules
 
-- PLAN is read-only — no code edits
-- Prompt file has feature README + service READMEs + mission
-- Stop hook fires on CONDUCTOR_MISSION env var only
-- User runs delivery themselves — never nest claude inside claude
+- Acceptance criteria are from the user, in their words
+- PLAN only checks resources, doesn't fix them
+- DELIVER never exits until criteria met or hard blocker
+- SHOW is the user doing the thing, not an agent claiming it works
