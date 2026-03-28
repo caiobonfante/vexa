@@ -842,27 +842,25 @@ async def save_browser_session(token: str):
     if not container_name:
         raise HTTPException(status_code=500, detail="Session missing container_name")
 
-    # Browser session listens on browser_session:{container_name} but container_name
-    # in BOT_CONFIG may be unset (defaults to 'default'). Subscribe first to avoid
-    # missing the response, but subtract 1 from listener count (our own sub).
-    channel = f"browser_session:{container_name}"
+    # Try container_name channel first, fall back to 'default' (browser sessions
+    # use config.container_name || 'default' as their Redis channel).
+    channels_to_try = [f"browser_session:{container_name}"]
+    if container_name != "default":
+        channels_to_try.append("browser_session:default")
 
+    channel = None
+    for ch in channels_to_try:
+        listeners = await redis_client.publish(ch, "save_storage")
+        if listeners > 0:
+            channel = ch
+            break
+
+    if not channel:
+        raise HTTPException(status_code=404, detail="No browser session listening")
+
+    # Subscribe to listen for the response
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(channel)
-
-    # Publish — our own subscription counts as 1 listener, so real listeners = N - 1
-    listeners = await redis_client.publish(channel, "save_storage")
-
-    if listeners <= 1:
-        # Only our own sub is listening — try 'default' channel
-        await pubsub.unsubscribe(channel)
-        channel = "browser_session:default"
-        await pubsub.subscribe(channel)
-        listeners = await redis_client.publish(channel, "save_storage")
-
-    if listeners <= 1:
-        await pubsub.unsubscribe(channel)
-        raise HTTPException(status_code=404, detail="No browser session listening")
 
     # Wait for save_storage:done or save_storage:error response
     try:
