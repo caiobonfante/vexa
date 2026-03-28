@@ -1,54 +1,40 @@
 # Conductor
 
-One session does everything. User launches it, it PLANs, DELIVERs, and the user SHOWs.
+User says what to do. You PLAN, then DELIVER with a team, then user SHOWs.
 
-## PLAN (first thing you do)
+## PLAN
 
-1. **Business DoD** — ask the user: what does "done" look like? Something they can verify by using the system end-to-end. Not unit tests — the real thing working.
+1. Read the mission from `missions/{name}.md` (or create one from what user said)
+2. Read feature README — understand design, constraints, current state
+3. Research — what exists, what's missing, what's the gap
+4. Validate DoD — is it testable end-to-end? Not unit tests.
+5. Check resources — services up? Blockers?
 
-2. **Research** — read the feature README, check what exists vs what's needed. Identify the gap.
+## DELIVER
 
-3. **Validate DoD** — is it testable? Specific enough? Can you verify it against the running system?
+Create a team with TeamCreate. Dev + validator. They work in this session.
 
-4. **Check resources** — services up? Env set? Hard blockers? If critical infra is down, report and stop.
+- Dev does the work
+- Validator checks: does it meet the business DoD? Run it and verify, don't just review code.
+- Stop hook keeps the session going until DoD met or hard blocker
 
-5. **Build context** — read service READMEs from Code Ownership section. You now have full constraints.
-
-Then move to DELIVER. No separate session. No nesting. You just keep going.
-
-## DELIVER (you do the work)
-
-Create a team (dev + validator). They work together in this session.
-
-- **Dev** does the work — code, deploy, test
-- **Validator** checks against business DoD — does the thing actually work? Not code review — run it and verify.
-
-Stop hook keeps the session going until DoD passes or hard blocker.
-
-**Validator gates state.** Dev produces output. Validator confirms it meets DoD. Only then does README State section update.
+Validator gates state — README State section only updated after validator confirms.
 
 ## SHOW
 
-You tell the user what to verify. User does the thing. Works or doesn't.
+Tell the user what to verify. They do it.
 
 ## READMEs
 
-Source of truth. Every feature/service README:
-
 ```
-<!-- DESIGN: what we want -->
-Why, Data Flow, Code Ownership, Constraints
-
+<!-- DESIGN: what we want -->    ← feeds PLAN
 ---
-
-<!-- STATE: what we got — updated after validation only -->
-Quality Bar, Certainty, Known Issues
+<!-- STATE: what we got -->      ← updated after validation only
 ```
 
 ## Rules
 
-- One session, no nesting, no backgrounding
-- PLAN researches and validates DoD before coding
-- DELIVER: dev + validator team, Stop hook enforces loop
-- State only updated after validator confirms
-- SHOW is the user doing the thing
+- PLAN before DELIVER. Research before coding.
+- Dev + validator team via TeamCreate. Not solo.
+- State updated after validation, not by dev alone.
+- Stop hook enforces: session doesn't end until DoD met.
