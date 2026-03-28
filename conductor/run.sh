@@ -673,41 +673,38 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
   local batch_stream="$BATCH_DIR/stream-${iteration}.jsonl"
   local batch_meta="$BATCH_DIR/meta-${iteration}.json"
 
-  # --- DEV: do the work ---
-  claude -p "Read conductor/mission.md. Read the system prompt — it has the feature README and service READMEs with constraints. Do the work: diagnose, fix, deploy, verify. Update findings.md with evidence. Update the README State section. Be autonomous — don't ask questions." \
+  # Two agents, full context each, talking to each other. No coordinator.
+  cat >> "$prompt_file" <<'TEAMEOF'
+
+## YOUR JOB
+
+Create a team. Spawn dev and validator. Let them work together. When validator writes a verdict, exit.
+
+1. TeamCreate("iter-ITERATION")
+2. Spawn dev (general-purpose):
+   "You are the dev. The system prompt has the full feature README + service READMEs + mission.
+    Do the work. Talk to validator as you go — share what you're doing and what you found.
+    When done, ask validator for verdict."
+3. Spawn validator (general-purpose):
+   "You are the validator. Same full context as dev.
+    Read .claude/agents/evaluator.md for your protocol.
+    Watch what dev does. Push back if something looks wrong.
+    When dev says done, verify independently and write verdict to conductor/evaluator-verdict.md."
+4. When validator writes verdict → exit.
+
+Do NOT micro-manage. Do NOT add rules about polling or timeouts.
+The agents have full context — let them work.
+TEAMEOF
+
+  sed -i "s/ITERATION/$iteration/g" "$prompt_file"
+
+  claude -p "Read the system prompt. Create the team and let them work." \
     --append-system-prompt-file "$prompt_file" \
     --permission-mode auto \
     --output-format stream-json \
     --verbose \
     $budget_flag \
     > "$batch_stream" 2>&1
-  local dev_exit=$?
-
-  # Parse dev output
-  if [[ -s "$batch_stream" ]]; then
-    python3 "$CONDUCTOR_DIR/parse-stream.py" "$batch_stream" "$batch_log" "$batch_meta" "$iteration" 2>/dev/null || true
-  fi
-
-  # --- VALIDATOR: check the work ---
-  local eval_stream="$BATCH_DIR/eval-stream-${iteration}.jsonl"
-  local eval_log="$BATCH_DIR/eval-${iteration}.log"
-  local eval_meta="$BATCH_DIR/eval-meta-${iteration}.json"
-
-  log "running validator"
-
-  claude -p "Read .claude/agents/evaluator.md for your protocol. The dev agent just finished an iteration. Review what changed: git diff, findings.md, README State section. Check constraints, evidence, regressions. Verify independently — run checks yourself. Write verdict to conductor/evaluator-verdict.md." \
-    --append-system-prompt-file "$prompt_file" \
-    --agent evaluator \
-    --permission-mode auto \
-    --output-format stream-json \
-    --verbose \
-    > "$eval_stream" 2>&1
-
-  if [[ -s "$eval_stream" ]]; then
-    python3 "$CONDUCTOR_DIR/parse-stream.py" "$eval_stream" "$eval_log" "$eval_meta" "$iteration" 2>/dev/null || true
-  fi
-
-  log "validator done"
   local exit_code=$?
   set -e
 
