@@ -47,124 +47,40 @@ phase = "evaluate"
     → show results, offer to merge or reject
 ```
 
-## PLAN stage (you are responsible for this)
+## PLAN stage — be fast
 
-**PLAN IS READ-ONLY. You do NOT edit code, write files, or run commands that modify anything.**
+PLAN should take 30 seconds, not 7 minutes. The DELIVER team does the real work. PLAN just checks if delivery can start.
 
-The ONLY files you create/edit in PLAN are:
-- `conductor/missions/{name}.md` (mission file)
-- `features/{name}/README.md` (scaffold Design section only)
-- `conductor/state.json` (phase transition)
-
-You do NOT:
-- Edit code (no services/, packages/, libs/)
-- Edit test files
-- Run docker build/restart
-- Commit anything
-- Fix bugs you find
-
-If you find blockers (broken infra, missing ports, stale config), **document them** — don't fix them. Blockers become separate conductor cycles:
-
-Blockers are things **outside the mission's scope** that prevent delivery. If it's in scope, it's not a blocker — the DELIVER team handles it.
+**PLAN IS READ-ONLY.** You only create: mission file, README scaffold (if missing), state.json update.
 
 ```
-In scope (DELIVER handles):     fixing feature code, writing tests, updating README
-Blocker (separate mission):     different service's infra broken, missing port mapping
-Blocker (human action):         needs credentials, needs manual testing, needs external access
-```
-
-Each blocker becomes its own PLAN → DELIVER → EVALUATE cycle managed by the conductor.
-
-Before DELIVER can start, everything must be in place. This is YOUR job — not the human's. The human describes what they want. You make sure the system is ready.
-
-### Pre-delivery checklist
-
-You MUST verify ALL of these before launching. Do not ask the human to check — check yourself:
-
-```
-1. Feature README exists and is complete
-   □ features/{focus}/README.md exists
-   □ Has Design section: Why, Data Flow, Code Ownership, Constraints, Gate
-   □ Has State section: Quality Bar, Certainty, Known Issues
-   □ Quality bar has specific FAIL items → those become the mission target
-   If missing: scaffold from features/.readme-template.md
-
-2. Service READMEs exist for owned code
-   □ Read Code Ownership from feature README
-   □ Each listed service/package has a README.md with Constraints section
-   If missing: research the service code, create README with constraints
-
-3. Mission file is clear
-   □ missions/{name}.md exists
-   □ Focus matches a features/ directory
-   □ Target is concrete: derived from quality bar FAIL items
-   □ Definition of Done is specific and checkable (not vague)
-   □ Stop-when has a number (e.g., "5 iterations")
-   □ Constraints include relevant README constraints
-
-4. Infrastructure is ready
-   □ Docker stack is running (docker ps shows services)
-   □ Required services are healthy (curl health endpoints)
-   □ Required env vars are set (.env file)
-   □ Worktree can be created (no branch conflicts)
-
-5. Context is complete
-   □ Feature README + all service READMEs will be auto-appended to prompt
-   □ Rejection context from last iteration (if any) is in state.json
-   □ No stale verdict files from previous missions
-```
-
-Show the user a summary: "Ready to deliver. Target: {FAIL items}. Services: {healthy/not}. Iterations: {N}."
-Wait for "go".
-
-### PLAN stage team
-
-You create a planning team (TeamCreate) — this is NOT a loop, it runs once:
-
-```
-TeamCreate("plan-{name}")
-    |
-    ├── Researcher agent
-    │     Internal: read code, check endpoints, find dependencies
-    │     External: best practices, platform docs, competitor approaches
-    │     Reports: what exists, what's missing, what's risky
-    │
-    ├── Evaluator agent (readiness reviewer)
-    │     Reviews: are READMEs complete? constraints specific enough?
-    │     Checks: infra healthy? env vars set? worktree clean?
-    │     Verifies: mission DoD is concrete and checkable
-    │     Verdict: READY or NOT READY (with specific gaps)
-    │
-    └── You (conductor / coordinator)
-          Scaffolds READMEs based on researcher findings
-          Creates mission file
-          Runs pre-delivery checklist
-          Asks evaluator: ready?
-          Shows summary to user → waits for "go"
-
-The team shuts down after evaluator says READY and user says "go".
-```
-
-The evaluator in PLAN is not adversarial — it's a readiness check. It ensures the DELIVER team will have everything it needs: complete READMEs, healthy infra, concrete DoD.
-
-```
-User describes what they want
+User says what they want
     |
     v
-You create planning team
-    → researcher investigates (code + external)
-    → you scaffold READMEs + mission from findings
-    → evaluator checks readiness
-        NOT READY → fix what's missing, ask evaluator again
-        READY → show summary to user
+Read feature README → current score, quality bar, constraints
     |
     v
-User says "go"
+Hard blocker? (services down, missing credentials, infra broken)
+    yes → report blocker to user, stop
+         blocker is OUT OF SCOPE → separate mission
+    no  → continue
     |
     v
-Set state.json phase = "deliver"
-Launch: ./run.sh --mission {name} --max-iterations {N}
+Create missions/{name}.md:
+    Focus, Target (from quality bar FAILs), Stop-when, Constraints
+    |
+    v
+Show user: "Mission: {target}. Ready?"
+    |
+    v
+User says "go" → launch ./run.sh --mission {name}
 ```
+
+**Do NOT:**
+- Spawn research teams during PLAN (DELIVER team researches)
+- Edit code, tests, or infra
+- Run E2E tests (that's DELIVER)
+- Spend minutes investigating — spend seconds checking
 
 ## DELIVER stage (autonomous)
 
