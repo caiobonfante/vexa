@@ -94,6 +94,26 @@ class ContainerManager:
         # Create via Runtime API
         logger.info(f"Requesting container for user {user_id}")
         body = {"user_id": user_id, "profile": "agent", **create_kwargs}
+
+        # Inject Claude credentials into container config
+        agent_config = body.setdefault("config", {})
+        agent_env = agent_config.setdefault("env", {})
+        agent_mounts = agent_config.setdefault("mounts", [])
+
+        # Pass ANTHROPIC_API_KEY if available
+        if config.ANTHROPIC_API_KEY:
+            agent_env["ANTHROPIC_API_KEY"] = config.ANTHROPIC_API_KEY
+
+        # Mount Claude OAuth credential files if paths are set
+        if config.CLAUDE_CREDENTIALS_PATH:
+            agent_mounts.append(
+                f"{config.CLAUDE_CREDENTIALS_PATH}:/root/.claude/.credentials.json:ro"
+            )
+        if config.CLAUDE_JSON_PATH:
+            agent_mounts.append(
+                f"{config.CLAUDE_JSON_PATH}:/root/.claude.json:ro"
+            )
+
         resp = await self._http.post("/containers", json=body)
         if resp.status_code not in (200, 201):
             raise RuntimeError(f"Runtime API failed: {resp.status_code} {resp.text[:200]}")

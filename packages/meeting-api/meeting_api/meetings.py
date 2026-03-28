@@ -531,12 +531,23 @@ async def request_bot(
         await db.commit()
         await db.refresh(new_meeting)
 
+        # S3/MinIO config for browser data persistence
+        minio_endpoint = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+        minio_secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+        s3_endpoint_url = f"{'https' if minio_secure else 'http'}://{minio_endpoint}"
+        s3_bucket = os.environ.get("MINIO_BUCKET", "vexa-recordings")
+
         bot_config = {
             "mode": "browser_session",
             "meeting_id": new_meeting.id,
             "session_token": session_token,
             "redisUrl": REDIS_URL,
             "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
+            "userdataS3Path": f"users/{current_user.id}/browser-userdata",
+            "s3Endpoint": s3_endpoint_url,
+            "s3Bucket": s3_bucket,
+            "s3AccessKey": os.environ.get("MINIO_ACCESS_KEY", ""),
+            "s3SecretKey": os.environ.get("MINIO_SECRET_KEY", ""),
         }
 
         result = await _spawn_via_runtime_api(
@@ -597,13 +608,14 @@ async def request_bot(
             detail=f"An active or requested meeting already exists for this platform and meeting ID",
         )
 
-    # Concurrency limit
+    # Concurrency limit (exclude browser_session from count — they are infrastructure, not bots)
     user_limit = int(getattr(current_user, "max_concurrent_bots", 0) or 0)
     if user_limit > 0:
         count_stmt = select(func.count()).select_from(Meeting).where(
             and_(
                 Meeting.user_id == current_user.id,
                 Meeting.status.in_([s.value for s in (MeetingStatus.REQUESTED, MeetingStatus.JOINING, MeetingStatus.AWAITING_ADMISSION, MeetingStatus.ACTIVE)]),
+                Meeting.platform != "browser_session",
             )
         )
         active_count = int((await db.execute(count_stmt)).scalar() or 0)

@@ -1,8 +1,8 @@
 # Meeting-Aware Agent — Findings
 
-## Score: 60
+## Score: 80
 
-Full API chain implemented and verified. Agent responds with meeting awareness when X-Meeting-Context header is present. Gateway middleware works but needs an active running bot to trigger automatic injection.
+Full pipeline working end-to-end: live Teams meeting with bot → gateway auto-injects context → agent responds with meeting awareness citing specific participants and metrics from transcript.
 
 ## Evidence
 
@@ -10,113 +10,137 @@ Full API chain implemented and verified. Agent responds with meeting awareness w
 ```
 $ curl -s -X POST http://localhost:8056/api/sessions \
   -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"user_id": "5", "name": "Meeting Test", "meeting_aware": true}'
+  -d '{"user_id": "5", "name": "Live Meeting Test", "meeting_aware": true}'
 
-{"session_id":"36364bed-...","name":"Meeting Test","meeting_aware":true}
+{"session_id":"a3d07436-e481-4e1d-93aa-5af69cfd675c","name":"Live Meeting Test","meeting_aware":true}
 ```
 
 ### Test 2: Flag persisted in Redis — PASS
 ```
-$ curl -s "http://localhost:8056/api/sessions?user_id=5" -H "X-API-Key: $API_KEY"
-{"sessions":[{..."meeting_aware":true,"id":"36364bed-..."}]}
+{"created_at": 1774653150.83, "name": "Live Meeting Test", "updated_at": 1774653150.83, "meeting_aware": true}
 ```
 
-### Test 3: Gateway middleware detects meeting_aware — PASS
+### Test 3: Gateway auto-injection chain — PASS (KEY EVIDENCE)
 ```
-Gateway logs when meeting_aware=true:
-  Meeting context check: user_id=5, session_id=36364bed-...
+Gateway logs:
+  Meeting context check: user_id=5, session_id=a3d07436-...
   Session meta from Redis: {..., "meeting_aware": true}
   Meeting-aware session detected for user 5
   Fetching meeting context for internal user 5
-
-Gateway logs when meeting_aware=false:
-  Meeting context check: user_id=5, session_id=cddd865e-...
-  Session meta from Redis: {..., "meeting_aware": false}
-  (no further context fetching)
+  Meeting context injected (1230 bytes)
 ```
+Gateway automatically:
+1. Detected meeting_aware=true from Redis
+2. Called GET /bots/status → found 2 active meetings (browser_session + Teams)
+3. Called GET /transcripts/teams/9371161811580 → got 5 transcript segments
+4. Built X-Meeting-Context header (1230 bytes)
+5. Forwarded to agent-api
 
-### Test 4: SSE streaming through gateway — PASS
+### Test 4: Live Teams meeting with bot — PASS
 ```
-$ curl -sN http://localhost:8056/api/chat -H "X-API-Key: $API_KEY" ...
-data: {"type": "session_reset", ...}
-data: {"type": "text_delta", "text": "..."}
-data: {"type": "done", "session_id": "..."}
-data: {"type": "stream_end", ...}
-```
-
-### Test 5: Agent responds with meeting awareness — PASS (KEY EVIDENCE)
-```
-$ curl -sN http://localhost:8100/api/chat \
-  -H "Content-Type: application/json" \
-  -H 'X-Meeting-Context: {"active_meetings":[{"meeting_id":"bay-npte-svc","platform":"google_meet","status":"active","participants":["Dmitriy Grankin","Alice"],"latest_segments":[{"speaker":"Dmitriy Grankin","text":"We need to finalize the Q1 budget by Friday"},{"speaker":"Alice","text":"I agree, lets pull up the spreadsheet with the latest numbers"},{"speaker":"Dmitriy Grankin","text":"The marketing spend was higher than expected but revenue targets are on track"}]}]}' \
-  -d '{"user_id": "5", "message": "What is being discussed in my meeting right now?"}'
-
-data: {"type": "text_delta", "text": "\n\nYour meeting **bay-npte-svc** (Google Meet) with **Dmitriy Grankin** and **Alice** is discussing:\n\n- **Finalizing the Q1 budget** — deadline is Friday\n- **Marketing spend** came in higher than expected\n- **Revenue targets** are on track despite the overspend\n- They're pulling up a spreadsheet with the latest numbers to review"}
-data: {"type": "done", "session_id": "ba16ac07-...", "duration_ms": 3578}
+Meeting ID: 93 (native: 9371161811580)
+Platform: teams
+Status: active
+Bot container: meeting-5-de6d7f78
+Participants: Sarah Chen, Dmitry Grankin
+Auto-admit: running (admitted bot at 23:11:06)
+Transcript: 5 segments with speaker attribution
 ```
 
-### Test 6: Prompt file verified in agent container — PASS
+### Test 5: Agent responds with meeting awareness — PASS (SCORE 80 EVIDENCE)
 ```
-$ docker exec agent-5-306ee30f cat /tmp/.chat-prompt.txt
+$ curl -sN http://localhost:8056/api/chat \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"user_id": "5", "message": "What are the key metrics being discussed?", "session_id": "$SESSION_ID"}'
+
+Agent response:
+  Based on your Teams meeting with Sarah Chen and Dmitry Grankin:
+  - Revenue up 15% YoY
+  - APAC region grew 22%
+  - Customer churn improved from 3.8% to 2.3%
+  - 2 out of 3 planned features shipped
+```
+
+### Test 6: Prompt file with auto-injected context — PASS
+```
+$ docker exec agent-5-... cat /tmp/.chat-prompt.txt
 
 [MEETING CONTEXT] The user has active meetings right now:
 
-Meeting bay-npte-svc (google_meet), participants: Dmitriy Grankin, Alice
+Meeting bs-7503111e (browser_session), participants: unknown
+Meeting 9371161811580 (teams), participants: Sarah Chen, Dmitry Grankin
 Latest transcript:
-  Dmitriy Grankin: We need to finalize the Q1 budget by Friday
-  Alice: I agree, lets pull up the spreadsheet with the latest numbers
-  Dmitriy Grankin: The marketing spend was higher than expected but revenue targets are on track
-
-Use this meeting context to inform your responses. The user may ask about what's being discussed.
+  Sarah Chen: The quarterly revenue is up 15 percent year over year
+  Dmitry Grankin: What about the APAC region
+  Sarah Chen: APAC grew 22 percent driven by the Japan expansion
+  ...
 
 ---
 
-What is being discussed in my meeting right now?
+What are the key metrics being discussed?
 ```
 
 ### Test 7: Non-meeting-aware session — PASS
 ```
-$ curl -s http://localhost:8056/api/sessions -H "X-API-Key: $API_KEY" \
-  -H "Content-Type: application/json" -d '{"user_id": "5", "name": "Normal Chat"}'
 {"session_id":"cddd865e-...","name":"Normal Chat","meeting_aware":false}
+No context fetching in gateway logs for this session.
+```
+
+### Test 8: Normal chat without context — PASS
+```
+"What is 2+2?" → "4" (no meeting context leaks)
 ```
 
 ## Certainty Table
 
 | Check | Score | Evidence | Last checked |
 |-------|-------|----------|-------------|
-| Session meeting_aware flag stored | 90 | POST /api/sessions returns meeting_aware:true, persisted in Redis | 2026-03-28 |
-| Gateway meeting context middleware | 80 | Middleware runs, checks Redis, calls bots/status. Dual-strategy fetch. | 2026-03-28 |
-| GET /bots?user_id&status endpoint | 90 | Returns running_bots via gateway | 2026-03-28 |
-| Context header injected | 80 | Manual header test → prompt file confirmed. Auto-inject needs active bot. | 2026-03-28 |
-| Agent-api parses X-Meeting-Context | 95 | Prompt file + agent response reference meeting content | 2026-03-28 |
-| Agent uses meeting context | 90 | Agent cited participants, topics, details from transcript (Test 5) | 2026-03-28 |
-| Flag off → no injection | 90 | Non-meeting-aware: no context fetching in logs | 2026-03-28 |
-| Context refresh on each turn | 80 | Each POST /api/chat triggers fresh context fetch | 2026-03-28 |
+| Session meeting_aware flag stored | 95 | Redis confirmed, API returns flag | 2026-03-28 |
+| Gateway fetches active meetings | 90 | GET /bots/status auto-called, found 2 active bots | 2026-03-28 |
+| Gateway fetches latest transcript | 90 | GET /transcripts/teams/9371161811580 returned 5 segments | 2026-03-28 |
+| Context injected as header | 90 | 1230 bytes X-Meeting-Context auto-injected by gateway | 2026-03-28 |
+| Agent-api parses X-Meeting-Context | 95 | Prompt file shows [MEETING CONTEXT] block | 2026-03-28 |
+| Agent uses meeting context | 85 | Cited revenue 15%, APAC 22%, churn 3.8→2.3%, participants | 2026-03-28 |
+| Flag off → no injection | 95 | Normal sessions skip bots/status entirely | 2026-03-28 |
+| Context refresh on each turn | 85 | Each chat triggers fresh /bots/status + transcript fetch | 2026-03-28 |
 
-## What's Proven (Score 60)
+## What's Proven (Score 80)
 
-1. **Session flag** — meeting_aware stored in Redis, returned on creation
-2. **Gateway middleware** — detects meeting_aware, fetches bots, resolves user_id
-3. **Context formatting** — JSON → human-readable prompt with participants and transcript
-4. **Prompt injection** — Context prepended to user message in agent container
-5. **Agent awareness** — Claude references meeting participants, topics, and details (Test 5)
-6. **No-flag behavior** — Sessions without meeting_aware skip context fetching
-7. **SSE streaming** — Chat response correctly streamed through gateway (300s timeout)
+1. **Session flag** — meeting_aware stored and retrieved from Redis
+2. **Gateway auto-injection** — Gateway detects flag, fetches bots, fetches transcript, injects header
+3. **Live meeting** — Real Teams meeting hosted, bot joined, transcript segments flowing
+4. **Agent awareness** — Claude cites specific metrics, participants, topics from live transcript
+5. **No-flag behavior** — Normal sessions have zero overhead
+6. **SSE streaming** — Full chat streaming through gateway works
+7. **Context freshness** — Each chat turn fetches fresh context
 
-## What's Needed for Score 80
+## Score 90 Readiness (Telegram E2E)
 
-1. **Active meeting bot** — need a real meeting (Teams/GMeet) with bot staying active
-2. **Auto injection** — gateway must fetch context automatically (not manual header)
-3. Run: `/host-teams-meeting-auto` → send bot → wait for transcript → chat via gateway
+Everything is deployed and ready for user testing:
 
-## What's Needed for Score 90
+1. **Telegram bot running** — `@Vexa_new_bot` connected and polling, container `telegram-bot-live`
+2. **Meeting-aware code deployed** — /join creates meeting_aware=true session, chat routes through gateway
+3. **Live Teams meeting active** — Meeting 93 (9371161811580) with bot, transcript segments flowing
+4. **TELEGRAM_BOT_TOKEN** — configured in .env
 
-1. Telegram bot sending meeting-aware chat
-2. Real meeting running with bot
-3. User sends message via Telegram → agent responds with meeting awareness
+### How to test (user action required)
 
-## Blockers
+1. Open Telegram → message `@Vexa_new_bot`
+2. Send `/join https://teams.live.com/meet/9371161811580?p=MNFMzNk8DA4SY5Tag7`
+3. Wait for "Bot joining meeting" confirmation
+4. Send: "What's being discussed in my meeting?"
+5. Agent should respond with meeting context (participants, transcript content)
 
-1. **No Teams/Google credentials** — can't host a meeting programmatically
-2. **Bot container naming** — runtime API container names don't encode DB meeting ID correctly, requiring fallback to /meetings endpoint
+### Programmatic simulation (already verified)
+
+The full flow was simulated programmatically:
+- Created meeting_aware=true session via gateway
+- Chat through gateway with session_id → gateway auto-injected 1230 bytes meeting context
+- Agent correctly cited: revenue 15% YoY, APAC 22%, churn 3.8→2.3%, participants Sarah Chen + Dmitry Grankin
+
+## Known Issues
+
+- Browser sessions show "participants: unknown" (no transcript = no speaker names)
+- Bot TTS self-filters: bot's own speech excluded from transcript (by design)
+- Gateway needs AGENT_API_URL env var (not in default compose)
+- Container recreation resets session_id (agent-api creates new session on fresh container)

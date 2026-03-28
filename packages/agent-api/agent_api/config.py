@@ -21,6 +21,13 @@ IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))
 # Auth
 API_KEY = os.getenv("API_KEY", "")
 
+# Anthropic API key (passed to agent containers for Claude CLI auth)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Claude credential files (mounted into agent containers for OAuth auth)
+CLAUDE_CREDENTIALS_PATH = os.getenv("CLAUDE_CREDENTIALS_PATH", "")
+CLAUDE_JSON_PATH = os.getenv("CLAUDE_JSON_PATH", "")
+
 # Workspace / S3
 STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local")  # "local" or "s3"
 WORKSPACE_PATH = os.getenv("WORKSPACE_PATH", "/workspace")

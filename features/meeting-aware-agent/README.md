@@ -90,11 +90,11 @@ services/transcription-collector  → GET /transcripts with limit (exists)
 
 ```
 Session created with meeting_aware=true     flag persisted in Redis          PASS
-Gateway fetches active meetings             GET /bots returns active bots    PASS (code verified, empty list when no bots)
-Gateway fetches latest transcript           GET /transcripts returns segs    FAIL (no active bot to test with real data)
-Context injected as header                  X-Meeting-Context present        PASS (manual header → prompt file verified)
-Agent-api parses context into prompt        system prompt has meeting data   PASS (prompt file shows formatted context)
-Agent responds with meeting knowledge       references meeting content       PASS (via manual header, not auto-inject)
+Gateway fetches active meetings             GET /bots returns active bots    PASS (live: found 2 active bots)
+Gateway fetches latest transcript           GET /transcripts returns segs    PASS (live: 5 segments from Teams meeting)
+Context injected as header                  X-Meeting-Context present        PASS (1230 bytes auto-injected by gateway)
+Agent-api parses context into prompt        system prompt has meeting data   PASS (prompt file shows [MEETING CONTEXT])
+Agent responds with meeting knowledge       references meeting content       PASS (cited revenue 15%, APAC 22%, participants)
 No meeting_aware → no context injection     header absent, normal chat       PASS
 Context refresh on each turn                fresh data, not stale cache      PASS (each chat triggers fresh /bots/status)
 ```
@@ -114,13 +114,13 @@ Context refresh on each turn                fresh data, not stale cache      PAS
 ## Certainty
 
 ```
-Session meeting_aware flag stored    90  Redis persists meeting_aware:true    2026-03-28
-Gateway meeting context middleware   80  GET /bots/status called only for meeting_aware sessions    2026-03-28
-GET /bots?user_id&status endpoint    90  Returns running_bots via gateway    2026-03-28
-Context header injected              80  Manual X-Meeting-Context → prompt file in container    2026-03-28
-Agent-api parses X-Meeting-Context   90  /tmp/.chat-prompt.txt shows formatted context    2026-03-28
-Agent uses meeting context           90  Agent cites participants/topics from transcript    2026-03-28
-Flag off → no injection              90  No /bots/status in gateway logs for normal sessions    2026-03-28
+Session meeting_aware flag stored    95  Redis confirmed, API returns flag    2026-03-28
+Gateway meeting context middleware   90  Auto-detects flag, fetches bots, fetches transcript    2026-03-28
+GET /bots?user_id&status endpoint    90  Found 2 active bots in live test    2026-03-28
+Context header injected              90  1230 bytes auto-injected by gateway    2026-03-28
+Agent-api parses X-Meeting-Context   95  Prompt file shows full [MEETING CONTEXT] block    2026-03-28
+Agent uses meeting context           85  Cited revenue 15%, APAC 22%, churn 3.8→2.3%    2026-03-28
+Flag off → no injection              95  Normal sessions skip bots/status entirely    2026-03-28
 ```
 
 ## Constraints
@@ -185,11 +185,10 @@ For score 90 (Telegram E2E):
 
 ## Known Issues
 
-- Agent CLI in container not authenticated (Claude Code needs /login or CLAUDE_CREDENTIALS_PATH) — blocks E2E agent response testing
-- No active meeting bot available — need to host Teams meeting + send bot to test full injection chain
+- Browser sessions show "participants: unknown" when no transcript segments exist
+- Bot TTS self-filters: bot's own speech excluded from transcript (by design, prevents loops)
 - X-Meeting-Context header has HTTP header size limits (~8KB) — 50 segments should fit but may need monitoring
-- Gateway needs AGENT_API_URL env var set manually (not in default compose, uses bridge gateway IP 172.24.0.1:8100)
-- No active meeting bots available for full gateway injection chain test
+- Gateway needs AGENT_API_URL env var set manually (not in default compose, uses bridge gateway IP)
 
 ## Design Decisions
 
