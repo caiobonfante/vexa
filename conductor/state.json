@@ -1,7 +1,8 @@
 {
-  "iteration": 3,
-  "status": "running",
-  "mission": "meeting-aware-agent",
+  "iteration": 0,
+  "phase": "plan",
+  "status": "pending",
+  "mission": null,
   "last_batch": "2026-03-28T02:20:00+03:00",
   "features": {
     "agentic-runtime": {

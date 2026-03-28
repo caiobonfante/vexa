@@ -615,9 +615,9 @@ run_iteration() {
   local iteration=$1
   local batch_log="$BATCH_DIR/batch-${iteration}.log"
 
-  log "iteration $iteration — spawning orchestrator"
+  log "iteration $iteration — spawning team"
 
-  # Update state
+  # Update state: enter DELIVER phase
   python3 -c "
 import json
 from pathlib import Path
@@ -625,6 +625,7 @@ state_path = Path('$STATE_FILE')
 state = json.loads(state_path.read_text())
 state['iteration'] = $iteration
 state['last_batch'] = '$(date -Is)'
+state['phase'] = 'deliver'
 state['status'] = 'running'
 state_path.write_text(json.dumps(state, indent=2) + '\n')
 "
@@ -714,6 +715,16 @@ TEAMEOF
     > "$batch_stream" 2>&1
   local exit_code=$?
   set -e
+
+  # Transition to EVALUATE phase
+  python3 -c "
+import json
+from pathlib import Path
+state_path = Path('$STATE_FILE')
+state = json.loads(state_path.read_text())
+state['phase'] = 'evaluate'
+state_path.write_text(json.dumps(state, indent=2) + '\n')
+"
 
   # Parse stream into human-readable activity log + metadata
   if [[ -s "$batch_stream" ]]; then
@@ -962,7 +973,17 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
     log "Iteration limit reached ($MAX_ITERATIONS)."
   fi
 
-  log "CONDUCTOR END"
+  # Transition to EVALUATE phase (human reviews)
+  python3 -c "
+import json
+from pathlib import Path
+state_path = Path('$STATE_FILE')
+state = json.loads(state_path.read_text())
+state['phase'] = 'evaluate'
+state_path.write_text(json.dumps(state, indent=2) + '\n')
+"
+
+  log "CONDUCTOR END — phase: evaluate (human reviews)"
   log "========================================"
 
   # Final status
