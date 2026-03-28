@@ -10,42 +10,41 @@ function detectPlatform(url) {
 }
 
 async function tryAdmitGoogleMeet(page) {
-  return await page.evaluate(() => {
-    // Google Meet: confirmation dialog
-    const dialogOk = document.querySelector('button[data-mdc-dialog-action="ok"]');
-    if (dialogOk && dialogOk.offsetParent) {
-      dialogOk.click();
-      return 'dialog_confirmed';
+  // Use Playwright locators — Google Meet's UI elements are not accessible via
+  // plain DOM queries (page.evaluate). Use getByRole/getByText which work reliably.
+  try {
+    // 1. "Admit all" button (visible after people panel or pill click)
+    const admitAll = page.getByRole('button', { name: 'Admit all' });
+    if (await admitAll.isVisible({ timeout: 500 }).catch(() => false)) {
+      await admitAll.click();
+      return 'admitted';
     }
 
-    // Google Meet: individual Admit / Admit all buttons (check deepest matches first)
-    const buttons = document.querySelectorAll('button, div[role="button"], span[role="button"]');
-    for (const btn of buttons) {
-      const text = (btn.textContent || '').trim();
-      if (btn.offsetParent && (text === 'Admit' || text === 'Admit all' || /^Admit \d+ guest/.test(text))) {
-        btn.click();
-        return text === 'Admit' ? 'admitted' : 'pill_clicked';
-      }
+    // 2. Individual "Admit <name>" button (aria-label="Admit <name>")
+    const admitOne = page.getByRole('button', { name: /^Admit / });
+    if (await admitOne.first().isVisible({ timeout: 500 }).catch(() => false)) {
+      await admitOne.first().click();
+      return 'admitted';
     }
 
-    // Google Meet: "Admit N guest(s)" pill — search all divs, pick smallest matching element
-    let bestPill = null;
-    let bestLen = Infinity;
-    const divs = document.querySelectorAll('div, span');
-    for (const el of divs) {
-      const text = (el.textContent || '').trim();
-      if (/^Admit \d+ guest/.test(text) && el.offsetParent && text.length < bestLen) {
-        bestPill = el;
-        bestLen = text.length;
-      }
-    }
-    if (bestPill) {
-      bestPill.click();
+    // 3. "Admit N guest(s)" pill in top-right — click to expand the panel
+    const pill = page.locator('text=/Admit \\d+ guest/').first();
+    if (await pill.isVisible({ timeout: 500 }).catch(() => false)) {
+      await pill.click();
       return 'pill_clicked';
     }
 
+    // 4. Confirmation dialog "OK" button
+    const dialogOk = page.locator('button[data-mdc-dialog-action="ok"]');
+    if (await dialogOk.isVisible({ timeout: 500 }).catch(() => false)) {
+      await dialogOk.click();
+      return 'dialog_confirmed';
+    }
+
     return 'none';
-  }).catch(() => 'error');
+  } catch {
+    return 'error';
+  }
 }
 
 async function tryAdmitTeams(page) {

@@ -369,6 +369,15 @@ class MeetingBase(BaseModel):
 
     # Removed get_bot_platform method, use Platform.get_bot_name(self.platform.value) if needed
 
+class AutomaticLeave(BaseModel):
+    """Optional overrides for automatic-leave timeouts (milliseconds)."""
+    model_config = {"extra": "forbid"}
+
+    waiting_room_timeout: Optional[int] = Field(None, description="Waiting room timeout in ms")
+    everyone_left_timeout: Optional[int] = Field(None, description="Everyone left timeout in ms")
+    no_one_joined_timeout: Optional[int] = Field(None, description="No one joined timeout in ms")
+
+
 class MeetingCreate(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -409,6 +418,10 @@ class MeetingCreate(BaseModel):
     default_avatar_url: Optional[str] = Field(
         None,
         description="Custom default avatar image URL for the bot's camera feed. Shown when no screen content is active. If omitted, the default Vexa logo is used."
+    )
+    automatic_leave: Optional[AutomaticLeave] = Field(
+        None,
+        description="Optional overrides for automatic-leave timeouts (ms). Unset fields keep defaults."
     )
     agent_enabled: Optional[bool] = Field(
         False,
