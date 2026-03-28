@@ -156,8 +156,15 @@ def format_cost(usd):
 def build_dashboard():
     """Build the dashboard data structure."""
     missions = find_missions()
+    # Read global state for phase info
+    global_state = parse_state(CONDUCTOR_DIR / "state.json")
+
     dashboard = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "phase": global_state.get("phase", "unknown"),
+        "status": global_state.get("status", "unknown"),
+        "mission": global_state.get("mission"),
+        "iteration": global_state.get("iteration", 0),
         "missions": [],
         "totals": {"cost": 0, "duration": 0, "count": 0},
         "scores": {},
@@ -335,6 +342,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             eval_text = get_mission_evaluator(mission_name)
             self._text(eval_text)
 
+        elif path.startswith("/api/team-messages/"):
+            mission_name = unquote(path[len("/api/team-messages/"):])
+            messages = get_team_messages(mission_name)
+            self._json(messages)
+
         else:
             self._text("not found", 404)
 
@@ -459,6 +471,122 @@ def parse_stream_live(stream_path):
         return f"(streaming... {size // 1024}KB received, parsing events)"
 
     return "\n".join(lines)
+
+
+def get_team_messages(name):
+    """Extract team messages from the latest stream JSONL for a mission."""
+    paths = [
+        WORKTREE_DIR / name / "conductor" / "batches",
+        CONDUCTOR_DIR / "batches",
+    ]
+    messages = []
+
+    for batches_dir in paths:
+        if not batches_dir.exists():
+            continue
+
+        stream_files = sorted(batches_dir.glob("stream-*.jsonl"), reverse=True)
+        if not stream_files:
+            continue
+
+        try:
+            raw = stream_files[0].read_text().strip()
+        except (OSError, FileNotFoundError):
+            continue
+
+        # Track which tool_use IDs are Agent/TeamCreate calls and their agent names
+        agent_tool_ids = {}  # tool_use_id -> agent name
+
+        for line in raw.split("\n"):
+            if not line.strip():
+                continue
+            try:
+                evt = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            evt_type = evt.get("type", "")
+            timestamp = evt.get("timestamp", "")
+
+            if evt_type == "assistant":
+                msg = evt.get("message", {})
+                for block in msg.get("content", []):
+                    bt = block.get("type", "")
+
+                    if bt == "tool_use":
+                        tool_name = block.get("name", "")
+                        inp = block.get("input", {})
+                        tool_id = block.get("id", "")
+
+                        if tool_name == "TeamCreate":
+                            team = inp.get("team_name", "")
+                            desc = inp.get("description", "")
+                            messages.append({
+                                "role": "conductor",
+                                "text": f"Created team '{team}': {desc}",
+                                "timestamp": timestamp,
+                                "type": "team",
+                            })
+
+                        elif tool_name == "Agent":
+                            agent_name = inp.get("name", "agent")
+                            desc = inp.get("description", "")
+                            agent_tool_ids[tool_id] = agent_name
+                            messages.append({
+                                "role": "conductor",
+                                "text": f"Spawned {agent_name}: {desc}",
+                                "timestamp": timestamp,
+                                "type": "spawn",
+                            })
+
+                        elif tool_name == "SendMessage":
+                            to = inp.get("to", "?")
+                            msg_text = inp.get("message", "")
+                            if isinstance(msg_text, dict):
+                                msg_type = msg_text.get("type", "")
+                                msg_text = f"[{msg_type}]"
+                            messages.append({
+                                "role": "conductor",
+                                "text": f"To {to}: {msg_text}" if len(str(msg_text)) < 500 else f"To {to}: {str(msg_text)[:500]}...",
+                                "timestamp": timestamp,
+                                "type": "message",
+                            })
+
+                    elif bt == "text":
+                        text = block.get("text", "").strip()
+                        # Conductor coordination messages
+                        if text and any(kw in text.lower() for kw in [
+                            "team", "dev", "validator", "agent", "mission",
+                            "iteration", "spawning", "created", "checking",
+                            "entry protocol", "shutdown", "verdict",
+                        ]):
+                            messages.append({
+                                "role": "conductor",
+                                "text": text[:500],
+                                "timestamp": timestamp,
+                                "type": "coordination",
+                            })
+
+            elif evt_type == "tool_result":
+                # Check if this is a result from an Agent call
+                content = evt.get("content", "")
+                tool_use_id = ""
+                # tool_result doesn't always have the tool_use_id at top level
+                # but we can check if content mentions agent results
+                if isinstance(content, str) and content.strip():
+                    # Look for agent completion patterns
+                    preview = content[:1000]
+                    if any(kw in preview.lower() for kw in ["completed", "finished", "done", "verdict", "accept", "reject", "score"]):
+                        messages.append({
+                            "role": "agent",
+                            "text": content[:500],
+                            "timestamp": timestamp,
+                            "type": "result",
+                        })
+
+        break  # Only process the first found batches dir
+
+    return messages
 
 
 def get_mission_evaluator(name):
