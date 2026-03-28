@@ -2,6 +2,30 @@
 
 Lessons from building a recursive self-improvement framework for a 15-feature, 12-service meeting transcription platform (Vexa). 48 hours of iteration, ~$50 in API costs, dozens of failed approaches.
 
+## The problems we're trying to solve
+
+### The codebase is too big for one person
+
+Vexa has 15 features, 12 services, 6 shared packages, 200+ Python files, 100 test files. Each feature touches multiple services with different constraints. Improving one thing (realtime transcription) requires understanding the bot lifecycle, audio capture, Whisper integration, Redis streaming, Postgres persistence, WebSocket delivery, and dashboard rendering. No one person holds all of this in their head.
+
+### Agents drift without guardrails
+
+Give Claude "fix the transcription pipeline" and it will: write code that works but violates service boundaries, import directly across services instead of going through the gateway, change production configs to make tests pass, claim scores without running tests, and declare victory with uncommitted code. The work is often good — but it's unsupervised, and unsupervised work accumulates drift.
+
+### "Done" is ambiguous
+
+When is a feature done? When the tests pass? When the code is committed? When the dashboard renders correctly? When the user can actually use it? Agents optimize for whatever they can measure. If you measure test counts, you get tests that pass but a broken feature. If you measure score claims, you get inflated scores. The only real "done" is: the user does the thing and it works.
+
+### Knowledge is scattered and stale
+
+Architecture decisions live in docs that are months old. Test results are in findings.md from a week ago. The docker-compose has different ports than the README says. The code changed but the documentation didn't. Every agent starts from scratch — reading stale docs, making the same mistakes, discovering the same blockers.
+
+### The work doesn't persist across sessions
+
+Claude runs for 10 minutes, makes progress, stops. The next session starts from zero. Context is lost. The agent re-discovers what the previous session already found. There's no institutional memory — each session is isolated.
+
+## What we tried and what we learned
+
 ## Claude will always take the shortest path
 
 No matter what your instructions say, Claude will bypass the process if it thinks it can solve the problem directly. We wrote detailed CLAUDE.md files with phases, checklists, and rules. Claude read them, then ignored them and went straight to coding.
