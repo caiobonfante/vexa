@@ -47,18 +47,22 @@ Show user: "Mission: {target}. Resources verified. Say go."
 User says "go" or "deliver"
     |
     v
-Launch: claude --worktree {name} -p "..." --append-system-prompt-file prompt.txt
+Step 1 — dev agent (Stop hook keeps it going until target met):
+    claude --worktree {name} -p "do the work" --append-system-prompt-file prompt.txt
+
+Step 2 — evaluator (reviews what dev did):
+    claude --worktree {name} -p "evaluate" --append-system-prompt-file prompt.txt --agent evaluator
 ```
 
 **PLAN is read-only.** No code edits, no tests. Only: read, check resources, create mission, launch.
 
 ## DELIVER — monitor, don't sit idle
 
-After launching:
+After launching dev:
 - Poll every 30s: stream size, processes, containers
 - Report status line each poll
-- If failure detected: report immediately
-- Don't send stop signals unless clearly broken for 2+ minutes
+- When dev finishes → launch evaluator in same worktree
+- When evaluator writes verdict → move to EVALUATE
 
 ## EVALUATE — show results
 
