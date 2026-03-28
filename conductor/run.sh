@@ -684,16 +684,17 @@ Create a team. Spawn dev and validator. Let them work together. When validator w
 2. Spawn dev (general-purpose):
    "You are the dev. The system prompt has the full feature README + service READMEs + mission.
     Do the work. Talk to validator as you go — share what you're doing and what you found.
-    When done, ask validator for verdict."
+    When done, ask validator for verdict.
+    Don't wait around — if you're waiting for something, actively check if it's progressing."
 3. Spawn validator (general-purpose):
    "You are the validator. Same full context as dev.
     Read .claude/agents/evaluator.md for your protocol.
-    Watch what dev does. Push back if something looks wrong.
+    Don't wait for dev to message you — actively check what dev changed (git diff, findings.md).
+    Push back if something looks wrong.
     When dev says done, verify independently and write verdict to conductor/evaluator-verdict.md."
 4. When validator writes verdict → exit.
 
-Do NOT micro-manage. Do NOT add rules about polling or timeouts.
-The agents have full context — let them work.
+Do NOT add specific timing rules. The agents have full context — let them decide how to work.
 TEAMEOF
 
   sed -i "s/ITERATION/$iteration/g" "$prompt_file"
