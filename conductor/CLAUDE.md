@@ -1,65 +1,54 @@
 # Conductor
 
-## PLAN
+One session does everything. User launches it, it PLANs, DELIVERs, and the user SHOWs.
 
-Team: conductor + researcher + validator. One pass, not a loop.
+## PLAN (first thing you do)
 
 1. **Business DoD** — ask the user: what does "done" look like? Something they can verify by using the system end-to-end. Not unit tests — the real thing working.
 
-2. **Researcher** investigates: read the code, check what exists, what's missing, what's the gap between Design README (what we want) and State (what we got).
+2. **Research** — read the feature README, check what exists vs what's needed. Identify the gap.
 
-3. **Validator** checks the DoD: is it testable? Is it specific enough? Can the delivery team verify it against the running system? If not, sharpen it.
+3. **Validate DoD** — is it testable? Specific enough? Can you verify it against the running system?
 
-4. **Check resources** — are services up? Env set? Hard blockers? If something critical is down, it's a blocker — report and stop.
+4. **Check resources** — services up? Env set? Hard blockers? If critical infra is down, report and stop.
 
-5. **Build prompt file** — mission + feature README + service READMEs → `batches/{name}-prompt.txt`
+5. **Build context** — read service READMEs from Code Ownership section. You now have full constraints.
 
-6. **Give the user the command:**
-```bash
-CONDUCTOR_MISSION={name} claude --worktree {name} \
-    --append-system-prompt-file conductor/batches/{name}-prompt.txt
-```
+Then move to DELIVER. No separate session. No nesting. You just keep going.
 
-## DELIVER
+## DELIVER (you do the work)
 
-User runs the command. One terminal. Interactive. Persistent loop (Stop hook).
+Create a team (dev + validator). They work together in this session.
 
-Inside: dev vs validator team.
 - **Dev** does the work — code, deploy, test
-- **Validator** checks against business DoD — not code quality, not scores. "Does the thing actually work?" Run it. Verify against the running system. If dev says "fixed" but it doesn't work, reject.
+- **Validator** checks against business DoD — does the thing actually work? Not code review — run it and verify.
 
-The loop: dev works → validator checks DoD → not met → dev continues. Stop hook enforces. Session doesn't end until business DoD passes or hard blocker.
+Stop hook keeps the session going until DoD passes or hard blocker.
 
-**Validator gates state.** Dev produces output. Validator confirms it meets DoD. Only then does README State section update. Dev doesn't write its own scores.
+**Validator gates state.** Dev produces output. Validator confirms it meets DoD. Only then does README State section update.
 
 ## SHOW
 
-User does the thing. Opens the dashboard. Sends the Telegram message. Joins the meeting. Either it works or it doesn't.
+You tell the user what to verify. User does the thing. Works or doesn't.
 
 ## READMEs
 
-Source of truth. Every feature/service README has:
+Source of truth. Every feature/service README:
 
 ```
-<!-- DESIGN: what we want — feeds into PLAN -->
+<!-- DESIGN: what we want -->
 Why, Data Flow, Code Ownership, Constraints
-    ↑ requirements, metrics, constraints, system design
 
 ---
 
 <!-- STATE: what we got — updated after validation only -->
 Quality Bar, Certainty, Known Issues
-    ↑ only updated when validator confirms output meets DoD
 ```
-
-Design is the spec — where it's going.
-State is honest — what it is right now.
 
 ## Rules
 
-- Business DoD from the user, in their words
-- PLAN identifies DoD + blockers + resources. Researcher + validator help.
-- DELIVER is a persistent loop. Dev vs validator. Validator checks real DoD.
-- State only updated after validation, never by dev alone
+- One session, no nesting, no backgrounding
+- PLAN researches and validates DoD before coding
+- DELIVER: dev + validator team, Stop hook enforces loop
+- State only updated after validator confirms
 - SHOW is the user doing the thing
-- READMEs are source of truth for where it's going (Design) and what it is (State)
