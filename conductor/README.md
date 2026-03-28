@@ -1,236 +1,207 @@
-# Conductor — Self-Improvement Loop
+# Conductor
+
+<!-- DESIGN -->
 
 ## Why
 
-The vexa codebase has 15 features, 12 services, and 42 agent configs. Improving any feature requires: reading the right docs, understanding the architecture, writing code that follows constraints, verifying with evidence, and updating docs. A human can't hold all of this in their head. An unsupervised agent drifts — writes code that works but violates the design, inflates scores, ignores constraints.
+Software systems grow beyond what one person can hold in their head. AI agents can work on them, but unsupervised agents drift — they write code that works but violates the design, claim progress without evidence, ignore constraints, and celebrate prematurely.
 
-The conductor keeps agents running, focused, and honest. It reads the manifest (design intent), spawns agents that follow it, verifies their claims with a skeptical evaluator, and tracks progress across sessions. The human steers from chat — describes missions, monitors output, intervenes when needed.
+The conductor is a framework for autonomous software improvement that solves this through four principles:
 
-## Data Flow
+**Constraint-aware.** Every feature and service has a README that declares its design (data flow, ownership, constraints). The agent reads these before touching code. It knows what it's allowed to change and what it must preserve.
+
+**Autonomous with boundaries.** The agent runs until it reaches the goal or hits a real blocker. It doesn't stop for convenience or declare partial success. It diagnoses, fixes, deploys, verifies — the full cycle in every iteration. When blocked by infrastructure it can't fix, it documents the blocker and stops honestly.
+
+**Adversarial.** Generation and validation are separate roles with opposing incentives. The dev agent implements. The validator agent tries to disprove the claims. They work as a team — the validator catches issues during implementation, not after. Neither can override the other. Progress requires both to agree.
+
+**Human interface.** The user manages everything from chat. Describe a mission → the framework runs it. Check progress → the dashboard shows live activity, costs, scores. Intervene → redirect the team mid-work. The user never edits config files, runs scripts manually, or reads raw logs.
+
+## How It Works
 
 ```
-User describes mission in chat (or writes conductor/missions/{name}.md)
+User describes what they want in chat
     |
     v
-run.sh --mission {name}
+Conductor reads the feature's README.md
+    → Design section: data flow, constraints, ownership (the spec)
+    → State section: quality bar, certainty, known issues (current reality)
+    → Identifies FAIL items in quality bar → those become the target
     |
     v
-worktree exists for this mission?
-    no  → git worktree add .worktrees/{name}/ (isolated branch)
-          copy conductor scripts + mission file into worktree
-    yes → reuse existing
+Creates mission file + git worktree (isolated branch)
     |
     v
-read mission.md → extract focus, target, stop-when
+Spawns a team (TeamCreate):
+    |
+    ├── Dev agent
+    |     reads README (design intent) + service READMEs (boundaries)
+    |     diagnoses → fixes → deploys → verifies
+    |     sends progress to validator
+    |
+    ├── Validator agent
+    |     reviews dev's work in real-time
+    |     checks: constraints respected? evidence real? scores honest?
+    |     sends issues back to dev before they compound
+    |     writes verdict: ACCEPT or REJECT with evidence
+    |
+    └── Coordinator (this chat session)
+          monitors progress, relays to user
+          user can intervene: "focus on X", "stop", "that's wrong"
     |
     v
-ITERATION LOOP (repeats until done, plateau, or limit):
-    |
-    v
-    read state.json → current iteration, scores, last evaluation
-    |
-    v
-    plateau detected? (same scores for 3+ iterations)
-        yes → inject PLATEAU ALERT into orchestrator prompt
-        no  → continue
-    |
-    v
-    last evaluation was REJECTED?
-        yes → inject rejection context into prompt
-        no  → continue
-    |
-    v
-    spawn orchestrator: claude -p --append-system-prompt-file (feature README.md)
-        |
-        v
-    orchestrator reads README.md (system design), mission.md (objective)
-        |
-        v
-    diagnose → fix → verify (autonomous, no human)
-        |
-        v
-    stream-json events → batches/stream-N.jsonl (live, every tool call)
-        |
-        v
-    parse-stream.py extracts:
-        batches/batch-N.log   ← activity log (▶ BASH, ◀ READ, ✎ EDIT)
-        batches/meta-N.json   ← cost, tokens, turns, files changed
-    |
-    v
-    snapshot scores: check-completion.py reads all findings.md
-        → update state.json with current scores
-    |
-    v
-    spawn evaluator: claude -p --agent evaluator
-        |
-        v
-    evaluator checks:
-        did scores actually move? (git diff findings.md)
-        is there execution evidence? (command + stdout, not prose)
-        did anything regress? (compare score snapshots)
-        constraints violated? (cross-service imports, ownership)
-        |
-        v
-    writes evaluator-verdict.md → ACCEPT or REJECT with evidence
-    |
-    v
-    check completion:
-        mission target met?     → STOP: mission accomplished
-        iteration limit hit?    → STOP: limit reached
-        stop signal file exists? → STOP: user halted
-        none of the above?      → LOOP: next iteration
+After team completes:
+    → scores updated in README State section (with evidence)
+    → findings.md updated with execution proof
+    → pre-merge gate checks constraints, regressions, evidence
+    → merge into main branch or reject with explanation
+```
+
+## Principles
+
+### README is the single source of truth
+
+Every feature and service has a README with two sections:
+
+```
+<!-- DESIGN: what we want. Can be ahead of code. -->
+Why, Data Flow, Code Ownership, Constraints, Gate
 
 ---
 
-dashboard.py :8899 (runs in background, serves web UI):
-    reads: state.json, meta-N.json, batch-N.log, conductor.log, verdict
-    serves: /api/dashboard (JSON), /api/batch/{name}, /api/logs/{name}
-    auto-refreshes every 5s
-    click mission → see activity log + evaluator verdict + conductor log
+<!-- STATE: what we have. Only updated with evidence. -->
+Quality Bar, Certainty, Known Issues
+```
+
+Design is the spec — it can be aspirational. State is the proof — it's never optimistic. They converge when the feature is done. The evaluator checks State against code, not Design against code.
+
+### Evidence-based progress
+
+Scores only move with execution evidence:
+
+```
+VALID evidence:    command + stdout ("curl returned 200, body contains 6 segments")
+INVALID evidence:  prose ("the code looks correct", "should work based on review")
+```
+
+Quality bar items stay FAIL until proven. Certainty scores require specific evidence with dates. The evaluator rejects claims without proof.
+
+### Adversarial validation
+
+Dev and validator have opposing incentives:
+
+```
+Dev's goal:        make progress, advance scores, ship features
+Validator's goal:  find what's wrong, reject inflated claims, catch drift
+
+Neither can override the other:
+    dev says PASS + validator says PASS → accepted
+    dev says PASS + validator says FAIL → rejected (validator explains why)
+    dev can't skip validation
+    validator can't make changes
+```
+
+### Constraint enforcement
+
+The conductor passes feature README + all owned service READMEs to the agent. Constraints are in the system prompt — the agent can't claim it didn't know.
+
+```
+Feature README says: "all API calls go through gateway"
+Service README says: "agent-api accepts calls from gateway only"
+    → agent imports agent-api directly → constraint violation
+    → evaluator catches it → rejected
+    → pre-merge gate blocks it
+```
+
+### Documentation flow
+
+```
+Before implementation:
+    1. Scaffold feature README (Design section: why, data flow, constraints)
+    2. Scaffold service READMEs if needed (new contracts)
+    3. All quality bar items = FAIL, all certainty = 0
+
+During implementation:
+    4. Dev agent reads READMEs → implements to match Design
+    5. Validator reviews against README constraints in real-time
+
+After implementation:
+    6. Update README State section (quality bar, certainty, known issues)
+    7. Only FAIL → PASS where execution evidence exists
+    8. Known issues: add discoveries, remove fixes
+    9. Design section: only change if architecture actually changed
+```
+
+## Components
+
+```
+conductor/CLAUDE.md          → control room (interactive sessions, team management)
+conductor/run.sh             → worktree setup, state management, iteration loop
+conductor/check-completion.py → score parsing, plateau detection, completion check
+conductor/parse-stream.py    → stream-json → activity log
+conductor/dashboard.py       → web dashboard :8899 (JSON API + HTML)
+conductor/dashboard.html     → web UI (auto-refresh, live activity log)
+conductor/missions/          → per-job mission files
+.claude/agents/evaluator.md  → skeptical evaluator agent definition
+```
+
+## Observability
+
+```
+Web dashboard (http://localhost:8899):
+    → mission cards: status, cost, duration, tokens
+    → batch output: live activity log (▶ BASH, ◀ READ, ✎ EDIT)
+    → evaluator verdict: ACCEPT/REJECT with evidence
+    → conductor log: iteration decisions, plateau detection
+    → feature scores: bar chart of all features
+
+Chat interface:
+    → "how's it going?" → show progress summary
+    → "stop" → halt the team
+    → "focus on X instead" → redirect
+    → "merge" → run pre-merge gate
+```
 
 ---
 
-MERGE (after mission complete):
-    run.sh --merge {name}
-        |
-        v
-    pre-merge gate:
-        1. evaluator verdict = ACCEPTED?
-        2. mission focus matches changed files?
-        3. no cross-service import violations?
-        4. tests pass?
-        5. no score regressions?
-        |
-        all pass → merge branch into main, clean up worktree
-        any fail → BLOCKED, show what failed
-```
-
-## Code Ownership
-
-```
-conductor/run.sh                    → outer loop, worktree mgmt, spawn orchestrator + evaluator
-conductor/check-completion.py       → score parsing, completion check, plateau detection
-conductor/parse-stream.py           → stream-json → activity log + metadata
-conductor/dashboard.py              → web + terminal dashboard, JSON API
-conductor/dashboard.html            → web UI, auto-refreshes every 5s
-conductor/missions/                 → per-job mission files
-conductor/Makefile                  → make targets
-conductor/CLAUDE.md                 → control room instructions (for interactive sessions)
-.claude/agents/evaluator.md         → skeptical evaluator agent
-.claude/commands/conductor-entry.md → ritualized session entry
-.claude/commands/evaluate.md        → manual evaluator trigger
-```
+<!-- STATE -->
 
 ## Quality Bar
 
 ```
-Orchestrator produces output     >0 bytes        stream-json working          PASS
-Scores parsed correctly          match findings   median + Overall: pattern    PASS
-Completion check detects done    exit 0           score-based + descriptive    PASS
-Evaluator catches false claims   rejects >= 1     caught 4 bugs first run     PASS
-Plateau detection fires          3 unchanged      logic exists, untested       PARTIAL
-Parallel missions (worktrees)    2+ simultaneous  both produced output         PASS
-Live streaming output            see agent work   stream-json → parse-stream   PASS
-Intervention (pause/resume)      inject context   not implemented              FAIL
-Cost tracking                    $/tokens shown   --output-format stream-json  PARTIAL
-Design enforcement               check manifest   manifests exist, not wired   FAIL
+Team-based execution (TeamCreate)     dev + validator collaborate     FAIL (sequential today)
+Constraint enforcement                README constraints in prompt    PASS (auto-appended)
+Adversarial validation                evaluator catches real bugs     PASS (caught 4+ bugs)
+Live activity streaming               see tool calls as they happen  PASS (parse-stream.py)
+Cost tracking                         $/tokens per iteration         PASS ($4.59 captured)
+Plateau detection                     3 unchanged → alert            PARTIAL (logic exists)
+Human intervention                    redirect mid-run from chat     FAIL (stop file only)
+Pre-merge gate                        blocks on violations           PASS (5 checks)
+Completion check accuracy             no false positives             FAIL (too permissive)
+README auto-append to prompt          feature + service READMEs      PASS (code ownership chain)
 ```
-
-## Gate
-
-**PASS**: Describe mission in chat → conductor creates worktree → orchestrator runs → stream output visible in dashboard → evaluator verifies → scores + cost shown → manifest constraints not violated.
-
-**FAIL**: Empty output, wrong scores, evaluator misses violations, dashboard stale, or constraints violated without detection.
 
 ## Certainty
 
 ```
-run.sh spawns orchestrator           90   3 successful runs                       2026-03-27
-check-completion.py parses scores    80   median + Overall: pattern working       2026-03-27
-Evaluator produces verdict           90   caught 4 real bugs first run            2026-03-27
-Worktree parallel missions           70   both ran, one ignored mission focus     2026-03-27
-Dashboard web UI serves              90   HTML + JSON API on port 8899            2026-03-27
-Stream output parsed                 80   parse-stream.py produces activity log   2026-03-27
-Cost/token tracking                  30   stream-json has data, not displayed yet 2026-03-27
-Intervention (pause/resume)           0   not implemented                         —
-Design enforcement via manifest       0   manifests exist, not wired to evaluator 2026-03-27
+Orchestrator runs autonomously        90   multiple missions completed              2026-03-28
+Evaluator catches false claims        90   rejected inflated scores, auth bugs      2026-03-28
+Score parsing from findings           80   median + Overall: pattern                2026-03-27
+Worktree isolation                    70   works but cwd bug caused main repo edits 2026-03-28
+Dashboard serves live data            90   HTML + JSON API on :8899                 2026-03-27
+Stream output parsed                  80   activity log with tool calls             2026-03-28
+Cost tracking                         80   $4.59 + $0.83 captured from stream-json  2026-03-28
+Pre-merge gate                        70   5 checks, stale verdict bug found        2026-03-28
+Team-based execution                   0   not implemented (sequential today)       —
+Human intervention via chat            0   stop file only, no mid-run redirect      —
+Completion check accuracy             30   descriptive targets too permissive       2026-03-28
 ```
-
-## Documentation Flow
-
-```
-Agent starts a mission
-    |
-    v
-read feature README.md ← this is the design intent (what SHOULD be true)
-    |
-    v
-diagnose what's broken (compare README claims vs actual code behavior)
-    |
-    v
-fix code to match README's quality bar
-    |
-    v
-run tests, capture evidence (command + stdout)
-    |
-    v
-update findings.md with evidence and new scores
-    |
-    v
-did the code change what the feature does?
-    yes → update README.md:
-            Why section   ← stays (design intent, rarely changes)
-            Data Flow     ← update if architecture changed
-            Quality Bar   ← update current values
-            Certainty     ← update scores + evidence
-            Known Issues  ← add/remove as discovered
-    no  → README stays as-is
-    |
-    v
-evaluator checks:
-    did code respect README constraints?
-    does README still match code?
-    any drift? → flag it, next iteration fixes it
-```
-
-**Order of operations** — every mission follows this:
-
-1. **README.md** is the design intent. Agent reads it before touching code.
-2. **Code** is changed to match the manifest's quality bar and fix known issues.
-3. **findings.md** is updated with execution evidence (command + stdout, not prose).
-4. **README.md** is updated from manifest + code:
-   - **Why** — from manifest (problem, constraints, design decisions)
-   - **What** — from code (what it does, architecture, key behaviors)
-   - **How** — from code (how to run, configure, develop)
-
-**Single source of truth:**
-- Why it exists, design intent → `README.md`
-- Current state, implementation → code + `findings.md`
-- User-facing docs → `README.md` (derived from manifest + code, never invented from scratch)
-
-**Drift detection:** The evaluator checks after each batch:
-- Did code changes respect manifest constraints?
-- Does README still match code?
-- Does manifest still match reality? (if not, update manifest — it's a living doc)
-
-## Constraints
-
-- Conductor is a bash outer loop — does NOT decide what to work on, only whether to keep going
-- All intelligence is in `claude -p` invocations — conductor is dumb orchestration
-- State persists in files (state.json, conductor.log, batches/) — never in memory or context windows
-- Each mission runs in its own git worktree — no shared mutable state between parallel missions
-- Conductor MUST pass the feature's README.md to the orchestrator via `--append-system-prompt-file`
-- Evaluator MUST check manifest constraints, not just score claims
-- Score parsing uses findings.md as source of truth — state.json can be overwritten by snapshots
-- Batch-written scores preserved via `max(parsed, existing)` in snapshots
-- No hardcoded ports, budgets, or model names — all configurable via flags
-- Dashboard reads from files only — no direct communication with running claude processes
-- README.md MUST be updated when behavior changes and match this manifest
 
 ## Known Issues
 
-- Orchestrator sometimes ignores mission focus and works on a different feature
-- `check-completion.py` "Met: YES" too permissive for descriptive targets
-- Evaluator verdict file path inconsistent between main conductor/ and worktrees
-- No session persistence yet (`--resume` not wired)
-- Stale files from earlier runs can confuse dashboard
+- Completion check too permissive — "pass" anywhere in findings triggers "met"
+- Evaluator reads stale verdicts from previous missions
+- Worktree cwd bug: orchestrator sometimes writes to main repo instead of worktree
+- Sequential dev → evaluator means issues caught late, not during implementation
+- `run.sh` is both worktree manager and execution engine — should be separated
+- No `--resume` session persistence across iterations
+- Dashboard doesn't render Mermaid or markdown in batch output
