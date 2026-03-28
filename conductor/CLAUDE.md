@@ -39,8 +39,8 @@ Quick resource check (30 seconds max):
     all clear → continue
     |
     v
-Create missions/{name}.md
-Build prompt.txt (feature README + service READMEs + mission)
+Create missions/{name}.md (mission definition only)
+Build batches/{name}-prompt.txt (feature README + service READMEs + mission — for --append-system-prompt-file)
     |
     v
 Show user: "Mission: {target}. Resources verified. Say go."
