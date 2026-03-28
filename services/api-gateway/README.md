@@ -71,14 +71,16 @@ Key responsibilities:
 | * | `/admin/{path}` | All admin/analytics endpoints |
 | PUT | `/user/webhook` | Set user webhook URL |
 
-**Remote Browser** (proxied to meeting-api, token-authenticated)
+**Bot Browser View** (proxied to container, token/meeting-ID authenticated)
+
+The `{token}` can be a meeting ID (integer) or a session_token (random string). Both resolve via Redis `browser_session:{token}` to the container name.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/b/{token}` | Browser session dashboard page (embedded VNC + controls) |
-| GET/WS | `/b/{token}/vnc/{path}` | Proxy to noVNC web client (HTTP assets + websockify WebSocket) |
-| GET/WS | `/b/{token}/cdp/{path}` | Proxy to Chrome DevTools Protocol endpoint on the container (HTTP JSON + WebSocket) |
-| POST | `/b/{token}/save` | Trigger storage save (browser profile + workspace) to MinIO |
+| GET | `/b/{token}` | Browser dashboard page (embedded VNC + controls) |
+| GET/WS | `/b/{token}/vnc/{path}` | Proxy to noVNC web client (HTTP assets + websockify WebSocket) — works for any bot |
+| GET/WS | `/b/{token}/cdp/{path}` | Proxy to Chrome DevTools Protocol endpoint (browser sessions only) |
+| POST | `/b/{token}/save` | Trigger storage save (browser sessions only) |
 
 **User Settings** (proxied to admin-api)
 

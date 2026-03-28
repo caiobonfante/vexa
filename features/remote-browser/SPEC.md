@@ -1,93 +1,112 @@
-# Remote Browser — Integration with Meetings (IMPLEMENTED)
+# Bot Browser View — Unified Architecture (IMPLEMENTED)
 
 ## WHY
 
-Browser sessions are currently implemented as a separate page (`/browser`) with their own lifecycle, but they store data in the `meetings` table with `platform=browser_session`. This causes:
+Previously, browser sessions were a separate concept from meeting bots — different code paths, different UI, different token system. But they use the same image (vexa-bot), same Xvfb, same Playwright. A browser session is just a bot without a meeting.
 
-1. **Browser sessions show in Meetings list** with no way to manage them
-2. **Stop is broken** — dashboard sends `meeting.id` but endpoint expects `platform_specific_id`
-3. **Stale sessions pile up** — containers die but DB stays "active" (22 stale in testing)
-4. **No concurrency check** — browser sessions bypass `max_concurrent_bots`, so a user can't start a real meeting bot while browser sessions are "active"
-5. **Two pages for one concept** — browser sessions ARE meetings, they should be managed from the Meetings page
+The unified architecture:
+1. **Every bot has VNC** — entrypoint starts fluxbox + x11vnc + websockify in all modes
+2. **Gateway routes by meeting ID** — no separate session_token needed for meeting bots
+3. **Dashboard shows browser view for any active meeting** — Transcript/Browser tab toggle
+4. **Browser sessions are still first-class** — same creation flow, with extra features (CDP, SSH, persistence)
 
 ## WHAT
 
-Browser sessions become first-class meetings:
+### Meeting bots (Google Meet, Teams, Zoom)
 
-- **Meetings page** shows browser sessions with proper icon (Monitor), actions (VNC, Stop, Connect Agent)
-- **Meeting detail page** (`/meetings/[id]`) detects `browser_session` mode and shows VNC view instead of transcript viewer
-- **"Join Meeting" modal** gets a "Browser Session" option alongside Google Meet/Teams/Zoom
-- **Concurrency check** — browser sessions count against `max_concurrent_bots`
-- **Stop works** — fix the meeting ID vs platform_specific_id mismatch
-- **Stale cleanup** — reconcile on page load, mark orphaned sessions as completed
-- **`/browser` page removed** from sidebar — everything through Meetings
+- VNC stack starts automatically in the container (fluxbox + x11vnc + websockify)
+- Container registered in Redis as `browser_session:{meeting_id}` after spawn
+- Dashboard meeting detail page shows **Transcript | Browser** tab toggle
+- Browser tab renders full-screen noVNC iframe via `/b/{meeting_id}/vnc/...`
+- Gateway resolves meeting ID from Redis, proxies to container:6080
 
-### Meeting detail for browser_session shows:
-- VNC iframe (same as current `/browser` page)
-- Toolbar: Save, Connect Agent (sidebar), Fullscreen, Stop
-- Connect Agent sidebar: CDP instructions, SSH, MCP endpoint
+### Browser sessions (standalone)
 
-### Git workspace settings:
-- Stored in localStorage (user-level, not per-session)
-- Configured from a settings panel accessible in the browser session view
-- Automatically passed when creating browser sessions
+- Same VNC stack, plus CDP proxy (socat on :9223) and SSH server
+- Registered in Redis by both `session_token` (backward compat) and `meeting_id`
+- Dashboard renders `BrowserSessionView` with Save, Connect Agent, SSH, Fullscreen, Stop
+- Persistent workspace (git/MinIO) and browser profile (MinIO)
+
+### Escalation (needs_human_help)
+
+- When a meeting bot gets stuck (CAPTCHA, auth wall, waiting room timeout)
+- VNC is already running — no lazy-start needed
+- Container already registered in Redis by meeting ID
+- Dashboard shows escalation banner with VNC link: `/b/{meeting_id}`
 
 ## HOW
 
-### 1. Bot-manager: concurrency check for browser sessions
-- Remove the early return at line 651 that bypasses `max_concurrent_bots`
-- Browser sessions count like any other bot
+### 1. Entrypoint (all modes)
 
-### 2. Fix stop endpoint
-- Dashboard sends `DELETE /bots/{meeting_id}` using meeting ID
-- Bot-manager looks up by `meetings.id` directly, not `platform_specific_id`
-- Or: dashboard sends the correct `platform_specific_id` ("bs-xxx")
+```bash
+# entrypoint.sh — runs for both meeting and browser_session mode
+Xvfb :99 -screen 0 1920x1080x24 &
+fluxbox &                    # maximizes all windows
+x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
+websockify --web /usr/share/novnc 6080 localhost:5900 &
+node dist/docker.js
+```
 
-### 3. Meeting detail page: browser_session branch
-- In `/meetings/[id]/page.tsx`, check `currentMeeting.data?.mode === "browser_session"`
-- If true: render VNC view + toolbar + agent sidebar (lifted from `/browser` page)
-- If false: existing transcript viewer
+Browser session mode additionally starts: socat (CDP proxy), SSH server.
 
-### 4. Meetings page: platform filter + icon
-- Add `browser_session` to platform filter dropdown
-- `PlatformIcon` renders Monitor icon for `browser_session`
-- MeetingRow: for active browser sessions, show Stop button inline
+### 2. Meeting API — container registration
 
-### 5. Join Meeting modal: browser session option
-- Add "Browser Session" tab/option in the join modal
-- Shows git workspace settings inline
-- Creates session via existing `POST /bots {mode: "browser_session"}`
+After spawning a container for any bot:
 
-### 6. Remove `/browser` page
-- Delete `services/dashboard/src/app/browser/page.tsx`
-- Remove "Browser" from sidebar navigation
+```python
+# meetings.py — after container spawn
+await redis_client.set(
+    f"browser_session:{meeting_id}",
+    json.dumps({"container_name": container_name, "meeting_id": meeting_id, "user_id": user_id}),
+    ex=86400,
+)
+```
 
-### 7. Stale session cleanup
-- On meetings page load (or on a timer), check active browser_sessions
-- For each: verify container exists via `/bots/status`
-- Mark orphaned ones as `completed`
+Browser sessions additionally store by `session_token` for backward compat.
+
+### 3. Gateway — unchanged
+
+The gateway's `resolve_browser_session(token)` does `redis.get(f"browser_session:{token}")`. The "token" can be a meeting ID (integer) or a session_token (random string) — both resolve to the same container info. Zero gateway changes needed.
+
+### 4. Dashboard — meeting detail page
+
+```tsx
+// page.tsx
+const hasBrowserView = ['requested', 'joining', 'awaiting_admission', 'active'].includes(status);
+
+// Full-screen layout when browser tab is active
+if (browserViewIframe) {
+  return (
+    <div className="flex flex-col h-[calc(100vh-64px)] -m-4 md:-m-6">
+      <toolbar>  Transcript | Browser | Fullscreen  </toolbar>
+      <iframe src="/b/{meeting_id}/vnc/vnc.html?autoconnect=true&resize=scale" />
+    </div>
+  );
+}
+
+// Otherwise: normal transcript view with tab toggle in header
+```
+
+Browser session mode: early return to `<BrowserSessionView />` (unchanged).
 
 ## Architecture
 
 ```
 Meetings Page (list)
-  ├── Regular meetings → click → /meetings/[id] → transcript viewer
-  └── Browser sessions → click → /meetings/[id] → VNC view + agent panel
+  ├── Regular meetings → click → /meetings/[id] → Transcript | Browser tabs
+  └── Browser sessions → click → /meetings/[id] → BrowserSessionView
 
-Join Meeting Modal
-  ├── Google Meet URL
-  ├── Teams URL
-  ├── Zoom URL
-  └── Browser Session (git workspace settings)
+Container lifecycle (unified):
+  POST /bots { meeting_url | mode: "browser_session" }
+    → check max_concurrent_bots
+    → INSERT meetings
+    → start container (vexa-bot image, same for both)
+    → Redis: browser_session:{meeting_id} → container_name
+    → VNC available at /b/{meeting_id}/vnc/...
 
-Container lifecycle:
-  POST /bots {mode: "browser_session"}
-    → check max_concurrent_bots (SAME as regular)
-    → INSERT meetings (platform="browser_session")
-    → start container (VNC + CDP + SSH)
-    → store session_token in meeting.data + Redis
-
-  DELETE /bots/{platform}/{platform_specific_id}
-    → stop container
-    → UPDATE meetings SET status="completed"
+Gateway VNC proxy:
+  /b/{id}/vnc/websockify
+    → resolve_browser_session(id)
+    → Redis GET browser_session:{id}
+    → proxy WebSocket to container:6080
 ```

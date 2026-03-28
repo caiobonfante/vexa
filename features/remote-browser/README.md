@@ -1,251 +1,115 @@
 # Bot Browser View
 
-> **Confidence: 0** — RESET: unified bot/browser architecture. Every bot now has VNC. Gateway routes by meeting ID, not session_token.
-> **Tested:** Container builds with VNC packages, browser starts in all modes, VNC accessible via meeting ID.
-> **Not tested:** Meeting-ID-based gateway routing (implementation pending), MinIO persistence, authenticated bot flow.
-> **Contributions welcome:** MinIO sync for browser profiles, authenticated meeting join flow, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).
+> **Confidence: 30** — Unified bot/browser architecture implemented. Every bot has VNC. Gateway routes by meeting ID. Dashboard shows browser view for any active meeting.
+> **Tested:** VNC in meeting mode, meeting-ID gateway routing, dashboard tab toggle, full-screen layout.
+> **Not tested:** MinIO persistence for meeting bots, authenticated bot flow, CDP proxy for meeting bots.
+> **Contributions welcome:** Authenticated meeting joins, MinIO sync for browser profiles, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).
 
 ## Why
 
-Meeting bots join as unauthenticated guests — org-restricted meetings reject them. Unlike generic headless browsers (Browserbase, Browserless) which are ephemeral and meeting-unaware, this provides:
+Every bot runs a real browser (Playwright on Xvfb). Users should be able to see what the bot sees — whether it's in a meeting or running as a standalone browser session. This helps with:
 
-- **VNC** — human sees and controls the browser (for OAuth, MFA, CAPTCHAs)
-- **CDP/Playwright** — agent automates programmatically (for meeting joins, navigation)
-- **Both simultaneously** — human authenticates once, agent takes over for all future sessions
-- **Persistent auth** — cookies/localStorage sync to MinIO, restored on next spawn
-- **Meeting-capable** — audio capture, transcription, screen sharing built in
+- **Monitoring** — watch the bot join, navigate, and interact in real time
+- **Debugging** — see exactly what went wrong when a bot fails
+- **Human intervention** — take over via VNC when the bot hits a CAPTCHA or auth wall
+- **Authenticated joins** — log into Google/Teams once via VNC, cookies persist for future bots
 
-This solves the hardest problem in meeting bots: org-restricted meetings. Human logs into Teams/Google once → agent joins all future meetings as an authenticated user.
+A browser session is just a bot without a meeting. Same image, same VNC, same container — just different config.
 
 ---
 
-Vexa bots are unauthenticated guests. They launch fresh `--incognito` Chromium, join as strangers, land in lobbies, get rejected from org-restricted meetings. There's no way to give a bot a persistent browser identity.
+## Design
 
-The fix: a **human-agent collaborative browser** with profile persistence. Human authenticates via VNC, agent automates via CDP/Playwright — both control the same browser simultaneously. Browser state and user workspace persist across sessions.
+### Every bot has VNC
 
-Human handles what requires judgment (OAuth, CAPTCHAs, MFA). Agent handles what's automatable (navigation, validation, meeting scripts).
+The vexa-bot container runs Xvfb on display `:99` and Playwright in non-headless mode for ALL modes. The entrypoint starts the VNC stack (fluxbox, x11vnc, websockify) regardless of whether the bot is joining a meeting or running as a standalone browser session.
+
+```
+entrypoint.sh (all modes):
+  Xvfb :99                    ← virtual display (always)
+  fluxbox                     ← window manager, maximizes all windows
+  x11vnc :99 → port 5900      ← VNC server
+  websockify 5900 → port 6080 ← VNC-over-WebSocket for noVNC
+  node dist/docker.js          ← bot process
+```
+
+### Gateway routes by meeting ID
+
+When a bot is created, the meeting-api registers the container in Redis:
+
+```
+Redis key:   browser_session:{meeting_id}
+Redis value: {"container_name": "meeting-5-abc123", "meeting_id": 42, "user_id": 5}
+```
+
+The gateway resolves `/b/{meeting_id}/vnc/...` by looking up this key — same resolver used for browser sessions. No separate session_token needed for meeting bots.
+
+Browser sessions additionally store by their `session_token` for backward compatibility.
+
+### Dashboard browser view
+
+The meeting detail page (`/meetings/{id}`) shows a **Transcript | Browser** tab toggle for any active meeting. The Browser tab renders a full-screen noVNC iframe.
+
+```
+/meetings/{id}  →  status is active?  →  show Transcript | Browser tabs
+                                          Browser tab: full-screen VNC via /b/{id}/vnc/...
+                                          Transcript tab: normal transcript view
+```
+
+For `mode=browser_session`, the dedicated `BrowserSessionView` component renders instead (with Save, Connect Agent, SSH controls).
 
 ---
 
 ## What
 
-Browser sessions are first-class meetings — created from the Meetings page, managed like any meeting, counted against `max_concurrent_bots`.
+### For any meeting bot (Google Meet, Teams, Zoom)
 
-- **VNC** — see and interact with Chromium live, embedded in the meeting detail page
+- **VNC** — see the bot's browser live on the dashboard via Browser tab
+- **Full-screen layout** — toolbar with Transcript/Browser toggle, meeting name, Fullscreen button
+- **Interactive** — click, type, scroll in the VNC view (useful for debugging or manual intervention)
+
+### For browser sessions (standalone browser, no meeting)
+
+All of the above, plus:
+
 - **CDP/Playwright** — `connectOverCDP(cdpUrl)` for full programmatic control
-- **SSH** — shell access into the container (port mapped automatically)
+- **SSH** — shell access into the container
 - **Persistent workspace** — scripts, files, data survive container restarts (git or MinIO)
 - **Persistent browser state** — cookies, localStorage, IndexedDB survive restarts (MinIO)
-- **Connect Agent** — one-click copy of instructions to paste into Claude or any AI agent
+- **Connect Agent** — one-click copy of instructions for Claude or any AI agent
+- **Save** — persist workspace + browser profile to storage
 
 ## How
 
-Two persistent layers, separated:
+### Architecture
 
 ```
-/workspace/              ← user files (scripts, data) — synced via git or MinIO
-/tmp/browser-data/       ← Chromium profile (cookies, localStorage) — synced via MinIO
+POST /bots { meeting_url }           POST /bots { mode: "browser_session" }
+         │                                       │
+         ▼                                       ▼
+    meeting-api                             meeting-api
+    ├─ create meeting record                ├─ create meeting record (platform=browser_session)
+    ├─ spawn container (vexa-bot)           ├─ spawn container (vexa-bot)
+    ├─ Redis: browser_session:{id}          ├─ Redis: browser_session:{id}
+    │         → container_name              │         → container_name
+    │                                       ├─ Redis: browser_session:{session_token}
+    │                                       │         → container_name (backward compat)
+    ▼                                       ▼
+  Container (same image)               Container (same image)
+  ├─ fluxbox + x11vnc + websockify     ├─ fluxbox + x11vnc + websockify
+  ├─ Playwright joins meeting           ├─ Playwright opens blank browser
+  ├─ VNC on :6080 (view/interact)       ├─ VNC on :6080 + CDP on :9223 + SSH on :22
+  └─ no persistence                     └─ workspace + browser data persistence
+
+Dashboard /meetings/{id}
+  ├─ Meeting bot: Transcript | Browser tabs
+  └─ Browser session: full BrowserSessionView (Save, Connect Agent, etc.)
+
+Gateway /b/{id}/vnc/websockify
+  └─ Redis lookup browser_session:{id} → proxy to container:6080
 ```
 
-On start: download both. On save: upload both. On next start: everything is there.
-
-### Storage options for workspace
-
-**Option A: MinIO (default)** — workspace syncs to `s3://vexa-recordings/users/{id}/browser-userdata/workspace/`. No external setup needed.
-
-**Option B: GitHub (recommended for teams)** — workspace clones from a private GitHub repo. On save: commit + push. Full git history, PRs, collaboration. Configured via dashboard (stored in localStorage).
-
-Browser data always uses MinIO (Chromium profile is binary, not git-friendly).
-
-### Data stages
-
-| Stage | Contents | Produced by | Consumed by |
-|-------|----------|-------------|-------------|
-| **raw** | Browser profile (cookies, localStorage, IndexedDB) + workspace files | Human interaction via VNC | MinIO/GitHub persistence |
-| **rendered** | Persisted state in MinIO/GitHub, accessible on next session start | Save operation | Next browser session |
-
-Data lives externally (MinIO: `s3://vexa-recordings/users/{id}/browser-userdata/`, GitHub: workspace repo). No local `data/` directory — persistence is the feature.
-
----
-
-## Quick start (Dashboard)
-
-### 1. Start a browser session
-
-Go to the Meetings page → click **Browser** button in the header.
-
-The session appears in your meetings list with a Monitor icon. Click it to open the VNC view.
-
-### 2. Connect an agent
-
-In the meeting detail view, click **Connect Agent** → sidebar opens with copy-pastable instructions:
-
-```js
-const { chromium } = require('playwright');
-const browser = await chromium.connectOverCDP('CDP_URL_FROM_DASHBOARD');
-const page = browser.contexts()[0].pages()[0];
-
-await page.goto('https://accounts.google.com');
-await page.screenshot({ path: 'screenshot.png' });
-await browser.close(); // disconnects only — browser stays alive
-```
-
-### 3. SSH into the container
-
-The Connect Agent sidebar also shows SSH access:
-
-```bash
-ssh root@localhost -p PORT_FROM_DASHBOARD
-# Password: the session_token (shown in Connect Agent sidebar)
-# Workspace: /workspace
-```
-
-### 4. Save storage
-
-Click **Save** in the toolbar. Saves workspace (git push or S3) + browser profile (S3).
-
-### 5. Stop
-
-Click **Stop** in the toolbar, or it stops like any other meeting.
-
----
-
-## Quick start (API)
-
-### 1. Create a browser session
-
-```bash
-curl -X POST http://localhost:8056/bots \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"mode": "browser_session"}'
-```
-
-Response:
-```json
-{
-  "id": 42,
-  "status": "active",
-  "data": {
-    "mode": "browser_session",
-    "session_token": "HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv",
-    "ssh_port": 32789
-  }
-}
-```
-
-### 2. Access the browser
-
-Dashboard (noVNC + toolbar):
-```
-http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv
-```
-
-Playwright CDP:
-```js
-const browser = await chromium.connectOverCDP(
-  'http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv/cdp'
-);
-```
-
-SSH:
-```bash
-ssh root@localhost -p 32789
-# Password: the session_token (shown in Connect Agent sidebar)
-```
-
-### 3. Save and stop
-
-```bash
-# Save
-curl -X POST http://localhost:8056/b/HxpBmQsJOsHtG8myegDHuS-wMhBJaPDv/save
-
-# Stop
-curl -X DELETE http://localhost:8056/bots/browser_session/bs-abc123 \
-  -H "X-API-Key: YOUR_API_KEY"
-
-# Start again — everything restored
-curl -X POST http://localhost:8056/bots \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"mode": "browser_session"}'
-```
-
----
-
-## GitHub workspace setup
-
-Use a private GitHub repo to persist your workspace files (scripts, configs, data).
-
-### 1. Create a private repo
-
-Create a new private repo on GitHub (e.g., `my-bot-workspace`). Can be empty.
-
-### 2. Create a fine-grained personal access token
-
-Go to: https://github.com/settings/personal-access-tokens/new
-
-Settings:
-- **Token name**: `vexa-bot-workspace`
-- **Expiration**: 90 days
-- **Repository access**: "Only select repositories" → select your workspace repo
-- **Permissions**:
-  - **Contents**: Read and write
-  - **Metadata**: Read-only (auto-selected)
-- Everything else: No access
-
-### 3. Configure in dashboard
-
-Go to Meetings page → click **Browser** → configure Git Workspace settings (repo URL, PAT, branch). Settings are saved in localStorage and passed automatically when creating sessions.
-
-### 4. Configure via API
-
-Pass git config when creating the session:
-
-```bash
-curl -X POST http://localhost:8056/bots \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mode": "browser_session",
-    "workspaceGitRepo": "https://github.com/YOUR_USER/my-bot-workspace.git",
-    "workspaceGitToken": "github_pat_...",
-    "workspaceGitBranch": "main"
-  }'
-```
-
----
-
-## Architecture
-
-```
-Meetings Page
-│  [Browser] button → POST /bots { mode: "browser_session" }
-│  → creates meeting record (platform=browser_session)
-│  → counts against max_concurrent_bots
-│  → starts container with VNC + CDP + SSH
-│
-Meeting Detail (/meetings/{id})
-│  detects mode=browser_session → shows VNC view
-│  toolbar: Save, Connect Agent, Fullscreen, Stop
-│  Connect Agent sidebar: CDP URL, SSH, MCP
-│
-Container (vexa-bot, browser_session mode)
-│  downloads browser data from MinIO
-│  clones/pulls workspace from GitHub (or MinIO)
-│  launchPersistentContext('/tmp/browser-data')
-│  VNC (:6080) + CDP (:9223 via socat) + SSH (:22)
-│
-│  Human: VNC iframe in dashboard
-│  Agent: connectOverCDP('/b/{token}/cdp')
-│  Shell: ssh root@host -p PORT
-│
-│  [Save] → git commit + push workspace (or S3 sync)
-│         → S3 sync browser data (excludes cache)
-│  container stays alive until stopped
-```
-
-### Container layout
+### Container layout (browser session mode)
 
 ```
 /workspace/              ← user files, git-tracked (GitHub or MinIO)
@@ -265,48 +129,82 @@ Container (vexa-bot, browser_session mode)
 
 ---
 
+## Quick start (Dashboard)
+
+### View any meeting bot's browser
+
+1. Go to the Meetings page → join a meeting (Google Meet, Teams, or Zoom)
+2. Open the meeting detail page
+3. Click **Browser** in the toolbar → see the bot's live browser view
+4. Click **Transcript** to switch back
+
+### Start a browser session
+
+1. Go to the Meetings page → click **Browser** button in the header
+2. The session appears in your meetings list with a Monitor icon
+3. Click it → full VNC view with Save, Connect Agent, Fullscreen, Stop
+
+---
+
+## Quick start (API)
+
+### Join a meeting (with browser view)
+
+```bash
+curl -X POST http://localhost:8056/bots \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"meeting_url": "https://meet.google.com/abc-defg-hij"}'
+```
+
+Browser view available at: `http://localhost:8056/b/{meeting_id}/vnc/vnc.html?autoconnect=true&resize=scale`
+
+### Create a browser session
+
+```bash
+curl -X POST http://localhost:8056/bots \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "browser_session"}'
+```
+
+Response includes `id` for VNC access and `data.session_token` for CDP/SSH.
+
+---
+
 ## API reference
 
-### Browser session lifecycle
+### Bot browser view (any meeting)
 
 ```
-POST   /bots { mode: "browser_session" }
-  → creates browser session, returns { id, data.session_token, data.ssh_port }
-
-DELETE /bots/browser_session/{platform_specific_id}
-  → stops browser session
+GET  /b/{meeting_id}/vnc/vnc.html     → noVNC web client
+WS   /b/{meeting_id}/vnc/websockify   → VNC WebSocket proxy
+GET  /b/{meeting_id}/vnc/{path}       → noVNC static files
 ```
 
-### Browser access (token-authenticated, no API key needed)
+### Browser session extras (standalone browser only)
 
 ```
-GET  /b/{token}              → dashboard page (noVNC + toolbar)
-WS   /b/{token}/vnc/websockify  → VNC WebSocket proxy
-GET  /b/{token}/vnc/{path}   → noVNC static files proxy
-WS   /b/{token}/cdp          → CDP WebSocket proxy
-GET  /b/{token}/cdp/{path}   → CDP HTTP proxy (e.g. /json/version)
-POST /b/{token}/save         → trigger storage save
+WS   /b/{token}/cdp                   → CDP WebSocket proxy
+GET  /b/{token}/cdp/{path}            → CDP HTTP proxy (e.g. /json/version)
+POST /b/{token}/save                  → trigger storage save
 ```
 
-### Storage save (internal)
+### Lifecycle
 
 ```
-POST /bots/{id}/storage/save
-  → trigger save (authenticated, for direct API use)
-
-POST /internal/browser-sessions/{token}/save
-  → trigger save (internal, used by gateway proxy)
+POST   /bots { meeting_url }          → join meeting, browser view at /b/{id}/vnc/...
+POST   /bots { mode: "browser_session" } → standalone browser
+DELETE /bots/{platform}/{native_id}   → stop bot
 ```
 
 ---
 
 ## System requirements
 
-| Resource | Per session |
-|----------|------------|
+| Resource | Per bot |
+|----------|---------|
 | RAM | ~1-1.5 GB (Chromium + Xvfb + VNC) |
 | CPU | 0.5 core idle, 1 core active |
 | SHM | 2 GB |
-| Disk | ~50 MB workspace + ~20 MB browser data (excludes cache) |
-| Image size | +50 MB over base vexa-bot (VNC + awscli + git + socat + sshd) |
-| MinIO | ~20-50 MB per user |
+| Image size | vexa-bot includes VNC + fluxbox + websockify |

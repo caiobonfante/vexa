@@ -48,14 +48,14 @@ Bot Container                    Bot Manager              Dashboard
       |
 checkEscalation() → non-null
       |
-startVncStack()  (x11vnc + websockify on existing Xvfb :99)
+VNC already running (started in entrypoint for all bots)
       |
 callNeedsHumanHelpCallback()
       |
       +--- HTTP POST /callback --→  bot_status_change_callback()
                                           |
                                     Update meeting.status = needs_human_help
-                                    Write browser_session:{token} to Redis
+                                    Container already in Redis as browser_session:{meeting_id}
                                           |
                                     publish_meeting_status_change()
                                           |
@@ -83,36 +83,28 @@ Added to `MeetingStatus` enum in `schemas.py`:
 - **Into:** `AWAITING_ADMISSION -> NEEDS_HUMAN_HELP`, `JOINING -> NEEDS_HUMAN_HELP`
 - **Out of:** `NEEDS_HUMAN_HELP -> ACTIVE` (resolved), `-> FAILED` (timeout), `-> STOPPING` (user stops)
 
-### VNC Lazy-Start
+### VNC Already Running
 
-Meeting bots already run Xvfb (the browser renders to a virtual display). VNC just exposes what's already there — two processes started on demand:
-
-```bash
-x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
-websockify 6080 localhost:5900 &
-```
-
-~1s startup latency, acceptable since user still needs to click through the notification. Port 6080 pre-exposed at container creation (Docker port mapping is free when nothing binds). VNC adds ~20MB RAM only when active, not on every bot.
+Since the unified bot/browser architecture, every meeting bot starts with VNC (fluxbox + x11vnc + websockify) in the entrypoint. No lazy-start needed — VNC is already active when escalation triggers. The container is also already registered in Redis by meeting ID, so the gateway can proxy VNC immediately.
 
 ### Components
 
 | Component | Role | Key File |
 |-----------|------|----------|
-| **escalation** | Detection logic, VNC lazy-start, `triggerEscalation()` | `services/vexa-bot/core/src/platforms/shared/escalation.ts` (new) |
-| **bot callback** | `callNeedsHumanHelpCallback()` sends status + VNC info | `services/vexa-bot/core/src/utils.ts` (modified) |
-| **bot-manager** | Handles `needs_human_help` callback, registers VNC session in Redis | `services/bot-manager/app/main.py` (modified) |
-| **schemas** | `NEEDS_HUMAN_HELP` status + valid transitions | `libs/shared-models/shared_models/schemas.py` (modified) |
-| **orchestrator_utils** | Pre-expose port 6080 on meeting bot containers | `services/bot-manager/app/orchestrator_utils.py` (modified) |
+| **escalation** | Detection logic, `triggerEscalation()` (VNC already running) | `services/vexa-bot/core/src/platforms/shared/escalation.ts` (new) |
+| **bot callback** | `callNeedsHumanHelpCallback()` sends status | `services/vexa-bot/core/src/utils.ts` (modified) |
+| **meeting-api** | Handles `needs_human_help` callback, escalation metadata in meeting.data | `packages/meeting-api/meeting_api/callbacks.py` (modified) |
+| **schemas** | `NEEDS_HUMAN_HELP` status + valid transitions | `packages/meeting-api/meeting_api/schemas.py` (modified) |
 | **dashboard** | Escalation banner + VNC link on meeting page | `services/dashboard/src/app/meetings/[id]/page.tsx` (modified) |
 | **bot-status-indicator** | Pulsing amber state for `needs_human_help` | `services/dashboard/src/components/meetings/bot-status-indicator.tsx` (modified) |
 
 ### Dependencies
 
 No new services, APIs, Redis structures, or WebSocket channels. Reuses:
-- VNC/noVNC/websockify binaries already in bot container image
-- `browser_session:{token}` Redis pattern for gateway discovery
+- VNC stack already running in every bot container (unified architecture)
+- `browser_session:{meeting_id}` Redis key already set at bot creation
 - `meeting.status` WebSocket event type
-- `/b/{token}` browser session routes in api-gateway
+- `/b/{meeting_id}` gateway routes for VNC proxy
 
 ### Timeout and Retry
 

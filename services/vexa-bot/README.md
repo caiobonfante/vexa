@@ -250,11 +250,21 @@ vexa-bot/
     test_mock_meeting_e2e.js  -- end-to-end mock test
 ```
 
+## VNC Browser View (All Modes)
+
+Every bot container runs a VNC stack so the dashboard can show the bot's browser in real time. The entrypoint starts this for all modes (meeting and browser_session):
+
+- **Xvfb**: Virtual display on `:99` (1920x1080x24) — Playwright renders here
+- **fluxbox**: Window manager that maximizes all windows to fill the display
+- **x11vnc**: VNC server on port 5900, connected to display :99
+- **websockify**: Bridges VNC to WebSocket on port 6080, serves noVNC web client
+
+The dashboard accesses VNC via the gateway: `/b/{meeting_id}/vnc/websockify`. The gateway resolves the meeting ID to a container name via Redis.
+
 ## Browser Session Mode
 
-Activated when `BOT_CONFIG` contains `mode: "browser_session"`. Instead of joining a meeting, the bot runs a persistent Chromium instance accessible via VNC, CDP, and SSH.
+Activated when `BOT_CONFIG` contains `mode: "browser_session"`. Instead of joining a meeting, the bot runs a persistent Chromium instance. Same VNC stack as meeting mode, plus:
 
-- **VNC**: noVNC on port 6080 (websockify proxies to x11vnc on display :99)
 - **CDP**: Chrome DevTools Protocol on port 9222 (socat exposes it on 0.0.0.0:9223 for Docker network access)
 - **SSH**: OpenSSH on port 22 (mapped to a random host port). Password is the `session_token` from BOT_CONFIG.
 - **Persistent browser profile**: Chromium user data stored at `/tmp/browser-data`, synced to/from MinIO (`users/{id}/browser-userdata/browser-data`) on startup and save.
