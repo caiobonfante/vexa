@@ -204,11 +204,17 @@ def build_dashboard():
         dashboard["totals"]["duration"] += (log_info.get("duration") or 0)
         dashboard["totals"]["count"] += 1
 
-        # Collect scores
+        # Collect scores from mission state
         for feat, info in state.get("features", {}).items():
             score = info.get("score", 0) if isinstance(info, dict) else info
             if feat not in dashboard["scores"] or score > dashboard["scores"][feat]:
                 dashboard["scores"][feat] = score
+
+    # Always include scores from global state (even with no active missions)
+    for feat, info in global_state.get("features", {}).items():
+        score = info.get("score", 0) if isinstance(info, dict) else info
+        if feat not in dashboard["scores"] or score > dashboard["scores"][feat]:
+            dashboard["scores"][feat] = score
 
     return dashboard
 
