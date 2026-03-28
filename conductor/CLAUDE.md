@@ -48,6 +48,46 @@ phase = "evaluate"
 
 ## PLAN stage (you are responsible for this)
 
+**PLAN IS READ-ONLY. You do NOT edit code, write files, or run commands that modify anything.**
+
+The ONLY files you create/edit in PLAN are:
+- `conductor/missions/{name}.md` (mission file)
+- `features/{name}/README.md` (scaffold Design section only)
+- `conductor/state.json` (phase transition)
+
+You do NOT:
+- Edit code (no services/, packages/, libs/)
+- Edit test files
+- Run docker build/restart
+- Commit anything
+- Fix bugs you find
+
+If you find blockers (broken infra, missing ports, stale config), **document them** — don't fix them. Blockers become separate conductor cycles:
+
+```
+User asks: "validate MS Teams realtime"
+    |
+    v
+PLAN finds blockers:
+    blocker 1: admin-api port not exposed (infra)
+    blocker 2: e2e test scripts reference wrong ports (code fix)
+    blocker 3: no live meeting to test against (needs hosting)
+    |
+    v
+Conductor creates missions for each:
+    missions/fix-admin-port.md       → infra fix, 1 iteration
+    missions/fix-e2e-scripts.md      → code fix, 1 iteration
+    missions/ms-teams-validate.md    → main validation, depends on above
+    |
+    v
+Run them in order (or parallel if independent):
+    1. fix-admin-port     → DELIVER → merge
+    2. fix-e2e-scripts    → DELIVER → merge
+    3. ms-teams-validate  → DELIVER → merge (now unblocked)
+```
+
+Each blocker is its own PLAN → DELIVER → EVALUATE cycle. The conductor manages the dependency chain. Small focused missions, not one giant mission that tries to fix everything.
+
 Before DELIVER can start, everything must be in place. This is YOUR job — not the human's. The human describes what they want. You make sure the system is ready.
 
 ### Pre-delivery checklist
