@@ -17,6 +17,17 @@ if [[ "$STOP_ACTIVE" == "true" ]]; then
   exit 0
 fi
 
+# Only block during DELIVER phase — don't interfere with interactive conductor or PLAN
+CONDUCTOR_DIR="${CWD}/conductor"
+if [[ ! -d "$CONDUCTOR_DIR" ]]; then
+  CONDUCTOR_DIR="$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null)/conductor"
+fi
+
+PHASE=$(python3 -c "import json; print(json.loads(open('$CONDUCTOR_DIR/state.json').read()).get('phase',''))" 2>/dev/null || echo "")
+if [[ "$PHASE" != "deliver" ]]; then
+  exit 0  # Not in delivery — allow stop
+fi
+
 # Find the active mission file
 CONDUCTOR_DIR="${CWD}/conductor"
 if [[ ! -d "$CONDUCTOR_DIR" ]]; then
