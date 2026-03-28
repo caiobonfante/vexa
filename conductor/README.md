@@ -18,43 +18,70 @@ The conductor is a framework for autonomous software improvement that solves thi
 
 ## How It Works
 
+Two layers: a dumb outer loop and a smart inner team.
+
 ```
-User describes what they want in chat
+OUTER LOOP (run.sh — bash, dumb, never makes decisions)
     |
     v
-Conductor reads the feature's README.md
-    → Design section: data flow, constraints, ownership (the spec)
-    → State section: quality bar, certainty, known issues (current reality)
-    → Identifies FAIL items in quality bar → those become the target
+create worktree for mission (isolated git branch)
     |
     v
-Creates mission file + git worktree (isolated branch)
+┌─────────────────────────────────────────────────────────┐
+│ ITERATION (repeats until goal met, plateau, or limit)   │
+│                                                         │
+│   read mission.md → what's the target?                  │
+│   read state.json → where are we?                       │
+│   plateau? → inject alert                               │
+│   last iteration rejected? → inject rejection context   │
+│                                                         │
+│   spawn claude session that creates:                    │
+│   ┌───────────────────────────────────────────────────┐ │
+│   │ INNER TEAM (TeamCreate — smart, collaborative)    │ │
+│   │                                                   │ │
+│   │  Dev agent                                        │ │
+│   │    reads feature README (design) + service READMEs│ │
+│   │    diagnoses → fixes → deploys → verifies         │ │
+│   │    sends progress to validator as it works         │ │
+│   │                                                   │ │
+│   │  Validator agent                                  │ │
+│   │    reviews dev's work in real-time                │ │
+│   │    checks constraints, evidence, regressions      │ │
+│   │    sends issues back DURING implementation        │ │
+│   │    writes verdict: ACCEPT or REJECT               │ │
+│   │                                                   │ │
+│   │  Coordinator (chat session)                       │ │
+│   │    monitors, relays to user                       │ │
+│   │    user intervenes: "focus on X", "stop"          │ │
+│   └───────────────────────────────────────────────────┘ │
+│                                                         │
+│   team finishes → update state files                    │
+│   check-completion.py: target met?                      │
+│       yes → STOP                                        │
+│       no  → LOOP                                        │
+│                                                         │
+│   stop signal? (mission.stop file) → STOP               │
+│   iteration limit? → STOP                               │
+│   plateau? (same scores 3x) → STOP with diagnosis       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
     |
     v
-Spawns a team (TeamCreate):
-    |
-    ├── Dev agent
-    |     reads README (design intent) + service READMEs (boundaries)
-    |     diagnoses → fixes → deploys → verifies
-    |     sends progress to validator
-    |
-    ├── Validator agent
-    |     reviews dev's work in real-time
-    |     checks: constraints respected? evidence real? scores honest?
-    |     sends issues back to dev before they compound
-    |     writes verdict: ACCEPT or REJECT with evidence
-    |
-    └── Coordinator (this chat session)
-          monitors progress, relays to user
-          user can intervene: "focus on X", "stop", "that's wrong"
-    |
-    v
-After team completes:
-    → scores updated in README State section (with evidence)
-    → findings.md updated with execution proof
-    → pre-merge gate checks constraints, regressions, evidence
-    → merge into main branch or reject with explanation
+MERGE (when ready)
+    pre-merge gate:
+        evaluator accepted?
+        constraints not violated?
+        no regressions?
+        tests pass?
+    all pass → merge worktree branch into main
+    any fail → BLOCKED, show what failed
 ```
+
+**The outer loop is deliberately dumb.** It doesn't understand the codebase, doesn't make decisions about what to fix, doesn't evaluate quality. It only asks: "are we done?" If not, it spawns the team again with context about what went wrong last time.
+
+**The inner team is deliberately smart.** Dev and validator collaborate in real-time. The validator catches issues during implementation — not hours later in a separate review. The user can intervene through the coordinator at any point.
+
+**The separation matters.** The dumb loop can't be talked out of continuing. The smart team can't avoid scrutiny. The human can steer without micromanaging.
 
 ## Principles
 
