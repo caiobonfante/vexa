@@ -187,17 +187,61 @@ Neither can override the other:
     validator can't make changes
 ```
 
-### Constraint enforcement
+### How agents get context and constraints
 
-The conductor passes feature README + all owned service READMEs to the agent. Constraints are in the system prompt — the agent can't claim it didn't know.
+The team doesn't discover constraints by reading files during execution. Constraints are **injected into the system prompt before the agent starts**. The mechanism:
 
 ```
-Feature README says: "all API calls go through gateway"
-Service README says: "agent-api accepts calls from gateway only"
-    → agent imports agent-api directly → constraint violation
-    → evaluator catches it → rejected
-    → pre-merge gate blocks it
+Mission says: Focus = meeting-aware-agent
+    |
+    v
+run.sh reads features/meeting-aware-agent/README.md
+    → finds Code Ownership section:
+        services/api-gateway
+        packages/agent-api
+        packages/runtime-api
+        services/admin-api
+    |
+    v
+for each owned directory:
+    read {dir}/README.md (if it exists)
+    |
+    v
+concatenate into prompt file:
+    1. Orchestrator instructions (diagnose → fix → deploy → verify → update)
+    2. Mission file (focus, target, constraints)
+    3. Feature README (Design: data flow, constraints, gate)
+    4. Service README: api-gateway (constraints: "validates tokens, injects headers")
+    5. Service README: agent-api (constraints: "accepts calls from gateway only")
+    6. Service README: runtime-api (constraints: "never exposed directly")
+    7. Service README: admin-api (constraints: "owns users and tokens")
+    |
+    v
+claude -p --append-system-prompt-file prompt.txt
+    → agent starts with FULL context in system prompt
+    → can't claim "I didn't know gateway validates tokens"
+    → every constraint from every relevant README is in the prompt
 ```
+
+The **dev agent** gets this full prompt → implements with constraints in mind.
+
+The **validator agent** gets the same README content → checks code changes against it.
+
+Neither agent has to go find the constraints. They're pre-loaded.
+
+```
+What this prevents:
+    Feature README says: "all API calls go through gateway"
+    Service README says: "agent-api accepts calls from gateway only"
+        → dev imports agent-api directly → KNOWS this violates the constraint
+        → validator sees the same constraint → catches it if dev ignores it
+        → pre-merge gate checks cross-service imports → blocks merge
+```
+
+What this does NOT prevent (yet):
+    → constraints that aren't in any README (undocumented rules)
+    → agent reads the constraint but decides to ignore it anyway
+    → constraint is in README but too vague to enforce ("keep it clean")
 
 ### Documentation flow
 
