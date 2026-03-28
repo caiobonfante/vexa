@@ -38,9 +38,16 @@ Conductor reads existing READMEs
     |
     v
 Researcher investigates (if needed)
-    → read code to understand current behavior
-    → check existing endpoints, services, infra
-    → report findings
+    Internal:
+        → read code to understand current behavior
+        → check existing endpoints, services, infra
+        → find dependencies, version constraints
+    External:
+        → industry best practices (how do competitors solve this?)
+        → platform docs (Zoom SDK, Teams API, Google Meet Media API)
+        → library/framework docs (FastAPI patterns, Playwright APIs)
+        → known issues and workarounds (GitHub issues, Stack Overflow)
+    → report findings with sources
     |
     v
 Human + conductor update READMEs
