@@ -4,7 +4,7 @@
 
 Team: conductor + researcher + validator. One pass, not a loop.
 
-1. **Business DoD** — ask the user: what does "done" look like? In their words, not technical language. Something they can verify themselves by doing the thing.
+1. **Business DoD** — ask the user: what does "done" look like? Something they can verify by using the system end-to-end. Not unit tests — the real thing working.
 
 2. **Researcher** investigates: read the code, check what exists, what's missing, what's the gap between Design README (what we want) and State (what we got).
 
