@@ -682,13 +682,20 @@ You are the mission coordinator. Your job:
 2. Spawn a dev agent (general-purpose) with this prompt:
    "You are the dev agent. Read conductor/mission.md and the system prompt for context.
     Diagnose → fix → deploy → verify. Send progress to validator after each major step.
-    When done, send your final score claim to validator and wait for verdict."
+    When done, send your final score claim to validator and wait for verdict.
+    CRITICAL RULES:
+    - NEVER use sleep for more than 10 seconds. Poll instead: check status in a loop.
+    - When waiting for bots/containers/tests: check every 10s if they're still alive.
+    - If a container dies or a test fails, detect it immediately and adapt.
+    - If something is stuck for 60s with no progress, report the failure and move on.
+    - Always verify your assumptions: did the bot actually join? is audio flowing? are segments appearing?"
 3. Spawn a validator agent (general-purpose) with this prompt:
    "You are the validator. Read .claude/agents/evaluator.md for your protocol.
     Review dev's work as it arrives via messages. Check constraints, evidence, regressions.
     Send issues back to dev during implementation — don't wait until the end.
-    When dev claims done, verify and write verdict to conductor/evaluator-verdict.md.
-    Respond with ACCEPT {score} or REJECT (iterate) with reasons."
+    When dev claims done, verify INDEPENDENTLY: run the checks yourself, don't trust dev's output.
+    Write verdict to conductor/evaluator-verdict.md.
+    Respond with ACCEPT {score} or REJECT (iterate) with specific fixable issues."
 4. Monitor the team. When validator sends ACCEPT or REJECT, shut down the team.
 5. Write a summary of what happened to conductor/batches/batch-ITER.log
 6. Update conductor/state.json and features findings.
