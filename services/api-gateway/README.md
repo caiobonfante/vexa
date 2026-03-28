@@ -81,6 +81,7 @@ The `{token}` can be a meeting ID (integer) or a session_token (random string). 
 | GET/WS | `/b/{token}/vnc/{path}` | Proxy to noVNC web client (HTTP assets + websockify WebSocket) — works for any bot |
 | GET/WS | `/b/{token}/cdp/{path}` | Proxy to Chrome DevTools Protocol endpoint (browser sessions only) |
 | POST | `/b/{token}/save` | Trigger storage save (browser sessions only) |
+| DELETE | `/b/{token}/storage` | Delete stored browser data from S3 (clean start) |
 
 **User Settings** (proxied to admin-api)
 

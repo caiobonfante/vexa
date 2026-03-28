@@ -42,6 +42,25 @@ export function getBrowserArgs(voiceAgentEnabled: boolean = false): string[] {
   return [...baseBrowserArgs];
 }
 
+/**
+ * Browser args for authenticated bot mode (persistent context with stored cookies).
+ * Uses minimal, clean flags — aggressive flags like --disable-web-security and
+ * --ignore-certificate-errors trigger Google's bot detection and cause "You can't
+ * join this video call" blocks. Modeled after getBrowserSessionArgs().
+ */
+export function getAuthenticatedBrowserArgs(): string[] {
+  return [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-infobars',
+    '--disable-gpu',
+    '--use-fake-ui-for-media-stream',
+    '--use-file-for-fake-video-capture=/dev/null',
+    '--disable-features=VizDisplayCompositor',
+  ];
+}
+
 // Default browser args
 export const browserArgs = getBrowserArgs(false);
 

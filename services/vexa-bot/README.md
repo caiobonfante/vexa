@@ -48,7 +48,7 @@ All platforms feed into the same shared transcription pipeline.
 | **Google Meet failures** | Known | 7.8% failure rate — join-stage "No active media elements" error. |
 | **Teams regressions** | Active | Current prod works (0% fail), but new code has open issues (#171, #189, #190, #191). |
 | **Zoom production** | Self-hosted only | Requires your own Zoom Marketplace app + SDK. Not available on hosted service. Web app mode (Playwright, no SDK) in development. |
-| **Unauthenticated guest only** | By design | Bots join as unauthenticated guests. Meetings requiring org authentication (domain-only Google Meet, enterprise Teams, authenticated Zoom) will reject the bot. Authenticated bot support is on the roadmap. |
+| **Authenticated bot support** | Google Meet | Bots can join as an authenticated Google user using stored browser credentials (`authenticated: true` in BOT_CONFIG). Uses persistent browser context with userdata synced from/to S3. Browser session mode is used to set up credentials initially. Teams and Zoom authenticated mode not yet implemented. |
 
 ## How
 
@@ -103,7 +103,7 @@ make rebuild                 # after editing TS (~10s, no image rebuild)
 
 | Variable                    | Description                                     |
 |-----------------------------|-------------------------------------------------|
-| `BOT_CONFIG`                | JSON with full bot config (platform, meetingUrl, botName, meeting_id, redisUrl, automaticLeave) |
+| `BOT_CONFIG`                | JSON with full bot config (platform, meetingUrl, botName, meeting_id, redisUrl, automaticLeave, authenticated, userdataS3Path, s3Endpoint, s3Bucket, s3AccessKey, s3SecretKey) |
 | `TRANSCRIPTION_SERVICE_URL` | HTTP URL of transcription-service endpoint       |
 | `REDIS_URL`                 | [Redis](../redis.md) connection URL              |
 | `ZOOM_CLIENT_ID`            | Zoom SDK client ID (Zoom only)                   |
@@ -175,6 +175,9 @@ Typical configurations:
 | **Recorder bot** (transcription only) | off | off | off |
 | **TTS speaker bot** (collection runs) | on | off | off |
 | **Full voice agent** (avatar + TTS + screen reading) | on | on | on |
+| **Authenticated recorder** (no lobby wait) | off | off | off |
+
+Authenticated bots additionally set `authenticated: true` + S3 credentials in BOT_CONFIG. The bot downloads stored browser userdata from S3, launches a persistent Chromium context (no incognito), and joins as the signed-in Google user — skipping name entry and lobby wait. Browser data is synced back to S3 on exit to keep credentials fresh.
 
 ## Supported Platforms
 

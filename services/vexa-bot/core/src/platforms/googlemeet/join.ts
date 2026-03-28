@@ -61,20 +61,28 @@ export async function joinGoogleMeeting(
       log("Camera already off or not found.");
     }
 
-    // Try "Join now" (authenticated) first, fall back to "Ask to join" (anonymous)
+    // Authenticated users may see different buttons:
+    // - "Join now" — standard authenticated join
+    // - "Switch here" — same account already in the meeting
+    // - "Ask to join" — cookies didn't load (fallback to anonymous)
     const joinNowSelector = 'button:has-text("Join now")';
+    const switchHereSelector = 'button:has-text("Switch here")';
     const askToJoinSelector = googleJoinButtonSelectors[0];
 
     try {
-      // Race: wait for either "Join now" or "Ask to join"
+      // Race: wait for any join button
       const joinButton = await Promise.race([
         page.waitForSelector(joinNowSelector, { timeout: 30000 }).then(el => ({ el, type: 'join_now' as const })),
+        page.waitForSelector(switchHereSelector, { timeout: 30000 }).then(el => ({ el, type: 'switch_here' as const })),
         page.waitForSelector(askToJoinSelector, { timeout: 30000 }).then(el => ({ el, type: 'ask_to_join' as const })),
       ]);
 
       if (joinButton.type === 'join_now') {
         await joinButton.el!.click();
         log("Bot joined Google Meet as authenticated user (Join now).");
+      } else if (joinButton.type === 'switch_here') {
+        await joinButton.el!.click();
+        log("Bot joined Google Meet as authenticated user (Switch here — same account already in call).");
       } else {
         // Cookies didn't work — fall back to anonymous join
         log("WARNING: Authenticated mode but 'Ask to join' found instead of 'Join now'. Cookies may not be loaded.");
@@ -96,9 +104,9 @@ export async function joinGoogleMeeting(
         log(`Bot joined Google Meet via fallback (Ask to join).`);
       }
     } catch (e) {
-      // Neither button found — take diagnostic screenshot and fail
+      // No button found — take diagnostic screenshot and fail
       await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-auth-failed.png', fullPage: true });
-      log("📸 Screenshot: Neither 'Join now' nor 'Ask to join' found");
+      log("📸 Screenshot: No join button found after 30s");
       throw e;
     }
 

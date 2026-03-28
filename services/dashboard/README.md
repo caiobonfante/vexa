@@ -7,9 +7,10 @@ Users need a visual interface to launch bots into meetings, watch live transcrip
 ## What
 
 A Next.js web application that provides:
-- Meeting management: launch bots, see active/past meetings
+- Meeting management: launch bots (with optional authenticated mode toggle), see active/past meetings
 - Live transcript viewer: real-time segments via WebSocket with speaker labels
 - Recording playback: audio player synced with transcript segments
+- Browser session management: VNC view, save/clear storage for authenticated bot credentials
 - User/token management: create API keys, configure webhooks
 - Admin analytics: user and meeting statistics
 

@@ -1704,6 +1704,29 @@ async def browser_save_storage(token: str):
         raise HTTPException(status_code=502, detail=f"Failed to reach bot-manager: {exc}")
 
 
+@app.delete("/b/{token}/storage", tags=["Remote Browser"], summary="Delete stored browser data from S3")
+async def browser_delete_storage(token: str):
+    """Delete stored browser userdata from S3 so user can start clean."""
+    session = await resolve_browser_session(token)
+    if not session:
+        raise HTTPException(status_code=404, detail="Browser session not found or expired")
+
+    user_id = session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=500, detail="Session missing user_id")
+
+    try:
+        resp = await app.state.http_client.delete(
+            f"{BOT_MANAGER_URL}/internal/browser-sessions/{user_id}/storage",
+            timeout=60.0,
+        )
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        return resp.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to reach bot-manager: {exc}")
+
+
 # --- End Remote Browser Session Routes ---
 
 # --- WebSocket Multiplex Endpoint ---

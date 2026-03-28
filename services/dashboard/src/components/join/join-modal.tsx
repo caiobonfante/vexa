@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Video, Loader2, Sparkles, Globe, ChevronDown, Mic, Monitor } from "lucide-react";
+import { Video, Loader2, Sparkles, Globe, ChevronDown, Mic, Monitor, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,7 @@ export function JoinModal() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [botName, setBotName] = useState("");
   const [passcode, setPasscode] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
 
   // Default is "auto" so we don't send a language and the transcription service can auto-detect.
   // (Previously we set getBrowserLanguage() here, which sent e.g. "en" and skipped detection.)
@@ -64,6 +65,7 @@ export function JoinModal() {
       setShowAdvanced(false);
       setBotName("");
       setPasscode("");
+      setAuthenticated(false);
     }
   }, [isOpen]);
 
@@ -133,6 +135,10 @@ export function JoinModal() {
       request.transcribe_enabled = false;
     }
 
+    if (authenticated) {
+      request.authenticated = true;
+    }
+
     try {
       const meeting = await vexaAPI.createBot(request);
 
@@ -190,7 +196,7 @@ export function JoinModal() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [parsedInput, passcode, botName, language, transcribeEnabled, config, setActiveMeeting, setCurrentMeeting, closeModal, router, user]);
+  }, [parsedInput, passcode, botName, language, transcribeEnabled, authenticated, config, setActiveMeeting, setCurrentMeeting, closeModal, router, user]);
 
   const handleBrowserSession = useCallback(async () => {
     setIsSubmitting(true);
@@ -432,6 +438,24 @@ export function JoinModal() {
           {!transcribeEnabled && (
             <p className="text-xs text-muted-foreground -mt-2">
               Bot will record audio only. You can transcribe later from the meeting page.
+            </p>
+          )}
+
+          {/* Authenticated Toggle */}
+          <div className="flex items-center justify-between">
+            <Label htmlFor="authenticated" className="text-sm flex items-center gap-2 cursor-pointer">
+              <UserCheck className="h-3.5 w-3.5" />
+              Authenticated
+            </Label>
+            <Switch
+              id="authenticated"
+              checked={authenticated}
+              onCheckedChange={setAuthenticated}
+            />
+          </div>
+          {authenticated && (
+            <p className="text-xs text-muted-foreground -mt-2">
+              Bot will join using your stored browser credentials instead of as a guest.
             </p>
           )}
 

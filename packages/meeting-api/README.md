@@ -19,7 +19,7 @@ Bot lifecycle management service. Handles meeting CRUD, voice agent controls (TT
 ### API Endpoints
 
 #### Meeting CRUD
-- `POST /bots` — create meeting bot
+- `POST /bots` — create meeting bot (supports `authenticated: true` for credential-based join)
 - `GET /bots/status` — list running bots (`running_bots` array)
 - `DELETE /bots/{platform}/{id}` — stop bot
 - `PUT /bots/{platform}/{meeting_id}/config` — update config
@@ -31,6 +31,10 @@ Bot lifecycle management service. Handles meeting CRUD, voice agent controls (TT
 
 #### Recordings
 - `GET /bots/{platform}/{meeting_id}/recordings` — list recordings
+
+#### Browser Sessions
+- `POST /internal/browser-sessions/{token}/save` — trigger browser data save to S3
+- `DELETE /internal/browser-sessions/{user_id}/storage` — delete stored browser data from S3
 
 #### Internal Callbacks
 - `POST /bots/internal/callback/exited` — bot exit

@@ -822,6 +822,105 @@ async def request_bot(
     return MeetingResponse.model_validate(new_meeting)
 
 
+@router.post("/internal/browser-sessions/{token}/save")
+async def save_browser_session(token: str):
+    """Save browser session storage to S3 via Redis command."""
+    if not redis_client:
+        raise HTTPException(status_code=500, detail="Redis not available")
+
+    # Look up container name from session token stored in Redis
+    session_data = await redis_client.get(f"browser_session:{token}")
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Browser session not found")
+
+    try:
+        session = json.loads(session_data)
+        container_name = session.get("container_name")
+    except (json.JSONDecodeError, AttributeError):
+        raise HTTPException(status_code=500, detail="Invalid session data")
+
+    if not container_name:
+        raise HTTPException(status_code=500, detail="Session missing container_name")
+
+    # Browser session listens on browser_session:{container_name} but container_name
+    # in BOT_CONFIG may be unset (defaults to 'default'). Subscribe first to avoid
+    # missing the response, but subtract 1 from listener count (our own sub).
+    channel = f"browser_session:{container_name}"
+
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(channel)
+
+    # Publish — our own subscription counts as 1 listener, so real listeners = N - 1
+    listeners = await redis_client.publish(channel, "save_storage")
+
+    if listeners <= 1:
+        # Only our own sub is listening — try 'default' channel
+        await pubsub.unsubscribe(channel)
+        channel = "browser_session:default"
+        await pubsub.subscribe(channel)
+        listeners = await redis_client.publish(channel, "save_storage")
+
+    if listeners <= 1:
+        await pubsub.unsubscribe(channel)
+        raise HTTPException(status_code=404, detail="No browser session listening")
+
+    # Wait for save_storage:done or save_storage:error response
+    try:
+        for _ in range(120):  # 120 second timeout (S3 sync can take a while)
+            msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if not msg:
+                continue
+            data = msg.get("data")
+            if isinstance(data, bytes):
+                data = data.decode()
+            if data == "save_storage:done":
+                return {"message": "Storage saved successfully"}
+            if isinstance(data, str) and data.startswith("save_storage:error:"):
+                error_msg = data[len("save_storage:error:"):]
+                raise HTTPException(status_code=500, detail=f"Save failed: {error_msg}")
+        raise HTTPException(status_code=504, detail="Save timed out")
+    finally:
+        await pubsub.unsubscribe(channel)
+
+
+@router.delete("/internal/browser-sessions/{user_id}/storage")
+async def delete_browser_storage(user_id: int):
+    """Delete stored browser data from S3 for a user via MinIO API."""
+    import boto3
+    from botocore.config import Config as BotoConfig
+
+    minio_endpoint = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+    minio_secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+    s3_endpoint = f"{'https' if minio_secure else 'http'}://{minio_endpoint}"
+    s3_bucket = os.environ.get("MINIO_BUCKET", "vexa-recordings")
+    prefix = f"users/{user_id}/browser-userdata/"
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=s3_endpoint,
+            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY", ""),
+            aws_secret_access_key=os.environ.get("MINIO_SECRET_KEY", ""),
+            config=BotoConfig(signature_version="s3v4"),
+            region_name="us-east-1",
+        )
+
+        # List and delete all objects under the prefix
+        deleted = 0
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=s3_bucket, Prefix=prefix):
+            objects = page.get("Contents", [])
+            if not objects:
+                continue
+            delete_keys = [{"Key": obj["Key"]} for obj in objects]
+            s3.delete_objects(Bucket=s3_bucket, Delete={"Objects": delete_keys})
+            deleted += len(delete_keys)
+
+        return {"message": f"Deleted {deleted} files for user {user_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
 @router.get(
     "/bots/status",
     response_model=BotStatusResponse,

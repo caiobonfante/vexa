@@ -97,12 +97,23 @@ function syncWorkspaceUp(config: BrowserSessionConfig): void {
   }
 }
 
-function saveAll(config: BrowserSessionConfig): void {
-  console.log('[browser-session] Saving workspace...');
-  syncWorkspaceUp(config);
-  console.log('[browser-session] Saving browser data...');
-  syncBrowserDataToS3(config);
-  console.log('[browser-session] Save complete');
+function saveAll(config: BrowserSessionConfig): { success: boolean; error?: string } {
+  try {
+    console.log('[browser-session] Saving workspace...');
+    syncWorkspaceUp(config);
+  } catch (err: any) {
+    console.error(`[browser-session] Workspace save failed: ${err.message}`);
+    // Workspace failure is non-fatal, continue to browser data
+  }
+  try {
+    console.log('[browser-session] Saving browser data...');
+    syncBrowserDataToS3(config);
+    console.log('[browser-session] Save complete');
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[browser-session] Browser data save FAILED: ${err.message}`);
+    return { success: false, error: err.message };
+  }
 }
 
 // --- Main entry point ---
@@ -168,8 +179,12 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
 
       // Legacy plain-string commands (save_storage / stop)
       if (message === 'save_storage') {
-        saveAll(config);
-        await publisher.publish(channelName, 'save_storage:done');
+        const result = saveAll(config);
+        if (result.success) {
+          await publisher.publish(channelName, 'save_storage:done');
+        } else {
+          await publisher.publish(channelName, `save_storage:error:${result.error}`);
+        }
         return;
       } else if (message === 'stop') {
         console.log('[browser-session] Stop command received, saving and exiting...');

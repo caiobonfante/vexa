@@ -117,6 +117,8 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
       ].join("\n")
     : "";
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
   async function handleSave() {
     setIsSaving(true);
     try {
@@ -129,6 +131,22 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
       toast.error("Save failed: " + (error as Error).message);
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleDeleteStorage() {
+    if (!confirm("Delete all stored browser data? You will need to log in again.")) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`${apiUrl}/b/${token}/storage`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error(await response.text());
+      toast.success("Storage deleted");
+    } catch (error) {
+      toast.error("Delete failed: " + (error as Error).message);
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -179,6 +197,20 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
             <Save className="h-4 w-4 mr-1" />
           )}
           Save
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDeleteStorage}
+          disabled={isDeleting}
+          className="text-destructive hover:text-destructive"
+        >
+          {isDeleting ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+          ) : (
+            <Trash2 className="h-4 w-4 mr-1" />
+          )}
+          Clear Storage
         </Button>
         <Button
           variant={showPanel ? "default" : "outline"}

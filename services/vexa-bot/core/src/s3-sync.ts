@@ -6,9 +6,10 @@ export const BROWSER_DATA_DIR = '/tmp/browser-data';
 
 export const BROWSER_CACHE_EXCLUDES = [
   'Cache/*', 'Code Cache/*', 'GrShaderCache/*', 'ShaderCache/*', 'GraphiteDawnCache/*',
-  'Service Worker/CacheStorage/*', 'BrowserMetrics*', '*-journal',
+  'Service Worker/*', 'BrowserMetrics*', '*-journal',
   'SingletonLock', 'SingletonCookie', 'SingletonSocket',
   'GPUCache/*', 'DawnGraphiteCache/*', 'DawnWebGPUCache/*',
+  'blob_storage/*', 'File System/*', 'IndexedDB/*',
 ];
 
 export interface S3Config {
@@ -34,14 +35,10 @@ export function s3Sync(localDir: string, s3Path: string, config: S3Config, direc
   const deleteArg = direction === 'up' ? '--delete' : '';
   const [src, dst] = direction === 'down' ? [s3Uri, `${localDir}/`] : [`${localDir}/`, s3Uri];
   console.log(`[s3-sync] S3 sync ${direction}: ${src} → ${dst}`);
-  try {
-    execSync(
-      `aws s3 sync "${src}" "${dst}" --endpoint-url "${config.s3Endpoint}" ${deleteArg} ${excludeArgs}`,
-      { env: getS3Env(config), stdio: 'inherit', timeout: 120000 }
-    );
-  } catch (err: any) {
-    console.log(`[s3-sync] S3 sync ${direction} issue: ${err.message}`);
-  }
+  execSync(
+    `aws s3 sync "${src}" "${dst}" --endpoint-url "${config.s3Endpoint}" ${deleteArg} ${excludeArgs}`,
+    { env: getS3Env(config), stdio: 'inherit', timeout: 300000 }
+  );
 }
 
 export function syncBrowserDataFromS3(config: S3Config): void {

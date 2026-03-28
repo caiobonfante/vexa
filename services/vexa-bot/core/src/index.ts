@@ -7,7 +7,7 @@ import { handleMicrosoftTeams, leaveMicrosoftTeams } from "./platforms/msteams";
 import { handleZoom, leaveZoom, leaveZoomWeb } from "./platforms/zoom";
 import { reconfigureZoomWebRecording, getLastActiveSpeaker } from "./platforms/zoom/web/recording";
 import { getZoomSpeakerEvents } from "./platforms/zoom/strategies/recording";
-import { browserArgs, getBrowserArgs, userAgent } from "./constans";
+import { browserArgs, getBrowserArgs, getAuthenticatedBrowserArgs, userAgent } from "./constans";
 import { BotConfig } from "./types";
 import { RecordingService } from "./services/recording";
 import { VideoRecordingService } from "./services/video-recording";
@@ -19,7 +19,7 @@ import { ScreenShareService } from "./services/screen-share"; // kept for Teams;
 import { createClient, RedisClientType } from 'redis';
 import { Page, Browser, BrowserContext } from 'playwright-core';
 import { execSync } from 'child_process';
-import { ensureBrowserDataDir, syncBrowserDataFromS3, cleanStaleLocks, BROWSER_DATA_DIR } from './s3-sync';
+import { ensureBrowserDataDir, syncBrowserDataFromS3, syncBrowserDataToS3, cleanStaleLocks, BROWSER_DATA_DIR } from './s3-sync';
 // HTTP imports removed - using unified callback service instead
 
 // Per-speaker transcription pipeline
@@ -757,6 +757,17 @@ async function performGracefulLeave(
     } finally {
       await activeRecordingService.cleanup();
       activeRecordingService = null;
+    }
+  }
+
+  // Sync browser data back to S3 for authenticated bots (preserves cookies/sessions)
+  if (currentBotConfig?.authenticated && currentBotConfig?.userdataS3Path) {
+    try {
+      log("[Graceful Leave] Syncing browser data to S3 (authenticated bot)...");
+      syncBrowserDataToS3(currentBotConfig);
+      log("[Graceful Leave] Browser data synced to S3.");
+    } catch (syncErr: any) {
+      log(`[Graceful Leave] Browser data S3 sync failed: ${syncErr.message}`);
     }
   }
 
@@ -2054,7 +2065,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     syncBrowserDataFromS3(botConfig);
     cleanStaleLocks(BROWSER_DATA_DIR);
 
-    const authArgs = getBrowserArgs(!!botConfig.voiceAgentEnabled);
+    const authArgs = getAuthenticatedBrowserArgs();
     const context: BrowserContext = await chromium.launchPersistentContext(BROWSER_DATA_DIR, {
       headless: false,
       ignoreDefaultArgs: ['--enable-automation'],

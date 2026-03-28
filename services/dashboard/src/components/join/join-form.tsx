@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Video, Loader2, Check, AlertCircle, Sparkles, Mic } from "lucide-react";
+import { Video, Loader2, Check, AlertCircle, Sparkles, Mic, UserCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
   const [botName, setBotName] = useState("");
   const [language, setLanguage] = useState("auto");
   const [transcribeEnabled, setTranscribeEnabled] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -106,6 +107,10 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
     if (!transcribeEnabled) {
       request.transcribe_enabled = false;
+    }
+
+    if (authenticated) {
+      request.authenticated = true;
     }
 
     try {
@@ -412,6 +417,26 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             {!transcribeEnabled && (
               <p className="text-xs text-muted-foreground">
                 Bot will record audio only. You can transcribe later from the meeting page.
+              </p>
+            )}
+          </div>
+
+          {/* Authenticated Toggle */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="authenticated" className="flex items-center gap-2 cursor-pointer">
+                <UserCheck className="h-3.5 w-3.5" />
+                Authenticated
+              </Label>
+              <Switch
+                id="authenticated"
+                checked={authenticated}
+                onCheckedChange={setAuthenticated}
+              />
+            </div>
+            {authenticated && (
+              <p className="text-xs text-muted-foreground">
+                Bot will join using your stored browser credentials instead of as a guest.
               </p>
             )}
           </div>
