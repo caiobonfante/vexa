@@ -503,40 +503,60 @@ Chat interface (cd conductor && claude):
 ## Quality Bar
 
 ```
-Team-based execution (TeamCreate)     dev + validator collaborate     FAIL (verified possible in -p, not wired)
-Constraint enforcement                README constraints in prompt    PASS (auto-appended)
-Adversarial validation                evaluator catches real bugs     PASS (caught 4+ bugs)
-Live activity streaming               see tool calls as they happen  PASS (parse-stream.py)
-Cost tracking                         $/tokens per iteration         PASS ($4.59 captured)
-Plateau detection                     3 unchanged → alert            PARTIAL (logic exists)
-Human intervention                    redirect mid-run from chat     FAIL (stop file only)
-Pre-merge gate                        blocks on violations           PASS (5 checks)
-Completion check accuracy             no false positives             FAIL (too permissive)
-README auto-append to prompt          feature + service READMEs      PASS (code ownership chain)
+Constraint enforcement                README constraints in prompt              PASS
+Adversarial validation                evaluator catches real bugs               PASS (caught 4+ bugs)
+Cost tracking                         $/tokens per iteration                    PASS ($5.73 captured)
+README auto-append to prompt          feature + service READMEs                 PASS
+Pre-merge gate                        blocks on violations                      PASS (5 checks)
+Live activity streaming               see tool calls as they happen             PASS (parse-stream.py)
+Team-based execution (TeamCreate)     dev + validator collaborate               FAIL (see findings)
+Team collaboration visible            see dev↔validator conversation            FAIL (black box)
+Worktree isolation                    changes only in worktree                  FAIL (cwd bug)
+PLAN stage speed                      30 seconds not 7 minutes                  FAIL
+Conductor follows own protocol        doesn't bypass run.sh, doesn't edit code  FAIL
+Dev agent polling                     poll not sleep, detect failures            FAIL
+Completion check accuracy             no false positives                        FAIL
+Dashboard shows plan activity         plan-log in dashboard                     PARTIAL
 ```
 
 ## Certainty
 
 ```
-Orchestrator runs autonomously        90   multiple missions completed              2026-03-28
-Evaluator catches false claims        90   rejected inflated scores, auth bugs      2026-03-28
-Score parsing from findings           80   median + Overall: pattern                2026-03-27
-Worktree isolation                    70   works but cwd bug caused main repo edits 2026-03-28
-Dashboard serves live data            90   HTML + JSON API on :8899                 2026-03-27
-Stream output parsed                  80   activity log with tool calls             2026-03-28
-Cost tracking                         80   $4.59 + $0.83 captured from stream-json  2026-03-28
-Pre-merge gate                        70   5 checks, stale verdict bug found        2026-03-28
-Team-based execution                  30   TeamCreate works in -p (verified), not wired into run.sh  2026-03-28
-Human intervention via chat            0   stop file only, no mid-run redirect      —
-Completion check accuracy             30   descriptive targets too permissive       2026-03-28
+Orchestrator runs autonomously        80   missions complete, but ignores protocol       2026-03-28
+Evaluator catches false claims        90   rejected inflated scores, auth bugs           2026-03-28
+Score parsing from findings           80   median + Overall: pattern                     2026-03-27
+Worktree isolation                    30   --add-dir doesn't work, writes to main repo   2026-03-28
+Dashboard serves live data            70   works but shows nothing during PLAN/team      2026-03-28
+Stream output parsed                  80   activity log with tool calls                  2026-03-28
+Cost tracking                         80   $5.73 captured from stream-json               2026-03-28
+Pre-merge gate                        70   5 checks, stale verdict bug                   2026-03-28
+Team-based execution                  20   TeamCreate spawns but coordination fails      2026-03-28
+Team collaboration visible             0   dev↔validator messages not in stream           2026-03-28
+PLAN stage speed                      20   spawned 3 research agents, took 7 min          2026-03-28
+Conductor protocol compliance         20   bypassed run.sh, edited code in PLAN           2026-03-28
+Dev agent polling                      0   sleeps 180s, doesn't detect dead containers    2026-03-28
+Completion check accuracy             50   fixed in conductor-v2 but not tested broadly   2026-03-28
 ```
 
-## Known Issues
+## Known Issues — from 2026-03-28 testing
 
-- Completion check too permissive — "pass" anywhere in findings triggers "met"
-- Evaluator reads stale verdicts from previous missions
-- Worktree cwd bug: orchestrator sometimes writes to main repo instead of worktree
-- Sequential dev → evaluator means issues caught late, not during implementation
-- `run.sh` is both worktree manager and execution engine — should be separated
-- No `--resume` session persistence across iterations
-- Dashboard doesn't render Mermaid or markdown in batch output
+### Critical (framework doesn't work as designed)
+
+- **Team collaboration is a black box.** Dev↔validator SendMessage traffic is invisible in stream-json. Only coordinator tool calls visible. Can't see if validator actually caught anything. The adversarial model is unverifiable.
+- **Worktree isolation broken.** `--add-dir $REPO` doesn't prevent writes to main repo. Dev agent edits files in main repo AND worktree simultaneously. profiles.yaml changed in main repo during a worktree mission.
+- **Conductor ignores its own CLAUDE.md.** Bypassed run.sh (did DELIVER inline), edited code during PLAN (read-only stage), spawned research teams (PLAN says don't). Instructions are clear but Claude overrides them.
+- **Dev agent sleeps instead of polling.** `sleep 180` while bot containers die. Doesn't detect failures. Wastes 3 minutes per dead-container cycle.
+
+### High (framework partially works but unreliable)
+
+- **PLAN stage too slow.** Spawns research teams, takes 7 minutes for what should be 30 seconds of README reading. CLAUDE.md now says "be fast" but untested.
+- **TeamCreate shutdown broken.** Coordinator sends 15+ shutdown requests, agents ignore them. Burns $1+ on shutdown loops. No force-kill mechanism.
+- **Conductor monitoring contradicts itself.** Says "bots died" then "bots alive and working" 30 seconds later. Sent stop signal while test was succeeding. Can't distinguish "waiting" from "stuck."
+- **Stale evaluator verdicts.** Verdict file from previous mission is read by next mission's pre-merge gate. Causes false rejections.
+
+### Medium (annoyances)
+
+- **Dashboard shows nothing during PLAN.** Plan-log.jsonl added but conductor only writes 2 entries in 7 minutes.
+- **Dashboard shows nothing during team execution.** Only coordinator activity visible, not dev/validator work.
+- **Completion check false positives.** Fixed in conductor-v2 run but not validated broadly.
+- **profiles.yaml changed globally.** auto_remove: true→false for browser bots. Affects all bots, not just test. Done in main repo without review.
