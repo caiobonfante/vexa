@@ -28,9 +28,31 @@ The loop: dev works → evaluator checks against acceptance criteria → not met
 
 User checks it themselves. Opens the dashboard. Clicks the meeting. Sees live transcripts. Either it works or it doesn't. No scores, no findings — just: does the thing work?
 
+## READMEs
+
+Every feature and service has a README with two parts:
+
+```
+<!-- DESIGN: what we want -->
+Why, Data Flow, Code Ownership, Constraints
+
+---
+
+<!-- STATE: what we have, with evidence -->
+Quality Bar, Certainty, Known Issues
+```
+
+Design is the spec. State is honest about where we are.
+
+- Prompt file includes READMEs → agents know the design and constraints
+- After DELIVER: State section updated with what actually changed (evidence, not claims)
+- After SHOW: if user confirms it works, Quality Bar item moves to PASS
+
 ## Rules
 
 - Acceptance criteria are from the user, in their words
+- READMEs are source of truth — Design is the spec, State is honest
 - PLAN only checks resources, doesn't fix them
 - DELIVER never exits until criteria met or hard blocker
 - SHOW is the user doing the thing, not an agent claiming it works
+- State section only updated with execution evidence, never optimistic
