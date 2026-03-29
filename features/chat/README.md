@@ -22,13 +22,13 @@ This feature enables the bot to observe meeting chat messages and inject message
 ### Components
 
 - **vexa-bot**: observes the meeting chat DOM for new messages, injects messages into the DOM
-- **bot-manager**: relays chat commands between API and bot
+- **meeting-api**: relays chat commands between API and bot (replaced bot-manager in Phase 4 refactoring)
 - **api-gateway**: exposes chat endpoints (POST to send, GET to read)
 
 ### Data flow
 
 ```
-Sending:  client → api-gateway → bot-manager → vexa-bot → meeting chat DOM
+Sending:  client → api-gateway → meeting-api → vexa-bot → meeting chat DOM
 Reading:  meeting chat DOM → vexa-bot → Redis → api-gateway → client
 ```
 
@@ -37,7 +37,7 @@ Reading:  meeting chat DOM → vexa-bot → Redis → api-gateway → client
 - POST /bots/{id}/chat sends a message into the meeting chat
 - GET /bots/{id}/chat returns messages observed from other participants
 - Bot observes the DOM for new chat messages in real-time
-- Messages are relayed via bot-manager and Redis
+- Messages are relayed via meeting-api and Redis
 - Chat works across supported meeting platforms
 
 ### Data stages

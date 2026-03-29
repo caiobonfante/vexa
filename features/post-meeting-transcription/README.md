@@ -99,7 +99,7 @@ packages/meeting-api (bot-manager routes)  → POST /transcribe, speaker mapping
 packages/transcription-service             → Whisper inference (ffmpeg + model)
 services/transcription-collector           → segment persistence, GET /transcripts
 services/dashboard                         → transcript viewer, audio player, seek
-libs/shared-models                         → Transcription, Recording, MediaFile models
+packages/meeting-api                       → Transcription, Recording, MediaFile models
 ```
 
 ---

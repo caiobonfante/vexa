@@ -1,7 +1,7 @@
 # Speaking Bot
 
 > **Confidence: 0** — Code complete, **not E2E tested.** TTS service + PulseAudio pipeline exist but have never been validated in a live meeting end-to-end.
-> **Tested:** Nothing end-to-end. Components exist: tts-service generates audio, bot-manager relays commands, PulseAudio virtual mic configured.
+> **Tested:** Nothing end-to-end. Components exist: tts-service generates audio, meeting-api relays commands, PulseAudio virtual mic configured.
 > **Not tested:** Full pipeline (speak command → TTS → PulseAudio → participants hear it), audio quality, latency, voice selection.
 > **Contributions welcome:** E2E test in live meeting, local TTS model ([#130](https://github.com/Vexa-ai/vexa/issues/130)), Ultravox voice assistant ([#131](https://github.com/Vexa-ai/vexa/issues/131)).
 
@@ -25,13 +25,13 @@ This feature converts text to speech and plays it into the meeting audio so part
 
 - **tts-service**: converts text to audio (text-to-speech)
 - **vexa-bot**: plays generated audio into the meeting via PulseAudio virtual mic
-- **bot-manager**: relays speak commands from API to bot
+- **meeting-api**: relays speak commands from API to bot (replaced bot-manager in Phase 4 refactoring)
 - **api-gateway**: exposes the speak endpoint
 
 ### Data flow
 
 ```
-client → api-gateway → bot-manager → vexa-bot → tts-service (text→audio)
+client → api-gateway → meeting-api → vexa-bot → tts-service (text→audio)
                                           ↓
                                     vexa-bot (plays audio)
                                           ↓

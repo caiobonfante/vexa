@@ -1,0 +1,29 @@
+# Vexa Agentic Runtime
+
+## Confidence Protocol
+
+Confidence is evidence-based, never self-reported. "Code looks correct" = 0 confidence. Observable signals only: tests pass, curl returns expected response, visible in browser, logs show expected output.
+
+**At every step:** Report what you verified and what confidence that gives you.
+
+**At 80+:** Run adversarial self-assessment — "what bugs can you find in what I just did?" — before declaring done. This reduces overconfidence ~15pp.
+
+**When delivery fails:** Stop. Don't patch. Diagnose root cause first. Report confidence at each diagnostic step. If confidence isn't rising after 3 steps, escalate.
+
+**After human reveals you were wrong:** Extract the root gap WITH the human (not a shallow patch). What assumption failed? Store as a gotcha.
+
+## Known Gotchas
+
+Read these before starting work. These are lessons from past failures.
+
+**G1: Test the system, not just the feature.** Before reporting confidence above 70, verify the basic user entry point: can the user load the dashboard? Does the API respond? Your own testing (curl bombardment, process restarts) can break the environment. (2026-03-29: 8/8 Playwright tests passed, agent claimed 80/100, dashboard was unreachable.)
+
+**G2: Don't flail — diagnose before fixing.** When something breaks, the protocol is: (1) stop, don't touch code, (2) read logs, form hypothesis, (3) report confidence and what evidence would raise it, (4) only then attempt ONE fix per hypothesis, verify after. Don't restart services hoping it helps. (2026-03-29: agent tried allowedDevOrigins, process restart, cookie analysis, another restart — none based on diagnosis.)
+
+**G3: CLAUDE.md changes don't reach running sessions.** If framework rules are updated mid-session, restart the session to pick them up.
+
+## Deep Reference
+
+Full confidence framework paper with math model, research citations, and changelog: `.claude/confidence-framework.md`
+
+Update the paper when you learn something new — a gotcha the framework didn't predict, a calibration failure, a new pattern. Add to both the Known Gotchas section here AND the paper's changelog.

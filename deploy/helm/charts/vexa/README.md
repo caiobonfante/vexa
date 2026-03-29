@@ -59,7 +59,7 @@ The meeting-api delegates container lifecycle to Runtime API, which supports thr
 ## Transcription Service
 
 The transcription-service requires a GPU. Options:
-- **External**: Run on a GPU machine outside K8s. Set `transcriptionService.enabled=false` and configure the URL in bot-manager.
+- **External**: Run on a GPU machine outside K8s. Set `transcriptionService.enabled=false` and configure the URL in meeting-api.
 - **In-cluster**: Set `transcriptionService.enabled=true` with a GPU node pool.
 
 ## Configuration

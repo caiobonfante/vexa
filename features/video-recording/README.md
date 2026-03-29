@@ -38,7 +38,7 @@ ffmpeg x11grab (10fps, VP9/H.264)
               muxed file (video + audio, synced via itsoffset)
                        |
                        v
-              upload() → bot-manager (POST /upload, media_type="video")
+              upload() → meeting-api (POST /internal/recordings/upload, media_type="video")
                        |
                        v
               MinIO (vexa-recordings bucket)
@@ -55,11 +55,11 @@ ffmpeg x11grab (10fps, VP9/H.264)
 | Bot lifecycle integration | `services/vexa-bot/core/src/index.ts` (lines 56-86, 691-718) | Complete |
 | Meeting flow hook | `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` (line 186) | Complete |
 | Audio muxing | `VideoRecordingService.muxAudio()` | Complete |
-| Upload to bot-manager | `VideoRecordingService.upload()` | Complete |
-| Bot-manager upload endpoint | `services/bot-manager/app/main.py` (`upload_recording`) | Complete |
-| MediaFile DB model | bot-manager DB (type="video" supported) | Complete |
-| Recording config API | `PUT /recording-config` (capture_modes: ["audio", "video"]) | Complete |
-| Content-type handling | bot-manager download endpoints (video/webm, video/mp4 routing) | Complete |
+| Upload to meeting-api | `VideoRecordingService.upload()` | Complete |
+| Meeting-api upload endpoint | `packages/meeting-api/meeting_api/recordings.py` (`POST /internal/recordings/upload`) | Complete |
+| MediaFile DB model | meeting-api DB (type="video" supported) | Complete |
+| Recording config API | Per-user recording_config in user.data (set via meeting creation) | Complete |
+| Content-type handling | meeting-api download endpoints (video/webm, video/mp4 routing) | Complete |
 | Hardware acceleration | VAAPI + NVENC + software VP9 + software H.264 | Complete |
 | BotConfig type | `services/vexa-bot/core/src/types.ts` (line 25, captureModes?: string[]) | Complete |
 | Zoom Native guard | `startVideoRecordingIfNeeded()` — skips Zoom Native, logs warning | Complete |
@@ -89,7 +89,7 @@ H.264: -crf 28 -preset ultrafast -tune zerolatency -pix_fmt yuv420p
 |-------|-----------|--------|---------|
 | MVP0 | VideoRecordingService captures Xvfb display to file | Done | -- |
 | MVP1 | Audio muxing with sync offset | Done | -- |
-| MVP2 | Upload to bot-manager, stored in MinIO | Done | ffmpeg missing from runtime Dockerfile (Bug 2) |
+| MVP2 | Upload to meeting-api, stored in MinIO | Done | ffmpeg missing from runtime Dockerfile (Bug 2) |
 | MVP3 | Dashboard plays video with synced audio | Not started | VideoPlayer not wired in (Bug 3), RecordingService.getStartTime() missing (Bug 1) |
 | MVP4 | Click-to-seek: transcript segment click jumps video to correct position | Not started | Depends on MVP3 |
 
@@ -180,7 +180,28 @@ All core recording, encoding, muxing, and upload logic is built and integrated i
 | Bot config type | `services/vexa-bot/core/src/types.ts:25` |
 | Bot Dockerfile | `services/vexa-bot/core/Dockerfile` |
 | Xvfb setup | `services/vexa-bot/core/entrypoint.sh:9` (1920x1080x24) |
-| Bot-manager upload endpoint | `services/bot-manager/app/main.py` |
-| Recording config API | `services/bot-manager/app/main.py` (`PUT /recording-config`) |
+| Meeting-api upload endpoint | `packages/meeting-api/meeting_api/recordings.py` |
+| Recording config API | Per-user recording_config in user.data |
 | Dashboard VideoPlayer | `services/dashboard/src/components/recording/video-player.tsx` |
 | Dashboard meeting page | `services/dashboard/src/app/meetings/[id]/page.tsx` |
+
+## Development Notes
+
+### Diagnostic hints
+
+- **ffmpeg ENOENT:** ffmpeg not installed in runtime Dockerfile stage. Check `services/vexa-bot/core/Dockerfile` runtime apt-get.
+- **getStartTime() throws:** RecordingService missing startTime field/method. Check `services/vexa-bot/core/src/services/recording.ts`.
+- **Video file 0 bytes:** Xvfb not running on :99 or DISPLAY env not set. Check `docker exec vexa-bot env | grep DISPLAY`.
+- **No VideoPlayer in dashboard:** Component exists at `components/recording/video-player.tsx` but not imported in `meetings/[id]/page.tsx`.
+- **Audio-video desync:** muxAudio() itsoffset calculation wrong -- compare RecordingService.getStartTime() vs VideoRecordingService.startTime.
+
+### Edge verification
+
+| Edge | From | To | What to verify |
+|------|------|----|---------------|
+| Display capture | Xvfb (:99) | ffmpeg x11grab | ffmpeg process spawns, no ENOENT, output file grows |
+| Audio sync | RecordingService.getStartTime() | VideoRecordingService.muxAudio() | startTime exists, itsoffset applied correctly |
+| Upload | VideoRecordingService.upload() | meeting-api POST /internal/recordings/upload | HTTP 200, media_type="video" stored |
+| Storage | meeting-api | MinIO (vexa-recordings) | Video file retrievable, correct content-type (video/webm or video/mp4) |
+| Dashboard | GET /recordings | VideoPlayer component | Component renders, video plays, click-to-seek jumps correctly |
+| Config | PUT /recording-config | BotConfig.captureModes | Bot receives ["audio", "video"] and starts video recording |

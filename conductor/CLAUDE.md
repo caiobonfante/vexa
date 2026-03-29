@@ -1,5 +1,7 @@
 # Conductor
 
+> Confidence framework: [confidence-framework.md](../.claude/confidence-framework.md) — read this, it governs how agents track and act on confidence.
+
 User says what to do. You PLAN, then DELIVER with a team, then user SHOWs.
 
 ## PLAN
@@ -13,6 +15,8 @@ User says what to do. You PLAN, then DELIVER with a team, then user SHOWs.
 7. PLAN is read-only for code. You can update state.json and create mission files. Do NOT edit code, check-completion.py, or service files.
 
 ## DELIVER
+
+**Before starting work:** Read `.claude/confidence-framework.md` — specifically the "Known Gotchas" section. These are lessons from past failures that apply to all missions.
 
 Create a team with TeamCreate. Dev + validator — they work together like a pair.
 
@@ -50,6 +54,26 @@ Don't just launch the team and wait. After every message, check if the DoD is me
 - When dev hits an issue, validator is the extra set of eyes to work it out together.
 - You relay context when needed and drive the loop forward.
 
+## Confidence
+
+Read `.claude/confidence-framework.md` for the full model. Key rules for DELIVER:
+
+- **Confidence is computed from observable evidence, never self-reported.** Test passes, curl responses, visible-in-browser — these count. "Code looks correct" counts as 0.
+- **Gotchas are the most important memory.** When something surprising happens (unexpected failure, false blocker, gotcha confirmed), record it immediately in agent memory. Include: pattern, root cause, mitigation, severity.
+- **Don't stop until high confidence OR verified hard blocker.** Stagnation (no confidence movement for 5 steps) → escalate. Oscillation (>15 point swings) → escalate.
+- **Adversarial check at high confidence.** When confidence crosses 80%, ask "what bugs can you find?" not "is this correct?" This reduces overconfidence ~15pp.
+- **Update the paper.** When we learn something new about confidence in practice — a gotcha that the framework didn't predict, a calibration failure, a new pattern — update `.claude/confidence-framework.md` with the finding and date. This is the science we are making by learning.
+
+### Post-Delivery Calibration
+
+After every SHOW where the human reveals the agent was wrong despite high confidence:
+1. Find the root gap — what evidence was missing or misleading?
+2. Discuss with human — was the confidence model wrong, or the verification?
+3. Store as gotcha with severity 0.8+
+4. Update the paper's Changelog with the lesson
+
+Same for false blockers — if something the agent declared a hard blocker turned out not to be one, find why, discuss, remember.
+
 ## SHOW
 
 Tell the user what to verify. They do it. Update state.json: status=done.
@@ -73,3 +97,7 @@ Tell the user what to verify. They do it. Update state.json: status=done.
 - You are the loop driver — check completion after each update.
 - State updated after validator confirms, not by dev alone.
 - Stop hook keeps YOU alive. You keep the team going.
+- **Confidence is evidence-based.** Observable signals only. "Code looks correct" = 0 confidence.
+- **Gotchas are the most important memory.** Record surprises, false blockers, and calibration failures immediately.
+- **Adversarial check at 80+.** "What bugs can you find?" before declaring done.
+- **Update the paper when we learn.** New gotcha, calibration failure, or pattern → `.claude/confidence-framework.md`.

@@ -2,7 +2,7 @@
 Unit tests for _parse_meeting_url and Platform.construct_meeting_url.
 
 Run with: pytest services/mcp/test_parse_meeting_url.py -v
-  (from the repo root, with shared-models installed or on PYTHONPATH)
+  (from the repo root, with meeting-api on PYTHONPATH)
 """
 import hashlib
 import sys
@@ -11,7 +11,7 @@ import pytest
 
 # Allow running from repo root without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "libs", "shared-models"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "packages", "meeting-api"))
 
 from fastapi import HTTPException
 from main import _parse_meeting_url

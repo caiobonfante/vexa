@@ -4,6 +4,10 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+# Install schema-sync library
+COPY ./libs/schema-sync /app/libs/schema-sync
+RUN pip install --no-cache-dir /app/libs/schema-sync
+
 # Install admin models library
 COPY ./libs/admin-models /app/libs/admin-models
 RUN pip install --no-cache-dir /app/libs/admin-models

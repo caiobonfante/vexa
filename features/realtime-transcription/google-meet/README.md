@@ -285,5 +285,25 @@ Real live Google Meet meetings. No mocks — real platform behavior, real audio,
 - `auto-admit.js`: pill detection improved (still intermittent — manual admit needed in some cases)
 
 **Open issues:**
-- Auto-admit unreliable for "Admit N guests" pill — not a pipeline issue, but friction for fully autonomous testing
+- Auto-admit unreliable for "Admit N guests" pill -- not a pipeline issue, but friction for fully autonomous testing
 - Minor ASR artifacts: "APVI" for "API", one echo segment (pipeline artifact)
+
+## Development Notes
+
+### Diagnostic Hints
+
+- **No media elements found:** `<audio>` elements not yet in DOM. Ensure bot completed join flow and was admitted.
+- **Speaker identity doesn't lock:** Multiple speakers talking simultaneously (no single-speaker window for voting). Need non-overlapping speech for locking.
+- **Transcription returns empty:** Audio is silence (below 0.005 threshold), or transcription-service is down. Check `docker logs transcription-service`.
+- **GC kills audio:** `window.__vexaAudioStreams` not populated. Check `startPerSpeakerAudioCapture()` ran after admission.
+
+### Edge Verification Checklist
+
+| Edge | From | To | What to verify |
+|------|------|----|---------------|
+| Audio capture | Browser ScriptProcessor | `handlePerSpeakerAudioData()` | Non-silent audio arrives (max amplitude > 0.005) |
+| Speaker identity | `queryBrowserState()` | `recordTrackVote()` | Exactly 1 speaker active, vote recorded, lock at 3 votes |
+| Transcription | `TranscriptionClient.transcribe()` | transcription-service | HTTP 200, response has non-empty `text` field |
+| Publish | `SegmentPublisher` | Redis `transcription_segments` | XADD succeeds, segment has speaker name |
+| Consume | Redis stream | transcription-collector | Segment appears in Redis Hash for the meeting |
+| Persist | Background task | Postgres | After 30s, segment in `transcription_segments` table |

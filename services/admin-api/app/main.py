@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, attributes
 from typing import List, Optional  # Import List for response model
-from datetime import datetime # Import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import func
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -97,12 +97,10 @@ async def verify_analytics_or_admin_token(api_key: str = Security(API_KEY_HEADER
     ) 
 
 async def get_current_user(api_key: str = Security(USER_API_KEY_HEADER), db: AsyncSession = Depends(get_db)) -> User:
-    """Dependency to verify user API key and return user object."""
+    """Dependency to verify user API key and return user object.
+    Checks scopes from DB column, not token prefix."""
     if not api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API Key")
-
-    if not check_token_scope(api_key, {"user", "admin"}):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token scope not authorized for this endpoint")
 
     result = await db.execute(
         select(APIToken).where(APIToken.token == api_key).options(selectinload(APIToken.user))
@@ -111,6 +109,11 @@ async def get_current_user(api_key: str = Security(USER_API_KEY_HEADER), db: Asy
 
     if not db_token or not db_token.user:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
+
+    # Check scopes from DB, not prefix
+    token_scopes = set(db_token.scopes) if db_token.scopes else set()
+    if not token_scopes & VALID_SCOPES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token scope not authorized for this endpoint")
 
     return db_token.user
 
@@ -136,7 +139,8 @@ user_router = APIRouter(
 )
 
 # --- Helper Functions ---
-from admin_models.token_scope import generate_prefixed_token, check_token_scope, parse_token_scope
+from admin_models.token_scope import generate_prefixed_token, check_token_scope, parse_token_scope, VALID_SCOPES
+from admin_models.database import engine as admin_engine
 
 def generate_secure_token(length=40, scope: str = "user"):
     return generate_prefixed_token(scope, length)
@@ -474,24 +478,50 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
              response_model=TokenResponse,
              status_code=status.HTTP_201_CREATED,
              summary="Generate a new API token for a user")
-async def create_token_for_user(user_id: int, scope: str = "user", db: AsyncSession = Depends(get_db)):
+async def create_token_for_user(
+    user_id: int,
+    scope: str = "user",
+    scopes: Optional[str] = None,
+    name: Optional[str] = None,
+    expires_in: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+):
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    token_value = generate_secure_token(scope=scope)
-    # Use the APIToken model from admin_models
-    # Use timezone-naive datetime for TIMESTAMP WITHOUT TIME ZONE column
+    # Parse scopes: ?scopes=bot,tx takes precedence over ?scope=bot
+    if scopes is not None:
+        scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+    else:
+        scope_list = [scope]
+
+    # Validate all scopes
+    invalid = [s for s in scope_list if s not in VALID_SCOPES]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid scope(s): {invalid}. Valid: {sorted(VALID_SCOPES)}",
+        )
+
+    # Token prefix uses the first scope
+    token_value = generate_secure_token(scope=scope_list[0])
+    expires_at = None
+    if expires_in is not None and expires_in > 0:
+        expires_at = datetime.utcnow().replace(tzinfo=None) + timedelta(seconds=expires_in)
+
     db_token = APIToken(
-        token=token_value, 
+        token=token_value,
         user_id=user_id,
-        created_at=datetime.utcnow().replace(tzinfo=None)
+        scopes=scope_list,
+        name=name,
+        created_at=datetime.utcnow().replace(tzinfo=None),
+        expires_at=expires_at,
     )
     db.add(db_token)
     await db.commit()
     await db.refresh(db_token)
-    logger.info(f"Admin created token for user {user_id} ({user.email})")
-    # Use TokenResponse for consistency with schema definition (datetime object)
+    logger.info(f"Admin created token for user {user_id} ({user.email}), scopes={scope_list}, name={name}")
     return TokenResponse.model_validate(db_token)
 
 @admin_router.delete("/tokens/{token_id}", 
@@ -799,23 +829,87 @@ async def validate_token(request: Request, payload: dict, db: AsyncSession = Dep
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     api_token, user = row
-    scope = parse_token_scope(token)
+
+    # Reject expired tokens
+    if api_token.expires_at is not None and api_token.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+
+    # Update last_used_at
+    api_token.last_used_at = datetime.utcnow().replace(tzinfo=None)
+    await db.commit()
+
+    # Read scopes from DB column, not prefix
+    scopes = list(api_token.scopes) if api_token.scopes else ["legacy"]
 
     return {
         "user_id": user.id,
-        "scopes": [scope] if scope else ["legacy"],
+        "scopes": scopes,
         "max_concurrent": user.max_concurrent_bots,
         "email": user.email,
     }
 
 
+async def backfill_token_scopes():
+    """Backfill scopes column for existing tokens (idempotent).
+
+    Handles two cases:
+    1. Tokens with empty/null scopes (fresh DB or new tokens before backfill)
+    2. Tokens with removed scopes (e.g. 'user', 'admin') — migrate to valid scopes
+
+    Result:
+    - vxa_bot_ tokens: scopes = ['bot']
+    - vxa_tx_ tokens: scopes = ['tx']
+    - vxa_user_ tokens: scopes = ['bot', 'tx'] (user scope removed, grant full access)
+    - Legacy tokens (no vxa_ prefix): scopes = ['bot', 'tx'] (full access)
+    - Tokens containing 'user' or 'admin' scope: replaced with ['bot', 'tx']
+    """
+    from sqlalchemy.sql import func
+    from sqlalchemy import or_, cast, String
+    full_access = sorted(VALID_SCOPES)
+
+    async with AsyncSession(admin_engine) as session:
+        # Find tokens that need updating: empty scopes OR containing removed scopes
+        result = await session.execute(
+            select(APIToken).where(
+                or_(
+                    func.array_length(APIToken.scopes, 1).is_(None),
+                    APIToken.scopes.op('@>')(['user']),
+                    APIToken.scopes.op('@>')(['admin']),
+                )
+            )
+        )
+        tokens = result.scalars().all()
+        if not tokens:
+            logger.info("Token backfill: all tokens have valid scopes — nothing to do.")
+            return
+
+        updated = 0
+        for token in tokens:
+            current = set(token.scopes) if token.scopes else set()
+            # Remove invalid scopes, keep valid ones
+            valid = current & VALID_SCOPES
+            if valid:
+                token.scopes = sorted(valid)
+            else:
+                # No valid scopes remain — check prefix for hint
+                scope = parse_token_scope(token.token)
+                if scope and scope in VALID_SCOPES:
+                    token.scopes = [scope]
+                else:
+                    # Legacy, vxa_user_, vxa_admin_, or unknown — full access
+                    token.scopes = full_access
+            updated += 1
+
+        await session.commit()
+        logger.info(f"Token backfill: migrated {updated} tokens to valid scopes.")
+
+
 # App events
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Admin API starting up. Skipping automatic DB initialization.")
-    # The 'migrate-or-init' Makefile target is now responsible for all DB setup.
-    # await init_db()
-    pass
+    logger.info("Admin API starting up — running schema sync.")
+    await init_db()
+    await backfill_token_scopes()
 
 # Include the routers
 app.include_router(admin_router)

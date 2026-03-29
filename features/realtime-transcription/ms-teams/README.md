@@ -223,3 +223,24 @@ Real live Teams meetings with TTS-speaking bots (Alice, Bob using different user
 | Stress (`tests/e2e/test-e2e-stress.sh`) | 18/20 (90%) | 100% | 15% |
 
 Teams meetings require a `passcode` field in the bot creation API. Without it, anonymous bots cannot pass the lobby. The API rejects unknown fields (extra fields forbidden).
+
+## Development Notes
+
+### Diagnostic Hints
+
+- **No audio element found:** Teams pre-join screen doesn't have audio until media warm-up completes. Bot must complete join flow first.
+- **Speaker detection no signal:** Participant tiles missing `voice-level-stream-outline`. Teams UI may not render these for all participants.
+- **Audio routed to wrong speaker:** `speakingStates` map stale, or DOM detection lag. Check `MIN_STATE_CHANGE_MS=200ms` debounce.
+- **MS Edge required:** Teams may behave differently in Chromium vs Edge. Bot tries Edge first, falls back to Chromium.
+
+### Edge Verification Checklist
+
+| Edge | From | To | What to verify |
+|------|------|----|---------------|
+| Caption enable | `captions.ts` (post-join) | Teams UI menu clicks | Captions wrapper appears in DOM |
+| Caption observer | MutationObserver on `closed-caption-renderer-wrapper` | `lastCaptionSpeaker` + ring buffer flush | Speaker changes detected, lookback audio flushed |
+| Audio hook | Browser ScriptProcessor (single stream) | Ring buffer + `handleTeamsAudioData(name, data)` | Non-silent audio stored in ring buffer, routed to caption/DOM speaker |
+| Caption data | Browser `__vexaTeamsCaptionData()` | `handleTeamsCaptionData()` | Caption text + speaker logged |
+| Speaker detection (fallback) | MutationObserver on `voice-level-stream-outline` | `speakingStates` map | State transitions fire, `vdi-frame-occlusion` detected |
+| Transcription | `TranscriptionClient.transcribe()` | transcription-service | HTTP 200, non-empty text |
+| Publish | `SegmentPublisher` | Redis `transcription_segments` | XADD succeeds, includes source/caption fields |

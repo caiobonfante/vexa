@@ -164,7 +164,7 @@ Response: 200
 
 ## Executor
 
-Background loop that runs inside the scheduler service (or inside bot-manager/calendar-service as a task).
+Background loop that runs inside the scheduler service (or inside runtime-api/calendar-service as a task).
 
 ```python
 async def executor_loop(redis):
@@ -291,11 +291,11 @@ Add to `libs/shared-models/shared_models/`:
 - `scheduler.py` — `schedule_job()`, `cancel_job()`, `list_jobs()`
 - `scheduler_worker.py` — `start_executor()`, `stop_executor()`, executor loop
 
-Runs inside bot-manager (or calendar-service) as a background task, just like the webhook retry worker.
+Runs inside runtime-api (or calendar-service) as a background task, just like the webhook retry worker.
 
 ### Phase 2: REST API
 
-Add endpoints to bot-manager or a new scheduler service:
+Add endpoints to runtime-api (or a new scheduler service):
 - `POST /schedule`
 - `GET /schedule`
 - `GET /schedule/{job_id}`

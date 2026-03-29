@@ -24,8 +24,8 @@ Bot (per-speaker) ──XADD {payload}──► Redis Stream (transcription_segm
 Bot (per-speaker) ──XADD──► Redis Stream (speaker_events_relative) ──XREADGROUP──► transcription-collector
     collector ──ZADD──► Redis Sorted Set (speaker_events:{session_uid})
 
-bot-manager ──PUBLISH──► Redis Pub/Sub (meeting:{id}:status)  ──SUBSCRIBE──► api-gateway ──► WebSocket clients
-bot-manager ──PUBLISH──► Redis Pub/Sub (bot_commands:meeting:{id}) ──SUBSCRIBE──► vexa-bot
+meeting-api ──PUBLISH──► Redis Pub/Sub (meeting:{id}:status)  ──SUBSCRIBE──► api-gateway ──► WebSocket clients
+meeting-api ──PUBLISH──► Redis Pub/Sub (bot_commands:meeting:{id}) ──SUBSCRIBE──► vexa-bot
 
 webhook_delivery ──LPUSH──► Redis List (webhook_retry_queue) ──BRPOP──► retry_worker ──► customer endpoint
 ```
@@ -39,9 +39,9 @@ webhook_delivery ──LPUSH──► Redis List (webhook_retry_queue) ──BRP
 | `meeting:{meeting_id}:segments` | Hash | transcription-collector | collector API, background flush | Mutable segment store keyed by start_time. TTL 1h |
 | `tc:meeting:{meeting_id}:mutable` | Pub/Sub | transcription-collector | api-gateway → WebSocket → dashboard | Change-only segment updates for real-time display |
 | `speaker_events:{session_uid}` | Sorted Set | transcription-collector | collector (speaker mapping fallback) | Speaker events scored by relative timestamp. TTL 24h |
-| `meeting:{meeting_id}:status` | Pub/Sub | bot-manager | api-gateway → WebSocket | Meeting status changes (joining, active, completed, failed) |
-| `bot_commands:meeting:{meeting_id}` | Pub/Sub | bot-manager | vexa-bot | Bot control commands (leave, reconfigure) |
-| `webhook_retry_queue` | List | webhook_delivery (shared-models) | retry_worker (bot-manager) | Failed webhook deliveries with backoff metadata |
+| `meeting:{meeting_id}:status` | Pub/Sub | meeting-api | api-gateway → WebSocket | Meeting status changes (joining, active, completed, failed) |
+| `bot_commands:meeting:{meeting_id}` | Pub/Sub | meeting-api | vexa-bot | Bot control commands (leave, reconfigure) |
+| `webhook_retry_queue` | List | webhook_delivery (meeting-api) | retry_worker (meeting-api) | Failed webhook deliveries with backoff metadata |
 
 ### Stream details
 
@@ -51,8 +51,8 @@ XADD transcription_segments * payload '{"type":"transcription","token":"<JWT>","
 ```
 
 The `payload` field contains a JSON string with:
-- `token` — MeetingToken JWT (HS256, iss=bot-manager, aud=transcription-collector, scope=transcribe:write)
-- `uid` — session UID (connectionId from bot-manager)
+- `token` — MeetingToken JWT (HS256, iss=meeting-api, aud=transcription-collector, scope=transcribe:write)
+- `uid` — session UID (connectionId from meeting-api)
 - `segments[].completed` — `false` for drafts (immediate, low latency), `true` for confirmed (stable after fuzzy match)
 - `segments[].speaker` — producer-labeled speaker name from DOM. Collector uses this directly (`PRODUCER_LABELED` status)
 
@@ -82,7 +82,7 @@ Collector stores these in sorted set `speaker_events:{session_uid}` (score = tim
 
 | Env var | Service | Default | Purpose |
 |---------|---------|---------|---------|
-| `REDIS_URL` | bot-manager, api-gateway | `redis://redis:6379/0` | Connection URL |
+| `REDIS_URL` | meeting-api, api-gateway | `redis://redis:6379/0` | Connection URL |
 | `REDIS_HOST` | transcription-collector | `redis` | Hostname |
 | `REDIS_PORT` | transcription-collector | `6379` | Port |
 | `REDIS_DB` | transcription-collector | `0` | Database index |
@@ -97,7 +97,7 @@ Collector stores these in sorted set `speaker_events:{session_uid}` (score = tim
 
 - Stream producer (bot): [`services/vexa-bot/core/src/services/segment-publisher.ts`](vexa-bot/core/src/services/segment-publisher.ts) -- XADD + PUBLISH per segment
 - Stream consumer: [`services/transcription-collector/streaming/consumer.py`](transcription-collector/streaming/consumer.py) -- `XREADGROUP` loop
-- Pub/Sub producer: [`services/bot-manager/app/main.py`](bot-manager/app/main.py) -- `publish_meeting_status_change()`
+- Pub/Sub producer: [`packages/meeting-api/meeting_api/callbacks.py`](../packages/meeting-api/meeting_api/callbacks.py) -- `publish_meeting_status_change()`
 - Pub/Sub consumer: [`services/api-gateway/main.py`](api-gateway/main.py) -- `websocket_multiplex()` subscribes for real-time updates
 - Webhook retry: [`libs/shared-models/shared_models/webhook_retry_worker.py`](../libs/shared-models/shared_models/webhook_retry_worker.py) -- `BRPOP` loop with backoff
 - Webhook enqueue: [`libs/shared-models/shared_models/webhook_delivery.py`](../libs/shared-models/shared_models/webhook_delivery.py) -- `LPUSH` on failure

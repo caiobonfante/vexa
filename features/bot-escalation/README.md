@@ -4,7 +4,7 @@
 > **Tested:** Nothing yet.
 > **Not tested:** Detection, VNC lazy-start, dashboard UI, timeout/retry.
 >
-> **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md)
+> [findings](tests/findings.md) | [feature-log](tests/feature-log.md)
 
 ## Why
 
@@ -176,3 +176,13 @@ Bot escalates → user solves CAPTCHA via VNC → clicks "Save Browser State"
 4. Click "Open Remote Browser" — verify VNC shows the bot's browser
 5. Admit the bot manually via VNC — verify bot resumes and meeting becomes `active`
 6. Test timeout: don't intervene — verify bot fails gracefully after extended timeout
+
+## Development Notes
+
+### Diagnostic hints
+
+- **Escalation doesn't trigger:** Check `checkEscalation()` is called in the platform's admission poll loop. Verify timeout threshold (80% of `waitingRoomTimeout`).
+- **VNC won't start:** Confirm x11vnc and websockify binaries exist in container. Check Xvfb is running on `:99`. Look for port conflicts.
+- **Dashboard doesn't show banner:** Check WebSocket connection is open. Verify `meeting.status` event includes `escalation_reason` and `vnc_url` in data payload.
+- **Bot doesn't resume:** Admission poll must keep running during escalation. Verify timeout was extended (5 min extension). Check `isAdmitted()` returns true after user intervention.
+- **VNC accessible but blank:** Xvfb display mismatch -- ensure x11vnc uses `-display :99` matching the bot's Xvfb.

@@ -13,7 +13,7 @@ Generated: 2026-03-24. Update this file whenever ports or env vars change.
 | admin-api | 8001 | **8067** | `ADMIN_API_PORT` | User/token management; requires `X-Admin-API-Key` header |
 | agent-api | 8100 | **8100** | `CHAT_API_PORT` | Chat/agent sessions; requires `X-API-Key: BOT_API_TOKEN` |
 | runtime-api | 8090 | **8090** | `RUNTIME_API_PORT` | Container lifecycle; internal to compose network |
-| bot-manager | 8080 | **8070** | `BOT_MANAGER_PORT` | Meeting bot orchestration; internal to compose network |
+| meeting-api | 8080 | (internal only) | — | Meeting bot orchestration + transcription collector (replaced bot-manager in Phase 4) |
 | transcription-collector | 8000 | **8060** | `TC_PORT` | Transcript storage/retrieval; internal to compose network |
 | redis | 6379 | **6389** | `REDIS_PORT` | WARNING: host port is NOT 6379. Use 6389 from host. |
 | postgres | 5432 | **5458** | `POSTGRES_PORT` | WARNING: host port is NOT 5432. Use 5458 from host. |
@@ -34,15 +34,14 @@ All inter-service calls use **container names** (not localhost). Services are on
 | Caller | Target | URL Used | Token |
 |--------|--------|----------|-------|
 | api-gateway | admin-api | `http://admin-api:8001` | passes through user token |
-| api-gateway | bot-manager | `http://bot-manager:8080` | passes through user token |
-| api-gateway | transcription-collector | `http://transcription-collector:8000` | passes through user token |
-| bot-manager | agent-api | `http://agent-api:8100` | `POST_MEETING_HOOKS` webhook |
+| api-gateway | meeting-api | `http://meeting-api:8080` | passes through user token (via `BOT_MANAGER_URL` legacy env var) |
+| meeting-api | agent-api | `http://agent-api:8100` | `POST_MEETING_HOOKS` webhook |
 | agent-api | runtime-api | `http://runtime-api:8090` | `BOT_API_TOKEN` |
 | telegram-bot | agent-api | `http://agent-api:8100` | no auth (internal) |
 | dashboard (Next.js server) | api-gateway | `http://localhost:8066` | user JWT token |
 | dashboard (Next.js server) | agent-api | `http://localhost:8100` | `AGENT_API_TOKEN` |
 | dashboard (Next.js server) | admin-api | `http://localhost:8067` | `VEXA_ADMIN_API_KEY` |
-| calendar-service | bot-manager | `http://bot-manager:8080` | `BOT_API_TOKEN` as `X-API-Key` |
+| calendar-service | meeting-api | `http://meeting-api:8080` | `BOT_API_TOKEN` as `X-API-Key` (via `BOT_MANAGER_URL` legacy env var) |
 | api-gateway | calendar-service | `http://calendar-service:8050` | passes through user token |
 
 ---
@@ -61,7 +60,7 @@ All inter-service calls use **container names** (not localhost). Services are on
 | `CLAUDE_JSON_PATH` | — | YES for agents | Path to claude.json on host |
 | `CHAT_DEFAULT_USER_ID` | — | NO | Default user ID for Telegram messages without mapping |
 | `CHAT_USER_MAP` | `{}` | NO | JSON map of Telegram user IDs to internal user IDs |
-| `ADMIN_TOKEN` | `vexa-admin-token` | YES | Shared admin token; must match across bot-manager, admin-api |
+| `ADMIN_TOKEN` | `vexa-admin-token` | YES | Shared admin token; must match across meeting-api, admin-api |
 | `DB_NAME` | `vexa_agentic` | NO | Postgres database name |
 | `DB_USER` | `postgres` | NO | Postgres user |
 | `DB_PASSWORD` | `postgres` | NO | Postgres password |
@@ -78,7 +77,7 @@ All inter-service calls use **container names** (not localhost). Services are on
 | Variable | Value in container | Source |
 |----------|--------------------|--------|
 | `ADMIN_API_URL` | `http://admin-api:8001` | hardcoded in compose |
-| `BOT_MANAGER_URL` | `http://bot-manager:8080` | hardcoded in compose |
+| `BOT_MANAGER_URL` | `http://meeting-api:8080` | Legacy name — points to meeting-api (replaced bot-manager in Phase 4) |
 | `TRANSCRIPTION_COLLECTOR_URL` | `http://transcription-collector:8000` | hardcoded in compose |
 | `MCP_URL` | `http://mcp:18888` | hardcoded in compose (mcp service not in stack) |
 | `REDIS_URL` | `redis://redis:6379/0` | hardcoded in compose |
@@ -92,7 +91,7 @@ All inter-service calls use **container names** (not localhost). Services are on
 | `ADMIN_API_TOKEN` | `vexa-admin-token` | from `ADMIN_TOKEN` in .env |
 | `DB_*` | postgres credentials | from .env |
 
-**Note:** admin-api uses `ADMIN_API_TOKEN`; bot-manager uses `ADMIN_TOKEN` — these are different env var names but must have the same value.
+**Note:** admin-api uses `ADMIN_API_TOKEN`; meeting-api uses `ADMIN_TOKEN` — these are different env var names but must have the same value.
 
 #### agent-api
 | Variable | Value in container | Source |
@@ -114,11 +113,11 @@ All inter-service calls use **container names** (not localhost). Services are on
 
 **Note:** MINIO_ENDPOINT format differs between runtime-api (`minio:9000`) and agent-api (`http://minio:9000`). This is intentional — each service uses a different MinIO client library with different URL expectations.
 
-#### bot-manager
+#### meeting-api
 | Variable | Value in container | Source |
 |----------|--------------------|--------|
 | `REDIS_URL` | `redis://redis:6379/0` | hardcoded in compose |
-| `DOCKER_NETWORK` | `vexa-agentic_vexa_agentic` | hardcoded in compose |
+| `RUNTIME_API_URL` | `http://runtime-api:8090` | hardcoded in compose |
 | `MINIO_ENDPOINT` | `minio:9000` | **no http://** |
 | `ADMIN_TOKEN` | `vexa-admin-token` | from .env |
 | `TRANSCRIPTION_SERVICE_URL` | from .env | external service; use host IP not `localhost` |
@@ -169,11 +168,11 @@ All inter-service calls use **container names** (not localhost). Services are on
 
 ## Known Inconsistencies (by design, not bugs)
 
-1. **MINIO_ENDPOINT format**: agent-api uses `http://minio:9000`; runtime-api, bot-manager, transcription-collector use `minio:9000`. Each service's MinIO client library requires a different format. Do not "fix" this by making them uniform — it will break one or the other.
+1. **MINIO_ENDPOINT format**: agent-api uses `http://minio:9000`; runtime-api, meeting-api, transcription-collector use `minio:9000`. Each service's MinIO client library requires a different format. Do not "fix" this by making them uniform — it will break one or the other.
 
 2. **REDIS_URL vs REDIS_HOST+REDIS_PORT**: transcription-collector uses `REDIS_HOST`/`REDIS_PORT`; all other services use `REDIS_URL`. Both work. Do not unify unless you update transcription-collector source.
 
-3. **ADMIN_TOKEN vs ADMIN_API_TOKEN**: bot-manager reads `ADMIN_TOKEN`; admin-api reads `ADMIN_API_TOKEN`. The compose file maps the same value correctly (`ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}` → container env `ADMIN_TOKEN`; admin-api compose env: `ADMIN_API_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}`). Same value, different names.
+3. **ADMIN_TOKEN vs ADMIN_API_TOKEN**: meeting-api reads `ADMIN_TOKEN`; admin-api reads `ADMIN_API_TOKEN`. The compose file maps the same value correctly (`ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}` → container env `ADMIN_TOKEN`; admin-api compose env: `ADMIN_API_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}`). Same value, different names.
 
 4. **Host ports offset from container ports**: redis (6389≠6379), postgres (5458≠5432), minio (9010≠9000). This avoids conflicts with other stacks on the same host.
 

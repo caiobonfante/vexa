@@ -16,6 +16,8 @@ import websockets
 import redis.asyncio as aioredis
 from datetime import datetime, timedelta, timezone
 import secrets
+import time
+import hashlib
 
 # Import schemas for documentation
 from meeting_api.schemas import (
@@ -42,6 +44,23 @@ AGENT_API_URL = os.getenv("AGENT_API_URL")  # Optional — agent-api for chat
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")  # Optional override, e.g. https://api.vexa.ai
 TRANSCRIPT_SHARE_TTL_SECONDS = int(os.getenv("TRANSCRIPT_SHARE_TTL_SECONDS", "900"))  # 15 min
 TRANSCRIPT_SHARE_TTL_MAX_SECONDS = int(os.getenv("TRANSCRIPT_SHARE_TTL_MAX_SECONDS", "86400"))  # 24h max
+
+# Rate limiting — requests per minute per API key (or per IP for unauthenticated).
+# 0 = disabled. Separate limits for auth'd API calls vs admin/WebSocket.
+RATE_LIMIT_RPM = int(os.getenv("RATE_LIMIT_RPM", "120"))  # per-key default
+RATE_LIMIT_ADMIN_RPM = int(os.getenv("RATE_LIMIT_ADMIN_RPM", "30"))  # admin endpoints
+RATE_LIMIT_WS_RPM = int(os.getenv("RATE_LIMIT_WS_RPM", "20"))  # WebSocket upgrades
+
+# Scope enforcement — map route prefixes to required scopes.
+# Three scopes: "bot" (meeting bots), "tx" (transcripts), "browser" (browser sessions).
+# Multi-scope tokens pass checks for all their domains.
+ROUTE_SCOPES = {
+    "/user/": {"bot"},
+    "/bots": {"bot", "browser"},
+    "/b/": {"browser"},
+    "/transcripts": {"tx"},
+    "/meetings": {"tx"},
+}
 
 # --- Validation at startup ---
 if not all([ADMIN_API_URL, BOT_MANAGER_URL, TRANSCRIPTION_COLLECTOR_URL, MCP_URL]):
@@ -153,6 +172,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Rate Limiting Middleware ---
+RATE_LIMIT_SKIP_PATHS = {"/", "/docs", "/openapi.json", "/redoc"}
+
+async def _check_rate_limit(redis_client, key: str, limit: int) -> Tuple[bool, int, int]:
+    """Sliding-window rate limit check using Redis sorted sets.
+    Returns (allowed, remaining, retry_after_seconds)."""
+    if limit <= 0:
+        return True, 0, 0
+
+    now = time.time()
+    window = 60  # 1-minute window
+    window_start = now - window
+    pipe = redis_client.pipeline()
+    pipe.zremrangebyscore(key, 0, window_start)
+    pipe.zadd(key, {f"{now}": now})
+    pipe.zcard(key)
+    pipe.expire(key, window + 1)
+    results = await pipe.execute()
+    count = results[2]
+    remaining = max(0, limit - count)
+    if count > limit:
+        # Find oldest request in window to calculate retry-after
+        retry_after = int(window - (now - window_start)) + 1
+        return False, 0, retry_after
+    return True, remaining, 0
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    path = request.url.path
+    if path in RATE_LIMIT_SKIP_PATHS or RATE_LIMIT_RPM <= 0:
+        return await call_next(request)
+
+    redis_client = getattr(app.state, "redis", None)
+    if not redis_client:
+        return await call_next(request)
+
+    # Determine rate limit bucket and limit
+    api_key = request.headers.get("x-api-key", "")
+    admin_key = request.headers.get("x-admin-api-key", "")
+    is_ws = request.headers.get("upgrade", "").lower() == "websocket"
+
+    if is_ws:
+        identifier = _token_hash(api_key) if api_key else request.client.host
+        bucket = f"ratelimit:ws:{identifier}"
+        limit = RATE_LIMIT_WS_RPM
+    elif path.startswith("/admin"):
+        identifier = _token_hash(admin_key) if admin_key else request.client.host
+        bucket = f"ratelimit:admin:{identifier}"
+        limit = RATE_LIMIT_ADMIN_RPM
+    else:
+        identifier = _token_hash(api_key) if api_key else request.client.host
+        bucket = f"ratelimit:api:{identifier}"
+        limit = RATE_LIMIT_RPM
+
+    try:
+        allowed, remaining, retry_after = await _check_rate_limit(redis_client, bucket, limit)
+    except Exception:
+        # Redis failure — don't block requests
+        return await call_next(request)
+
+    if not allowed:
+        return Response(
+            content=json.dumps({"detail": "Rate limit exceeded", "retry_after": retry_after}),
+            status_code=429,
+            media_type="application/json",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    response = await call_next(request)
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+    response.headers["X-RateLimit-Limit"] = str(limit)
+    return response
+
+
 # --- HTTP Client ---
 # Use a single client instance for connection pooling
 @app.on_event("startup")
@@ -209,9 +302,22 @@ async def forward_request(client: httpx.AsyncClient, method: str, url: str, requ
             # Validate token via admin-api and inject identity headers
             user_data = await _resolve_token(client, client_key)
             if user_data:
+                user_scopes = set(user_data.get("scopes", []))
                 headers["x-user-id"] = str(user_data["user_id"])
-                headers["x-user-scopes"] = ",".join(user_data.get("scopes", []))
+                headers["x-user-scopes"] = ",".join(user_scopes)
                 headers["x-user-limits"] = str(user_data.get("max_concurrent", 1))
+
+                # Scope enforcement: check if token has required scope for this route
+                req_path = request.url.path
+                for prefix, required in ROUTE_SCOPES.items():
+                    if req_path.startswith(prefix):
+                        if not user_scopes & required:
+                            return Response(
+                                content=json.dumps({"detail": "Insufficient scope for this endpoint"}),
+                                status_code=403,
+                                media_type="application/json",
+                            )
+                        break
             elif require_auth:
                 return Response(
                     content=json.dumps({"detail": "Invalid API key"}),
@@ -232,9 +338,14 @@ async def forward_request(client: httpx.AsyncClient, method: str, url: str, requ
         raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}")
 
 
+def _token_hash(api_key: str) -> str:
+    """Short hash of full token for cache/rate-limit keys (avoids prefix collisions)."""
+    return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+
 async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[dict]:
     """Validate a token via admin-api, with Redis cache (60s TTL)."""
-    cache_key = f"gateway:token:{api_key[:16]}"
+    cache_key = f"gateway:token:{_token_hash(api_key)}"
     redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
 
     # Check cache first

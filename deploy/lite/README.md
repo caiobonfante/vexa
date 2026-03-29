@@ -503,3 +503,44 @@ The Lite deployment adds the following without modifying core service code:
 - `services/transcription-collector/main.py` - Password parameter in Redis connection
 
 All changes are **backwards compatible** and don't affect standard Docker Compose deployment.
+
+## Development Notes
+
+### Build source mapping
+
+The Lite image packages code from across the monorepo:
+
+| Source | Destination in image |
+|--------|---------------------|
+| `libs/shared-models/` | `/app/shared-models/` + PYTHONPATH |
+| `services/api-gateway/` | `/app/api-gateway/` |
+| `services/admin-api/` | `/app/admin-api/` |
+| `packages/meeting-api/` | `/app/meeting-api/` |
+| `services/transcription-collector/` | `/app/transcription-collector/` |
+| `services/mcp/` | `/app/mcp/` |
+| `packages/tts-service/` | `/app/tts-service/` |
+| `services/vexa-bot/core/` | `/app/vexa-bot/` (npm ci + build) |
+| `libs/shared-models/alembic/` | `/app/alembic/` |
+
+Rebuild after any source component changes code that ships in the image.
+
+### Integration edge verification
+
+When validating a Lite build, these are the integration edges to test:
+
+| Edge | What to verify |
+|------|---------------|
+| 0. Build | Container starts, supervisord all RUNNING, API responds on :8056 |
+| 1. Client -> Bot -> Meeting | `POST /bots` with meeting URL, bot logs show "admitted" |
+| 2. Bot -> Transcription | Bot audio reaches transcription service, HTTP 200 with text |
+| 3. TC -> WS -> Client | WebSocket client receives `{speaker, text, start_time}` messages |
+| 4. TC -> DB -> API | `GET /transcripts/{platform}/{id}` returns persisted segments |
+| 5. Bot -> Storage -> API | `GET /recordings` returns entry, download returns audio bytes |
+| 6. Client -> Bot chat | `POST /bots/{platform}/{id}/chat` then `GET .../chat` round-trips |
+| 7. SPLM | Speaker attribution >= 70% correct after deferred processing |
+
+### Container security notes
+
+- The container runs as root (Playwright/Xvfb requirement).
+- Internal Redis has no auth (localhost only inside container). For external Redis, set `REDIS_PASSWORD`.
+- Never publish an image with secrets baked in. Verify with `docker history` and `docker inspect`.

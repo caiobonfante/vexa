@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/confidence-check.sh",
+            "timeout": 30,
+            "statusMessage": "Checking confidence protocol..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/session-start.sh",
+            "timeout": 5,
+            "statusMessage": "Loading confidence protocol..."
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "echo 'Confidence Protocol ACTIVE | Stop hook ON | Gotchas: G1-G6'"
+  }
+}

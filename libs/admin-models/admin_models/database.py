@@ -102,14 +102,11 @@ async def get_db() -> AsyncSession:
 
 # --- Initialization Function ---
 async def init_db():
-    """Creates database tables based on admin models' metadata."""
+    """Converge database schema to match admin models (idempotent)."""
+    from schema_sync import ensure_schema
     logger.info(f"Initializing database tables at {DB_HOST}:{DB_PORT}/{DB_NAME}")
     try:
-        async with engine.begin() as conn:
-            # This relies on all SQLAlchemy models being imported
-            # somewhere before this runs, so Base.metadata is populated.
-            # Add checkfirst=True to prevent errors if tables already exist
-            await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        await ensure_schema(engine, Base)
         logger.info("Database tables checked/created successfully.")
     except Exception as e:
         logger.error(f"Error initializing database tables: {e}", exc_info=True)

@@ -187,6 +187,14 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: "/",
     });
+    // Set user-info cookie so getAuthenticatedUserId can resolve the user
+    cookieStore.set("vexa-user-info", JSON.stringify({ email: user!.email, name: user!.name }), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+    });
 
     // Step 6: Return success with user info
     return NextResponse.json({

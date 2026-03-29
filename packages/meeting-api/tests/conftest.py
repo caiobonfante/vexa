@@ -4,7 +4,7 @@ Provides: mock DB, mock Redis, mock httpx (Runtime API), test user/token,
 and an httpx.AsyncClient wired to the FastAPI app with all deps overridden.
 """
 
-# --- Environment must be set BEFORE any shared_models import ---
+# --- Environment must be set BEFORE any model imports ---
 import os
 import sys
 from pathlib import Path

@@ -4,7 +4,7 @@
 > **Tested:** Audio join, per-speaker ScriptProcessor, DOM speaker polling, transcription pipeline, raw capture, scoring.
 > **Not tested:** DOM-based per-segment attribution (MVP1 fix), automated TTS collection (reCAPTCHA blocks).
 >
-> **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md)
+> [findings](tests/findings.md) | [feature-log](tests/feature-log.md)
 
 ## Why
 
@@ -305,3 +305,25 @@ Audio flows after "Allow" click fix. Transcription pipeline produces segments wi
 - [Collabora WhisperLive](https://github.com/collabora/WhisperLive) — codebase ancestor, sliding window server
 - [How Zoom's web client avoids using WebRTC](https://webrtchacks.com/zoom-avoids-using-webrtc/)
 - [Recall.ai: Zoom Web SDK raw audio](https://www.recall.ai/blog/can-i-access-raw-audio-data-using-the-zoom-web-sdk)
+
+## Development Notes
+
+### Diagnostic Hints
+
+- **Audio elements found but silent:** Bot didn't join audio channel. Check `prepareZoomWebMeeting()` logs for "Joined with Computer Audio". Root cause: recorder bot clicks "Continue without microphone and camera" bypassing audio.
+- **Speaker names empty:** `queryZoomActiveSpeaker()` returns null -- verify `.speaker-active-container__video-frame` exists in DOM. Check `isMostRecentlyActiveTrack()` gating.
+- **TTS bots ejected (~4s):** Check `removal.ts` logs -- likely false-positive from `framenavigated` during Zoom post-join redirect. Also: no auto-admit for waiting room yet.
+- **PulseAudio captures silence:** Expected. Chrome doesn't route Zoom WebRTC through PulseAudio. Per-speaker ScriptProcessor is the only working path.
+- **Duplicate segments:** Both PulseAudio+WhisperLive and ScriptProcessor+TranscriptionClient run simultaneously. Per-speaker is primary.
+
+### Edge Verification Checklist
+
+| Edge | From | To | What to verify |
+|------|------|----|---------------|
+| Audio channel join | `prepareZoomWebMeeting()` | Zoom audio subsystem | Bot joins computer audio (not video-only) |
+| Audio capture | Browser ScriptProcessor | `handlePerSpeakerAudioData()` | Non-silent audio arrives (max amplitude > 0.005) |
+| Speaker identity | `queryZoomActiveSpeaker()` + `traverseZoomDOM()` | `recordTrackVote()` | Active speaker correlated with audio track, lock at 2 votes |
+| Transcription | `TranscriptionClient.transcribe()` | transcription-service | HTTP 200, response has non-empty `text` field |
+| Publish | `SegmentPublisher` | Redis `transcription_segments` | XADD succeeds, segment has speaker name |
+| Consume | Redis stream | transcription-collector | Segment appears in Redis Hash for the meeting |
+| Persist | Background task | Postgres | After 30s, segment in `transcription_segments` table |

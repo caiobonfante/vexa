@@ -40,10 +40,10 @@ and validates at every WS tick that the rendered transcript state matches ground
 
 ```bash
 # Run with default dataset (teams-3sp-collection)
-API_TOKEN=vxa_user_... node replay-delivery-test.js
+API_TOKEN=vxa_tx_... node replay-delivery-test.js
 
 # Run with specific dataset
-DATASET=teams-7sp-panel API_TOKEN=vxa_user_... node replay-delivery-test.js
+DATASET=teams-7sp-panel API_TOKEN=vxa_tx_... node replay-delivery-test.js
 ```
 
 ### What it validates
@@ -81,3 +81,26 @@ TICK  23 | 12C none    | covered: 12/12 | PASS
 FINAL | REST: 12/12 | WS/REST match: 12/12 | PASS
 DELIVERY: PASS (12/12 GT, 0 regressions, 0 phantoms, REST consistent)
 ```
+
+## Development Notes
+
+### Gate Criteria
+
+| Check | Pass | Fail |
+|-------|------|------|
+| WS delivers all segments | N/N segments arrive via WS subscription | Any segment missing |
+| REST returns latest state per segment_id | GET /transcripts matches WS | Missing or stale segments |
+| Postgres persistence | Segments in DB after 30s immutability | Missing rows |
+| Dashboard renders correctly | Two-map model: confirmed (by segment_id) + pending (by speaker) | Vanishing segments, duplicates |
+| Ordering | Segments sorted by absolute_start_time | Out-of-order |
+| Latency | WS within 1s of publish, REST within 30s+10s | Excessive delay |
+
+### Edge Map
+
+| Edge | From | To | Data format | Failure mode |
+|------|------|----|-------------|--------------|
+| Publish (stream) | SegmentPublisher | Redis XADD transcription_segments | JSON payload | Redis down -- segments lost |
+| Publish (WS) | SegmentPublisher | Redis PUBLISH tc:meeting:{id}:mutable | JSON bundle | No subscribers -- silent drop |
+| Consume | Redis stream | transcription-collector XREADGROUP | JSON | Consumer group lag |
+| Persist | collector background task | Postgres UPSERT | SQL | DB down -- stuck in Redis |
+| REST | api-gateway | Client | JSON merge Redis Hash + Postgres | Stale if background behind |

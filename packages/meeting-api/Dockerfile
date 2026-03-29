@@ -5,6 +5,10 @@ WORKDIR /app
 # Install system deps
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
+# Install schema-sync library
+COPY libs/schema-sync /schema-sync
+RUN pip install --no-cache-dir /schema-sync
+
 # Copy admin models first (its plain pydantic dep must not override pydantic[email])
 COPY libs/admin-models /admin-models
 RUN pip install --no-cache-dir /admin-models

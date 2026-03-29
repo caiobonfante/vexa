@@ -5,5 +5,5 @@ import os
 SERVICE_ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, SERVICE_ROOT)
 
-SHARED_MODELS = os.path.join(os.path.dirname(__file__), "..", "..", "..", "libs", "shared-models")
-sys.path.insert(0, SHARED_MODELS)
+MEETING_API = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "meeting-api")
+sys.path.insert(0, MEETING_API)

@@ -37,7 +37,7 @@ All endpoints accept `user_id` as a query parameter.
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Log level |
 | `SYNC_INTERVAL_SECONDS` | `300` | Seconds between calendar sync cycles |
-| `DATABASE_URL` | — | PostgreSQL connection string (via shared_models) |
+| `DATABASE_URL` | — | PostgreSQL connection string (via admin-models/meeting-api) |
 
 ### Run
 

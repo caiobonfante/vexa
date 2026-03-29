@@ -104,3 +104,31 @@ scripts/                       # User automation, scheduled via vexa schedule
 | 8 | Script execution via worker containers | Not started |
 | 9 | Multi-workspace support (workspace CRUD API) | Not started |
 | 10 | Additional templates (project, meeting-notes, blank) | Not started |
+
+## Development Notes
+
+### Key code locations
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| Knowledge template | `features/knowledge-workspace/templates/knowledge/` | Done |
+| Agent CLAUDE.md | `templates/knowledge/.claude/CLAUDE.md` | Done |
+| Workspace sync | `services/agent-api/app/workspace_sync.py` | Done |
+| Workspace endpoints | `services/agent-api/app/workspace_endpoints.py` | Done |
+| Workspace context | `services/agent-api/app/workspace_context.py` | Done |
+| Entity extraction | TBD | Not started |
+| Git integration | TBD | Not started |
+
+### Edges
+
+**Depends on:**
+- agentic-runtime (container lifecycle, workspace mounting)
+- scheduler (scheduled chat jobs for audits/reminders, script execution)
+- post-meeting-transcription (transcript source for entity extraction)
+- webhooks (meeting.completed triggers agent wake-up)
+- MinIO (workspace storage)
+- Redis (session state)
+
+**Provides to:**
+- agentic-runtime (workspace templates define agent behavior)
+- mcp-integration (future: expose workspace as MCP resources)

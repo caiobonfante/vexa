@@ -38,10 +38,14 @@ export async function GET(request: NextRequest) {
 
     const userData = await response.json();
     const keys = (userData.api_tokens || []).map(
-      (t: { id: number; token: string; created_at: string }) => ({
+      (t: { id: number; token: string; scopes?: string[]; name?: string; created_at: string; last_used_at?: string; expires_at?: string }) => ({
         id: String(t.id),
         token: t.token,
+        scopes: t.scopes || [],
+        name: t.name || null,
         created_at: t.created_at,
+        last_used_at: t.last_used_at || null,
+        expires_at: t.expires_at || null,
       })
     );
 
@@ -69,11 +73,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const scope = body.scope; // "bot" or "tx"
+    const scopes = body.scopes || body.scope; // "bot,tx" or "bot" — accept both
+    const name = body.name;
+    const expiresIn = body.expires_in; // seconds until expiry
 
-    const url = scope
-      ? `${VEXA_ADMIN_API_URL}/admin/users/${userId}/tokens?scope=${encodeURIComponent(scope)}`
-      : `${VEXA_ADMIN_API_URL}/admin/users/${userId}/tokens`;
+    const params = new URLSearchParams();
+    if (scopes) params.set("scopes", scopes);
+    if (name) params.set("name", name);
+    if (expiresIn) params.set("expires_in", String(expiresIn));
+    const qs = params.toString();
+    const url = `${VEXA_ADMIN_API_URL}/admin/users/${userId}/tokens${qs ? `?${qs}` : ""}`;
 
     const response = await fetch(url, {
       method: "POST",

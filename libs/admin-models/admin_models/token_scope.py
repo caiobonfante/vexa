@@ -5,10 +5,9 @@ Format: vxa_<scope>_<random>
 Example: vxa_bot_a7f2b9c1d3e5f6...
 
 Scopes:
-  - user: Dashboard/webapp tokens (SSO login)
-  - bot: Bot management tokens
-  - tx: Transcription API tokens
-  - admin: Full admin access
+  - bot: Meeting bots, webhooks, voice agent
+  - tx: Transcription and meeting data access
+  - browser: Browser sessions (VNC, CDP, workspace)
 
 Tokens without the vxa_ prefix are legacy (full access).
 """
@@ -24,7 +23,7 @@ logger = logging.getLogger("admin_models.token_scope")
 TOKEN_PREFIX = "vxa"
 TOKEN_PATTERN = re.compile(r"^vxa_([a-z]+)_(.+)$")
 
-VALID_SCOPES = {"user", "bot", "tx", "admin"}
+VALID_SCOPES = {"bot", "tx", "browser"}
 
 
 def generate_prefixed_token(scope: str, length: int = 32) -> str:

@@ -104,12 +104,13 @@ RUN pip3 install --no-cache-dir --upgrade pydantic>=2.0.0 && \
 # Clean up requirements files
 RUN rm -f /tmp/requirements-*.txt
 
-# Copy admin models and meeting-api libraries
+# Copy schema-sync, admin models, and meeting-api libraries
+COPY libs/schema-sync /app/schema-sync
 COPY libs/admin-models /app/admin-models
 COPY packages/meeting-api /app/meeting-api
 
 # Add libraries to Python path
-ENV PYTHONPATH="/app/admin-models:/app/meeting-api${PYTHONPATH:+:${PYTHONPATH}}"
+ENV PYTHONPATH="/app/schema-sync:/app/admin-models:/app/meeting-api${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Verify imports
 RUN python3 -c "from admin_models.models import User; print('admin_models imported successfully')" \
@@ -139,8 +140,7 @@ COPY packages/tts-service/ /app/tts-service/
 
 # Alembic migrations
 COPY alembic.ini /app/alembic.ini
-# Alembic migrations (still in shared-models until fully migrated)
-COPY libs/shared-models/alembic/ /app/alembic/
+# Schema sync replaces alembic — ensure_schema() runs on service startup
 
 # -----------------------------------------------------------------------------
 # Node.js Bot Build

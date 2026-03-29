@@ -22,14 +22,18 @@ export async function getAuthenticatedUserId(): Promise<string | null> {
   const token = cookieStore.get("vexa-token")?.value;
   if (!token) return null;
 
-  // Validate the token by calling the API gateway (same as /api/auth/me)
+  // Validate the token by calling the API gateway — use /bots/status which
+  // works with any scope (bot, tx).  The old /meetings endpoint required tx scope
+  // and broke direct-login tokens that only carry bot scope.
   const VEXA_API_URL = process.env.VEXA_API_URL || "http://localhost:18056";
-  const verifyRes = await fetch(`${VEXA_API_URL}/meetings`, {
+  const verifyRes = await fetch(`${VEXA_API_URL}/bots/status`, {
     headers: { "X-API-Key": token },
   });
   if (!verifyRes.ok) return null;
 
-  // Get the user's email from the SSO cookie, then resolve to a user ID
+  // Get the user's email from the vexa-user-info cookie, then resolve to a user ID.
+  // This cookie is set by send-magic-link (direct login), verify (magic link),
+  // and the SSO flow.
   const userInfoStr = cookieStore.get("vexa-user-info")?.value;
   if (!userInfoStr) return null;
 

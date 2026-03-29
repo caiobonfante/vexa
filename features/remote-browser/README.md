@@ -208,3 +208,19 @@ DELETE /bots/{platform}/{native_id}   → stop bot
 | CPU | 0.5 core idle, 1 core active |
 | SHM | 2 GB |
 | Image size | vexa-bot includes VNC + fluxbox + websockify |
+
+## Development Notes
+
+### Key constraints
+
+- **Persistent context**: Always `chromium.launchPersistentContext('/tmp/userdata', ...)` -- never `launch()` or `--incognito`
+- **No `--enable-automation`**: Strip via `ignoreDefaultArgs`
+- **MinIO sync**: `aws s3 sync` before launch (download) and on save/exit (upload)
+- **SingletonLock cleanup**: Always `rm -f SingletonLock SingletonCookie SingletonSocket` before Chromium start
+- **URL is auth**: `/b/{token}` routes need no API key -- the token IS the auth
+
+### Infrastructure
+
+- **vexa-bot** container in `browser_session` mode
+- **MinIO** at `s3://vexa/users/{user_id}/browser-userdata/`
+- **Ports**: noVNC :6080, CDP :9222 (proxied through api-gateway)

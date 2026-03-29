@@ -124,13 +124,22 @@ async function handleDirectLogin(email: string): Promise<NextResponse> {
 
   const apiToken = tokenResult.data.token;
 
-  // Set cookie
+  // Set cookies
   const cookieStore = await cookies();
   cookieStore.set("vexa-token", apiToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 30, // 30 days
+    path: "/",
+  });
+  // Set user-info cookie so getAuthenticatedUserId can resolve the user
+  // (mirrors what the verify endpoint and SSO flow set)
+  cookieStore.set("vexa-user-info", JSON.stringify({ email: user!.email, name: user!.name }), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 30,
     path: "/",
   });
 

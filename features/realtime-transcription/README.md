@@ -5,8 +5,7 @@
 > **Not tested:** 3+ distinct human speakers, 5+ speaker SFU remapping, WS live delivery during active speech, Zoom, language locking in live meeting, Teams overlapping speech attribution.
 > **Contributions welcome:** Zoom implementation, faster human speaker locking, Whisper alternatives ([#148](https://github.com/Vexa-ai/vexa/issues/148), [#156](https://github.com/Vexa-ai/vexa/issues/156)).
 >
-> **Agent manifest:** [CLAUDE.md](.claude/CLAUDE.md) | [findings](tests/findings.md) | [feature-log](tests/feature-log.md) | **Cycle:** validation (collect → iterate → expand)
-> **Sub-agents:** [google-meet](google-meet/) | [ms-teams](ms-teams/) | [zoom](zoom/) — each with own gate, findings, tests
+> **Sub-features:** [google-meet](google-meet/) | [ms-teams](ms-teams/) | [zoom](zoom/) | [delivery](delivery/) — each with own gate, findings, tests
 
 ## Why
 
@@ -311,3 +310,61 @@ Values hardcoded in `index.ts` (around lines 1037-1041). Note: `.env.example` sh
 - [WhisperLiveKit](https://github.com/QuentinFuxa/WhisperLiveKit) — SimulStreaming + Streaming Sortformer (SOTA 2025)
 - [DiCoW](https://www.sciencedirect.com/science/article/abs/pii/S088523082500066X) — Diarization-Conditioned Whisper
 - [Deepgram: Multichannel vs Diarization](https://deepgram.com/learn/multichannel-vs-diarization) — industry comparison
+
+## Development Notes
+
+### Quality Bar
+
+Industry-standard means:
+- **Speaker attribution:** every segment attributed to the correct speaker, no "Unknown" speakers
+- **Text accuracy:** WER competitive with commercial transcription services
+- **Completeness:** no dropped utterances, no phantom/hallucinated segments
+- **Latency:** speech-to-segment delivery under 5 seconds
+- **Consistency:** WS live segments match REST historical output exactly
+
+### Edge Map
+
+Agent-to-agent boundaries where data crosses:
+
+| Edge | From | To | Data format | Failure mode |
+|------|------|----|-------------|--------------|
+| Audio capture | Browser (page.evaluate) | Node.js (`handlePerSpeakerAudioData` / `handleTeamsAudioData`) | `(index, number[])` or `(name, number[])` via exposed function | GC collects AudioContext -- no audio arrives |
+| Transcription | `TranscriptionClient` | `transcription-service` | HTTP POST multipart WAV | 502/timeout -- buffer grows to hard cap, force-flushes empty |
+| Publish | `SegmentPublisher` | Redis stream `transcription_segments` | XADD `{ payload: JSON }` | Redis down -- segments lost |
+| Consume | Redis stream | `transcription-collector` | XREADGROUP | Consumer group lag -- delayed delivery |
+| Live delivery | `SegmentPublisher` (bot) | `api-gateway` WS | Redis PUBLISH `tc:meeting:{id}:mutable` | No subscribers -- segments in Redis but not on WS |
+| Persist | `transcription-collector` background task | Postgres | INSERT after 30s immutability | DB down -- segments stuck in Redis Hash |
+| Historical | `api-gateway` REST | Client | JSON merge of Redis Hash + Postgres | Stale data if background task is behind |
+
+### Certainty Table (last updated 2026-03-23)
+
+| Check | Score | Evidence |
+|-------|-------|----------|
+| Bot joins live meeting | 90 | 3 speakers found and locked |
+| Audio reaches TX service | 90 | HTTP 200 with non-empty text |
+| Speaker identity locks (TTS) | 90 | All 3 locked permanently at 100% (TTS bots) |
+| Speaker identity locks (human) | 40 | 23/215 segments unnamed, lock took 585s for speaker-0 |
+| Segment confirmation (GMeet) | 40 | speaker-2 has monolith segments, confirmation never triggers |
+| Playback alignment | 50 | Normal segments OK, giant segments seek to wrong position |
+| Multi-track dedup | 40 | Same person on 2 tracks produces duplicate content |
+| VAD filters silence | 85 | Sandbox: 7 skips on 30s silence gap |
+| Language locking | 80 | Schema + API + bot wiring deployed, not tested live |
+| Segments in Redis Hash | 90 | 7 segments in DB |
+| WS live delivery | 90 | 3/3 segments via WS within 0.1s |
+| REST /transcripts | 90 | 3 segments matching WS output |
+| WS/REST consistency | 90 | 3/3 WS segments match REST text+speaker+completed |
+| End-to-end latency | 90 | 10.8s confirmed (drafts no longer published) |
+
+### How to Test
+
+1. Ensure compose stack is running (`make all` from `deploy/compose/`)
+2. Create a live meeting with auto-admit (Teams: `/host-teams-meeting-auto`; GMeet: `gmeet-host-auto.js` + `auto-admit.js`)
+3. Send bots to join the meeting (they get auto-admitted through the lobby)
+4. Connect to WS: `wscat -c ws://localhost:8056/ws -H "X-API-Key: <token>"`
+5. Subscribe to the meeting's transcription channel
+6. Speak in the meeting -- verify live segments arrive with correct speaker names
+7. Wait 30s+ for immutability threshold
+8. Verify `GET /transcripts/{meeting_id}` returns all segments with matching text and speakers
+9. Cross-check: every WS segment should appear in REST, same content
+
+Testing uses real live meetings created on-demand via browser sessions -- no mocks.

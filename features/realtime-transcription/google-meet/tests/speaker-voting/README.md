@@ -93,7 +93,7 @@ Prerequisites:
 - Compose stack running
 - Browser session with Google account logged in (for meeting creation)
 - Auto-admit running: `node scripts/auto-admit.js "http://IP:9223" &`
-- No orphaned meetings (see .claude/CLAUDE.md for cleanup SQL)
+- No orphaned meetings (see cleanup SQL below)
 
 ## Key findings
 
@@ -113,7 +113,44 @@ speaker-voting/
   test-runner.sh         # join/leave/rejoin test (3 phases)
   test-edge-cases.sh     # edge case stress tests (6 scenarios)
   score.py               # parse logs, validate mappings + attribution
-  .claude/CLAUDE.md      # agent instructions for running tests
   .gitignore             # excludes results/
   results/               # test run outputs (gitignored)
 ```
+
+## Development Notes
+
+### Orphaned Meeting Cleanup
+
+Bot creation fails with "concurrent bot limit (1)" when old meetings aren't stopped:
+
+```sql
+UPDATE meetings SET status = 'stopped', end_time = NOW()
+WHERE user_id IN (1, 26, 27, 28, 29, 30, 31)
+AND status IN ('requested', 'active')
+AND id NOT IN ({browser_session_id});
+```
+
+The `status` column must be `'stopped'` -- the concurrency check uses `status IN ('requested', 'active')`.
+
+### Bot Tokens
+
+Users 26-31 (SpeakerA-F@replay.vexa.ai) have pre-created tokens in the DB. Each has `max_concurrent_bots=1`. Token values are hardcoded in test-runner.sh and test-edge-cases.sh.
+
+### Key Gotchas
+
+- **CDP connection:** Use container IP:9223 (socat proxy), not the gateway `/b/{token}/cdp` (returns 307)
+- **Meeting creation via script hangs:** `gmeet-host-auto.js` hangs when called from subshell. Create meeting separately via Playwright, then pass `--meeting`.
+- **Playwright location:** Only installed in `/home/dima/dev/vexa-restore/services/vexa-bot/node_modules`. Run Playwright scripts from that directory or with NODE_PATH.
+- **Redis module:** The test scripts find the Redis client module via `find` in `services/`. This path is resolved at runtime.
+
+### Log Patterns
+
+| Pattern | Meaning | Reliable? |
+|---------|---------|-----------|
+| `[SpeakerIdentity] Element N -> "Name"` | Raw resolution (may be rejected by dedup) | Shows attempts, not state |
+| `[SPEAKER MAPPED] Track N: "old" -> "new"` | Accepted state change | Ground truth for mapping |
+| `[SPEAKER ACTIVE] Track N -> "Name"` | Initial track assignment | Ground truth |
+| `[SpeakerIdentity] Participant count changed` | Invalidation trigger | Always reliable |
+| `[CONFIRMED] Speaker \| lang \| ...` | Final transcription segment | Ground truth for attribution |
+
+`score.py` uses `SPEAKER MAPPED` + `SPEAKER ACTIVE` events (accepted state) for mapping checks, and `CONFIRMED` segments for attribution checks. Raw `Element -> Name` logs are NOT used for scoring because they include rejected resolutions during simultaneous speech.

@@ -170,7 +170,7 @@ calendar_events (
 
 ## Scheduler
 
-Calendar integration uses the **generic scheduler** (`libs/shared-models/shared_models/scheduler.py`) to fire API calls at the right time.
+Calendar integration uses the **generic scheduler** (`packages/runtime-api/runtime_api/scheduler.py`) to fire API calls at the right time.
 
 ### How it works
 

@@ -72,6 +72,23 @@ Key values in `charts/vexa-lite/values.yaml`:
 
 - For production, set explicit image repositories/tags and configure external Postgres/Redis and secrets management.
 
+## Development Notes
+
+### Verification checklist
+
+After deploying, verify:
+
+1. `helm template` renders without errors
+2. `helm install --dry-run` succeeds
+3. All pods reach Running state (no CrashLoopBackOff)
+4. All services have endpoints
+5. Ingress routes correctly
+6. Secrets are created
+7. PVCs are bound
+8. Bot RBAC works (can spawn pods, if using kubernetes orchestrator)
+9. Inter-service connectivity (api-gateway can reach admin-api, meeting-api, etc.)
+10. Health endpoints respond on each service
+
 ## License
 
 See `LICENSE`.

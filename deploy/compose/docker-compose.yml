@@ -18,6 +18,9 @@ services:
       - TRANSCRIPT_SHARE_TTL_SECONDS=900
       - LOG_LEVEL=DEBUG
       - CORS_ORIGINS=http://localhost:${DASHBOARD_HOST_PORT:-3001},http://localhost:3000,http://localhost:3001
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-120}
+      - RATE_LIMIT_ADMIN_RPM=${RATE_LIMIT_ADMIN_RPM:-30}
+      - RATE_LIMIT_WS_RPM=${RATE_LIMIT_WS_RPM:-20}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
       interval: 30s

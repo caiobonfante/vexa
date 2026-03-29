@@ -35,18 +35,20 @@ import { withBasePath } from "@/lib/base-path";
 interface APIKeyDisplay {
   id: string;
   name: string;
-  scope: "bot" | "tx" | "user";
+  scopes: KeyScope[];
   token: string;
   masked_token: string;
   created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
 }
 
-type KeyScope = "bot" | "tx" | "user";
+type KeyScope = "bot" | "tx" | "browser";
 
 const SCOPE_CONFIG: Record<KeyScope, { label: string; prefix: string; color: string; bgColor: string }> = {
   bot: { label: "bot", prefix: "vxa_bot_", color: "text-purple-300", bgColor: "bg-purple-900/40" },
   tx: { label: "tx", prefix: "vxa_tx_", color: "text-cyan-300", bgColor: "bg-cyan-900/40" },
-  user: { label: "user", prefix: "vxa_user_", color: "text-amber-300", bgColor: "bg-amber-900/40" },
+  browser: { label: "browser", prefix: "vxa_browser_", color: "text-emerald-300", bgColor: "bg-emerald-900/40" },
 };
 
 // ==========================================
@@ -54,10 +56,9 @@ const SCOPE_CONFIG: Record<KeyScope, { label: string; prefix: string; color: str
 // ==========================================
 
 function inferScope(token: string): KeyScope {
-  if (token.startsWith("vxa_bot_")) return "bot";
   if (token.startsWith("vxa_tx_")) return "tx";
-  if (token.startsWith("vxa_user_")) return "user";
-  return "user";
+  if (token.startsWith("vxa_browser_")) return "browser";
+  return "bot";
 }
 
 function maskToken(token: string): string {
@@ -75,6 +76,29 @@ function maskToken(token: string): string {
   return `${token.slice(0, 8)}••••${token.slice(-4)}`;
 }
 
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatExpiry(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function scopesFromApi(scopes: string[]): KeyScope[] {
+  const valid: KeyScope[] = ["bot", "tx", "browser"];
+  const result = scopes.filter((s): s is KeyScope => valid.includes(s as KeyScope));
+  return result.length > 0 ? result : ["bot"];
+}
+
 // ==========================================
 // Component
 // ==========================================
@@ -87,7 +111,8 @@ export default function ProfilePage() {
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyScope, setNewKeyScope] = useState<KeyScope>("bot");
+  const [newKeyScopes, setNewKeyScopes] = useState<Set<KeyScope>>(new Set(["bot", "tx", "browser"]));
+  const [newKeyExpiry, setNewKeyExpiry] = useState<string>("");
   const [isCreatingKey, setIsCreatingKey] = useState(false);
   const [createdKeyToken, setCreatedKeyToken] = useState<string | null>(null);
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
@@ -106,13 +131,15 @@ export default function ProfilePage() {
         }
         const data = await response.json();
         setApiKeys(
-          (data.keys || []).map((k: { id: string; token: string; name?: string; created_at: string }) => ({
+          (data.keys || []).map((k: { id: string; token: string; scopes?: string[]; name?: string; created_at: string; last_used_at?: string; expires_at?: string }) => ({
             id: k.id,
             name: k.name || "API Key",
-            scope: inferScope(k.token),
+            scopes: k.scopes && k.scopes.length > 0 ? scopesFromApi(k.scopes) : [inferScope(k.token)],
             token: k.token,
             masked_token: maskToken(k.token),
             created_at: k.created_at,
+            last_used_at: k.last_used_at || null,
+            expires_at: k.expires_at || null,
           }))
         );
       } catch {
@@ -128,10 +155,16 @@ export default function ProfilePage() {
   const handleCreateKey = async () => {
     setIsCreatingKey(true);
     try {
+      const scopes = Array.from(newKeyScopes).join(",");
       const response = await fetch(withBasePath("/api/profile/keys"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName, scope: newKeyScope, userId: user?.id }),
+        body: JSON.stringify({
+          name: newKeyName,
+          scopes,
+          userId: user?.id,
+          ...(newKeyExpiry ? { expires_in: parseInt(newKeyExpiry) * 86400 } : {}),
+        }),
       });
       if (!response.ok) throw new Error("Failed to create key");
       const data = await response.json();
@@ -140,12 +173,14 @@ export default function ProfilePage() {
       setApiKeys((prev) => [
         ...prev,
         {
-          id: data.id,
+          id: data.id || String(Date.now()),
           name: newKeyName || "API Key",
-          scope: newKeyScope,
+          scopes: data.scopes ? scopesFromApi(data.scopes) : Array.from(newKeyScopes),
           token: data.token,
           masked_token: maskToken(data.token),
           created_at: new Date().toISOString(),
+          last_used_at: null,
+          expires_at: null,
         },
       ]);
       toast.success("API key created");
@@ -222,7 +257,8 @@ export default function ProfilePage() {
                 size="sm"
                 onClick={() => {
                   setNewKeyName("");
-                  setNewKeyScope("bot");
+                  setNewKeyScopes(new Set(["bot", "tx", "browser"]));
+                  setNewKeyExpiry("");
                   setCreatedKeyToken(null);
                   setShowCreateDialog(true);
                 }}
@@ -251,26 +287,29 @@ export default function ProfilePage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{key.name}</span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold",
-                            SCOPE_CONFIG[key.scope].bgColor,
-                            SCOPE_CONFIG[key.scope].color
-                          )}
-                        >
-                          {SCOPE_CONFIG[key.scope].label}
-                        </span>
+                        {key.scopes.map((s) => (
+                          <span
+                            key={s}
+                            className={cn(
+                              "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                              SCOPE_CONFIG[s].bgColor,
+                              SCOPE_CONFIG[s].color
+                            )}
+                          >
+                            {SCOPE_CONFIG[s].label}
+                          </span>
+                        ))}
                       </div>
                       <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                         {key.masked_token}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground">
-                        {new Date(key.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                      <span className="text-muted-foreground" title="Last used">
+                        {key.last_used_at ? relativeTime(key.last_used_at) : "Never used"}
+                      </span>
+                      <span className="text-muted-foreground" title="Expires">
+                        {key.expires_at ? `Exp ${formatExpiry(key.expires_at)}` : "No expiry"}
                       </span>
                       <button
                         onClick={() => handleCopyKey(key.id, key.token)}
@@ -349,48 +388,89 @@ export default function ProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Key Type</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setNewKeyScope("bot")}
-                    className={cn(
-                      "p-3 rounded-lg border-2 text-left transition-all",
-                      newKeyScope === "bot"
-                        ? "border-purple-500 bg-purple-950/20"
-                        : "border-border hover:border-muted-foreground/30"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium">Bot Key</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-900/40 text-purple-300">
-                        bot
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Prefix: vxa_bot_ — Bot management & meetings
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewKeyScope("tx")}
-                    className={cn(
-                      "p-3 rounded-lg border-2 text-left transition-all",
-                      newKeyScope === "tx"
-                        ? "border-cyan-500 bg-cyan-950/20"
-                        : "border-border hover:border-muted-foreground/30"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium">TX Key</span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-900/40 text-cyan-300">
-                        tx
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Prefix: vxa_tx_ — Transcript access only
-                    </p>
-                  </button>
+                <Label>Scopes</Label>
+                <div className="space-y-2">
+                  {(["bot", "tx", "browser"] as const).map((scope) => {
+                    const config = {
+                      bot: { name: "Bot", desc: "Meeting bots, webhooks, voice agent" },
+                      tx: { name: "Transcript", desc: "Read transcripts & meeting data" },
+                      browser: { name: "Browser", desc: "Browser sessions, VNC, CDP, workspace" },
+                    }[scope];
+                    const checked = newKeyScopes.has(scope);
+                    return (
+                      <button
+                        key={scope}
+                        type="button"
+                        onClick={() => {
+                          setNewKeyScopes((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(scope)) {
+                              next.delete(scope);
+                            } else {
+                              next.add(scope);
+                            }
+                            return next;
+                          });
+                        }}
+                        className={cn(
+                          "w-full p-3 rounded-lg border-2 text-left transition-all flex items-center gap-3",
+                          checked
+                            ? "border-foreground/20 bg-muted/50"
+                            : "border-border hover:border-muted-foreground/30"
+                        )}
+                      >
+                        <div className={cn(
+                          "h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                          checked ? "border-foreground bg-foreground" : "border-muted-foreground/40"
+                        )}>
+                          {checked && <Check className="h-3 w-3 text-background" />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{config.name}</span>
+                            <span
+                              className={cn(
+                                "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                                SCOPE_CONFIG[scope].bgColor,
+                                SCOPE_CONFIG[scope].color
+                              )}
+                            >
+                              {SCOPE_CONFIG[scope].label}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {config.desc}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Expiration</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "Never", value: "" },
+                    { label: "30 days", value: "30" },
+                    { label: "90 days", value: "90" },
+                    { label: "1 year", value: "365" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setNewKeyExpiry(opt.value)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md text-xs font-medium border transition-all",
+                        newKeyExpiry === opt.value
+                          ? "border-foreground/30 bg-muted"
+                          : "border-border hover:border-muted-foreground/30"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -403,7 +483,7 @@ export default function ProfilePage() {
                 </Button>
                 <Button
                   onClick={handleCreateKey}
-                  disabled={isCreatingKey || !newKeyName.trim()}
+                  disabled={isCreatingKey || !newKeyName.trim() || newKeyScopes.size === 0}
                 >
                   {isCreatingKey ? (
                     <>

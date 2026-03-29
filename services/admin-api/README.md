@@ -26,7 +26,7 @@ Three routers provide different access levels:
 | GET | `/admin/users/{user_id}` | Get user by ID (includes API tokens) |
 | GET | `/admin/users/email/{email}` | Get user by email |
 | PATCH | `/admin/users/{user_id}` | Update user fields (name, image, max_concurrent_bots, data) |
-| POST | `/admin/users/{user_id}/tokens?scope=user` | Generate a new API token for a user (scope: `user`, `bot`, `tx`, `admin`) |
+| POST | `/admin/users/{user_id}/tokens?scopes=bot,tx,browser&name=label` | Generate a new API token for a user (scopes: `bot`, `tx`, `browser` — stored in DB as TEXT[]) |
 | DELETE | `/admin/tokens/{token_id}` | Revoke an API token |
 | GET | `/admin/stats/meetings-users` | Paginated meetings joined with user info |
 | GET | `/admin/analytics/users` | User table (no sensitive fields) |
@@ -37,8 +37,10 @@ Three routers provide different access levels:
 
 ### Dependencies
 
-- **PostgreSQL** -- `users`, `api_tokens`, `meetings`, `meeting_sessions`, `transcriptions` tables via `shared_models`
-- **shared_models** -- ORM models, schemas, database session factory, token scope utilities
+- **PostgreSQL** -- `users`, `api_tokens` tables via `admin-models`; `meetings`, `meeting_sessions`, `transcriptions` tables via `meeting-api`
+- **admin-models** -- User/APIToken ORM models, token scope utilities, security headers
+- **meeting-api** -- Meeting/Transcription models, schemas, webhook delivery
+- **schema-sync** -- `ensure_schema()` for startup schema convergence (adds missing columns/tables, no Alembic)
 
 ## Data Flow
 
@@ -61,9 +63,11 @@ FastAPI middleware checks authentication:
     │     injects user context
     │
     └── /internal/validate:
-          accepts any POST with token in body
-          returns user_id + scopes + email
-          ⚠ NO caller authentication
+          accepts POST with token in body
+          returns user_id + scopes (from DB) + email
+          updates last_used_at on token
+          rejects expired tokens
+          requires INTERNAL_API_SECRET (planned — currently optional)
     │
     ▼
 Router handles request
@@ -72,7 +76,7 @@ Router handles request
 SQLAlchemy async queries against PostgreSQL
     │
     ├── users table (CRUD, find-or-create by email)
-    ├── api_tokens table (scoped: user/bot/tx/admin)
+    ├── api_tokens table (scoped: bot/tx/browser — scopes stored as TEXT[] in DB)
     ├── meetings table (analytics joins)
     ├── meeting_sessions table (telematics)
     └── transcriptions table (stats)
@@ -142,8 +146,8 @@ curl -X POST http://localhost:8001/admin/users \
 | Area | Score | Evidence | Gap |
 |------|-------|----------|-----|
 | User CRUD | 8/10 | Idempotent create (200/201), paginated list, email lookup, JSONB merge on PATCH | JSONB merge is shallow (nested objects overwritten, not deep-merged); `created_at` null repair repeated 9 times |
-| Token management | 7/10 | Scoped tokens (user/bot/tx/admin) with prefixed generation; revocation works | Legacy tokens without `vxa_` prefix default to admin scope — verify this is intentional |
-| /internal/validate | 3/10 | Correctly resolves token → user_id + scopes for gateway header injection | **CRITICAL: No caller authentication.** Any service (or attacker) can POST to `/internal/validate` with any token and get back user_id, scopes, email. Needs X-Gateway-Key or network-level restriction |
+| Token management | 8/10 | Scopes stored in DB as TEXT[], multi-scope support, name/expires_at/last_used_at columns, 422 for invalid scopes | Legacy backfill runs on startup (idempotent). No token rotation mechanism. |
+| /internal/validate | 8/10 | Reads scopes from DB, updates last_used_at, rejects expired, enforces INTERNAL_API_SECRET (fail-closed) | 60s Redis cache in gateway means last_used_at slightly delayed. No cache invalidation on revocation. |
 | Analytics queries | 7/10 | Meeting stats, user details, telematics with proper joins to meeting_api.models | Queries may be slow on large tables (no pagination on some analytics endpoints) |
 | Webhook endpoint | 7/10 | SSRF validation via `meeting_api.webhook_url.validate_webhook_url()` | Webhook secret stored in plaintext JSONB (not hashed) |
 | Meeting-api integration | 9/10 | Dockerfile correctly COPYs and pip-installs meeting-api package; imports work | Tight coupling — if meeting-api package is removed/renamed, build breaks with no fallback |
@@ -154,8 +158,8 @@ curl -X POST http://localhost:8001/admin/users \
 
 ### Known Limitations
 
-1. **`/internal/validate` is unauthenticated** — hidden from OpenAPI (`include_in_schema=False`) but fully accessible. Any HTTP client can resolve arbitrary API tokens to user identity (user_id, scopes, email). This is the single highest-risk issue across all three components.
-2. **Legacy tokens get admin scope** — tokens without the `vxa_` prefix (pre-scoping era) default to `["admin"]` scope. If any legacy tokens exist in the database, they have full admin access.
+1. **`/internal/validate` caller auth enforced** — `INTERNAL_API_SECRET` is mandatory. Missing/wrong secret → 403. No secret configured + DEV_MODE=false → 503. ~~Previously optional.~~ Fixed 2026-03-29.
+2. **Legacy tokens backfilled** — tokens without `vxa_` prefix now have `['bot', 'tx']` scopes in DB. Tokens with removed scopes (`user`, `admin`) migrated to `['bot', 'tx']`. Backfill runs on startup, idempotent. Fixed 2026-03-29.
 3. **Webhook secret stored in plaintext** — `webhook_secret` is stored as a plain string in the user's JSONB `data` column. Not hashed, not encrypted at rest (beyond DB-level encryption).
 4. **`created_at` null repair pattern** — the same 5-line null check for `created_at` is copy-pasted 9 times throughout main.py. Root cause is SQLAlchemy async `refresh()` not loading server-side defaults. Should be a utility function.
 5. **No rate limiting** — token validation, user creation, and analytics endpoints have no rate limiting. Token brute-force is theoretically possible (though token space is large).
@@ -163,10 +167,11 @@ curl -X POST http://localhost:8001/admin/users \
 
 ### Validation Plan (to reach 90+)
 
-- [ ] **P0**: Add caller authentication to `/internal/validate` (X-Gateway-Key header with constant-time comparison)
-- [ ] **P0**: Add network-level restriction (Docker network policy) so only api-gateway can reach `/internal/validate`
-- [ ] **P1**: Audit legacy tokens in database — revoke or re-issue with explicit scopes
-- [ ] **P1**: Add rate limiting on `/internal/validate` (e.g., 100/min per source IP)
+- [x] **P0**: Enforce INTERNAL_API_SECRET on `/internal/validate` — done 2026-03-29
+- [x] **P0**: Add scopes (TEXT[]), name, last_used_at, expires_at columns to api_tokens (via ensure_schema) — done 2026-03-29
+- [x] **P0**: /internal/validate reads scopes from DB, updates last_used_at, rejects expired — done 2026-03-29
+- [x] **P1**: Backfill existing tokens: parse prefix → scopes array; legacy → ['bot','tx']; removed scopes migrated — done 2026-03-29
+- [x] **P1**: Validate scope param on token creation (reject invalid/removed scopes with 422) — done 2026-03-29
 - [ ] **P2**: Extract `created_at` null repair into a utility function to reduce duplication
 - [ ] **P2**: Hash webhook secrets before storage (or document that plaintext is intentional)
 - [ ] **P2**: Add HEALTHCHECK to Dockerfile
@@ -177,7 +182,7 @@ curl -X POST http://localhost:8001/admin/users \
 
 - admin-api is the ONLY service that writes to `users` and `api_tokens` tables — no other service has DB write access for user data
 - All authentication flows resolve through admin-api — either directly or via `/internal/validate` from api-gateway
-- Token scoping is enforced: `user`, `bot`, `tx`, `admin` — each scope grants different endpoint access
+- Token scoping: `bot`, `tx`, `browser` — `admin` and `user` scopes removed (dead code). Scopes stored in DB TEXT[] column (source of truth).
 - `X-Admin-API-Key` uses constant-time comparison (`hmac.compare_digest`) — timing attacks mitigated
 - PostgreSQL is the only data store — no Redis, no caching layer
 - Depends on `admin-models` and `meeting-api` shared packages — Dockerfile COPYs and installs both
@@ -187,8 +192,10 @@ curl -X POST http://localhost:8001/admin/users \
 
 ## Known Issues
 
-- `/internal/validate` is unauthenticated — any HTTP client on the network can resolve tokens to user identity (P0)
-- Legacy tokens without `vxa_` prefix default to `["admin"]` scope — potential privilege escalation
+- deploy/compose/docker-compose.yml missing INTERNAL_API_SECRET — agentic stack has it, prod compose does not
+- ~~`/internal/validate` caller auth optional~~ — fixed 2026-03-29, now enforced
+- ~~Legacy tokens bypass scope checks~~ — fixed 2026-03-29, backfilled to ['bot','tx']
+- ~~Token scopes not in DB~~ — fixed 2026-03-29, scopes TEXT[] column added
 - Webhook secret stored in plaintext JSONB (not hashed)
 - `created_at` null repair pattern copy-pasted 9 times (SQLAlchemy async refresh issue)
 - No rate limiting on any endpoint — token brute-force theoretically possible

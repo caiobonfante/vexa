@@ -100,3 +100,40 @@ LOCAL_TRANSCRIPTION=true
 | docker-compose.yml | Main stack definition |
 | docker-compose.local-db.yml | PostgreSQL overlay (used when REMOTE_DB≠true) |
 | Makefile | All targets for compose workflow |
+
+## Development Notes
+
+### Service ports (internal)
+
+| Service | Port | Health/Verify |
+|---------|------|---------------|
+| API Gateway | 8056 | `curl http://localhost:8056/` |
+| Admin API | 8057 | Swagger at `/docs` |
+| Meeting API | 8080 | `/health` |
+| Transcription Collector | 8123 | `/health` |
+| MCP | 18888 | MCP protocol |
+| Dashboard | 3001 | HTML page loads |
+| PostgreSQL | 5438 | `pg_isready` |
+| MinIO | 9000 | Bucket `vexa-recordings` |
+
+### Startup dependency order
+
+Services should start in this order due to dependencies:
+
+1. **Infra:** PostgreSQL, Redis, MinIO
+2. **Foundation:** Transcription Collector, Admin API
+3. **Dependent:** API Gateway, Meeting API, MCP, TTS Service
+4. **Frontend:** Dashboard
+
+### Cleanup
+
+Always stop the stack before restarting, even on failure:
+
+```bash
+make down && docker compose ps  # should be empty
+```
+
+### Security
+
+- Never log secrets (`ADMIN_API_TOKEN`, DB credentials, API keys). Log that they are set, not their values.
+- Create test users/meetings per run. Do not reuse data from previous runs.

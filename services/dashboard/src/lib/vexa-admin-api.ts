@@ -263,10 +263,12 @@ export async function createUser(data: {
 }
 
 /**
- * Create API token for user
+ * Create API token for user.
+ * Default scope is all scopes — dashboard login tokens need full access.
  */
-export async function createUserToken(userId: string): Promise<ApiResult<{ token: string }>> {
-  return adminRequest<{ token: string }>(`/admin/users/${userId}/tokens`, {
+export async function createUserToken(userId: string, scopes = "bot,tx,browser"): Promise<ApiResult<{ token: string }>> {
+  const qs = scopes ? `?scopes=${encodeURIComponent(scopes)}` : "";
+  return adminRequest<{ token: string }>(`/admin/users/${userId}/tokens${qs}`, {
     method: "POST",
   });
 }

@@ -1,9 +1,9 @@
 # Scheduler
 
-> **Confidence: 0** — RESET after architecture refactoring. Scheduler moved from shared-models to runtime-api. Wired into runtime-api main.py but never tested live.
+> **Confidence: 0** — RESET after architecture refactoring. Scheduler moved from shared-models to runtime-api (shared-models being deleted). Wired into runtime-api main.py but never tested live.
 > **Tested:** Job scheduling, atomic execution (no duplicates), retry with backoff, crash recovery, cancellation, on_success/on_failure callbacks, idempotency keys.
 > **Not tested:** Executor not wired into running services. REST API not built. No E2E test through gateway.
-> **Contributions welcome:** Wire executor into bot-manager startup, REST API endpoints (POST/GET/DELETE /schedule), calendar-service integration.
+> **Contributions welcome:** Wire executor into runtime-api startup, REST API endpoints (POST/GET/DELETE /schedule), calendar-service integration.
 
 ## Why
 
@@ -36,7 +36,7 @@ A generic, bullet-proof job scheduler backed by Redis sorted sets. Two component
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Producers                             │
-│  calendar-service  │  bot-manager  │  admin-api  │ MCP  │
+│  calendar-service  │  meeting-api  │  admin-api  │ MCP  │
 └────────┬───────────┴───────┬───────┴──────┬──────┴──────┘
          │                   │              │
          ▼                   ▼              ▼
@@ -74,10 +74,9 @@ A generic, bullet-proof job scheduler backed by Redis sorted sets. Two component
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **scheduler.py** | `libs/shared-models/shared_models/scheduler.py` | Core API: `schedule_job()`, `cancel_job()`, `list_jobs()`, `get_job()` |
-| **scheduler_worker.py** | `libs/shared-models/shared_models/scheduler_worker.py` | Executor loop: poll, fire, retry, callbacks |
-| **REST endpoints** | `services/bot-manager/` (or dedicated service) | HTTP API for external scheduling |
-| **test_scheduler.py** | `libs/shared-models/shared_models/test_scheduler.py` | 16 unit tests |
+| **scheduler.py** | `packages/runtime-api/runtime_api/scheduler.py` | Core API: `schedule_job()`, `cancel_job()`, `list_jobs()`, `get_job()` |
+| **scheduler_api.py** | `packages/runtime-api/runtime_api/scheduler_api.py` | REST endpoints for scheduling |
+| **test_scheduler.py** | `packages/runtime-api/tests/test_scheduler.py` | Unit tests |
 
 ### Job spec
 
@@ -93,7 +92,7 @@ Every scheduled job is a self-contained JSON blob:
   "request": {
     "method": "POST",
     "url": "http://api-gateway:8000/bots",
-    "headers": {"X-API-Key": "vxa_user_..."},
+    "headers": {"X-API-Key": "vxa_bot_..."},
     "body": {"meeting_url": "https://meet.google.com/abc-defg-hij"},
     "timeout": 30
   },
@@ -214,28 +213,20 @@ HTTP request (method, url, headers, body, timeout)
 
 ### Current implementation
 
-The scheduler core is implemented and tested in shared-models:
+The scheduler core is implemented and tested in runtime-api:
 
 ```bash
-# Run unit tests (16/16 pass)
-cd libs/shared-models
-python3 -m pytest shared_models/test_scheduler.py -v
+# Run unit tests
+cd packages/runtime-api
+python3 -m pytest tests/test_scheduler.py -v
 ```
 
-### Not yet wired
+### Wiring
 
-The executor is not running in any service yet. To activate:
+The executor is wired into runtime-api main.py:
 
 ```python
-# In any service startup (bot-manager recommended for Phase 1):
-from shared_models.scheduler_worker import start_executor, stop_executor
-
-async def startup():
-    redis = await create_redis_client()
-    asyncio.create_task(start_executor(redis))
-
-async def shutdown():
-    await stop_executor()
+from runtime_api.scheduler import start_executor, stop_executor
 ```
 
 ### REST API (not yet implemented)
@@ -243,7 +234,7 @@ async def shutdown():
 ```bash
 # Schedule a job
 curl -X POST http://localhost:8066/schedule \
-  -H "X-API-Key: vxa_user_..." \
+  -H "X-API-Key: vxa_bot_..." \
   -d '{
     "execute_at": "2026-03-24T10:00:00Z",
     "request": {"method": "POST", "url": "/bots", "body": {"meeting_url": "..."}},
@@ -262,19 +253,19 @@ curl -X DELETE http://localhost:8066/schedule/job_abc123
 ```bash
 cd features/scheduler/tests
 make env-check    # verify Redis + .env
-make test-unit    # shared-models unit tests (16 pass)
+make test-unit    # runtime-api scheduler unit tests
 make test-e2e     # schedule a job, verify execution (needs running services)
 make test         # all tests
 ```
 
 ## Roadmap
 
-### Phase 1: Wire executor into bot-manager
-- Start executor alongside webhook retry worker
-- No REST API yet — jobs scheduled via Python API from within bot-manager
+### Phase 1: Wire executor into runtime-api
+- Start executor alongside runtime-api (already wired into runtime-api main.py)
+- No REST API yet — jobs scheduled via Python API
 
 ### Phase 2: REST API + gateway proxy
-- Add `POST/GET/DELETE /schedule` endpoints to bot-manager
+- Add `POST/GET/DELETE /schedule` endpoints to runtime-api
 - Proxy through api-gateway
 - Expose as MCP tool: `schedule_api_call`
 

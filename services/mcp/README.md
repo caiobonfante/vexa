@@ -2,21 +2,42 @@
 
 ## Why
 
-AI assistants (Claude, Cursor, etc.) need a structured way to interact with Vexa -- launching bots, fetching transcripts, managing recordings -- without building custom integrations. The Model Context Protocol (MCP) provides a standard tool interface that any MCP-compatible client can use. Without this service, every AI client would need its own Vexa API integration code.
+AI assistants (Claude, Cursor, etc.) need a structured way to interact with Vexa — launching bots, fetching transcripts, managing recordings, chatting in meetings, speaking via TTS, managing calendar — without building custom integrations. The Model Context Protocol (MCP) provides a standard tool interface that any MCP-compatible client can use. Without this service, every AI client would need its own Vexa API integration code.
 
 ## What
 
-A FastAPI service that exposes Vexa's bot management, transcript retrieval, and recording operations as MCP tools. It proxies to the api-gateway, translating MCP tool calls into Vexa API requests.
+A FastAPI service that exposes Vexa's meeting capabilities as **32+ MCP tools**, **4+ prompts**, and **MCP Resources** with a custom `vexa://` URI scheme. It proxies to the api-gateway, translating MCP tool calls into Vexa API requests.
 
 ### Documentation
 - [Vexa MCP](../../docs/vexa-mcp.mdx)
 
-Key tools: `start_bot`, `stop_bot`, `get_bot_status`, `get_meeting_transcript`, `parse_meeting_link`, `update_meeting_data`, `create_transcript_share_link`, `get_meeting_bundle`, recording CRUD.
+### Tool Categories
+
+| Category | Count | Examples |
+|----------|-------|---------|
+| Meeting Management | 7 | `request_meeting_bot`, `stop_bot`, `list_meetings`, `parse_meeting_link` |
+| Transcripts & Sharing | 3 | `get_meeting_transcript`, `get_meeting_bundle`, `create_transcript_share_link` |
+| Recordings | 6 | `list_recordings`, `get_recording`, `get_recording_media_download` |
+| Bot Config | 1 | `update_bot_config` |
+| Interactive Bot Control | 7 | `send_chat_message`, `read_chat_messages`, `bot_speak`, `stop_speaking`, `bot_screen_share`, `stop_screen_share`, `set_bot_avatar` |
+| Calendar | 5 | `calendar_connect`, `calendar_status`, `list_calendar_events`, `update_calendar_preferences` |
+| Webhook & Processing | 2 | `configure_webhook`, `transcribe_recording` |
+
+### MCP Protocol Features Used
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Tools | Active | 32+ tools with annotations |
+| Prompts | Active | 7 workflow prompts |
+| Resources | New | `vexa://` URI scheme for meetings/transcripts |
+| Tool Annotations | New | readOnly, destructive, idempotent, openWorld hints |
+| Subscriptions | Planned | Live transcript push via WebSocket bridge |
+| Sampling | Planned | Real-time meeting intelligence |
 
 ### Dependencies
 
-- **api-gateway** -- all Vexa operations are proxied through the gateway
-- No database, no Redis -- stateless proxy
+- **api-gateway** — all Vexa operations are proxied through the gateway
+- No database, no Redis — stateless proxy
 
 ## How
 
@@ -112,23 +133,28 @@ Once you have completed the above steps:
 
 ## Useful MCP Tools by Use Case
 
-Meeting preparation:
-
+**Meeting preparation:**
 - `parse_meeting_link`: paste a full meeting URL to extract `platform`, `native_meeting_id`, and `passcode` (Teams/Zoom).
-- `update_meeting_data`: set `name`, `participants`, `languages`, and `notes` ahead of time (these notes are surfaced in transcript responses).
+- `update_meeting_data`: set `name`, `participants`, `languages`, and `notes` ahead of time.
+- `list_calendar_events`: see upcoming meetings from connected calendar.
 
-During the meeting:
-
+**During the meeting:**
 - `get_bot_status`: see which bots are currently running.
-- `get_meeting_transcript`: fetch the current transcript snapshot (REST-style polling).
+- `get_meeting_transcript`: fetch the current transcript snapshot.
+- `send_chat_message`: send a message to the meeting chat.
+- `read_chat_messages`: read messages from the meeting chat.
+- `bot_speak`: make the bot speak using TTS.
 
-Post meeting:
+**Post meeting:**
+- `create_transcript_share_link`: create a short-lived public URL for a transcript.
+- `get_meeting_bundle`: one call to fetch status + notes + recordings + share link.
+- `transcribe_recording`: trigger post-meeting transcription of a recording.
+- Recordings: `list_recordings`, `get_recording`, `get_recording_media_download`, `delete_recording`
 
-- `create_transcript_share_link`: create a short-lived public URL for a transcript (good for sharing / downstream tools).
-- `get_meeting_bundle`: one call to fetch status + notes + recordings + (optional) share link.
-- Recordings:
-  - `list_recordings`, `get_recording`, `get_recording_media_download`, `delete_recording`
-  - `get_recording_media_download` returns an absolute `download_url` when running on local storage.
+**Configuration:**
+- `configure_webhook`: set up webhook notifications for meeting events.
+- `calendar_connect` / `calendar_status`: manage calendar integration.
+- `update_recording_config`: toggle recording on/off, set capture modes.
 
 ## Troubleshooting
 

@@ -24,13 +24,13 @@ This feature provides a unified bot API that routes to platform-specific join fl
 
 - **vexa-bot**: implements platform-specific join flows
 - **googlemeet/msteams/zoom agents**: handle platform-specific DOM interactions
-- **bot-manager**: routes bot requests to the correct platform handler based on meeting URL
+- **meeting-api**: routes bot requests to the correct platform handler based on meeting URL (replaced bot-manager in Phase 4 refactoring)
 - **api-gateway**: exposes the unified API
 
 ### Data flow
 
 ```
-client -> api-gateway -> bot-manager (detect platform from URL)
+client -> api-gateway -> meeting-api (detect platform from URL)
                               |
               +---------------+---------------+
               v               v               v
