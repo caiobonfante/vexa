@@ -123,8 +123,8 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | Variable | Description |
 |----------|-------------|
 | `ADMIN_API_URL` | Internal URL of admin-api (required) |
-| `BOT_MANAGER_URL` | Internal URL of meeting-api (required) |
-| `TRANSCRIPTION_COLLECTOR_URL` | Internal URL of transcription-collector (required) |
+| `BOT_MANAGER_URL` | Internal URL of meeting-api (required). Legacy name — points to meeting-api which replaced bot-manager in Phase 4. Rename to `MEETING_API_URL` is TBD. |
+| `TRANSCRIPTION_COLLECTOR_URL` | Internal URL of meeting-api (required). Legacy name — meeting-api has a built-in transcription collector (Redis Stream consumer). |
 | `MCP_URL` | Internal URL of MCP service (required) |
 | `REDIS_URL` | Redis URL for WebSocket Pub/Sub and share links |
 | `PUBLIC_BASE_URL` | Public-facing base URL for share links (e.g., `https://api.vexa.ai`) |
@@ -166,7 +166,7 @@ open http://localhost:8000/docs
 |------|-------|----------|-----|
 | Proxy routing | 9/10 | ~50 endpoints correctly forwarded; test_routes.py confirms all exist | Voice agent endpoints (speak, chat, screen) untested in integration |
 | Header injection & cache | 8/10 | Strips spoofed X-User-* headers before injection; 60s Redis TTL; graceful fallback when Redis/admin-api down | No early cache invalidation (revoked tokens valid up to 60s); admin-api response structure not validated before injection |
-| Token validation | 7/10 | test_header_injection.py covers valid/invalid/cached/spoofed cases | Cannot flush cache on token revocation; no rate limiting on validation |
+| Token validation | 8/10 | test_header_injection.py covers valid/invalid/cached/spoofed cases. Cache key uses sha256 hash (no prefix collision). Scopes come from DB via admin-api. | Cannot flush cache on token revocation (60s TTL). |
 | WebSocket hub | 6/10 | Redis Pub/Sub fan-out for meeting status; subscribe authorization delegated to TC | No unit tests for actual message flow; no rate limit on subscribe (DoS vector); concurrent subscribe edge case with duplicate meetings |
 | Remote browser proxy | 7/10 | VNC + CDP WebSocket proxying with token auth; binary + JSON-RPC protocols handled | No unit tests; `print()` debug statement on line 1373 instead of logger; token in URL leaks to browser history |
 | Public share links | 8/10 | `secrets.token_urlsafe(16)` (~2^100 bits); configurable TTL with max cap (24h); proper cache headers | Share link token in URL can leak via logs/browser history (mitigated by TTL) |
@@ -181,14 +181,15 @@ open http://localhost:8000/docs
 
 1. **CORS defaults block production** — `CORS_ORIGINS` defaults to `localhost:3000,3001`. Any production deployment that forgets this env var will have all browser requests silently rejected. No startup warning.
 2. **Token revocation has 60s delay** — cached tokens remain valid for up to 60 seconds after revocation. No cache invalidation endpoint exists.
-3. **WebSocket has no rate limiting** — a client can flood `subscribe` messages, each triggering an HTTP POST to transcription-collector. DoS vector.
+3. **Rate limiting implemented** — Redis sliding window, 3 tiers: API (120/min), admin (30/min), WS (20/min). Configurable via env vars. Returns 429 with Retry-After header. ~~Previously no rate limiting.~~ Fixed 2026-03-29. WebSocket subscribe rate limiting still separate (not yet done).
 4. **Debug print statement** — line 1373 uses `print()` instead of `logger.debug()` for CDP proxy URL rewriting.
 5. **No WebSocket integration tests** — the real-time meeting status feature (a key selling point) has zero automated test coverage for actual message delivery.
 6. **Admin-api response not validated** — if admin-api returns malformed user_data (e.g., `user_id: null`), it gets injected as `X-User-ID: None` and cached for 60s.
 
 ### Validation Plan (to reach 90+)
 
-- [ ] Require `CORS_ORIGINS` env var at startup for non-dev environments (fail fast)
+- [x] **P0**: Add gateway-level rate limiting (configurable, returns 429) — done 2026-03-29, 3 tiers via RATE_LIMIT_RPM env vars
+- [ ] **P0**: Require `CORS_ORIGINS` env var at startup for non-dev environments (fail fast)
 - [ ] Replace `print()` on line 1373 with `logger.debug()`
 - [ ] Validate admin-api response structure before header injection (user_id is int, scopes is list)
 - [ ] Add rate limiter to WebSocket subscribe (e.g., 10/min per connection)

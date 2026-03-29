@@ -25,22 +25,11 @@ export const googleWaitingRoomIndicators: string[] = [
   'text="Waiting for the host to let you in"',
   'text="You\'re in the waiting room"',
   'text="Asking to be let in"',
-  
+
   // Aria labels and waiting room indicators
   '[aria-label*="waiting room"]',
   '[aria-label*="Asking to be let in"]',
   '[aria-label*="waiting for admission"]',
-  
-  // Progress/loading indicators in waiting room
-  '[role="progressbar"]',
-  '[aria-label*="loading"]',
-  '.loading-spinner',
-  
-  // Legacy patterns (keep for compatibility)
-  'text="Ask to join"',
-  'text="Join now"',
-  'text="Can\'t join the meeting"',
-  'text="Meeting not found"'
 ];
 
 export const googleRejectionIndicators: string[] = [

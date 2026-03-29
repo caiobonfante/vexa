@@ -1,6 +1,6 @@
 # Agentic Runtime
 
-> **Confidence: 0** — RESET after architecture refactoring. agent-api renamed, scheduler moved to runtime-api, shared-models split. All prior gate checks invalidated.
+> **Confidence: 0** — RESET after architecture refactoring. agent-api renamed, scheduler moved to runtime-api, shared-models being deleted (utilities redistributed to admin-models and meeting-api). All prior gate checks invalidated.
 > **Tested:** Agent chat (SSE streaming, session resume), meeting join/transcribe/speak/chat/screen, browser sessions (VNC/CDP), scheduler (16/16 unit tests), workspace persistence (MinIO).
 > **Not tested:** BOT_API_TOKEN wiring (blocks container spawning from agent), post-meeting auto-trigger webhook, server-side chat history.
 > **Contributions welcome:** Webhook receiver endpoint (~20 LOC in agent-api), server-side chat history (Redis list). For workspace/knowledge features, see [knowledge-workspace](../knowledge-workspace/).
@@ -262,7 +262,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 - All features that need container orchestration
 
 **Replaces / subsumes:**
-- bot-manager container orchestration -> Runtime API
+- bot-manager container orchestration -> Runtime API + Meeting API (Phase 4 refactoring, 2026-03-26). Bot-manager source deleted in commit `65f033d3`. A stale cached Docker image still runs in the agentic compose — to be removed once meeting-api handles all bot creation.
 - scheduler HTTP executor -> Runtime API container spawn
 - quorum ContainerManager + ChatManager -> Agent API + Runtime API
 
@@ -491,9 +491,10 @@ User: "Join my meeting"
 ### Quick start
 
 ```bash
-# 1. Configure environment
-cp features/agentic-runtime/deploy/.env.example features/agentic-runtime/deploy/.env
+# 1. Configure environment (root .env is the single source of truth)
+# The deploy dir symlinks to root .env — edit the root copy
 # Edit .env: set CLAUDE_CREDENTIALS_PATH, CLAUDE_JSON_PATH, TRANSCRIPTION_SERVICE_URL
+vi .env
 
 # 2. Build container images (agent + bot)
 docker build -t vexa-agent:dev -f containers/agent/Dockerfile .

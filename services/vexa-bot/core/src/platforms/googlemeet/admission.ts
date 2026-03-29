@@ -89,12 +89,10 @@ export async function waitForGoogleMeetingAdmission(
     log("Checking if bot is already admitted to the Google Meet meeting...");
     
     // Check for any visible admission indicator (multiple selectors for robustness)
+    // If meeting controls are visible, the bot is admitted — lobby indicators are unreliable
     const initialAdmissionFound = await checkForGoogleAdmissionIndicators(page);
-    
-    // Negative check: ensure we're not still in lobby/pre-join
-    const initialLobbyStillVisible = await checkForWaitingRoomIndicators(page);
-    
-    if (initialAdmissionFound && !initialLobbyStillVisible) {
+
+    if (initialAdmissionFound) {
       log(`Found Google Meet admission indicator: visible meeting controls - Bot is already admitted to the meeting!`);
       
       // Take screenshot when already admitted
@@ -208,15 +206,16 @@ export async function waitForGoogleMeetingAdmission(
           throw new Error("Bot admission was rejected by meeting admin");
         }
 
-        // Admission indicators
+        // Admission indicators — if meeting controls are visible, bot is admitted
+        // regardless of any residual lobby-like elements in the DOM
         const admissionFound = await checkForGoogleAdmissionIndicators(page);
-        const lobbyVisible = await checkForWaitingRoomIndicators(page);
-        if (admissionFound && !lobbyVisible) {
+        if (admissionFound) {
           log("✅ Bot admitted during polling window (meeting controls visible)");
           return true;
         }
 
         // If lobby appears later, switch to waiting-room handling by breaking
+        const lobbyVisible = await checkForWaitingRoomIndicators(page);
         if (lobbyVisible) {
           log("ℹ️ Waiting room appeared during polling. Switching to waiting-room monitoring...");
 

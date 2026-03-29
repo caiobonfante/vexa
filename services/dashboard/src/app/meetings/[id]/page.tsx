@@ -60,6 +60,7 @@ import type { MeetingStatus, Meeting } from "@/types/vexa";
 import { StatusHistory } from "@/components/meetings/status-history";
 import { cn } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
+import { withBasePath } from "@/lib/base-path";
 import { toast } from "sonner";
 import { LanguagePicker } from "@/components/language-picker";
 import { WHISPER_LANGUAGE_CODES, getLanguageDisplayName } from "@/lib/languages";
@@ -830,7 +831,8 @@ export default function MeetingDetailPage() {
 
   const browserViewIframe = hasBrowserView && viewMode === 'browser' ? (() => {
     const meetingId = currentMeeting.id;
-    const vncUrl = `${apiBaseUrl}/b/${meetingId}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${meetingId}/vnc/websockify`;
+    // VNC loads from same origin — nginx proxies /b/ routes to the gateway
+    const vncUrl = `/b/${meetingId}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${meetingId}/vnc/websockify`;
     return (
       <div className="flex-1 overflow-hidden">
         <iframe
@@ -868,7 +870,7 @@ export default function MeetingDetailPage() {
               Browser
             </Button>
           </div>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => { const mid = currentMeeting.id; const url = `${apiBaseUrl}/b/${mid}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${mid}/vnc/websockify`; window.open(url, "_blank"); }}>
+          <Button variant="outline" size="sm" className="h-8" onClick={() => { const mid = currentMeeting.id; const url = `/b/${mid}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${mid}/vnc/websockify`; window.open(url, "_blank"); }}>
             <ExternalLink className="h-3.5 w-3.5 mr-1" />
             Fullscreen
           </Button>
@@ -1686,7 +1688,7 @@ export default function MeetingDetailPage() {
                       const sessionToken = escalation?.session_token as string
                         || currentMeeting.data?.session_token as string;
                       if (!sessionToken) return null;
-                      const vncUrl = `${apiBaseUrl}/b/${sessionToken}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${sessionToken}/vnc/websockify`;
+                      const vncUrl = withBasePath(`/b/${sessionToken}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&view_only=false&path=b/${sessionToken}/vnc/websockify`);
                       return (
                         <Button
                           variant="default"
@@ -1711,7 +1713,7 @@ export default function MeetingDetailPage() {
                           className="gap-2"
                           onClick={async () => {
                             try {
-                              const response = await fetch(`${apiBaseUrl}/b/${sessionToken}/save`, {
+                              const response = await fetch(withBasePath(`/b/${sessionToken}/save`), {
                                 method: "POST",
                               });
                               if (!response.ok) throw new Error(await response.text());

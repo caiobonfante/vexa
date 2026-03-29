@@ -87,10 +87,9 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
     );
   }
 
-  const vncUrl = apiUrl
-    ? `${apiUrl}/b/${token}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${token}/vnc/websockify`
-    : null;
-  const cdpUrl = apiUrl ? `${apiUrl}/b/${token}/cdp` : null;
+  // VNC/CDP use relative URLs — nginx proxies /b/ routes to the gateway (same origin, no CORS)
+  const vncUrl = `/b/${token}/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&path=b/${token}/vnc/websockify`;
+  const cdpUrl = apiUrl ? `${apiUrl}/b/${token}/cdp` : `/b/${token}/cdp`;
   const mcpUrl = apiUrl ? `${apiUrl}/mcp` : null;
   const sshPort = meeting.data?.ssh_port as number | undefined;
   const sshHost = apiUrl ? (() => { try { return new URL(apiUrl).hostname; } catch { return "localhost"; } })() : "localhost";
@@ -122,7 +121,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
   async function handleSave() {
     setIsSaving(true);
     try {
-      const response = await fetch(`${apiUrl}/b/${token}/save`, {
+      const response = await fetch(withBasePath(`/b/${token}/save`), {
         method: "POST",
       });
       if (!response.ok) throw new Error(await response.text());
@@ -138,7 +137,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
     if (!confirm("Delete all stored browser data? You will need to log in again.")) return;
     setIsDeleting(true);
     try {
-      const response = await fetch(`${apiUrl}/b/${token}/storage`, {
+      const response = await fetch(withBasePath(`/b/${token}/storage`), {
         method: "DELETE",
       });
       if (!response.ok) throw new Error(await response.text());

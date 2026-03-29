@@ -53,7 +53,7 @@ def verify_meeting_token(token: str) -> Optional[dict]:
         now = int(datetime.now(timezone.utc).timestamp())
         if 'exp' in payload and int(payload['exp']) < now:
             return None
-        if payload.get('aud') != 'transcription-collector' or payload.get('iss') != 'meeting-api':
+        if payload.get('aud') != 'transcription-collector' or payload.get('iss') not in ('meeting-api', 'bot-manager'):
             return None
         if payload.get('scope') != 'transcribe:write':
             return None

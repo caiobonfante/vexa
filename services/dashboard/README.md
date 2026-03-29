@@ -69,6 +69,19 @@ Backend requirements:
 Notes:
 - The dashboard fetches audio through its own `/api/vexa/...` proxy to avoid MinIO/S3 CORS issues.
 
+## URL Proxy Pattern
+
+All gateway requests from the browser go through Next.js server-side proxies — never directly to the gateway URL. This avoids CORS issues and keeps the gateway URL as a single env var (`VEXA_API_URL`).
+
+| Browser path | Proxied to | Configured in |
+|---|---|---|
+| `/api/vexa/*` | `${VEXA_API_URL}/*` | `src/app/api/vexa/[...path]/route.ts` |
+| `/b/*` | `${VEXA_API_URL}/b/*` | `next.config.ts` rewrites |
+
+**Rule:** Components must use relative paths (`/b/{token}/save`, `/api/vexa/meetings`) for fetch calls. The public gateway URL (`publicApiUrl` from `/api/config`) is only for display purposes (e.g., CDP connection strings for external tools).
+
+In Docker Compose, `VEXA_API_URL` comes from the root `.env`. In Kubernetes, it comes from a ConfigMap.
+
 ## Zoom Notes
 
 Zoom meeting joins require additional setup in the Vexa backend (Zoom Meeting SDK + OAuth/OBF). See the Vexa repo doc: `docs/zoom-app-setup.mdx`.
