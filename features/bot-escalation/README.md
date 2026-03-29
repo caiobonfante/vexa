@@ -159,7 +159,7 @@ Bot escalates → user solves CAPTCHA via VNC → clicks "Save Browser State"
 | MVP1 | "Save Browser State" button in escalation banner → manual save |
 | MVP2 | Auto-save when `needs_human_help → active` transition fires |
 | MVP3 | Per-platform profile isolation (`s3://users/{id}/browser-userdata/{platform}/`) |
-| MVP4 | Meeting bots download user's browser profile on startup (bots "learn" to use saved credentials) |
+| MVP4 | Meeting bots download user's browser profile on startup (bots "learn" to use saved credentials). Note: Google Meet works. Teams requires M365 Business account — consumer accounts get locked by Microsoft. See `conductor/missions/research-msteams-auth.md`. |
 
 ### Future Extensions
 

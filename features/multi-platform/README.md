@@ -57,9 +57,9 @@ client -> api-gateway -> bot-manager (detect platform from URL)
 | Standard | `abc-defg-hij` (3-4-3 lowercase) | `meet.google.com/cxi-ebnp-ixk` |
 | Custom Workspace nickname | 5-40 chars, alphanumeric + hyphens | `meet.google.com/my-team-standup` |
 
-All Google Meet types: bot joins as unauthenticated guest, goes through waiting room, host must admit.
+Default: bot joins as unauthenticated guest, goes through waiting room, host must admit. With `authenticated: true`: bot joins as signed-in Google user, skips name entry and lobby — no admission needed. See `conductor/missions/authenticated-bots.md`.
 
-**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
+**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - Standard: `^[a-z]{3}-[a-z]{4}-[a-z]{3}$`
 - Custom nickname: `^[a-z0-9][a-z0-9-]{3,38}[a-z0-9]$`
 
@@ -80,12 +80,16 @@ All Google Meet types: bot joins as unauthenticated guest, goes through waiting 
 
 All Teams types: bot joins as anonymous guest, may go through lobby, host must admit.
 
-**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
+**Authenticated join (not yet implemented):** Requires a Microsoft 365 Business Basic account (~$6/mo) with a dedicated tenant. Consumer Microsoft accounts (Gmail-linked or Outlook.com) get locked by Microsoft's anti-automation detection — confirmed dead end across the industry (Recall.ai, Fireflies, etc. all use M365 Business). See `conductor/missions/research-msteams-auth.md` for full research.
+
+**Upcoming: Microsoft bot detection (May 2026, MC1077547).** Microsoft is rolling out automatic third-party bot detection in Teams meetings. Bots will be labeled in the lobby and organizers must explicitly admit them individually. This affects all meeting bot companies and changes the UX — users need to tell meeting organizers to expect the bot.
+
+**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - Numeric: `^\d{10,15}$`
 - Hex hash: `^[0-9a-f]{16}$`
 
 **Out of scope:**
-- Org-only meetings (authenticated users only) — bot joins as anonymous guest, gets rejected
+- Org-only meetings (authenticated users only) — bot joins as anonymous guest, gets rejected. May become accessible with M365 authenticated bots (future).
 - Teams Live Events / Webinars — different URL format, untested
 
 ### Zoom
@@ -98,7 +102,7 @@ All Teams types: bot joins as anonymous guest, may go through lobby, host must a
 
 Zoom requires OAuth + Meeting SDK (self-hosted only).
 
-**Native ID validation** (from `libs/shared-models/shared_models/schemas.py`):
+**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - `^\d{9,11}$`
 
 **Out of scope:**

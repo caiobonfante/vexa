@@ -48,7 +48,7 @@ All platforms feed into the same shared transcription pipeline.
 | **Google Meet failures** | Known | 7.8% failure rate — join-stage "No active media elements" error. |
 | **Teams regressions** | Active | Current prod works (0% fail), but new code has open issues (#171, #189, #190, #191). |
 | **Zoom production** | Self-hosted only | Requires your own Zoom Marketplace app + SDK. Not available on hosted service. Web app mode (Playwright, no SDK) in development. |
-| **Authenticated bot support** | Google Meet | Bots can join as an authenticated Google user using stored browser credentials (`authenticated: true` in BOT_CONFIG). Uses persistent browser context with userdata synced from/to S3. Browser session mode is used to set up credentials initially. Teams and Zoom authenticated mode not yet implemented. |
+| **Authenticated bot support** | Google Meet ✅, Teams 🔴 | Google Meet: bots join as authenticated Google user via stored browser credentials (`authenticated: true` in BOT_CONFIG). Uses persistent browser context with userdata synced from/to S3. Teams: blocked — consumer Microsoft accounts (Gmail-linked) get locked by anti-automation detection. Requires Microsoft 365 Business Basic tenant (~$6/mo) with MFA disabled. S3 sync infrastructure already covers Teams sessions; gap is account provisioning only. See `conductor/missions/research-msteams-auth.md`. Zoom: not started. |
 
 ## How
 
@@ -177,7 +177,9 @@ Typical configurations:
 | **Full voice agent** (avatar + TTS + screen reading) | on | on | on |
 | **Authenticated recorder** (no lobby wait) | off | off | off |
 
-Authenticated bots additionally set `authenticated: true` + S3 credentials in BOT_CONFIG. The bot downloads stored browser userdata from S3, launches a persistent Chromium context (no incognito), and joins as the signed-in Google user — skipping name entry and lobby wait. Browser data is synced back to S3 on exit to keep credentials fresh.
+Authenticated bots additionally set `authenticated: true` + S3 credentials in BOT_CONFIG. The bot downloads stored browser userdata from S3, launches a persistent Chromium context (no incognito), and joins as the signed-in user — skipping name entry and lobby wait. Browser data is synced back to S3 on exit to keep credentials fresh.
+
+**Platform support:** Google Meet authenticated join is implemented and validated. MS Teams authenticated join requires a Microsoft 365 Business Basic account (consumer accounts get locked). The S3 sync and persistent context infrastructure is shared — Teams needs the same cookies/localStorage files that `s3-sync.ts` already handles.
 
 ## Supported Platforms
 
