@@ -551,7 +551,7 @@ async def request_bot(
             "meeting_id": new_meeting.id,
             "session_token": session_token,
             "redisUrl": REDIS_URL,
-            "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
+            "meetingApiCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
             "userdataS3Path": f"users/{current_user.id}/browser-userdata",
             "s3Endpoint": s3_endpoint_url,
             "s3Bucket": s3_bucket,
@@ -713,7 +713,7 @@ async def request_bot(
             "noOneJoinedTimeout": 120000,    # 2 min
             "everyoneLeftTimeout": 300000,   # 5 min
         },
-        "botManagerCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
+        "meetingApiCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
         "recordingEnabled": user_recording_config.get("enabled", os.getenv("RECORDING_ENABLED", "false").lower() == "true"),
         "transcribeEnabled": transcribe,
         "captureModes": user_recording_config.get("capture_modes", os.getenv("CAPTURE_MODES", "audio").split(",")),

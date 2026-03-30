@@ -50,7 +50,7 @@ export async function callStatusChangeCallback(
   speakerEvents?: any[]
 ): Promise<void> {log(`🔥 UNIFIED CALLBACK: ${status.toUpperCase()} - reason: ${reason || 'none'}`);
   
-  if (!botConfig.botManagerCallbackUrl) {log("Warning: No callback URL configured. Cannot send status change callback.");
+  if (!botConfig.meetingApiCallbackUrl) {log("Warning: No callback URL configured. Cannot send status change callback.");
     return;
   }
 
@@ -66,7 +66,7 @@ export async function callStatusChangeCallback(
     let timeoutId: NodeJS.Timeout | null = null;
     try {
       // Convert the callback URL to the unified endpoint
-      const baseUrl = botConfig.botManagerCallbackUrl.replace('/exited', '/status_change');
+      const baseUrl = botConfig.meetingApiCallbackUrl.replace('/exited', '/status_change');
       
       const payload: UnifiedCallbackPayload = {
         connection_id: botConfig.connectionId,

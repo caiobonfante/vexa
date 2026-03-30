@@ -54,8 +54,8 @@ case "${1:-}" in
 import json, sys
 c = json.loads('$BOT_CONFIG')
 # Fix URLs: meeting-api is on localhost, not Docker hostname
-if 'botManagerCallbackUrl' in c:
-    c['botManagerCallbackUrl'] = c['botManagerCallbackUrl'].replace('meeting-api:8080', 'localhost:8090')
+if 'meetingApiCallbackUrl' in c:
+    c['meetingApiCallbackUrl'] = c['meetingApiCallbackUrl'].replace('meeting-api:8080', 'localhost:8090')
 if 'recordingUploadUrl' in c:
     c['recordingUploadUrl'] = c['recordingUploadUrl'].replace('meeting-api:8080', 'localhost:8090')
 if 'redisUrl' in c:

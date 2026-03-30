@@ -281,7 +281,7 @@ print(d.get('cdp_url', 'No CDP URL available'))
     ;;
 
   meeting)
-    BOT_MGR="${VEXA_BOT_MANAGER:-http://bot-manager:8080}"
+    BOT_MGR="${VEXA_MEETING_API:-http://meeting-api:8080}"
     BOT_TOKEN="${VEXA_BOT_API_TOKEN:-}"
     TC="${VEXA_TC:-http://transcription-collector:8000}"
     case "${2:-}" in
@@ -836,7 +836,7 @@ else:
     ;;
 
   recording)
-    BOT_MGR="${VEXA_BOT_MANAGER:-http://bot-manager:8080}"
+    BOT_MGR="${VEXA_MEETING_API:-http://meeting-api:8080}"
     BOT_TOKEN="${VEXA_BOT_API_TOKEN:-}"
     case "${2:-}" in
       list)

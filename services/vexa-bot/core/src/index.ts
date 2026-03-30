@@ -37,7 +37,7 @@ let currentLanguage: string | null | undefined = null;
 let currentTask: string | null | undefined = 'transcribe'; // Default task
 let currentRedisUrl: string | null = null;
 let currentConnectionId: string | null = null;
-let botManagerCallbackUrl: string | null = null; // ADDED: To store callback URL
+let meetingApiCallbackUrl: string | null = null; // ADDED: To store callback URL
 let currentPlatform: "google_meet" | "zoom" | "teams" | undefined;
 let page: Page | null = null; // Initialize page, will be set in runBot
 
@@ -790,12 +790,12 @@ async function performGracefulLeave(
     log(`[Speaker Events] Failed to read: ${e?.message}`);
   }
 
-  if (botManagerCallbackUrl && currentConnectionId) {
+  if (meetingApiCallbackUrl && currentConnectionId) {
     // Use unified callback for exit status
     const statusMapping = mapExitReasonToStatus(finalCallbackReason, finalCallbackExitCode);
 
     const botConfig = {
-      botManagerCallbackUrl,
+      meetingApiCallbackUrl,
       connectionId: currentConnectionId,
       container_name: process.env.HOSTNAME || 'unknown'
     };
@@ -1982,7 +1982,7 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
   currentTask = botConfig.transcribeEnabled === false ? null : (botConfig.task || 'transcribe');
   currentRedisUrl = botConfig.redisUrl;
   currentConnectionId = botConfig.connectionId;
-  botManagerCallbackUrl = botConfig.botManagerCallbackUrl || null; // ADDED: Get callback URL from botConfig
+  meetingApiCallbackUrl = botConfig.meetingApiCallbackUrl || null; // ADDED: Get callback URL from botConfig
   currentPlatform = botConfig.platform; // Set currentPlatform here
   currentBotConfig = botConfig; // Store full config for recording upload
 

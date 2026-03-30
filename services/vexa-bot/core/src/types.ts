@@ -20,7 +20,7 @@ export type BotConfig = {
   },
   reconnectionIntervalMs?: number,
   meeting_id: number,  // Required, not optional
-  botManagerCallbackUrl?: string;
+  meetingApiCallbackUrl?: string;
   recordingEnabled?: boolean;
   captureModes?: string[];  // e.g., ['audio'], ['audio', 'video'], ['audio', 'screenshots']
   recordingUploadUrl?: string;  // meeting-api internal upload endpoint
@@ -52,7 +52,7 @@ export type BrowserSessionConfig = {
   meeting_id?: number;
   redisUrl: string;
   container_name?: string;
-  botManagerCallbackUrl?: string;
+  meetingApiCallbackUrl?: string;
   s3Endpoint?: string;
   s3Bucket?: string;
   s3AccessKey?: string;

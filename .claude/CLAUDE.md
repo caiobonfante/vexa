@@ -26,6 +26,8 @@ Read these before starting work. These are lessons from past failures.
 
 **G5: Don't default to fallbacks — clean-cut renames, not shims.** When renaming env vars, config keys, or service references, replace everywhere. Don't propose `NEW_VAR or OLD_VAR` backward-compat logic unless the user explicitly asks for a transition period. Fallbacks add complexity, mask incomplete migrations, and keep dead names alive. The only things that survive a rename are frozen external contracts (API paths, token issuers, wire protocols that external clients depend on). (2026-03-30: agent proposed BOT_MANAGER_URL fallback in mission DoD — user corrected: "no fallbacks, bot-manager is dead, we hate fallbacks unless explicitly a design choice.")
 
+**G6: Search ALL case variants when renaming.** When cleaning up references to a renamed component, search every casing pattern: `kebab-case` (bot-manager), `snake_case` (bot_manager), `SCREAMING_SNAKE` (BOT_MANAGER), `camelCase` (botManager), `PascalCase` (BotManager). Missing one pattern leaves live references in wire protocols, type definitions, and config keys. (2026-03-30: team grepped bot-manager/bot_manager/BOT_MANAGER across 107 files, reported 90/100 confidence. Human found 14 `botManagerCallbackUrl` references in live wire protocol code + `VEXA_BOT_MANAGER` env var in vexa-agent — all missed because camelCase was never searched.)
+
 ## Deep Reference
 
 Full confidence framework paper with math model, research citations, and changelog: `.claude/confidence-framework.md`

@@ -25,7 +25,7 @@ export const BotConfigSchema = z.object({
   }).default({}),
   reconnectionIntervalMs: z.number().int().optional(), // ADDED: Optional reconnection interval
   meeting_id: z.number().int().optional(), // Allow optional internal ID
-  botManagerCallbackUrl: z.string().url().optional(), // ADDED: Optional callback URL
+  meetingApiCallbackUrl: z.string().url().optional(), // ADDED: Optional callback URL
   recordingEnabled: z.boolean().optional(),
   captureModes: z.array(z.string()).optional(),
   recordingUploadUrl: z.string().url().optional(),
@@ -71,7 +71,7 @@ if (!rawConfig) {
       mode: "browser_session",
       redisUrl: validatedConfig.redisUrl,
       container_name: validatedConfig.container_name,
-      botManagerCallbackUrl: validatedConfig.botManagerCallbackUrl,
+      meetingApiCallbackUrl: validatedConfig.meetingApiCallbackUrl,
       s3Endpoint: validatedConfig.s3Endpoint,
       s3Bucket: validatedConfig.s3Bucket,
       s3AccessKey: validatedConfig.s3AccessKey,
