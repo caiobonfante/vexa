@@ -1,6 +1,6 @@
 """Integration tests for recording proxy routes.
 
-Verifies that /recordings/* routes correctly proxy to BOT_MANAGER_URL.
+Verifies that /recordings/* routes correctly proxy to MEETING_API_URL.
 """
 import pytest
 import httpx

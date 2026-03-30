@@ -122,14 +122,14 @@ API_GATEWAY_PORT="${API_GATEWAY_PORT:-8066}"
 ADMIN_API_PORT="${ADMIN_API_PORT:-8067}"
 CHAT_API_PORT="${CHAT_API_PORT:-8100}"
 RUNTIME_API_PORT="${RUNTIME_API_PORT:-8090}"
-BOT_MANAGER_PORT="${BOT_MANAGER_PORT:-8070}"
+MEETING_API_PORT="${MEETING_API_PORT:-8070}"
 TC_PORT="${TC_PORT:-8060}"
 
 check_port "api-gateway" localhost "$API_GATEWAY_PORT" "/"
 check_port "admin-api" localhost "$ADMIN_API_PORT" "/"
 check_port "agent-api" localhost "$CHAT_API_PORT" "/health"
 check_port "runtime-api" localhost "$RUNTIME_API_PORT" "/health"
-check_port "bot-manager" localhost "$BOT_MANAGER_PORT" "/"
+check_port "meeting-api" localhost "$MEETING_API_PORT" "/"
 check_port "transcription-collector" localhost "$TC_PORT" "/health"
 check_redis localhost "$REDIS_PORT"
 check_port "minio" localhost "${MINIO_PORT:-9010}" "/minio/health/live"
@@ -172,12 +172,12 @@ check_container_var "vexa-agentic-runtime-api" DOCKER_NETWORK yes
 check_container_var "vexa-agentic-runtime-api" BOT_API_TOKEN yes
 check_container_var "vexa-agentic-runtime-api" MINIO_ENDPOINT yes
 
-# bot-manager critical vars
-check_container_var "vexa-agentic-bot-manager" REDIS_URL yes
-check_container_var "vexa-agentic-bot-manager" DOCKER_NETWORK yes
-check_container_var "vexa-agentic-bot-manager" ADMIN_TOKEN yes
-check_container_var "vexa-agentic-bot-manager" TRANSCRIPTION_SERVICE_URL yes
-check_container_var "vexa-agentic-bot-manager" MINIO_ENDPOINT yes
+# meeting-api critical vars
+check_container_var "vexa-agentic-meeting-api" REDIS_URL yes
+check_container_var "vexa-agentic-meeting-api" DOCKER_NETWORK yes
+check_container_var "vexa-agentic-meeting-api" ADMIN_TOKEN yes
+check_container_var "vexa-agentic-meeting-api" TRANSCRIPTION_SERVICE_URL yes
+check_container_var "vexa-agentic-meeting-api" MINIO_ENDPOINT yes
 
 # admin-api
 check_container_var "vexa-agentic-admin-api" ADMIN_API_TOKEN yes
@@ -185,7 +185,7 @@ check_container_var "vexa-agentic-admin-api" DB_HOST yes
 
 # api-gateway
 check_container_var "vexa-agentic-api-gateway" ADMIN_API_URL yes
-check_container_var "vexa-agentic-api-gateway" BOT_MANAGER_URL yes
+check_container_var "vexa-agentic-api-gateway" MEETING_API_URL yes
 check_container_var "vexa-agentic-api-gateway" REDIS_URL yes
 
 # transcription-collector
@@ -212,18 +212,18 @@ if [[ -n "$AGENT_API_CID" && -n "$RUNTIME_API_CID" ]]; then
   fi
 fi
 
-# ADMIN_TOKEN: bot-manager ADMIN_TOKEN must match admin-api ADMIN_API_TOKEN
-BOT_MGR_CID=$(docker ps --filter "name=vexa-agentic-bot-manager" -q 2>/dev/null | head -1)
+# ADMIN_TOKEN: meeting-api ADMIN_TOKEN must match admin-api ADMIN_API_TOKEN
+MEETING_API_CID=$(docker ps --filter "name=vexa-agentic-meeting-api" -q 2>/dev/null | head -1)
 ADMIN_API_CID=$(docker ps --filter "name=vexa-agentic-admin-api" -q 2>/dev/null | head -1)
 
-if [[ -n "$BOT_MGR_CID" && -n "$ADMIN_API_CID" ]]; then
-  TOKEN_BOT=$(docker exec "$BOT_MGR_CID" env 2>/dev/null | grep "^ADMIN_TOKEN=" | cut -d= -f2-)
+if [[ -n "$MEETING_API_CID" && -n "$ADMIN_API_CID" ]]; then
+  TOKEN_MEETING=$(docker exec "$MEETING_API_CID" env 2>/dev/null | grep "^ADMIN_TOKEN=" | cut -d= -f2-)
   TOKEN_ADMIN=$(docker exec "$ADMIN_API_CID" env 2>/dev/null | grep "^ADMIN_API_TOKEN=" | cut -d= -f2-)
 
-  if [[ "$TOKEN_BOT" == "$TOKEN_ADMIN" ]]; then
-    pass "ADMIN_TOKEN (bot-manager) matches ADMIN_API_TOKEN (admin-api)"
+  if [[ "$TOKEN_MEETING" == "$TOKEN_ADMIN" ]]; then
+    pass "ADMIN_TOKEN (meeting-api) matches ADMIN_API_TOKEN (admin-api)"
   else
-    fail "ADMIN_TOKEN MISMATCH: bot-manager='$TOKEN_BOT' admin-api='$TOKEN_ADMIN'"
+    fail "ADMIN_TOKEN MISMATCH: meeting-api='$TOKEN_MEETING' admin-api='$TOKEN_ADMIN'"
   fi
 fi
 
@@ -302,12 +302,12 @@ except Exception as e:
 
 check_internal_redis "vexa-agentic-agent-api"
 check_internal_redis "vexa-agentic-runtime-api"
-check_internal_redis "vexa-agentic-bot-manager"
+check_internal_redis "vexa-agentic-meeting-api"
 
 check_internal_reach "vexa-agentic-agent-api" "agent-api → runtime-api" "http://runtime-api:8090/health"
-check_internal_reach "vexa-agentic-bot-manager" "bot-manager → agent-api webhook" "http://agent-api:8100/health"
+check_internal_reach "vexa-agentic-meeting-api" "meeting-api → agent-api webhook" "http://agent-api:8100/health"
 check_internal_reach "vexa-agentic-api-gateway" "api-gateway → admin-api" "http://admin-api:8001/"
-check_internal_reach "vexa-agentic-api-gateway" "api-gateway → bot-manager" "http://bot-manager:8080/"
+check_internal_reach "vexa-agentic-api-gateway" "api-gateway → meeting-api" "http://meeting-api:8080/"
 check_internal_reach "vexa-agentic-api-gateway" "api-gateway → transcription-collector" "http://transcription-collector:8000/health"
 
 # ─── Step 6: Dashboard .env sanity ───────────────────────────────────────────

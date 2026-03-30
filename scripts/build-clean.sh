@@ -150,14 +150,14 @@ management. Agent API for chat sessions, scheduling, workspaces.
 Runtime API for container orchestration and profiles." \
   "services/api-gateway/" "services/admin-api/" "packages/agent-api/" "packages/runtime-api/"
 
-# 3. Bot manager and orchestrators
+# 3. Meeting API and orchestrators
 commit_group "$DIMA" \
-  "feat: bot manager with Docker, Kubernetes, and process orchestrators
+  "feat: meeting API with Docker, Kubernetes, and process orchestrators
 
 Bot lifecycle management, concurrent launch control, meeting state machine.
 Post-meeting hooks, webhook delivery, status callbacks.
 Pluggable orchestrators: Docker, Kubernetes, process-based." \
-  "services/bot-manager/"
+  "packages/meeting-api/"
 
 # 4. Transcription pipeline
 commit_group "$DIMA" \

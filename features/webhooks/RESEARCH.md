@@ -164,7 +164,7 @@ Payloads lack a unique `event_id`. Consumers cannot deduplicate retried deliveri
 
 ### P1 — Core Features
 
-4. **Add granular bot lifecycle events** — `bot.joining`, `bot.waiting_room`, `bot.in_call`, `bot.recording`, `bot.leaving`, `bot.done`, `bot.fatal`. These map to existing status transitions in bot-manager.
+4. **Add granular bot lifecycle events** — `bot.joining`, `bot.waiting_room`, `bot.in_call`, `bot.recording`, `bot.leaving`, `bot.done`, `bot.fatal`. These map to existing status transitions in meeting-api.
 
 5. **Support multiple webhook endpoints** — move from `user.data.webhook_url` to a `webhook_endpoints` table. Each endpoint gets its own URL, secret, event filter, active/disabled status.
 

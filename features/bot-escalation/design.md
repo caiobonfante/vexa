@@ -105,9 +105,9 @@ export async function callNeedsHumanHelpCallback(
 }
 ```
 
-### Bot-Manager Handling
+### Meeting-API Handling
 
-**File:** `services/bot-manager/app/main.py`, in `bot_status_change_callback()`:
+**File:** `packages/meeting-api/meeting_api/callbacks.py`, in `bot_status_change_callback()`:
 
 When `new_status == "needs_human_help"`:
 1. Update meeting status in DB
@@ -225,13 +225,13 @@ async function registerVncSession(botConfig: BotConfig): Promise<string> {
     user_id: botConfig.user_id,
     escalation: true
   };
-  // Write to Redis — bot-manager callback handler does this
+  // Write to Redis — meeting-api callback handler does this
   // Bot sends the token in the needs_human_help callback payload
   return token;
 }
 ```
 
-The bot-manager receives the callback and writes `browser_session:{token}` to Redis, exactly as it does for `browser_session` mode containers. The api-gateway's existing `/b/{token}` routes (lines 1016-1400) immediately serve VNC access.
+The meeting-api receives the callback and writes `browser_session:{token}` to Redis, exactly as it does for `browser_session` mode containers. The api-gateway's existing `/b/{token}` routes (lines 1016-1400) immediately serve VNC access.
 
 ---
 
@@ -314,8 +314,8 @@ If the block was a CAPTCHA or auth wall (not a waiting room), the bot may be in 
 | `services/vexa-bot/core/src/platforms/zoom/web/admission.ts` | Add `checkEscalation()` in poll loop |
 | `services/vexa-bot/core/src/platforms/googlemeet/admission.ts` | Add `checkEscalation()` in poll loops |
 | `services/vexa-bot/core/src/platforms/msteams/admission.ts` | Add `checkEscalation()` in poll loops |
-| `services/bot-manager/app/main.py` | Handle `needs_human_help` status in callback, register VNC session in Redis |
-| `services/bot-manager/app/orchestrator_utils.py` | Expose port 6080 on meeting bot containers |
+| `packages/meeting-api/meeting_api/callbacks.py` | Handle `needs_human_help` status in callback, register VNC session in Redis |
+| `packages/meeting-api/meeting_api/meetings.py` | Expose port 6080 on meeting bot containers (via runtime-api) |
 | `services/dashboard/src/components/meetings/bot-status-indicator.tsx` | Add `needs_human_help` visual state |
 | `services/dashboard/src/app/meetings/[id]/page.tsx` | Add escalation banner with VNC link |
 | `services/dashboard/src/types/vexa.ts` | Add `needs_human_help` to `MeetingStatus` type |
@@ -323,7 +323,7 @@ If the block was a CAPTCHA or auth wall (not a waiting room), the bot may be in 
 ### Data Flow
 
 ```
-                  Bot Container                    Bot Manager              Dashboard
+                  Bot Container                    Meeting API              Dashboard
                   ============                     ===========              =========
   [admission poll loop]
         |
@@ -408,7 +408,7 @@ This is the same S3 sync infrastructure used by browser sessions:
 ### What Exists Already
 
 - **S3 sync service:** `services/vexa-bot/core/src/s3-sync.ts` — handles upload/download of browser profiles to MinIO
-- **Save endpoint:** `POST /b/{token}/save` → proxies to `bot-manager/internal/browser-sessions/{token}/save`
+- **Save endpoint:** `POST /b/{token}/save` → proxies to `meeting-api/internal/browser-sessions/{token}/save`
 - **Bot startup sync:** `entrypoint.sh` calls S3 sync down on startup (browser_session mode)
 - **Dashboard Save button:** `browser-session-view.tsx` has "Save Storage" button
 

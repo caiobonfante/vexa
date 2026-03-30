@@ -37,7 +37,7 @@ export function checkEscalation(
 }
 
 /**
- * Trigger escalation: start VNC stack and notify bot-manager.
+ * Trigger escalation: start VNC stack and notify meeting-api.
  * Idempotent — only fires once per admission attempt.
  */
 export async function triggerEscalation(botConfig: any, reason: string): Promise<void> {

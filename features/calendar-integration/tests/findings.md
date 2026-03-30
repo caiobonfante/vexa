@@ -26,7 +26,7 @@ Full MVP built by calendar-executor, verified by independent verifier (5/6 confi
 
 ### Bug found and fixed during verification
 
-**Auth bug in sync.py**: Originally used `X-User-Id` header for POST /bots — bot-manager requires `X-API-Key` token auth. Would silently fail with 401/403 on every scheduling attempt. Fixed: now uses `BOT_API_TOKEN` env var with `X-API-Key` header.
+**Auth bug in sync.py**: Originally used `X-User-Id` header for POST /bots — meeting-api requires `X-API-Key` token auth. Would silently fail with 401/403 on every scheduling attempt. Fixed: now uses `BOT_API_TOKEN` env var with `X-API-Key` header.
 
 ### Deployment (2026-03-25)
 

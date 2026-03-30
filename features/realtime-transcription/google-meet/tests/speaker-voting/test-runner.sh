@@ -164,7 +164,7 @@ log "Sending Recorder bot..."
 RECORDER_ID=$(send_bot "Recorder" "$TOKEN_RECORDER" "$MEETING_ID" true)
 log "  Recorder → bot $RECORDER_ID"
 
-# Get the meeting_id that the bot uses internally (numeric, from bot-manager)
+# Get the meeting_id that the bot uses internally (numeric, from meeting-api)
 # The Redis command channel uses this numeric ID
 RECORDER_MEETING_ID="$RECORDER_ID"
 
@@ -205,7 +205,7 @@ log "Waiting 20s for audio elements to stabilize..."
 sleep 20
 
 # Speak sequentially — each bot uses its own meeting_id for the Redis command
-# But the command channel uses the meeting_id from bot-manager (numeric)
+# But the command channel uses the meeting_id from meeting-api (numeric)
 # Actually, the command goes to bot_commands:meeting:{meeting_id} where meeting_id
 # is the DB meeting row ID. All bots in the same meeting share the channel.
 # We need to target specific bots — but speak commands are broadcast to all.
@@ -216,7 +216,7 @@ sleep 20
 # We need the SPECIFIC bot to speak. Use meeting_id of the specific bot.
 
 log "Alice speaks..."
-# Each bot has its own meeting_id (the bot's ID in bot-manager DB)
+# Each bot has its own meeting_id (the bot's ID in meeting-api DB)
 send_command "$ALICE_ID" '{"action":"speak","text":"Hello, my name is Alice. I am testing the speaker identification system. This is a longer sentence to give the voting system enough time to accumulate votes and lock my track."}'
 sleep 15
 

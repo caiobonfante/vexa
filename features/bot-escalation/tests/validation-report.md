@@ -59,9 +59,9 @@ The bot escalation feature is **mostly complete** with two issues found:
 - Calls `callStatusChangeCallback(botConfig, "needs_human_help", reason)`
 - Imported and used by `escalation.ts`
 
-### 6. bot-manager: needs_human_help handling
+### 6. meeting-api: needs_human_help handling
 - **Result: PASS (with caveat — see bug #2)**
-- File: `services/bot-manager/app/main.py` (lines 2024-2064)
+- File: `services/meeting-api/app/main.py` (lines 2024-2064)
 - `elif new_status == MeetingStatus.NEEDS_HUMAN_HELP:` block handles:
   - Updates meeting status via `update_meeting_status()`
   - Stores escalation metadata in `meeting.data['escalation']` JSONB
@@ -86,7 +86,7 @@ The bot escalation feature is **mostly complete** with two issues found:
   - Escalation banner renders when `status === "needs_human_help"` (lines 1570-1620+)
   - Shows reason, "Open Remote Browser" button, "Save Browser State" button
   - VNC URL construction is correct format
-  - **BUG:** Reads `escalation?.session_token` but bot-manager never stores `session_token` in escalation — only stores `vnc_url`. The VNC button will never render.
+  - **BUG:** Reads `escalation?.session_token` but meeting-api never stores `session_token` in escalation — only stores `vnc_url`. The VNC button will never render.
 - **bot-status-indicator.tsx: PASS**
   - `needs_human_help` has sort order 2.5 (between awaiting_admission and active)
 - **admin/bots/page.tsx: FAIL**
@@ -113,7 +113,7 @@ needs_human_help: { label: "Needs Help", color: "bg-orange-100 text-orange-700",
 
 ### BUG: VNC button won't render in dashboard
 
-**File:** `services/bot-manager/app/main.py:2038-2046`
+**File:** `services/meeting-api/app/main.py:2038-2046`
 **Issue:** Bot-manager stores `escalation.vnc_url = "/b/{token}"` but NOT `escalation.session_token = token`. Dashboard (`page.tsx:1589`) reads `escalation?.session_token` which is always `undefined`.
 **Fix:** Add `meeting_data['escalation']['session_token'] = session_token` after line 2044:
 ```python
@@ -133,8 +133,8 @@ meeting_data['escalation']['session_token'] = session_token  # <-- ADD THIS
 | All 3 admission files have checkEscalation | PASS |
 | utils.ts has callNeedsHumanHelpCallback | PASS |
 | schemas.py has NEEDS_HUMAN_HELP + valid transitions | PASS |
-| bot-manager handles needs_human_help callback | PASS |
-| bot-manager writes browser_session to Redis | PASS |
+| meeting-api handles needs_human_help callback | PASS |
+| meeting-api writes browser_session to Redis | PASS |
 | orchestrator_utils exposes port 6080 on meeting bots | PASS |
 | Dashboard vexa.ts has needs_human_help | PASS |
 | Dashboard page.tsx has escalation banner | PASS |

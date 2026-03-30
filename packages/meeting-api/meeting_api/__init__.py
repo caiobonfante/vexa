@@ -1,1 +1,1 @@
-"""Meeting API — Meeting domain extracted from bot-manager."""
+"""Meeting API — Meeting domain package."""

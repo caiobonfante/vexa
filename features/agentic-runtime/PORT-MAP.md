@@ -13,7 +13,7 @@ Generated: 2026-03-24. Update this file whenever ports or env vars change.
 | admin-api | 8001 | **8067** | `ADMIN_API_PORT` | User/token management; requires `X-Admin-API-Key` header |
 | agent-api | 8100 | **8100** | `CHAT_API_PORT` | Chat/agent sessions; requires `X-API-Key: BOT_API_TOKEN` |
 | runtime-api | 8090 | **8090** | `RUNTIME_API_PORT` | Container lifecycle; internal to compose network |
-| meeting-api | 8080 | (internal only) | — | Meeting bot orchestration + transcription collector (replaced bot-manager in Phase 4) |
+| meeting-api | 8080 | (internal only) | — | Meeting bot orchestration + transcription collector |
 | transcription-collector | 8000 | **8060** | `TC_PORT` | Transcript storage/retrieval; internal to compose network |
 | redis | 6379 | **6389** | `REDIS_PORT` | WARNING: host port is NOT 6379. Use 6389 from host. |
 | postgres | 5432 | **5458** | `POSTGRES_PORT` | WARNING: host port is NOT 5432. Use 5458 from host. |
@@ -34,14 +34,14 @@ All inter-service calls use **container names** (not localhost). Services are on
 | Caller | Target | URL Used | Token |
 |--------|--------|----------|-------|
 | api-gateway | admin-api | `http://admin-api:8001` | passes through user token |
-| api-gateway | meeting-api | `http://meeting-api:8080` | passes through user token (via `BOT_MANAGER_URL` legacy env var) |
+| api-gateway | meeting-api | `http://meeting-api:8080` | passes through user token (via `MEETING_API_URL` env var) |
 | meeting-api | agent-api | `http://agent-api:8100` | `POST_MEETING_HOOKS` webhook |
 | agent-api | runtime-api | `http://runtime-api:8090` | `BOT_API_TOKEN` |
 | telegram-bot | agent-api | `http://agent-api:8100` | no auth (internal) |
 | dashboard (Next.js server) | api-gateway | `http://localhost:8066` | user JWT token |
 | dashboard (Next.js server) | agent-api | `http://localhost:8100` | `AGENT_API_TOKEN` |
 | dashboard (Next.js server) | admin-api | `http://localhost:8067` | `VEXA_ADMIN_API_KEY` |
-| calendar-service | meeting-api | `http://meeting-api:8080` | `BOT_API_TOKEN` as `X-API-Key` (via `BOT_MANAGER_URL` legacy env var) |
+| calendar-service | meeting-api | `http://meeting-api:8080` | `BOT_API_TOKEN` as `X-API-Key` (via `MEETING_API_URL` env var) |
 | api-gateway | calendar-service | `http://calendar-service:8050` | passes through user token |
 
 ---
@@ -77,7 +77,7 @@ All inter-service calls use **container names** (not localhost). Services are on
 | Variable | Value in container | Source |
 |----------|--------------------|--------|
 | `ADMIN_API_URL` | `http://admin-api:8001` | hardcoded in compose |
-| `BOT_MANAGER_URL` | `http://meeting-api:8080` | Legacy name — points to meeting-api (replaced bot-manager in Phase 4) |
+| `MEETING_API_URL` | `http://meeting-api:8080` | Internal URL of meeting-api |
 | `TRANSCRIPTION_COLLECTOR_URL` | `http://transcription-collector:8000` | hardcoded in compose |
 | `MCP_URL` | `http://mcp:18888` | hardcoded in compose (mcp service not in stack) |
 | `REDIS_URL` | `redis://redis:6379/0` | hardcoded in compose |

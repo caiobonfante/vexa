@@ -26,10 +26,10 @@ Additional: `meeting_id` added to BrowserSessionConfig (types.ts:51), passed in 
 Implementation is **code-complete for regular bots**, broken for browser_session bots:
 - `packages/tts-service/` — Piper TTS, OpenAI-compatible `/v1/audio/speech` endpoint, ONNX voices, generates ~53KB WAV for "hello world" in <100ms
 - `services/vexa-bot/core/src/index.ts:470` — speak handler: subscribes to `bot_commands:meeting:{id}`, calls TTS, plays via `paplay --device=tts_sink`
-- `services/bot-manager/app/main.py:2889` — relays speak commands via Redis pub/sub
+- `packages/meeting-api/meeting_api/meetings.py` — relays speak commands via Redis pub/sub
 - `services/api-gateway/` — `POST /bots/{platform}/{native_meeting_id}/speak` returns 202
 
-TTS service is also used by collection runs (send-tts-bots), but that's a DIFFERENT code path — bots call TTS directly from their script. The speak API uses the full relay chain: client → gateway → bot-manager → Redis → bot → TTS → PulseAudio.
+TTS service is also used by collection runs (send-tts-bots), but that's a DIFFERENT code path — bots call TTS directly from their script. The speak API uses the full relay chain: client → gateway → meeting-api → Redis → bot → TTS → PulseAudio.
 
 ## Certainty Table
 
@@ -46,7 +46,7 @@ TTS service is also used by collection runs (send-tts-bots), but that's a DIFFER
 ## Bugs Found (3)
 
 ### Bug 1: Channel mismatch for browser_session bots
-- **bot-manager** publishes speak commands to `bot_commands:meeting:{id}` (main.py:2889)
+- **meeting-api** publishes speak commands to `bot_commands:meeting:{id}`
 - **browser-session.ts** subscribes to `browser_session:{container_name}` (line 202-221)
 - Commands are published but never received by browser_session bots
 - **Fix**: Subscribe browser_session to `bot_commands:meeting:{id}` in addition to its current channel
@@ -105,7 +105,7 @@ Same pattern at line 798 for speak_audio handler. Platform-specific — could be
 ## Bugs Found (4)
 
 ### Bug 1: Channel mismatch for browser_session bots
-- **bot-manager** publishes speak commands to `bot_commands:meeting:{id}` (main.py:2889)
+- **meeting-api** publishes speak commands to `bot_commands:meeting:{id}`
 - **browser-session.ts** subscribes to `browser_session:{container_name}` (line 202-221)
 - Commands are published but never received by browser_session bots
 - **Fix**: Subscribe browser_session to `bot_commands:meeting:{id}` in addition to its current channel

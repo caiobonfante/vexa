@@ -76,7 +76,7 @@ if (!CDP_URL) { console.error('CDP_URL required'); process.exit(1); }
   let joinUrl = 'https://app.zoom.us/wc/' + meetingId + '/join';
   if (pwd) joinUrl += '?pwd=' + pwd;
 
-  // Also build a standard invite URL for bot-manager
+  // Also build a standard invite URL for meeting-api
   let inviteUrl = 'https://zoom.us/j/' + meetingId;
   if (pwd) inviteUrl += '?pwd=' + pwd;
 

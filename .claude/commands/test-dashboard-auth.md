@@ -4,7 +4,7 @@ Goal: verify dashboard profile page shows scopes, name, last_used, expires for t
 
 ## Prerequisites
 
-- Agentic stack running (gateway on :8066, admin-api, bot-manager)
+- Agentic stack running (gateway on :8066, admin-api, meeting-api)
 - Dashboard accessible from the remote browser (see step 1)
 - Playwright installed in `services/dashboard/`
 

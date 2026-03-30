@@ -8,7 +8,7 @@ sources_checked: [vexa-github-issues, otter-ai-blog, fireflies-techcrunch, recal
 | Rank | Opportunity | Signal | Gap | Feasibility | Action |
 |------|------------|--------|-----|-------------|--------|
 | 1 | Zoom platform support | Very High — 3rd platform, 0 score, every competitor has it | Vexa is 0/complete; Recall, Fireflies, Otter all support it | Medium — bot infra exists, Zoom SDK compliance requires Marketplace review | Build new (0 → 60) |
-| 2 | Calendar integration (auto-join) | Very High — #1 enterprise ask, every competitor ships it | Vexa research-only; Recall.ai ships Calendar V2 API as core product | High — architecture researched, bot-manager POST /bots exists | Build new (0 → 60) |
+| 2 | Calendar integration (auto-join) | Very High — #1 enterprise ask, every competitor ships it | Vexa research-only; Recall.ai ships Calendar V2 API as core product | High — architecture researched, meeting-api POST /bots exists | Build new (0 → 60) |
 | 3 | Knowledge workspace entity extraction | High — "company memory" is the dominant market narrative in 2026 | Vexa has infra + template; pipeline from transcript → entities is missing | High — transcript pipeline exists, entity extraction is one new service | Improve existing (30 → 70) |
 | 4 | Chat validation (E2E test) | High — code-complete, 0 tested; speaking bot + chat = interactive agent | Competitors don't expose raw chat API; Vexa has competitive moat here | Very High — code exists, needs browser session E2E test | Improve existing (0 → 70) |
 | 5 | Speaking bot stability | High — 4 browser_session bugs block agentic use cases | MeetingBaaS ships speaking bots via Pipecat; Vexa has comparable capability | High — code exists, remote-browser needs work | Improve existing (70 → 90) |

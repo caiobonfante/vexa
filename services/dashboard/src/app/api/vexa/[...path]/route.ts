@@ -27,7 +27,7 @@ async function proxyRequest(
     const meetings: any[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Active bots from api-gateway → bot-manager
+    // 1. Active bots from api-gateway → meeting-api
     try {
       const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
         headers: { "X-API-Key": VEXA_API_KEY },

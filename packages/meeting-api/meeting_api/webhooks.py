@@ -1,7 +1,7 @@
 """Webhook delivery — thin wrapper over meeting_api.webhook_delivery.
 
 Preserves the exact HMAC signing algorithm, envelope format, and header
-contracts from bot-manager. See tests/contracts/test_webhook_contracts.py.
+contracts from the original bot-manager (frozen). See tests/contracts/test_webhook_contracts.py.
 
 Webhook config (webhook_url, webhook_secret, webhook_events) is now read
 from meeting.data, stored at creation time by the POST /bots endpoint.

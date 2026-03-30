@@ -1,6 +1,6 @@
 """/recordings/* and /internal/recordings/upload endpoints.
 
-Recording management — same paths and response shapes as bot-manager.
+Recording management — /recordings/* and /internal/recordings/upload endpoints.
 """
 
 import asyncio

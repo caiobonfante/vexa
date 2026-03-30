@@ -57,7 +57,7 @@ This is the critical verification — recording time, segment times, and playbac
 
 ```
 api-gateway      :8056   must be healthy
-meeting-api      :8080   must be healthy (includes bot-manager + collector)
+meeting-api      :8080   must be healthy (includes meeting + collector)
 transcription-lb :8085   must be healthy
 postgres         :5438   must be accessible
 minio            :9000   must be accessible

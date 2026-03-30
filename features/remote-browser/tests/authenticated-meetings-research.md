@@ -24,8 +24,8 @@
   }
   ```
 
-#### 3. Bot-manager passes authenticated config to bot container
-- When `req.authenticated=true`, bot-manager reads `user.data.browser_userdata`
+#### 3. Meeting-api passes authenticated config to bot container
+- When `req.authenticated=true`, meeting-api reads `user.data.browser_userdata`
 - If metadata exists, builds `authenticated_extra_config`:
   ```json
   {
@@ -74,7 +74,7 @@ When `authenticated=true` but the saved browser profile has expired cookies or t
 
 ```
 STEP 1: POST /bots { mode: "browser_session" }
-  └─ bot-manager creates container, Redis session, returns VNC URL
+  └─ meeting-api creates container, Redis session, returns VNC URL
   └─ browser-session.ts: syncBrowserDataFromS3() → launchPersistentContext()
   STATUS: EXISTS ✓
 
@@ -89,7 +89,7 @@ STEP 3: User triggers save (POST /bots/{id}/storage/save)
   STATUS: EXISTS ✓
 
 STEP 4: POST /bots { platform: "google_meet", meeting_url: "...", authenticated: true }
-  └─ bot-manager reads user.data.browser_userdata → builds authenticated_extra_config
+  └─ meeting-api reads user.data.browser_userdata → builds authenticated_extra_config
   └─ Passes to start_bot_container() → BOT_CONFIG includes S3 creds + path
   STATUS: EXISTS ✓ (config passed)
 

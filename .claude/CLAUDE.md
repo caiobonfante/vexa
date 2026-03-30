@@ -22,6 +22,10 @@ Read these before starting work. These are lessons from past failures.
 
 **G3: CLAUDE.md changes don't reach running sessions.** If framework rules are updated mid-session, restart the session to pick them up.
 
+**G4: "Cleanup" missions still need functional DoD.** A rename/refactor that touches live wiring (env vars, proxy routes, service URLs) can break every route. Grep-clean != working. If the mission touches anything that carries traffic at runtime, the DoD must include curl/deploy verification of the affected routes. (2026-03-30: agent wrote mission with DoD = "grep returns clean + compose config validates", reported 90/100. Human caught it — grep would pass even if all 20 proxy routes returned 502.)
+
+**G5: Don't default to fallbacks — clean-cut renames, not shims.** When renaming env vars, config keys, or service references, replace everywhere. Don't propose `NEW_VAR or OLD_VAR` backward-compat logic unless the user explicitly asks for a transition period. Fallbacks add complexity, mask incomplete migrations, and keep dead names alive. The only things that survive a rename are frozen external contracts (API paths, token issuers, wire protocols that external clients depend on). (2026-03-30: agent proposed BOT_MANAGER_URL fallback in mission DoD — user corrected: "no fallbacks, bot-manager is dead, we hate fallbacks unless explicitly a design choice.")
+
 ## Deep Reference
 
 Full confidence framework paper with math model, research citations, and changelog: `.claude/confidence-framework.md`

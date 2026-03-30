@@ -36,7 +36,7 @@ _redis_client: Any = None
 def set_redis_client(client: Any) -> None:
     """Set the module-level Redis client for durable webhook delivery.
 
-    Call this once at application startup (e.g. in bot-manager's
+    Call this once at application startup (e.g. in meeting-api's
     startup_event) so that all ``deliver()`` calls automatically get
     Redis-backed retry without needing to pass the client explicitly.
     """

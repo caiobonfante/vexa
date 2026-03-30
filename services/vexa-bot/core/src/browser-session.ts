@@ -157,7 +157,7 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
     await publisher.connect();
 
     // Bug 1 fix: also subscribe to the bot_commands meeting channel so speak
-    // commands published by bot-manager reach browser_session containers.
+    // commands published by meeting-api reach browser_session containers.
     const meetingChannelName = config.meeting_id
       ? `bot_commands:meeting:${config.meeting_id}`
       : null;

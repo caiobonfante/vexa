@@ -4,7 +4,7 @@ import os
 
 # Set required env vars BEFORE importing main (it validates at import time)
 os.environ.setdefault("ADMIN_API_URL", "http://admin-api:8000")
-os.environ.setdefault("BOT_MANAGER_URL", "http://bot-manager:8000")
+os.environ.setdefault("MEETING_API_URL", "http://meeting-api:8000")
 os.environ.setdefault("TRANSCRIPTION_COLLECTOR_URL", "http://transcription-collector:8000")
 os.environ.setdefault("MCP_URL", "http://mcp:18888")
 

@@ -4,7 +4,7 @@ Command: `CDP_URL=<cdp_url> node features/realtime-transcription/scripts/teams-h
 Output: MEETING_URL, NATIVE_MEETING_ID, MEETING_PASSCODE to stdout. Updates .env.
 Then: auto-admit runs within the script (Teams auto-admit via lobby click).
 Needs:
-  - Browser session with CDP access (create via bot-manager POST /sessions)
+  - Browser session with CDP access (create via meeting-api POST /sessions)
   - Microsoft account signed in via VNC (one-time human step)
   - Full stack running
 Dead ends: none known — more reliable than GMeet hosting.

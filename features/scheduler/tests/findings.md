@@ -47,10 +47,10 @@ Redis is exposed on host port 6389 (`REDIS_URL=redis://localhost:6389`). The "bl
 | `test_scheduler.py` (unit) | 16/16 pass |
 | E2E validation | 6/6 pass (inline test) |
 | REST endpoints | Not started |
-| Wired into bot-manager | Not started |
+| Wired into meeting-api | Not started |
 
 ## Next steps
 
-1. Wire executor into bot-manager startup (background task)
+1. Wire executor into meeting-api startup (background task)
 2. Add REST API endpoints (POST/GET/DELETE /schedule)
 3. Fix test-scheduler-e2e.sh (lrange → hget for history)

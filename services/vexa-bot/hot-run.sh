@@ -2,7 +2,7 @@
 # Run vexa-bot hot (no Docker) for fast iteration.
 #
 # Usage:
-#   1. Start a meeting from dashboard as normal — bot-manager launches container
+#   1. Start a meeting from dashboard as normal — meeting-api launches container
 #   2. Grab config: ./hot-run.sh grab <container-name>
 #   3. Stop the container: docker stop <container-name>
 #   4. Run hot: ./hot-run.sh run
@@ -53,11 +53,11 @@ case "${1:-}" in
     export BOT_CONFIG=$(python3 -c "
 import json, sys
 c = json.loads('$BOT_CONFIG')
-# Fix URLs: bot-manager is on localhost, not Docker hostname
+# Fix URLs: meeting-api is on localhost, not Docker hostname
 if 'botManagerCallbackUrl' in c:
-    c['botManagerCallbackUrl'] = c['botManagerCallbackUrl'].replace('bot-manager:8080', 'localhost:8090')
+    c['botManagerCallbackUrl'] = c['botManagerCallbackUrl'].replace('meeting-api:8080', 'localhost:8090')
 if 'recordingUploadUrl' in c:
-    c['recordingUploadUrl'] = c['recordingUploadUrl'].replace('bot-manager:8080', 'localhost:8090')
+    c['recordingUploadUrl'] = c['recordingUploadUrl'].replace('meeting-api:8080', 'localhost:8090')
 if 'redisUrl' in c:
     c['redisUrl'] = c['redisUrl'].replace('redis:6379', 'localhost:6399')
 if not c.get('transcriptionServiceUrl'):

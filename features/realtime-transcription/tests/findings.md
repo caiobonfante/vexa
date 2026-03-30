@@ -12,7 +12,7 @@
 | Segments persist to Postgres | 90 | Meeting 40: 57 segments in Postgres, Redis Hash cleaned (0). Full lifecycle: XADD→HSET→Postgres→HDEL verified. | 2026-03-24 | -- |
 | Persistence lifecycle (stream→hash→pg→cleanup) | 80 | Meeting 40: 522 stream entries, 57 in Postgres, Redis Hash 0 (cleaned by db_writer). All completed=true. | 2026-03-24 | Verify during active meeting: pending segments visible in REST before db_writer flush, then completed after |
 | REST delivers pending segments | 50 | REST merges Redis Hash + Postgres. Bot only XADDs completed segments — no pending in XADD path. Pending/draft only via WS PUBLISH. REST has no pending segments to deliver. | 2026-03-24 | Verify: during active meeting, are there ever completed=false segments in REST? If not, is this correct behavior or a gap? |
-| Duplicate bot prevention | 90 | bot-manager enforces: same user + platform + native_meeting_id + non-terminal status → 409 Conflict. Race condition handled via SELECT FOR UPDATE on user row. | 2026-03-24 | -- |
+| Duplicate bot prevention | 90 | meeting-api enforces: same user + platform + native_meeting_id + non-terminal status → 409 Conflict. Race condition handled via SELECT FOR UPDATE on user row. | 2026-03-24 | -- |
 | Pipeline replay (capture) | 100 | 17/17 utterances captured in production-replay | 2026-03-21 | -- |
 | Pipeline replay (attribution) | 100 | 17/17 correct speaker in production-replay | 2026-03-21 | -- |
 | Live speaker attribution (Teams) | 90 | 3/3 speakers correct in live 3-speaker test, 7/7 in 9-speaker test | 2026-03-21 | -- |

@@ -10,7 +10,7 @@
 
 Vexa already has **significant Zoom code** in the codebase — more than the "score 0" suggests. There are two complete implementation paths:
 
-1. **Zoom Web (Playwright)** — fully implemented, compiled, and infrastructure-routed. PR #181 code is merged into `vexa-bot:dev`. ZOOM_WEB=true confirmed working in bot-manager. Needs real meeting testing only.
+1. **Zoom Web (Playwright)** — fully implemented, compiled, and infrastructure-routed. PR #181 code is merged into `vexa-bot:dev`. ZOOM_WEB=true confirmed working in meeting-api. Needs real meeting testing only.
 2. **Zoom Native SDK** — code exists with stub mode. Requires proprietary SDK binaries + Marketplace approval.
 
 A third path exists externally:
@@ -26,7 +26,7 @@ A third path exists externally:
 | Dimension | Browser Web Client (Playwright) | Native Meeting SDK | RTMS SDK | Zoom Web SDK |
 |-----------|-------------------------------|-------------------|----------|-------------|
 | **Code exists in repo** | YES — complete: join, admission, recording, leave, removal, selectors | YES — with stub mode, native wrapper | NO | NO |
-| **Infrastructure ready** | YES — ZOOM_WEB=true in compose, bot-manager routes correctly | Partial — SDK binaries not present | NO | NO |
+| **Infrastructure ready** | YES — ZOOM_WEB=true in compose, meeting-api routes correctly | Partial — SDK binaries not present | NO | NO |
 | **Bot visible in meeting** | Yes (browser participant) | Yes (SDK participant) | NO — invisible, server-side | Yes (Web SDK participant) |
 | **Audio capture** | PulseAudio (parecord from zoom_sink.monitor) | SDK raw audio API (per-participant PCM) | WebSocket stream (PCM 16-bit, configurable sample rate) | Limited — no raw audio access documented |
 | **Speaker detection** | DOM polling (active speaker CSS class) | SDK onActiveSpeakerChange callback | Per-participant audio channels + transcript with speaker attribution | Unknown |
@@ -65,8 +65,8 @@ All code exists at `services/vexa-bot/core/src/platforms/zoom/web/`:
 ### Infrastructure routing (already working)
 
 ```
-docker-compose.yml: ZOOM_WEB=true (in bot-manager env)
-bot-manager: detects ZOOM_WEB=true, passes to container, logs "using Playwright web client"
+docker-compose.yml: ZOOM_WEB=true (in meeting-api env)
+meeting-api: detects ZOOM_WEB=true, passes to container, logs "using Playwright web client"
 vexa-bot: process.env.ZOOM_WEB === 'true' routes to handleZoomWeb() instead of native SDK
 entrypoint.sh: Xvfb + PulseAudio + zoom_sink already configured
 ```
@@ -134,7 +134,7 @@ Code exists at `services/vexa-bot/core/src/platforms/zoom/`:
 2. **Marketplace review required** — 4-6 weeks for approval to join external meetings
 3. **OBF token enforcement** (March 2, 2026) — bot joining external meetings needs OBF token, requiring:
    - User completes Zoom OAuth in dashboard
-   - bot-manager mints OBF token via `GET /v2/users/me/token?type=onbehalf`
+   - meeting-api mints OBF token via `GET /v2/users/me/token?type=onbehalf`
    - Authorizing user must be **present in the meeting** while bot is active
 4. **Linux x86_64 only** — SDK is platform-specific
 
@@ -229,7 +229,7 @@ New service: zoom-rtms-bridge
   - No browser, no bot container, no PulseAudio
 
 Changes needed:
-  - bot-manager: new "rtms" mode alongside "browser" and "sdk"
+  - meeting-api: new "rtms" mode alongside "browser" and "sdk"
   - api-gateway: webhook endpoint for Zoom
   - New service: zoom-rtms-bridge (Node.js)
   - User flow: Zoom OAuth + RTMS consent
@@ -331,8 +331,8 @@ If CAPTCHA blocks step 4, investigate:
 | `services/vexa-bot/core/src/platforms/zoom/web/*` | All 8 modules (join, admission, prepare, recording, leave, removal, selectors, index) |
 | `services/vexa-bot/core/src/platforms/zoom/index.ts` | Routes to web path when `ZOOM_WEB=true` |
 | `services/vexa-bot/core/entrypoint.sh` | Xvfb, PulseAudio, zoom_sink already configured |
-| `services/bot-manager/app/orchestrator_utils.py` | Detects `ZOOM_WEB=true`, passes to container |
-| `features/agentic-runtime/deploy/docker-compose.yml` | `ZOOM_WEB=true` in bot-manager env |
+| `packages/meeting-api/meeting_api/orchestrator_utils.py` | Detects `ZOOM_WEB=true`, passes to container |
+| `features/agentic-runtime/deploy/docker-compose.yml` | `ZOOM_WEB=true` in meeting-api env |
 
 ### May need changes (based on testing)
 
@@ -341,14 +341,14 @@ If CAPTCHA blocks step 4, investigate:
 | `services/vexa-bot/core/src/platforms/zoom/web/selectors.ts` | Selector updates if Zoom DOM changed |
 | `services/vexa-bot/core/src/platforms/zoom/web/join.ts` | CAPTCHA handling if encountered |
 | `services/vexa-bot/core/src/platforms/zoom/web/recording.ts` | Speaker detection tuning based on real meeting behavior |
-| `services/bot-manager/app/orchestrator_utils.py` | Zoom-specific container config (memory, timeout) if needed |
+| `packages/meeting-api/meeting_api/orchestrator_utils.py` | Zoom-specific container config (memory, timeout) if needed |
 
 ### For RTMS path (future)
 
 | Component | Changes |
 |-----------|---------|
 | New service: `zoom-rtms-bridge` | Webhook receiver + RTMS client + audio pipeline |
-| `services/bot-manager/app/main.py` | New "rtms" mode for Zoom bots |
+| `packages/meeting-api/meeting_api/meetings.py` | New "rtms" mode for Zoom bots |
 | `services/api-gateway` | Webhook endpoint for Zoom `meeting.rtms_started` |
 | Dashboard OAuth | Additional RTMS scopes in Zoom app configuration |
 
@@ -359,7 +359,7 @@ If CAPTCHA blocks step 4, investigate:
 ### For Browser Web Client (Phase 1)
 
 - [x] ZOOM_WEB=true in docker-compose.yml
-- [x] Bot-manager routes Zoom to web path
+- [x] Meeting-api routes Zoom to web path
 - [x] vexa-bot:dev image has compiled zoom/web/ modules
 - [x] PulseAudio + zoom_sink configured in entrypoint.sh
 - [ ] Real Zoom meeting URL for testing

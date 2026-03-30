@@ -37,8 +37,8 @@ spec:
           env:
             - name: ADMIN_API_URL
               value: "http://{{ include "vexa.componentName" (list . "admin-api") }}:{{ .Values.adminApi.service.port }}"
-            - name: BOT_MANAGER_URL
-              value: "http://{{ include "vexa.componentName" (list . "transcription-collector") }}:{{ .Values.transcriptionCollector.service.port }}"
+            - name: MEETING_API_URL
+              value: "http://{{ include "vexa.componentName" (list . "meeting-api") }}:{{ .Values.meetingApi.service.port }}"
             - name: TRANSCRIPTION_COLLECTOR_URL
               value: "http://{{ include "vexa.componentName" (list . "transcription-collector") }}:{{ .Values.transcriptionCollector.service.port }}"
             - name: MCP_URL

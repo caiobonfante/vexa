@@ -9,7 +9,7 @@ services:
       - "${API_GATEWAY_HOST_PORT:-8056}:8000"
     environment:
       - ADMIN_API_URL=http://admin-api:8001
-      - BOT_MANAGER_URL=http://meeting-api:8080
+      - MEETING_API_URL=http://meeting-api:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - MCP_URL=http://mcp:18888
       - AGENT_API_URL=${AGENT_API_URL:-}

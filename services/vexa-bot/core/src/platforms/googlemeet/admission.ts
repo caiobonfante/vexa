@@ -125,7 +125,7 @@ export async function waitForGoogleMeetingAdmission(
       await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-4-waiting-room.png', fullPage: true });
       log("📸 Screenshot taken: Bot confirmed in waiting room");
       
-      // --- Call awaiting admission callback to notify bot-manager that bot is waiting ---
+      // --- Call awaiting admission callback to notify meeting-api that bot is waiting ---
       try {
         await callAwaitingAdmissionCallback(botConfig);
         log("Awaiting admission callback sent successfully");

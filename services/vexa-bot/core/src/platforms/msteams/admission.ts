@@ -130,7 +130,7 @@ export async function waitForTeamsMeetingAdmission(
       log("Waiting 1 second to ensure joining callback is processed before sending awaiting_admission...");
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // --- Call awaiting admission callback to notify bot-manager that bot is waiting ---
+      // --- Call awaiting admission callback to notify meeting-api that bot is waiting ---
       try {
         await callAwaitingAdmissionCallback(botConfig);
         log("Awaiting admission callback sent successfully");

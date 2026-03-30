@@ -9,7 +9,7 @@ When an entry contains ``metadata.meeting_id``, the worker updates the
 meeting's ``data.webhook_delivery`` JSONB field on terminal outcomes
 (delivered or permanently failed/expired).
 
-Usage (inside bot-manager startup)::
+Usage (inside meeting-api startup)::
 
     from meeting_api.webhook_retry_worker import start_retry_worker, stop_retry_worker
 
@@ -54,7 +54,7 @@ _session_factory: Optional[Callable] = None
 def set_session_factory(factory: Callable) -> None:
     """Set the async session factory for DB writes in the retry worker.
 
-    Call this once at application startup (e.g. in bot-manager's
+    Call this once at application startup (e.g. in meeting-api's
     startup_event) so the retry worker can update meeting records.
 
     Args:

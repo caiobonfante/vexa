@@ -302,7 +302,7 @@ These terms are used consistently across all feature docs. Use them by name.
 
 ## Features vs services
 
-**Services** (`services/`) are infrastructure — a transcription service, an API gateway, a bot manager. They exist to be composed. A service doesn't know why it's being called.
+**Services** (`services/`) are infrastructure — a transcription service, an API gateway, a meeting API. They exist to be composed. A service doesn't know why it's being called.
 
 **Features** (`features/`) are the reason services exist. A feature like `realtime-transcription` orchestrates speaker-streams, transcription-client, segment-publisher, speaker-mapper, transcription-collector, and api-gateway into a pipeline that does something a user cares about: live speaker-attributed transcription.
 
@@ -312,7 +312,7 @@ features/                          services/
     google-meet/             USES    transcription-service/
     ms-teams/                USES    transcription-collector/
     zoom/                    USES    api-gateway/
-  speaking-bot/              USES    tts-service/, vexa-bot/, bot-manager/
+  speaking-bot/              USES    tts-service/, vexa-bot/, meeting-api/
   browser-control/           USES    vexa-bot/ (CDP, PulseAudio)
   ...
 ```
@@ -812,7 +812,7 @@ MIN_AUDIO_DURATION=3
 | redis | 7.0-alpine | PING | PONG |
 | postgres | 17-alpine | SELECT 1 | ok |
 | tts-service | piper, en_US-lessac-medium | GET /health | 200 OK |
-| bot-manager | vexa-bot-restore:dev | GET /health | 200 OK |
+| meeting-api | meeting-api:latest | GET /health | 200 OK |
 
 ### Smoke test
 Sent: "Hello world" via TTS → pipeline → confirmed segment

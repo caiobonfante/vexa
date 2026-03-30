@@ -1,6 +1,6 @@
 """Post-meeting tasks — aggregation, webhooks, hooks.
 
-Replaces bot-manager/app/tasks/bot_exit_tasks/ with a single module.
+Post-meeting aggregation, webhooks, and hooks.
 Same logic, same webhook payloads.
 """
 
@@ -103,7 +103,7 @@ async def fire_post_meeting_hooks(meeting: Meeting, db: AsyncSession):
 async def run_all_tasks(meeting_id: int):
     """Run all post-meeting tasks for a given meeting_id.
 
-    Creates its own DB session (same pattern as bot-manager).
+    Creates its own DB session.
     """
     logger.info(f"Starting post-meeting tasks for meeting {meeting_id}")
 

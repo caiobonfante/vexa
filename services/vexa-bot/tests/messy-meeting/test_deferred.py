@@ -6,7 +6,7 @@ Simulates the full post-meeting flow:
 1. Mix per-speaker WAVs into one combined recording (like MediaRecorder)
 2. Generate speaker_events with timestamps (like __vexaSpeakerEvents)
 3. POST combined recording to transcription-service (deferred path)
-4. Map speakers to segments using timestamp overlap (like bot-manager)
+4. Map speakers to segments using timestamp overlap (like meeting-api)
 5. Validate: keyword attribution, cross-contamination, hallucinations
 
 This tests: recording → deferred transcription → speaker mapping
@@ -131,7 +131,7 @@ def transcribe_combined(wav_path: Path) -> dict:
     return resp.json()
 
 
-# ─── Step 4: Map speakers to segments (replicate bot-manager logic) ───────────
+# ─── Step 4: Map speakers to segments (replicate meeting-api logic) ───────────
 
 def map_speakers_to_segments(
     speaker_events: list[dict],
@@ -139,7 +139,7 @@ def map_speakers_to_segments(
 ) -> list[dict]:
     """Map speaker names to transcription segments using timestamp overlap.
 
-    Replicates bot-manager/app/main.py:_map_speakers_to_segments()
+    Replicates meeting_api.meetings:_map_speakers_to_segments()
     """
     # Build time ranges per speaker
     speaker_ranges: dict[str, list[tuple[int, int]]] = {}

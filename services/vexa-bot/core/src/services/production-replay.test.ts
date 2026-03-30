@@ -81,7 +81,7 @@ async function createReplayMeeting(dataset: string): Promise<{ meetingId: number
   // Must be a valid 13-digit numeric Teams native ID for WS authorize-subscribe validation
   const nativeMeetingId = process.env.NATIVE_MEETING_ID || `${Date.now()}`.slice(0, 13);
 
-  // Create meeting directly in DB (bypasses bot-manager which tries to launch a real bot)
+  // Create meeting directly in DB (bypasses meeting-api which tries to launch a real bot)
   const http = await import('http');
   const adminResp = await new Promise<any>((resolve, reject) => {
     const data = JSON.stringify({ email: 'test@vexa.ai', name: 'Test User' });

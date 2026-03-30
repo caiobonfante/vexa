@@ -217,7 +217,7 @@ These are obfuscated Google Meet class names. They change with UI updates — `s
 ### How to Test (fully autonomous)
 
 1. Ensure compose stack is running
-2. Create a browser session: `POST /sessions` to bot-manager
+2. Create a browser session: `POST /sessions` to meeting-api
 3. Host a Google Meet:
    ```bash
    CDP_URL=<cdp_url> node features/realtime-transcription/scripts/gmeet-host-auto.js

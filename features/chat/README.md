@@ -22,7 +22,7 @@ This feature enables the bot to observe meeting chat messages and inject message
 ### Components
 
 - **vexa-bot**: observes the meeting chat DOM for new messages, injects messages into the DOM
-- **meeting-api**: relays chat commands between API and bot (replaced bot-manager in Phase 4 refactoring)
+- **meeting-api**: relays chat commands between API and bot via Redis pub/sub
 - **api-gateway**: exposes chat endpoints (POST to send, GET to read)
 
 ### Data flow

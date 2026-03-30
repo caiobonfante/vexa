@@ -5,7 +5,7 @@ Output: bot joins meeting, speaks the text, captures audio
 Needs:
   - Live meeting URL (from host-gmeet-meeting or host-teams-meeting tool)
   - API token with bot scope
-  - bot-manager running
+  - meeting-api running
   - TTS service running (for bot speech generation)
   - Meeting must have auto-admit running or bot will wait in lobby
 For scripted multi-bot conversations: use collection manifest (features/realtime-transcription/tests/collection-manifest-*.md) which defines utterances, speakers, timing.

@@ -2,12 +2,12 @@
 
 ## Executive Summary
 
-Refactor Vexa from a tangled monolith (bot-manager doing 5 jobs) into a clean layered architecture with two clear boundaries:
+Refactor Vexa from a tangled monolith (original bot-manager doing 5 jobs) into a clean layered architecture with two clear boundaries:
 
 - **Domain layer**: Meeting API, Agent API, Admin API — business logic, no container knowledge
 - **Infrastructure layer**: Runtime API — generic container orchestration, no meeting/agent knowledge
 
-Bot-manager is deleted. Its orchestration code merges into Runtime API. Its meeting domain code becomes Meeting API.
+Bot-manager was deleted. Its orchestration code merged into Runtime API. Its meeting domain code became Meeting API.
 
 **Decision: Build, not buy.** Research across 10 alternatives (Nomad, Knative, Fly Machines, Temporal, Argo, KEDA, Modal, E2B, K8s Jobs, serverless) confirms domain-specific requirements kill generic solutions. Recall.ai (8M EC2 instances/month) built fully custom, validating this approach.
 
@@ -244,7 +244,7 @@ profiles = {
 - Per-user, per-profile limits (configurable)
 - Checked at creation time, rejected with 429 if exceeded
 
-**What merges in from bot-manager:**
+**What merged in from bot-manager:**
 - `orchestrators/kubernetes.py` → K8s backend
 - `orchestrators/process.py` → process backend
 - GPU passthrough logic from `orchestrator_utils.py`
@@ -260,9 +260,9 @@ profiles = {
 
 **Purpose:** Meeting lifecycle, voice agent control, recordings, webhooks. Uses Runtime API for all container operations.
 
-**Port:** 8080 (inherits from bot-manager)
+**Port:** 8080 (inherited from bot-manager)
 
-**Constraint: all existing endpoint paths are preserved.** Gateway routes `/bots/*` to this service exactly as it routes to bot-manager today.
+**Constraint: all existing endpoint paths are preserved.** Gateway routes `/bots/*` to meeting-api (previously bot-manager).
 
 **Public Endpoints (unchanged paths):**
 
@@ -299,7 +299,7 @@ POST   /bots/internal/callback/admission         Bot admission event
 POST   /internal/recordings/upload               Recording upload from bot
 ```
 
-**What moves here from bot-manager:**
+**What moved here from bot-manager:**
 - Meeting CRUD (`POST /bots` → `POST /meetings`)
 - Status state machine (requested → joining → awaiting_admission → active → completed)
 - Voice agent endpoints (/speak, /chat, /screen, /avatar)
@@ -337,8 +337,8 @@ No changes. Already clean.
 **Routing (all paths unchanged):**
 
 ```
-/bots/*         → Meeting API (8080)      # was bot-manager, now meeting-api
-/recordings/*   → Meeting API (8080)      # was bot-manager
+/bots/*         → Meeting API (8080)      # was bot-manager, now meeting-api (done)
+/recordings/*   → Meeting API (8080)      # was bot-manager (done)
 /admin/*        → Admin API (8001)        # unchanged
 /api/chat/*     → Agent API (8100)        # unchanged
 /transcripts/*  → Transcription Collector (8002)  # unchanged
@@ -411,7 +411,7 @@ services/
 ├── admin-api/                # Users, tokens, analytics
 ├── meeting-api/              # NEW — meetings, recordings, webhooks, voice agent
 ├── agent-api/                # Chat, workspaces, scheduling
-├── runtime-api/              # EXPANDED — generic CaaS (absorbs bot-manager orchestration)
+├── runtime-api/              # EXPANDED — generic CaaS (absorbed bot-manager orchestration)
 ├── transcription-service/    # Whisper API
 ├── transcription-collector/  # Redis → DB pipeline
 ├── tts-service/              # Text-to-speech
@@ -424,7 +424,7 @@ services/
 └── transcript-rendering/     # TypeScript library
 
 DELETED:
-├── bot-manager/              # Split into meeting-api + runtime-api
+├── bot-manager/              # DELETED — split into meeting-api + runtime-api
 └── containers/               # Moved to services/vexa-agent/
 ```
 
@@ -485,16 +485,16 @@ No big bang rewrite. Extract piece by piece while production keeps running.
 
 **Validation:** `POST /containers {profile: "meeting", config: {...}}` spawns a working meeting bot.
 
-**Safety:** Feature toggle in bot-manager. Both paths run, compare results.
+**Safety:** Feature toggle. Both paths run, compare results.
 
 ### Phase 2: Create Meeting API
 
 **Goal:** New service owns all meeting domain logic. Same endpoint paths.
 
 1. Create `services/meeting-api/`
-2. Move endpoints from bot-manager: `/bots/*`, recordings, webhooks, voice agent
+2. Move endpoints from bot-manager to meeting-api: `/bots/*`, recordings, webhooks, voice agent
 3. Meeting API calls Runtime API for container operations
-4. API Gateway changes one line: proxy `/bots/*` target from bot-manager:8080 → meeting-api:8080
+4. API Gateway: proxy `/bots/*` target from bot-manager:8080 → meeting-api:8080
 5. External clients see zero change
 
 **Validation:** Full meeting lifecycle works through Meeting API → Runtime API. Same curl commands, same responses.
@@ -557,28 +557,27 @@ Three independent devil's advocate reviews (infrastructure, code, product) ident
 ### Blockers
 
 **1. Hardcoded callback URLs in bot containers**
-Bot containers have `http://bot-manager:8080/bots/internal/callback/exited` baked into BOT_CONFIG at spawn time. After refactoring, bot-manager is gone.
+Bot containers had `http://bot-manager:8080/bots/internal/callback/exited` baked into BOT_CONFIG at spawn time. After refactoring, bot-manager is gone — meeting-api handles callbacks.
 **Fix:** Runtime API accepts `callback_url` as a parameter at container creation. Meeting API passes its own URL. No hardcoded service names in container config.
 
 **2. Dashboard depends on exact `/bots/status` response shape**
 Dashboard merges `/bots/status` (running_bots with container_name, meeting_id_from_name, etc.) with `/meetings`. The admin page also uses it. Auth verification calls it.
 **Fix:** Meeting API must return identical response shape. Write contract tests before Phase 2.
 
-**3. Calendar service hardcoded to `bot-manager:8080`**
-`services/calendar-service/app/sync.py` calls `POST {BOT_MANAGER_URL}/bots` directly, bypassing gateway. Default hostname is `bot-manager`. Fails silently when DNS name disappears.
+**3. Calendar service** (resolved)
+`services/calendar-service/app/sync.py` calls `POST {MEETING_API_URL}/bots` directly. Default hostname is `meeting-api`.
 **Fix:** Route calendar-service through API gateway, or update env var. Add startup health check.
 
 **4. Redis channel names are frozen contracts**
 Three publishers use specific channel prefixes that gateway WebSocket handler subscribes to:
-- `bm:meeting:{id}:status` (bot-manager → must stay `bm:`)
+- `bm:meeting:{id}:status` (meeting-api → `bm:` prefix is frozen)
 - `tc:meeting:{id}:mutable` (transcription-collector)
 - `va:meeting:{id}:chat` (vexa-bot)
 Agent API also subscribes to `bm:meeting:*:status` for agent wake-up.
 **Fix:** Document as frozen. Meeting API publishes to same `bm:` prefix with same payload shapes.
 
 **5. Phase 2 in-flight meetings span the cutover**
-Bots launched by bot-manager callback to `http://bot-manager:8080`. After gateway switches to meeting-api, bot-manager still receives callbacks but users query meeting-api (which has no record).
-**Fix:** Either drain all in-flight meetings before cutover, or make meeting-api handle bot-manager-originated callbacks (read same DB, accept same callback paths).
+Bots previously called back to `http://bot-manager:8080`. After cutover, meeting-api handles all callbacks directly (resolved — same DB, same callback paths).
 
 ### High Priority (design before Phase 1)
 

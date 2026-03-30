@@ -36,7 +36,7 @@ export interface SegmentPublisherConfig {
   redisUrl: string;
   /** Internal meeting ID (numeric) */
   meetingId: string;
-  /** MeetingToken JWT (HS256, signed by bot-manager) */
+  /** MeetingToken JWT (HS256, signed by meeting-api) */
   token: string;
   /** Session UID (connectionId from bot config) */
   sessionUid: string;

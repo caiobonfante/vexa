@@ -50,7 +50,7 @@ export async function callStatusChangeCallback(
   speakerEvents?: any[]
 ): Promise<void> {log(`🔥 UNIFIED CALLBACK: ${status.toUpperCase()} - reason: ${reason || 'none'}`);
   
-  if (!botConfig.botManagerCallbackUrl) {log("Warning: No bot manager callback URL configured. Cannot send status change callback.");
+  if (!botConfig.botManagerCallbackUrl) {log("Warning: No callback URL configured. Cannot send status change callback.");
     return;
   }
 

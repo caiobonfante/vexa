@@ -29,7 +29,7 @@ Different audio sources, different delivery mechanisms. No conflict.
 
 **Upload**: `performGracefulLeave()` calls `activeRecordingService.upload(recordingUploadUrl, token)` with multipart form + metadata (meeting_id, session_uid, format, duration, file_size).
 
-**Remaining risk (5%)**: If `botConfig.recordingUploadUrl` is not configured, upload silently skips. Verify meeting-api passes this field.
+**Remaining risk (5%)**: If `botConfig.recordingUploadUrl` is not configured, upload silently skips. Verify meeting-api passes this field in BOT_CONFIG.
 
 ### Speaker event collection — VERIFIED INTACT (confidence: 95%)
 
@@ -49,7 +49,7 @@ Different audio sources, different delivery mechanisms. No conflict.
 6. Close connections & exit
 ```
 
-**Meeting-api persistence** (`main.py`): Receives `speaker_events` in `BotStatusChangePayload`, writes to `meeting.data['speaker_events']` with `flag_modified`.
+**Meeting-api persistence** (`meetings.py`): Receives `speaker_events` in `BotStatusChangePayload`, writes to `meeting.data['speaker_events']` with `flag_modified`.
 
 **All three platforms**: Google Meet, Teams (both via `window.__vexaSpeakerEvents`), Zoom (via `getZoomSpeakerEvents()` module function).
 
@@ -76,7 +76,7 @@ if segment_speaker:
 
 ### Post-meeting speaker mapping
 
-`bot-manager/app/main.py:_map_speakers_to_segments()`:
+`packages/meeting-api/meeting_api/post_meeting.py:_map_speakers_to_segments()`:
 1. Read `meeting.data.speaker_events` array
 2. Build time ranges per speaker: `{name: [[start_ms, end_ms], ...]}`
 3. For each deferred segment, find speaker with **maximum overlap**
@@ -99,7 +99,7 @@ Media elements → AudioContext → ScriptProcessor → __vexaPerSpeakerAudioDat
 
 `initPerSpeakerPipeline()` returns `false` if `transcriptionServiceUrl` is missing, but the bot continues running. No transcription happens, no segments to Redis, but recording still works.
 
-**Verify:** Is `TRANSCRIPTION_SERVICE_URL` set in Docker env? Is `botConfig.transcriptionServiceUrl` passed from bot-manager?
+**Verify:** Is `TRANSCRIPTION_SERVICE_URL` set in Docker env? Is `botConfig.transcriptionServiceUrl` passed by meeting-api?
 
 ### 2. Speaker name resolution (confidence: 90% — fix implemented)
 
@@ -111,7 +111,7 @@ Fixed: speaking signal checked first, TTL cache, junk name filter. See `docs/spe
 
 If `botConfig.recordingUploadUrl` is undefined, `RecordingService.upload()` silently skips. Recording is captured but never uploaded.
 
-**Verify:** Does bot-manager include `recordingUploadUrl` in BOT_CONFIG?
+**Verify:** Does meeting-api include `recordingUploadUrl` in BOT_CONFIG?
 
 ### 4. Deferred transcription hallucination (confidence: 80% — fix identified)
 
@@ -125,7 +125,7 @@ Recording pipeline coexists with per-speaker pipeline. `__vexaSaveRecordingBlob`
 
 ### ~~6. Speaker events not persisted~~ VERIFIED OK
 
-Full chain works: browser → bot exit → unified callback → bot-manager → `meeting.data.speaker_events`.
+Full chain works: browser → bot exit → unified callback → meeting-api → `meeting.data.speaker_events`.
 
 ### ~~7. Collector format mismatch~~ VERIFIED OK
 
@@ -143,8 +143,8 @@ All field names match. Collector handles producer-labeled speaker field.
 | `core/src/services/speaker-identity.ts` | Name resolution + cache |
 | `platforms/googlemeet/recording.ts` | Browser-side audio + speaker detection + flush |
 | `platforms/googlemeet/leave.ts:106-112` | Flush recording on manual leave |
-| `bot-manager/app/main.py:1759-1767` | Persist speaker_events to meeting.data |
-| `bot-manager/app/main.py:2994-3018` | _map_speakers_to_segments (deferred) |
+| `packages/meeting-api/meeting_api/callbacks.py` | Persist speaker_events to meeting.data |
+| `packages/meeting-api/meeting_api/post_meeting.py` | _map_speakers_to_segments (deferred) |
 | `transcription-collector/streaming/processors.py` | Segment consumption + Postgres persistence |
 
 ## Test results (2026-03-15)

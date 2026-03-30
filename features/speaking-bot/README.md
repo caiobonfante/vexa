@@ -25,7 +25,7 @@ This feature converts text to speech and plays it into the meeting audio so part
 
 - **tts-service**: converts text to audio (text-to-speech)
 - **vexa-bot**: plays generated audio into the meeting via PulseAudio virtual mic
-- **meeting-api**: relays speak commands from API to bot (replaced bot-manager in Phase 4 refactoring)
+- **meeting-api**: relays speak commands from API to bot via Redis pub/sub
 - **api-gateway**: exposes the speak endpoint
 
 ### Data flow

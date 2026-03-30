@@ -21,7 +21,7 @@ export async function joinGoogleMeeting(
   await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-0-after-navigation.png', fullPage: true });
   log("📸 Screenshot taken: After navigation to meeting URL");
 
-  // --- Call joining callback to notify bot-manager that bot is joining ---
+  // --- Call joining callback to notify meeting-api that bot is joining ---
   try {
     await callJoiningCallback(botConfig);
     log("Joining callback sent successfully");

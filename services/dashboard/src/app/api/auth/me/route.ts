@@ -18,7 +18,7 @@ export async function GET() {
   }
 
   try {
-    // Verify token by making a request to the Vexa API (bot-manager)
+    // Verify token by making a request to the Vexa API (meeting-api)
     const response = await fetch(`${VEXA_API_URL}/bots/status`, {
       headers: {
         "X-API-Key": token,

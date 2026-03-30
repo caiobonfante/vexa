@@ -16,12 +16,12 @@ Before recommending an approach, the codebase audit revealed that **video record
 | Integration in bot lifecycle | `services/vexa-bot/core/src/index.ts` (lines 56-86, 691-718) | Complete |
 | Meeting flow hook | `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` (line 186) | Complete |
 | Audio muxing | `VideoRecordingService.muxAudio()` | Complete |
-| Upload to bot-manager | `VideoRecordingService.upload()` | Complete |
-| Bot-manager upload endpoint | `services/bot-manager/app/main.py` (upload_recording) | Complete (accepts media_type="video") |
-| MediaFile DB model | bot-manager DB | Complete (type="video" supported) |
+| Upload to meeting-api | `VideoRecordingService.upload()` | Complete |
+| Bot-manager upload endpoint | `services/meeting-api/app/main.py` (upload_recording) | Complete (accepts media_type="video") |
+| MediaFile DB model | meeting-api DB | Complete (type="video" supported) |
 | Recording config API | `PUT /recording-config` | Complete (capture_modes: ["audio", "video"]) |
 | Dashboard VideoPlayer | `services/dashboard/src/components/recording/video-player.tsx` | Built but NOT integrated into meeting page |
-| Content-type handling | bot-manager download endpoints | Complete (video/webm, video/mp4 routing) |
+| Content-type handling | meeting-api download endpoints | Complete (video/webm, video/mp4 routing) |
 | Hardware acceleration | VAAPI + NVENC + software VP9 + software H.264 | Complete |
 | BotConfig type | `services/vexa-bot/core/src/types.ts` (line 25) | Complete (captureModes?: string[]) |
 | Zoom Native guard | `startVideoRecordingIfNeeded()` | Complete (skips Zoom Native, logs warning) |
@@ -154,7 +154,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 **File**: `services/dashboard/src/app/meetings/[id]/page.tsx`
 **Impact**: Even if video is recorded and uploaded successfully, the dashboard has no way to display it. The `VideoPlayer` component exists at `components/recording/video-player.tsx` but is never imported.
 
-**Fix**: In the meeting detail page, check if the recording has a video `MediaFile` (type="video"). If so, render `VideoPlayer` instead of (or alongside) `AudioPlayer`. The bot-manager already returns `media_files` with `type` field in the recording metadata.
+**Fix**: In the meeting detail page, check if the recording has a video `MediaFile` (type="video"). If so, render `VideoPlayer` instead of (or alongside) `AudioPlayer`. The meeting-api already returns `media_files` with `type` field in the recording metadata.
 
 ---
 
@@ -219,9 +219,9 @@ Vexa is architecturally ahead on video recording compared to where most meeting 
 | Bot config type | `services/vexa-bot/core/src/types.ts:25` |
 | Bot Dockerfile | `services/vexa-bot/core/Dockerfile` |
 | Xvfb setup | `services/vexa-bot/core/entrypoint.sh:9` (1920x1080x24) |
-| Bot-manager upload endpoint | `services/bot-manager/app/main.py:2055-2260` |
-| Recording config API | `services/bot-manager/app/main.py:2625-2688` |
-| Download/stream endpoints | `services/bot-manager/app/main.py:2340-2550` |
+| Bot-manager upload endpoint | `services/meeting-api/app/main.py:2055-2260` |
+| Recording config API | `services/meeting-api/app/main.py:2625-2688` |
+| Download/stream endpoints | `services/meeting-api/app/main.py:2340-2550` |
 | Dashboard VideoPlayer | `services/dashboard/src/components/recording/video-player.tsx` |
 | Dashboard AudioPlayer | `services/dashboard/src/components/recording/audio-player.tsx` |
 | Meeting detail page | `services/dashboard/src/app/meetings/[id]/page.tsx` |

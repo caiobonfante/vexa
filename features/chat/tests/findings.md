@@ -8,7 +8,7 @@
 
 Implementation is **code-complete across the full stack**:
 - `services/vexa-bot/core/src/services/chat.ts` (~700 lines) — MeetingChatService with DOM observation (MutationObserver), message injection, Redis pub/sub relay
-- `services/bot-manager/app/main.py` (lines 2968-3030) — chat endpoints, Redis list persistence
+- `packages/meeting-api/meeting_api/meetings.py` — chat endpoints, Redis list persistence
 - `services/api-gateway/main.py` — POST/GET proxy routes
 - `services/dashboard/src/components/meetings/chat-panel.tsx` — renders messages with auto-scroll
 - `libs/shared-models` — ChatSendRequest, ChatMessage, ChatMessagesResponse schemas

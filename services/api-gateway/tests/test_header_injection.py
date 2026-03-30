@@ -65,7 +65,7 @@ class TestHeaderStripping:
             "x-user-limits": "100",
         })
 
-        await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+        await forward_request(client, "GET", "http://meeting-api:8000/bots", req)
 
         assert captured_headers.get("x-user-id") == "5"  # From validated token, not spoofed
         assert captured_headers.get("x-user-scopes") == "bot"
@@ -97,7 +97,7 @@ class TestHeaderInjection:
         app.state.redis = None
 
         req = _make_request(headers={"x-api-key": "vxa_bot_abc123"})
-        await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+        await forward_request(client, "GET", "http://meeting-api:8000/bots", req)
 
         assert captured_headers["x-user-id"] == "5"
         assert captured_headers["x-user-scopes"] == "bot"
@@ -117,7 +117,7 @@ class TestFailClosed:
         app.state.redis = None
 
         req = _make_request(headers={"x-api-key": "bad_token"})
-        resp = await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+        resp = await forward_request(client, "GET", "http://meeting-api:8000/bots", req)
 
         assert resp.status_code == 401
         body = json.loads(resp.body)
@@ -133,7 +133,7 @@ class TestFailClosed:
         app.state.redis = None
 
         req = _make_request(headers={})
-        resp = await forward_request(client, "GET", "http://bot-manager:8000/bots", req)
+        resp = await forward_request(client, "GET", "http://meeting-api:8000/bots", req)
 
         assert resp.status_code == 401
         body = json.loads(resp.body)
@@ -157,7 +157,7 @@ class TestFailClosed:
         client.request = mock_request
 
         req = _make_request(headers={})
-        resp = await forward_request(client, "POST", "http://bot-manager:8000/auth/login", req, require_auth=False)
+        resp = await forward_request(client, "POST", "http://meeting-api:8000/auth/login", req, require_auth=False)
 
         assert resp.status_code == 200
 

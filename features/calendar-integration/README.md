@@ -20,7 +20,7 @@ Connect Google Calendar (and later Outlook) to Vexa. The system watches for meet
 - **calendar-service** (new) — syncs calendar events, schedules bots, manages OAuth tokens
 - **dashboard** — OAuth consent flow, calendar connection UI, preferences panel, upcoming meetings view
 - **api-gateway** — proxies calendar API endpoints
-- **bot-manager** — receives `POST /bots` from calendar-service (existing API, no changes)
+- **meeting-api** — receives `POST /bots` from calendar-service (existing API, no changes)
 - **mcp** — exposes calendar tools for AI agents
 
 ### Data flow
@@ -73,7 +73,7 @@ Connect Google Calendar (and later Outlook) to Vexa. The system watches for meet
 |-------|----------|-------------|-------------|
 | **raw** | Calendar events from Google API | calendar-service sync | Event processor |
 | **core** | Extracted meeting URLs + scheduling decisions | Event processor | Bot scheduler |
-| **rendered** | Bot status per calendar event | Bot scheduler + bot-manager callbacks | Dashboard, webhooks |
+| **rendered** | Bot status per calendar event | Bot scheduler + meeting-api callbacks | Dashboard, webhooks |
 
 ### Configuration
 
@@ -122,7 +122,7 @@ make test         # full validation
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  Dashboard   │────▶│  calendar-service │────▶│  bot-manager │
+│  Dashboard   │────▶│  calendar-service │────▶│  meeting-api │
 │  (OAuth UI)  │     │  (sync + schedule)│     │  (POST /bots)│
 └─────────────┘     └──────────────────┘     └──────────────┘
                            │    ▲

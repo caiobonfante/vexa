@@ -133,9 +133,13 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if request.url.path in ("/health", "/docs", "/openapi.json"):
             return await call_next(request)
 
+        # Skip auth if no API keys configured (dev mode)
+        if not config.API_KEYS:
+            return await call_next(request)
+
         api_key = request.headers.get("X-API-Key", "")
         if api_key not in config.API_KEYS:
-            return JSONResponse(status_code=403, content={"detail": "Invalid API key"})
+            return JSONResponse(status_code=403, content={"detail": "Missing API token (X-API-Key header)"})
 
         return await call_next(request)
 

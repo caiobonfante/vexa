@@ -11,7 +11,7 @@
 | ffmpeg x11grab captures display | 80 | Code complete, architecture validated in research. Not E2E tested (ffmpeg missing from runtime Dockerfile) | 2026-03-25 | Fix Bug 2 (add ffmpeg to runtime stage), run E2E capture test |
 | VP9/H.264 codec selection | 80 | Code handles all 4 modes (VP9, H.264 CPU, VAAPI, NVENC) with correct ffmpeg args | 2026-03-25 | E2E test each codec path |
 | Audio muxing (itsoffset sync) | 70 | `muxAudio()` implemented with delay offset. `RecordingService.getStartTime()` exists (line 233). Not E2E tested. | 2026-03-25 | E2E test: verify muxed file has synced audio |
-| Upload to bot-manager | 80 | Upload endpoint accepts media_type="video", content-type routing works | 2026-03-25 | E2E test: record -> upload -> download -> verify playback |
+| Upload to meeting-api | 80 | Upload endpoint accepts media_type="video", content-type routing works | 2026-03-25 | E2E test: record -> upload -> download -> verify playback |
 | Dashboard video playback | 10 | VideoPlayer component exists but is NOT imported in meeting page | 2026-03-25 | Fix Bug 3: wire VideoPlayer into meeting detail page |
 | Click-to-seek on transcript | 0 | Not implemented | 2026-03-25 | Depends on dashboard integration (Bug 3) |
 | Storage/retention policy | 0 | No MinIO lifecycle rules for video files | 2026-03-25 | Configure retention policy, add monitoring |

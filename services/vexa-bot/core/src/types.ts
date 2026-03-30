@@ -23,7 +23,7 @@ export type BotConfig = {
   botManagerCallbackUrl?: string;
   recordingEnabled?: boolean;
   captureModes?: string[];  // e.g., ['audio'], ['audio', 'video'], ['audio', 'screenshots']
-  recordingUploadUrl?: string;  // bot-manager internal upload endpoint
+  recordingUploadUrl?: string;  // meeting-api internal upload endpoint
 
   // Per-speaker transcription
   transcriptionServiceUrl?: string;   // HTTP endpoint for transcription-service

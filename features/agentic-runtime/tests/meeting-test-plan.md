@@ -8,9 +8,9 @@
 
 ## Critical Bug Found: Redis Pub/Sub Payload Mismatch
 
-**This MUST be fixed before live testing.** The agent-api Redis subscriber will silently fail to extract any fields from bot-manager events.
+**This MUST be fixed before live testing.** The agent-api Redis subscriber will silently fail to extract any fields from meeting-api events.
 
-### What bot-manager publishes (`publish_meeting_status_change` in bot-manager/app/main.py:226)
+### What meeting-api publishes (`publish_meeting_status_change` in packages/meeting-api/meeting_api/meetings.py)
 
 ```json
 {
@@ -21,7 +21,7 @@
 }
 ```
 
-**Note:** `user_id` is passed as a parameter to `publish_meeting_status_change()` but is **NOT included in the published JSON payload**.
+**Note:** `user_id` is passed as a parameter but is **NOT included in the published JSON payload**.
 
 ### What agent-api subscriber expects (agent-api/app/main.py:175-179)
 
@@ -50,7 +50,7 @@ user_id = str(data.get("user_id", ""))  # Still missing from payload!
 platform = data.get("meeting", {}).get("platform", "unknown")
 ```
 
-AND add `user_id` to the bot-manager's publish payload:
+AND add `user_id` to the meeting-api's publish payload:
 ```python
 payload = {
     "type": "meeting.status",
@@ -61,11 +61,11 @@ payload = {
 }
 ```
 
-Or flatten the bot-manager payload to match what the subscriber expects.
+Or flatten the meeting-api payload to match what the subscriber expects.
 
 ### Second notification path (webhook) works correctly
 
-The POST_MEETING_HOOKS webhook path (`/internal/webhooks/meeting-completed`) receives a different payload format from `post_meeting_hooks.py` via `build_envelope("meeting.completed", {...})` and correctly reads `event.data.meeting.user_id`, `event.data.meeting.id`, etc. **This path should work for meeting-completed events only** (not meeting-started).
+The POST_MEETING_HOOKS webhook path (`/internal/webhooks/meeting-completed`) receives a different payload format from meeting-api's `post_meeting_hooks.py` via `build_envelope("meeting.completed", {...})` and correctly reads `event.data.meeting.user_id`, `event.data.meeting.id`, etc. **This path should work for meeting-completed events only** (not meeting-started).
 
 ---
 
@@ -87,7 +87,7 @@ All these must be healthy:
 | minio | 9000 | 9010 | `curl http://localhost:9010/minio/health/live` |
 | agent-api | 8100 | 8100 | `curl http://localhost:8100/health` |
 | runtime-api | 8090 | 8090 | `curl http://localhost:8090/health` |
-| bot-manager | 8080 | 8070 | `curl http://localhost:8070/` |
+| meeting-api | 8080 | 8070 | `curl http://localhost:8070/` |
 | api-gateway | 8000 | 8066 | `curl http://localhost:8066/` |
 | admin-api | 8001 | 8067 | `curl http://localhost:8067/` |
 | transcription-collector | 8000 | 8060 | `curl http://localhost:8060/health` |
@@ -102,7 +102,7 @@ Must pass all checks. Key vars:
 - `BOT_API_TOKEN` -- must match across agent-api, runtime-api, and dashboard
 - `CLAUDE_CREDENTIALS_PATH` and `CLAUDE_JSON_PATH` -- host files must exist
 - `TRANSCRIPTION_SERVICE_URL` -- external transcription service must be reachable
-- `ADMIN_TOKEN` -- must match between bot-manager and admin-api
+- `ADMIN_TOKEN` -- must match between meeting-api and admin-api
 
 ### 3. Docker images built
 
@@ -141,7 +141,7 @@ Create a Google Meet (or Teams/Zoom) meeting URL. Have a second browser/device r
 
 ### Phase 0: Verify Redis Pub/Sub wiring (before live meeting)
 
-**Purpose:** Confirm bot-manager publishes to Redis and agent-api subscribes, independent of a real meeting.
+**Purpose:** Confirm meeting-api publishes to Redis and agent-api subscribes, independent of a real meeting.
 
 ```bash
 # Terminal 1: Watch agent-api logs for subscriber activity
@@ -180,7 +180,7 @@ curl -X POST http://localhost:8100/api/chat \
 
 **Verification:**
 ```bash
-# Check bot-manager for active meetings
+# Check meeting-api for active meetings
 curl http://localhost:8070/bots/status -H "X-API-Key: $TOKEN"
 
 # Check Redis for meeting status publications
@@ -208,6 +208,8 @@ docker logs -f vexa-agentic-agent-api-1 2>&1 | grep -E "meeting|agent.*woken|wak
 - Agent receives message: "Meeting {id} (google_meet) just started..."
 
 **Risk:** If bug is not fixed, this step will silently fail. The subscriber will log the event but not match "active" status.
+
+**Note:** meeting-api publishes status changes to Redis; agent-api subscribes.
 
 ### Phase 3: Meeting in progress -- verify transcription
 
@@ -245,15 +247,15 @@ docker logs -f vexa-agentic-agent-api-1 2>&1 | grep -E "completed|webhook|wake"
 ```
 
 **Expected:**
-- Bot-manager detects meeting end, publishes `completed` status to Redis
-- Bot-manager fires POST_MEETING_HOOKS to `http://agent-api:8100/internal/webhooks/meeting-completed`
+- Meeting-api detects meeting end, publishes `completed` status to Redis
+- Meeting-api fires POST_MEETING_HOOKS to `http://agent-api:8100/internal/webhooks/meeting-completed`
 - Agent-api receives BOTH notifications (Redis sub + webhook)
 - Agent is woken with processing instructions
 - Agent fetches transcript, summarizes, saves to workspace
 
 **Key difference between the two paths:**
-- Redis path: fires for both `active` and `completed` status changes. Currently broken (payload mismatch).
-- Webhook path: fires only on `completed`. Should work correctly (uses `build_envelope` with structured `data.meeting` payload).
+- Redis path: fires for both `active` and `completed` status changes. Currently broken (payload mismatch). Published by meeting-api.
+- Webhook path: fires only on `completed`. Should work correctly (uses `build_envelope` with structured `data.meeting` payload). Sent by meeting-api.
 
 ### Phase 5: Verify post-meeting processing
 
@@ -282,11 +284,11 @@ docker exec $CONTAINER cat /workspace/knowledge/meetings/*.md
 
 ### High risk
 
-2. **No `user_id` in Redis payload** -- even after fixing the field extraction, `user_id` is not included in the bot-manager's publish payload. The subscriber guard at line 203 (`if not user_id`) will drop the event. Must be added to the payload in bot-manager.
+2. **No `user_id` in Redis payload** -- even after fixing the field extraction, `user_id` is not included in meeting-api's publish payload. The subscriber guard at line 203 (`if not user_id`) will drop the event. Must be added to the payload in meeting-api.
 
 3. **Duplicate notifications** -- both Redis subscriber AND webhook fire on meeting completion. The agent may receive two "meeting ended" messages and process twice. Need to add deduplication or disable one path.
 
-4. **`duration_seconds` not in Redis payload** -- the subscriber reads `data.get("duration_seconds", 0)` but this field doesn't exist in the bot-manager's published JSON. Will always show "0s" duration.
+4. **`duration_seconds` not in Redis payload** -- the subscriber reads `data.get("duration_seconds", 0)` but this field doesn't exist in meeting-api's published JSON. Will always show "0s" duration.
 
 ### Medium risk
 
@@ -310,8 +312,8 @@ Run these in separate terminals during the test:
 # Terminal 1: Agent API logs (subscriber events + webhook + agent wakeups)
 docker logs -f vexa-agentic-agent-api-1 2>&1
 
-# Terminal 2: Bot Manager logs (meeting lifecycle, status publishes)
-docker logs -f vexa-agentic-bot-manager-1 2>&1
+# Terminal 2: Meeting API logs (meeting lifecycle, status publishes)
+docker logs -f vexa-agentic-meeting-api-1 2>&1
 
 # Terminal 3: Redis pub/sub monitor (see all messages)
 docker exec vexa-agentic-redis-1 redis-cli -p 6379 PSUBSCRIBE "bm:meeting:*"
@@ -334,4 +336,4 @@ docker logs -f $AGENT_CONTAINER 2>&1
 | Phase 4 | Meeting-completed notification | Meeting ends naturally | HIGH (dual notification) |
 | Phase 5 | Post-meeting processing | Phase 4 | Medium (container state) |
 
-**Recommendation:** Fix the Redis payload mismatch bug first, then run Phase 0 to validate the fix, then proceed with live testing. The webhook path (`/internal/webhooks/meeting-completed`) can serve as fallback for the completed event even without the Redis fix, but the "meeting started" notification has no fallback.
+**Recommendation:** Fix the Redis payload mismatch in meeting-api first, then run Phase 0 to validate the fix, then proceed with live testing. The webhook path (`/internal/webhooks/meeting-completed`) can serve as fallback for the completed event even without the Redis fix, but the "meeting started" notification has no fallback.

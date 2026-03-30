@@ -113,8 +113,8 @@ export class VideoRecordingService {
   }
 
   /**
-   * Upload the video file to the bot-manager upload endpoint.
-   * Sends media_type: "video" so bot-manager stores it as a video MediaFile.
+   * Upload the video file to the meeting-api upload endpoint.
+   * Sends media_type: "video" so meeting-api stores it as a video MediaFile.
    */
   async upload(callbackUrl: string, token: string): Promise<void> {
     if (!fs.existsSync(this.filePath)) {

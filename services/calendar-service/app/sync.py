@@ -24,7 +24,7 @@ logger = logging.getLogger("calendar-service.sync")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL", "http://bot-manager:8080")
+MEETING_API_URL = os.getenv("MEETING_API_URL", "http://meeting-api:8080")
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 DEFAULT_LEAD_TIME_MINUTES = int(os.getenv("DEFAULT_LEAD_TIME_MINUTES", "2"))
 
@@ -151,7 +151,7 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
     scheduled = 0
 
     for event in events:
-        # Get user's API key for bot-manager auth
+        # Get user's API key for meeting-api auth
         user_result = await db.execute(select(User).where(User.id == event.user_id))
         user = user_result.scalar_one_or_none()
         if not user:
@@ -160,7 +160,7 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    f"{BOT_MANAGER_URL}/bots",
+                    f"{MEETING_API_URL}/bots",
                     json={
                         "platform": event.platform,
                         "native_meeting_id": _extract_native_id(event.meeting_url, event.platform),
@@ -197,7 +197,7 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
 
 
 def _extract_native_id(url: str, platform: str) -> str:
-    """Extract the native meeting ID from a URL for bot-manager."""
+    """Extract the native meeting ID from a URL for meeting-api."""
     if platform == "google_meet":
         # https://meet.google.com/abc-defg-hij -> abc-defg-hij
         return url.rsplit("/", 1)[-1].split("?")[0]

@@ -1,6 +1,6 @@
 # Zoom Web — Findings
 
-## Gate verdict: INFRASTRUCTURE READY — bot-manager routes to web path
+## Gate verdict: INFRASTRUCTURE READY — meeting-api routes to web path
 
 ## Score: 25
 
@@ -59,11 +59,11 @@ Same pattern as Teams:
 ## Executor validation (2026-03-24)
 
 ### Step 1: ZOOM_WEB=true added to docker-compose.yml
-Added to bot-manager environment section alongside existing RECORDING_ENABLED=true.
+Added to meeting-api environment section alongside existing RECORDING_ENABLED=true.
 
-### Step 2: bot-manager restarted and env vars confirmed
+### Step 2: meeting-api restarted and env vars confirmed
 ```
-docker exec vexa-agentic-bot-manager-1 env | grep -E "ZOOM_WEB|RECORDING"
+docker exec vexa-agentic-meeting-api-1 env | grep -E "ZOOM_WEB|RECORDING"
 RECORDING_ENABLED=true
 ZOOM_WEB=true
 ```
@@ -84,13 +84,13 @@ Response: {"id":52,"status":"requested","bot_container_id":"11ce3bddba579dc51b9a
 ```
 No SDK credential error. Meeting created successfully.
 
-### Step 5: bot-manager log confirms web path
+### Step 5: meeting-api log confirms web path
 ```
 INFO - Received bot request for platform 'zoom' with native ID '12345678901' from user 2
 WARNING - Zoom OAuth is not connected for user 2; starting meeting 52 without OBF token.
 INFO - ZOOM_WEB=true: using Playwright web client for Zoom (no SDK credentials needed)
 ```
-Critical: last line confirms ZOOM_WEB routing is active.
+Critical: last line confirms ZOOM_WEB routing is active in meeting-api.
 
 ### What still needs testing
 - Real Zoom meeting join (requires actual Zoom meeting URL)

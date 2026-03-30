@@ -37,9 +37,9 @@
 ### list_meetings
 - File: `services/mcp/main.py:683-692`
 - The MCP endpoint proxies to `GET /meetings` on the gateway
-- Gateway proxies to bot-manager's meetings endpoint
-- Need to check if bot-manager already supports query params or if we need to add them there too
-- If bot-manager doesn't support filtering, add params at bot-manager level first
+- Gateway proxies to meeting-api's meetings endpoint
+- Need to check if meeting-api already supports query params or if we need to add them there too
+- If meeting-api doesn't support filtering, add params at meeting-api level first
 
 ### get_recording_media_download
 - File: `services/mcp/main.py:495-515`

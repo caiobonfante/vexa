@@ -735,7 +735,7 @@ async function performGracefulLeave(
         }
       }
 
-      log("[Graceful Leave] Uploading video to bot-manager...");
+      log("[Graceful Leave] Uploading video to meeting-api...");
       await activeVideoRecordingService.upload(currentBotConfig.recordingUploadUrl, currentBotConfig.token);
       log("[Graceful Leave] Video uploaded successfully.");
     } catch (uploadError: any) {
@@ -749,7 +749,7 @@ async function performGracefulLeave(
   // Upload audio recording separately (used for audio-only playback / transcription alignment)
   if (activeRecordingService && currentBotConfig?.recordingUploadUrl && currentBotConfig?.token) {
     try {
-      log("[Graceful Leave] Uploading audio recording to bot-manager...");
+      log("[Graceful Leave] Uploading audio recording to meeting-api...");
       await activeRecordingService.upload(currentBotConfig.recordingUploadUrl, currentBotConfig.token);
       log("[Graceful Leave] Audio recording uploaded successfully.");
     } catch (uploadError: any) {

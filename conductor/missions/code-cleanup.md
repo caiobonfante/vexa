@@ -16,12 +16,12 @@ Constraint: Never delete anything that's actually imported/deployed — verify b
 ## Phase 2 — Fix broken references
 
 5. `deploy/compose/Makefile` — replace all `transcription-collector` service references with `meeting-api` (lines 124-175)
-6. Helm charts — delete `deployment-bot-manager.yaml`, `service-bot-manager.yaml`, update `values.yaml` to remove botManager section, update api-gateway template to not reference bot-manager
+6. Helm charts — delete `deployment-bot-manager.yaml`, `service-bot-manager.yaml`, update `values.yaml` to remove botManager section, update api-gateway template to reference meeting-api
 7. Root `alembic.ini` — either delete (real migrations are in libs/shared-models/) or add a comment redirecting to the correct location
 
 ## Phase 3 — Update stale documentation
 
-8. Root `README.md` — remove references to bot-manager and transcription-collector, update service table to reflect packages/ vs services/ split
+8. Root `README.md` — remove stale service references, update service table to reflect packages/ vs services/ split
 9. `services/README.md` — update to reflect that agent-api, transcript-rendering, transcription-collector are gone; note that meeting-api, runtime-api, transcription-service, tts-service live in packages/
 
 ## Phase 4 — Clean build artifacts

@@ -1,6 +1,6 @@
 # Multi-Platform
 
-> **Confidence: 0** — RESET after architecture refactoring. Bot spawning changed: meeting-api to runtime-api (was bot-manager). Platform configs in profiles.yaml. Needs re-validation.
+> **Confidence: 0** — RESET after architecture refactoring. Bot spawning changed: meeting-api delegates to runtime-api. Platform configs in profiles.yaml. Needs re-validation.
 > **Tested:** Google Meet standard + custom nickname URLs, Teams personal + enterprise URLs, platform auto-detection from URL.
 > **Not tested:** Zoom (SDK requires app approval), Teams legacy deep links, Teams US Gov/DoD, cross-platform transcript consistency.
 > **Contributions welcome:** Zoom browser-based implementation ([#150](https://github.com/Vexa-ai/vexa/issues/150), [#128](https://github.com/Vexa-ai/vexa/issues/128)), Teams admission bug ([#171](https://github.com/Vexa-ai/vexa/issues/171)), new meeting type coverage.
@@ -24,7 +24,7 @@ This feature provides a unified bot API that routes to platform-specific join fl
 
 - **vexa-bot**: implements platform-specific join flows
 - **googlemeet/msteams/zoom agents**: handle platform-specific DOM interactions
-- **meeting-api**: routes bot requests to the correct platform handler based on meeting URL (replaced bot-manager in Phase 4 refactoring)
+- **meeting-api**: routes bot requests to the correct platform handler based on meeting URL
 - **api-gateway**: exposes the unified API
 
 ### Data flow

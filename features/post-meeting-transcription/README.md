@@ -20,7 +20,7 @@ captures per-speaker audio streams (ScriptProcessorNode)
 audio chunks → recording       speaker events collected from DOM
     |          (webm format)       |
     v                              v
-upload to MinIO               bot exits → POST callback to bot-manager
+upload to MinIO               bot exits → POST callback to meeting-api
                                    |
                                    v
                               store SPEAKER_START/END events
@@ -33,7 +33,7 @@ AFTER MEETING (user triggers):
 User clicks "Transcribe" in Dashboard (or API call)
     |
     v
-POST /meetings/{id}/transcribe → api-gateway :8056 → bot-manager
+POST /meetings/{id}/transcribe → api-gateway :8056 → meeting-api
     |
     v
 already transcribed?
@@ -95,7 +95,7 @@ seek audio to segment.start_time
 
 ```
 services/vexa-bot                          → recording, speaker events
-packages/meeting-api (bot-manager routes)  → POST /transcribe, speaker mapping
+packages/meeting-api                       → POST /transcribe, speaker mapping
 packages/transcription-service             → Whisper inference (ffmpeg + model)
 services/transcription-collector           → segment persistence, GET /transcripts
 services/dashboard                         → transcript viewer, audio player, seek
@@ -142,13 +142,13 @@ POST /transcribe endpoint           20   405 — not implemented in meeting-api 
 
 ## Constraints
 
-- All client-facing API calls go through api-gateway — dashboard never calls bot-manager or transcription-collector directly
-- bot-manager owns transcription orchestration (download → Whisper → map → persist) — no other service duplicates this
+- All client-facing API calls go through api-gateway — dashboard never calls meeting-api or transcription-collector directly
+- meeting-api owns transcription orchestration (download → Whisper → map → persist) — no other service duplicates this
 - Dashboard fetches transcripts via `GET /transcripts` through api-gateway, never queries Postgres directly
 - Auth is `X-API-Key` validated at gateway — services trust injected `X-User-ID` headers
 - No Python imports across service boundaries
 - Recording storage is MinIO only — no local filesystem
-- Speaker mapping runs inside bot-manager — not a separate service
+- Speaker mapping runs inside meeting-api — not a separate service
 - Segments are immutable after 30s — no updates to persisted rows
 - README.md MUST be updated when behavior changes and match this manifest
 

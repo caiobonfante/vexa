@@ -39,10 +39,10 @@ Meeting 648 — 2 speakers (Alice, Bob), Teams, 6 utterances
 
 | Blocker | Root cause | Fix | File |
 |---------|-----------|-----|------|
-| DNS resolution failure | `TRANSCRIPTION_GATEWAY_URL` → wrong hostname (different docker network) | Fall back to `TRANSCRIPTION_SERVICE_URL` | bot-manager/main.py:3308 |
+| DNS resolution failure | `TRANSCRIPTION_GATEWAY_URL` → wrong hostname (different docker network) | Fall back to `TRANSCRIPTION_SERVICE_URL` | meeting-api/meetings.py:3308 |
 | webm format not decoded | `soundfile` can't read webm, transcription service had no ffmpeg | Added ffmpeg to Dockerfile + subprocess fallback | transcription-service/main.py, Dockerfile |
 | `RECORDING_ENABLED=false` | Compose default disabled recording | Changed default to `true` | docker-compose.yml:88 |
-| Wrong MIME type | Hardcoded `audio/wav` but recording is webm | Detect format from storage metadata | bot-manager/main.py:3315 |
+| Wrong MIME type | Hardcoded `audio/wav` but recording is webm | Detect format from storage metadata | meeting-api/meetings.py:3315 |
 
 ## Certainty Table
 

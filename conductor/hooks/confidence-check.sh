@@ -1,6 +1,5 @@
 #!/bin/bash
-# Stop hook: enforces the confidence protocol on DELIVERY responses only.
-# Skips casual responses. Only enforces when the agent reports completed work.
+# Stop hook: enforces the confidence protocol on EVERY stop.
 
 LOGFILE="/tmp/vexa-hooks.log"
 
@@ -14,31 +13,16 @@ fi
 
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty')
 
-# Only enforce on delivery-like responses.
-# A delivery response is long AND contains completion language.
-MSG_LEN=${#LAST_MSG}
-if [[ "$MSG_LEN" -lt 300 ]]; then
-  echo "[$(date '+%H:%M:%S')] Stop: SKIP (${MSG_LEN} chars — not a delivery)" >> "$LOGFILE"
-  exit 0
-fi
-
-# Check if message looks like a delivery (reporting results/completion)
-IS_DELIVERY=$(echo "$LAST_MSG" | grep -ciE "pass|done|fixed|working|complete|verified|test.*pass|all.*pass|result|deploy|implement|finish" || true)
-if [[ "$IS_DELIVERY" -eq 0 ]]; then
-  echo "[$(date '+%H:%M:%S')] Stop: SKIP (no delivery language)" >> "$LOGFILE"
-  exit 0
-fi
-
-# This is a delivery — enforce confidence protocol
-echo "[$(date '+%H:%M:%S')] Stop: ENFORCING (delivery detected, ${MSG_LEN} chars)" >> "$LOGFILE"
-
+# Build search text: last message + recent transcript
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 RECENT=""
 if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
-  RECENT=$(tail -30 "$TRANSCRIPT_PATH" 2>/dev/null || true)
+  RECENT=$(tail -50 "$TRANSCRIPT_PATH" 2>/dev/null || true)
 fi
 SEARCH_TEXT="${LAST_MSG}
 ${RECENT}"
+
+echo "[$(date '+%H:%M:%S')] Stop: ENFORCING (${#LAST_MSG} chars)" >> "$LOGFILE"
 
 MISSING=""
 
@@ -58,13 +42,20 @@ if [[ -n "$HIGH_CONF" ]] && [[ "$HIGH_CONF" -ge 80 ]]; then
 fi
 
 # Check 3: System health verified?
-HAS_HEALTH=$(echo "$SEARCH_TEXT" | grep -ciE "dashboard.*(load|reach|access|200|respond)|curl.*(dashboard|localhost|gateway)|entry.?point.*(work|load|respond|verified)|system.*(health|check|verified)|user.*(can|able).*(reach|access|load)" || true)
-if [[ "$HAS_HEALTH" -eq 0 ]]; then
-  MISSING="${MISSING}\n- No system health verification. Before stopping, verify the user can reach the entry point (dashboard loads, API responds)."
+# Skip health check for planning/docs-only work (no code edits, no deploys, no service restarts).
+IS_CODE_WORK=$(echo "$SEARCH_TEXT" | grep -ciE "edit.*file|wrote.*code|deploy|docker.*(up|restart|build)|compose.*up|service.*(start|restart|stop)|curl.*localhost|pip install|npm|make |build" || true)
+if [[ "$IS_CODE_WORK" -gt 0 ]]; then
+  HAS_HEALTH=$(echo "$SEARCH_TEXT" | grep -ciE "dashboard.*(load|reach|access|200|respond)|curl.*(dashboard|localhost|gateway)|entry.?point.*(work|load|respond|verified)|system.*(health|check|verified)|user.*(can|able).*(reach|access|load)|read-only.*(diagnostic|review|task)|no.*(code change|deploy|service)" || true)
+  if [[ "$HAS_HEALTH" -eq 0 ]]; then
+    MISSING="${MISSING}\n- No system health verification. Before stopping, verify the user can reach the entry point (dashboard loads, API responds)."
+  fi
+else
+  echo "[$(date '+%H:%M:%S')] Stop: health check skipped (planning/docs-only work)" >> "$LOGFILE"
 fi
 
 if [[ -z "$MISSING" ]]; then
   echo "[$(date '+%H:%M:%S')] Stop: PASS (confidence protocol followed)" >> "$LOGFILE"
+  echo "✓ confidence check passed" >&2
   exit 0
 fi
 

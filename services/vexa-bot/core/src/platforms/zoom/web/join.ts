@@ -78,7 +78,7 @@ export async function joinZoomWebMeeting(page: Page | null, botConfig: BotConfig
     await page.waitForTimeout(HOST_NOT_STARTED_RETRY_INTERVAL_MS);
   }
 
-  // Notify bot-manager: joining
+  // Notify meeting-api: joining
   try {
     await callJoiningCallback(botConfig);
   } catch (e: any) {

@@ -46,7 +46,7 @@
 
 | Level | Gate | Score | Evidence | Last checked |
 |-------|------|-------|----------|-------------|
-| 0 | Code exists + infrastructure routed | 90 | 8 complete modules at platforms/zoom/web/. ZOOM_WEB=true confirmed in bot-manager. POST /bots with platform=zoom creates container. No SDK needed. | 2026-03-24 |
+| 0 | Code exists + infrastructure routed | 90 | 8 complete modules at platforms/zoom/web/. ZOOM_WEB=true confirmed in meeting-api. POST /bots with platform=zoom creates container. No SDK needed. | 2026-03-24 |
 | 30 | Bot navigates to Zoom web client, enters name | 90 | Meeting 57: navigated to app.zoom.us/wc/87932820681/join, entered name "Vexa Zoom Test", muted mic/video, clicked Join. No CAPTCHA. | 2026-03-25 |
 | 50 | Bot joins real Zoom meeting, audio captured via PulseAudio | 90 | Meeting 57: bot immediately admitted (no waiting room). PulseAudio capture started with 3 streams. Speaker "Dmtiry Grankin" detected via DOM polling. Recording to WAV started. Chat panel opened. | 2026-03-25 |
 | 60 | Transcription works end-to-end | 90 | Meeting 63: 11 confirmed segments, Russian speech transcribed correctly. WhisperLive connected, PulseAudio capture working. CUDA OOM resolved (workers restarted). | 2026-03-25 |
@@ -64,7 +64,7 @@
 | Step | Result |
 |------|--------|
 | API accepts request | PASS — meeting 57 created, container `vexa-bot-57-b371a184` spawned |
-| ZOOM_WEB routing | PASS — bot-manager logs "using Playwright web client for Zoom" |
+| ZOOM_WEB routing | PASS — meeting-api logs "using Playwright web client for Zoom" |
 | CAPTCHA | **NO CAPTCHA** — bot navigated directly to pre-join page |
 | Name + mute + join | PASS — name entered, mic/video muted, Join clicked |
 | Admission | PASS — immediately admitted (Leave button visible) |
@@ -104,7 +104,7 @@
 #### Zoom research findings (2026-03-24)
 
 - **Zoom Web code discovered:** 8 complete Playwright modules at `services/vexa-bot/core/src/platforms/zoom/web/`. All compiled and present in vexa-bot:dev image.
-- **Infrastructure routed:** `ZOOM_WEB=true` confirmed in bot-manager env.
+- **Infrastructure routed:** `ZOOM_WEB=true` confirmed in meeting-api env.
 - **CAPTCHA risk mitigated:** First live test showed no CAPTCHA on guest web join. May vary by meeting settings.
 - **Three approaches evaluated** (full details in `zoom-research.md`): Browser Web Client (validated, working), Native Meeting SDK (requires proprietary binaries + Marketplace review), Zoom RTMS SDK (strategic long-term, requires paid Developer Pack).
 - **Competitor validation:** Browser automation is the industry standard. Recall.ai, MeetingBaaS, and multiple open-source tools use the same approach.

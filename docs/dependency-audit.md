@@ -152,24 +152,24 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 | **http://runtime-api:8000** | meeting-api/meeting_api/config.py (RUNTIME_API_URL) | Container lifecycle (not currently used in meetings.py) |
 | **http://meeting-api:8080** | meeting-api/meeting_api/config.py (MEETING_API_URL) | Callback URL for bot container exit |
 | **http://transcription-collector:8000** | meeting-api/meeting_api/config.py (TRANSCRIPTION_COLLECTOR_URL) | Fetch transcripts post-meeting |
-| **http://bot-manager:8080** | calendar-service/app/sync.py (BOT_MANAGER_URL) | Get user's API key, create bots |
-| **http://bot-manager:8000** | api-gateway/tests/conftest.py (BOT_MANAGER_URL) | Test proxy target |
+| **http://meeting-api:8080** | calendar-service/app/sync.py (MEETING_API_URL) | Get user's API key, create bots |
+| **http://meeting-api:8000** | api-gateway/tests/conftest.py (MEETING_API_URL) | Test proxy target |
 | **http://admin-api:8000** | api-gateway/tests/conftest.py (ADMIN_API_URL) | Test proxy target |
 | **http://transcription-collector:8000** | api-gateway/tests/conftest.py (TRANSCRIPTION_COLLECTOR_URL) | Test proxy target |
-| **http://transcription-collector:8000** | transcription-collector/streaming/processors.py | Hardcoded JWT validation check ("iss": "bot-manager") |
+| **http://transcription-collector:8000** | transcription-collector/streaming/processors.py | Hardcoded JWT validation check ("iss": "bot-manager" — frozen contract) |
 | **http://tts-service** | meeting-api/meeting_api/meetings.py | Optional TTS_SERVICE_URL env var |
 
 **Environment Variables Used:**
 - `RUNTIME_API_URL` (agent-api, meeting-api)
 - `MEETING_API_URL` (meeting-api, for callback_url)
 - `TRANSCRIPTION_COLLECTOR_URL` (meeting-api)
-- `BOT_MANAGER_URL` (calendar-service, api-gateway tests)
+- `MEETING_API_URL` (calendar-service, api-gateway tests)
 - `ADMIN_API_URL` (api-gateway)
 - `TTS_SERVICE_URL` (meeting-api, optional)
 
 **Hardcoded Hostnames (NOT env vars):**
-- `bot-manager` in agent-api/app/schedule_endpoints.py line 118: `http://bot-manager:8080/bots`
-- `admin-api`, `bot-manager`, `transcription-collector` in shared_models/webhook_url.py (validation list)
+- `meeting-api` in calendar-service/app/sync.py (default hostname in MEETING_API_URL)
+- `admin-api`, `meeting-api` (+ frozen `bot-manager`) in meeting_api/webhook_url.py (JWT issuer validation list)
 
 ---
 
@@ -188,7 +188,7 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 | **webhook:retry_queue** | shared_models/webhook_delivery.py | shared_models/webhook_retry_worker.py | Retry queue for failed webhook deliveries |
 
 **Key Ownership Summary:**
-- **bot-manager-style** (bm:) — published by meeting-api, consumed by agent-api, api-gateway
+- **meeting-api** (bm: prefix — frozen) — published by meeting-api, consumed by agent-api, api-gateway
 - **transcription-collector-style** (tc:, meeting:) — published by transcription-collector, read by meeting-api, api-gateway
 - **voice-agent-style** (va:) — published by meeting-api voice_agent, read by api-gateway
 - **webhook** — written/read by shared_models webhooks
@@ -235,9 +235,9 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 | **MEETING_API_URL** | meeting-api/meeting_api/config.py, meeting-api/meeting_api/meetings.py | Callback URL for bot exit | Yes (meeting-api) |
 | **TRANSCRIPTION_COLLECTOR_URL** | meeting-api/meeting_api/config.py, meeting-api/meeting_api/post_meeting.py | Fetch transcripts after meeting ends | Yes (meeting-api) |
 | **TTS_SERVICE_URL** | meeting-api/meeting_api/meetings.py | Optional TTS service integration | No (optional) |
-| **BOT_MANAGER_URL** | calendar-service/app/sync.py | Get user API keys, create bots | Yes (calendar-service) |
+| **MEETING_API_URL** | calendar-service/app/sync.py | Get user API keys, create bots | Yes (calendar-service) |
 | **ADMIN_API_URL** | api-gateway/main.py | Proxy admin endpoints | Yes (api-gateway) |
-| **BOT_MANAGER_URL** | api-gateway/main.py | Proxy bot endpoints | Yes (api-gateway) |
+| **MEETING_API_URL** | api-gateway/main.py | Proxy bot endpoints | Yes (api-gateway) |
 | **TRANSCRIPTION_COLLECTOR_URL** | api-gateway/main.py | Proxy transcription endpoints | Yes (api-gateway) |
 | **MCP_URL** | api-gateway/main.py | Proxy MCP endpoints | Yes (api-gateway) |
 | **ADMIN_API_TOKEN** | admin-api/app/main.py | Admin endpoint authentication | Yes (admin-api) |
@@ -246,7 +246,7 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 | **REDIS_URL** | All services (via fastapi-redis, etc.) | Redis connection | Yes (all) |
 
 **Blocking Dependencies:**
-- **api-gateway** requires: ADMIN_API_URL, BOT_MANAGER_URL, TRANSCRIPTION_COLLECTOR_URL, MCP_URL (hard-fail on startup)
+- **api-gateway** requires: ADMIN_API_URL, MEETING_API_URL, TRANSCRIPTION_COLLECTOR_URL, MCP_URL (hard-fail on startup)
 - **admin-api** requires: ADMIN_API_TOKEN (error logged at startup if missing)
 - **meeting-api** requires: ADMIN_TOKEN, TRANSCRIPTION_COLLECTOR_URL, RUNTIME_API_URL, MEETING_API_URL
 - **agent-api** requires: RUNTIME_API_URL
@@ -293,7 +293,7 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 
     Calendar-Service (in-repo)
     │
-    ├─→ BOT_MANAGER_URL (create bots)
+    ├─→ MEETING_API_URL (create bots)
     └─→ shared_models (database)
 
     TTS-Service (in-repo, optional)
@@ -317,7 +317,7 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 | **MEETING_API_URL callback** | meeting-api → bots | 🟡 MEDIUM | Exit status webhook |
 | **Redis pub/sub (bm:meeting:*)** | agent-api ← meeting-api | 🟡 MEDIUM | Real-time meeting status events |
 | **ADMIN_TOKEN** | meeting-api | 🟡 MEDIUM | JWT minting for transcription auth |
-| **BOT_MANAGER_URL** | api-gateway, calendar-service | 🟡 MEDIUM | Legacy bot API (not in this repo) |
+| **MEETING_API_URL** | api-gateway, calendar-service | 🟡 MEDIUM | Meeting/bot API |
 | **Database foreign keys** | meeting-api ↔ transcription-collector | 🟡 MEDIUM | Referential integrity |
 
 ---
@@ -358,8 +358,8 @@ All services import from `shared_models` (libs/shared-models). Below is the comp
 
 ### Dependency Count
 - **Total services:** 10 (admin-api, agent-api, meeting-api, transcription-collector, api-gateway, calendar-service, tts-service, mcp, runtime-api, vexa-bot)
-- **In-repo services:** 8 (all except runtime-api, bot-manager)
-- **Cross-service HTTP calls:** 4 (agent-api→runtime-api, meeting-api→transcription-collector, meeting-api→runtime-api, calendar-service→bot-manager)
+- **In-repo services:** 10 (all)
+- **Cross-service HTTP calls:** 4 (agent-api→runtime-api, meeting-api→transcription-collector, meeting-api→runtime-api, calendar-service→meeting-api)
 - **Shared database:** YES (all services use shared_models ORM)
 - **Pub/Sub channels:** 4 (bm:meeting:*, tc:meeting:*, va:meeting:*, bot_commands:*, webhook:retry_queue)
 - **Environment variable couplings:** 12

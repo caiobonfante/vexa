@@ -141,7 +141,7 @@ Run these commands sequentially. ALL must succeed.
 
 ```bash
 # 1. Recording exists in MinIO?
-# Queries bot-manager API for meeting data, checks recordings array
+# Queries meeting-api for meeting data, checks recordings array
 make -C tests check-recording MEETING_ID=$ID
 # PASS: recordings array non-empty, status=completed
 # FAIL: empty array or status != completed

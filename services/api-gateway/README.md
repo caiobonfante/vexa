@@ -123,8 +123,8 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | Variable | Description |
 |----------|-------------|
 | `ADMIN_API_URL` | Internal URL of admin-api (required) |
-| `BOT_MANAGER_URL` | Internal URL of meeting-api (required). Legacy name — points to meeting-api which replaced bot-manager in Phase 4. Rename to `MEETING_API_URL` is TBD. |
-| `TRANSCRIPTION_COLLECTOR_URL` | Internal URL of meeting-api (required). Legacy name — meeting-api has a built-in transcription collector (Redis Stream consumer). |
+| `MEETING_API_URL` | Internal URL of meeting-api (required) |
+| `TRANSCRIPTION_COLLECTOR_URL` | Internal URL of transcription-collector (required) |
 | `MCP_URL` | Internal URL of MCP service (required) |
 | `REDIS_URL` | Redis URL for WebSocket Pub/Sub and share links |
 | `PUBLIC_BASE_URL` | Public-facing base URL for share links (e.g., `https://api.vexa.ai`) |
@@ -133,7 +133,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | `CORS_ORIGINS` | Comma-separated allowed origins for CORS (default: `http://localhost:3000,http://localhost:3001`). Controls `Access-Control-Allow-Origin` for all endpoints. |
 | `LOG_LEVEL` | Logging level |
 
-The service fails to start if any of `ADMIN_API_URL`, `BOT_MANAGER_URL` (points to meeting-api), `TRANSCRIPTION_COLLECTOR_URL`, or `MCP_URL` are missing.
+The service fails to start if any of `ADMIN_API_URL`, `MEETING_API_URL`, `TRANSCRIPTION_COLLECTOR_URL`, or `MCP_URL` are missing.
 
 ### Test
 

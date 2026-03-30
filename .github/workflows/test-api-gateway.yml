@@ -29,7 +29,7 @@ jobs:
       - name: Run tests
         env:
           ADMIN_API_URL: http://admin-api:8001
-          BOT_MANAGER_URL: http://meeting-api:8080
+          MEETING_API_URL: http://meeting-api:8080
           TRANSCRIPTION_COLLECTOR_URL: http://meeting-api:8080
           MCP_URL: http://mcp:18888
         run: pytest services/api-gateway/tests/ -v

@@ -928,7 +928,7 @@ async def delete_browser_storage(user_id: int):
 async def get_user_bots_status(
     auth_data: tuple = Depends(get_user_and_token),
 ):
-    """Returns {running_bots: [...]} with exact same fields as bot-manager."""
+    """Returns {running_bots: [...]} — bot status for the authenticated user."""
     _, current_user = auth_data
     try:
         running_bots = await _get_running_bots_from_runtime(current_user.id)
@@ -1086,3 +1086,96 @@ async def stop_bot(
         await publish_meeting_status_change(meeting.id, "stopping", redis_client, platform_value, native_meeting_id, meeting.user_id)
 
     return {"message": "Stop request accepted and is being processed."}
+
+
+# --- Recording Config ---
+
+class RecordingConfigRequest(BaseModel):
+    enabled: Optional[bool] = None
+    capture_modes: Optional[List[str]] = None
+
+
+@router.get(
+    "/recording-config",
+    summary="Get recording configuration for the authenticated user",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def get_recording_config(
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+    from admin_models.models import User
+    user = (await db.execute(select(User).where(User.id == current_user.id))).scalars().first()
+    if not user:
+        return {
+            "enabled": os.getenv("RECORDING_ENABLED", "false").lower() == "true",
+            "capture_modes": os.getenv("CAPTURE_MODES", "audio").split(","),
+        }
+    data = user.data or {}
+    rc = data.get("recording_config", {})
+    return {
+        "enabled": rc.get("enabled", os.getenv("RECORDING_ENABLED", "false").lower() == "true"),
+        "capture_modes": rc.get("capture_modes", os.getenv("CAPTURE_MODES", "audio").split(",")),
+    }
+
+
+@router.put(
+    "/recording-config",
+    summary="Update recording configuration for the authenticated user",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def update_recording_config(
+    req: RecordingConfigRequest,
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+    from admin_models.models import User
+    user = (await db.execute(select(User).where(User.id == current_user.id))).scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    data = dict(user.data or {})
+    rc = dict(data.get("recording_config", {}))
+    if req.enabled is not None:
+        rc["enabled"] = req.enabled
+    if req.capture_modes is not None:
+        rc["capture_modes"] = req.capture_modes
+    data["recording_config"] = rc
+    user.data = data
+    attributes.flag_modified(user, "data")
+    await db.commit()
+    return rc
+
+
+# --- Deferred Transcription ---
+
+@router.post(
+    "/meetings/{meeting_id}/transcribe",
+    summary="Trigger deferred transcription for a completed meeting",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def transcribe_meeting(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+    meeting = (await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id, Meeting.user_id == current_user.id)
+    )).scalars().first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if meeting.status not in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail=f"Meeting status is '{meeting.status}', expected 'completed' or 'failed'")
+
+    # Deferred transcription not yet implemented.
+    # POST /meetings/{id}/transcribe is stubbed — the logic
+    # (download recording → Whisper → speaker mapping → persist) hasn't been
+    # migrated to meeting-api yet. Return 501 so callers get a clear signal.
+    raise HTTPException(
+        status_code=501,
+        detail="Deferred transcription not yet implemented in meeting-api. "
+               "Real-time transcription during meetings works normally.",
+    )

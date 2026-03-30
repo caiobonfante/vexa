@@ -198,13 +198,13 @@ resp = await httpx.post(f"{RUNTIME_API_URL}/containers", json={
 ### 2.3 Gateway routing change (one line)
 
 ```python
-# Before
-BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL", "http://bot-manager:8080")
-# After
+# Before (Phase 2)
 BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL", "http://meeting-api:8080")
+# Final (post-finalization)
+MEETING_API_URL = os.getenv("MEETING_API_URL", "http://meeting-api:8080")
 ```
 
-Same env var name for backward compat. Just change the default.
+Env var renamed from BOT_MANAGER_URL to MEETING_API_URL in the finalization phase.
 
 ### 2.4 Frozen contracts
 

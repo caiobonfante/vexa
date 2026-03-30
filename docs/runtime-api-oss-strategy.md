@@ -119,11 +119,11 @@ git filter-repo --subdirectory-filter services/runtime-api
 
 | Remove | Why |
 |--------|-----|
-| Internal hostnames (`bot-manager:8080`, `agent-api:8100`) | Internal coupling |
+| Internal hostnames (`meeting-api:8080`, `agent-api:8100`) | Internal coupling |
 | `shared_models` imports (User, APIToken) | DB coupling |
 | Claude/Anthropic credential mounting | Vexa-specific |
 | `VEXA_USER_ID`, `BOT_CONFIG`, MinIO env injection | Domain leakage |
-| Logger naming (`bot_manager.auth`) | Leaked internal names |
+| Logger naming (`meeting_api.auth`) | Leaked internal names |
 | Hardcoded profiles (meeting, agent, browser) | Move to config file |
 
 ### Step 3: Make pluggable

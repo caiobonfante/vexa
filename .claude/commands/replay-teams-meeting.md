@@ -15,7 +15,7 @@ Replays the saved closed-caption transcript with multiple speaking bots into a T
 | Service | Port | Purpose |
 |---------|------|---------|
 | API Gateway | 8066 | Bot creation, speak commands, transcription retrieval |
-| Bot Manager | 8080 (internal) | Proxied through API Gateway |
+| Meeting API | 8080 (internal) | Proxied through API Gateway |
 | Transcription Service | 8083 | Whisper transcription |
 | TTS Service | 8002 | Text-to-speech for speaker bots |
 | Redis | 6379 | Segment streaming, pub/sub |
@@ -59,7 +59,7 @@ Response includes `id` (meeting ID) and `bot_container_id` (Docker container).
 
 ### 2. Send speaker bots (one per user account)
 
-Each speaker bot must come from a **different user account** (bot-manager prevents duplicate bots per user per meeting).
+Each speaker bot must come from a **different user account** (meeting-api prevents duplicate bots per user per meeting).
 
 Available speaker accounts and tokens:
 
@@ -148,7 +148,7 @@ API_KEY=<your_api_key> node test_data/replay-meeting.js \
 ### Parameters
 
 - `--limit=N` — Only replay first N consolidated utterances (useful for quick tests)
-- `API_URL` — Bot manager URL (default: `http://localhost:8066`)
+- `API_URL` — API gateway URL (default: `http://localhost:8066`)
 - `ADMIN_URL` — Admin API URL (default: `http://localhost:8067`)
 
 ## What to look for

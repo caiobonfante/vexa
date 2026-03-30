@@ -50,7 +50,7 @@ class PaginatedMeetingUserStatResponse(BaseModel):
     total: int
     items: List[MeetingUserStat]
 
-# Security - Reuse logic from bot-manager/auth.py for admin token verification
+# Security - Reuse logic from meeting-api/auth.py for admin token verification
 API_KEY_HEADER = APIKeyHeader(name="X-Admin-API-Key", auto_error=False) # Use a distinct header
 USER_API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False) # For user-facing endpoints
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN") # Read from environment
@@ -264,7 +264,7 @@ async def delete_workspace_git(
 
     return UserResponse.model_validate(user)
 
-# --- Admin Endpoints (Copied and adapted from bot-manager/admin.py) --- 
+# --- Admin Endpoints (Copied and adapted from meeting-api/admin.py) ---
 @admin_router.post("/users",
              response_model=UserResponse,
              status_code=status.HTTP_201_CREATED,

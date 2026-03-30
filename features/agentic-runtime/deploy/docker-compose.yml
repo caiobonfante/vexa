@@ -123,7 +123,7 @@ services:
       - "${API_GATEWAY_PORT:-8066}:8000"
     environment:
       - ADMIN_API_URL=http://admin-api:8001
-      - BOT_MANAGER_URL=http://bot-manager:8080
+      - MEETING_API_URL=http://meeting-api:8080
       - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - MCP_URL=http://mcp:18888
       - CALENDAR_SERVICE_URL=http://calendar-service:8050
@@ -137,7 +137,6 @@ services:
       - vexa_agentic
     depends_on:
       - admin-api
-      - bot-manager
       - meeting-api
       - agent-api
       - redis
@@ -165,48 +164,6 @@ services:
       - postgres
     restart: unless-stopped
 
-  bot-manager:
-    build:
-      context: ../../..
-      dockerfile: services/bot-manager/Dockerfile
-    ports:
-      - "${BOT_MANAGER_PORT:-8070}:8080"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - BOT_IMAGE_NAME=vexa-bot:dev
-      - RAW_CAPTURE=${RAW_CAPTURE:-}
-      - DOCKER_NETWORK=vexa-agentic_vexa_agentic
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-vexa_agentic}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_SSL_MODE=disable
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
-      - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
-      - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
-      - STORAGE_BACKEND=minio
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
-      - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
-      - MINIO_SECURE=false
-      - RECORDING_ENABLED=true
-      - ZOOM_WEB=true
-      - CAPTURE_MODES=audio
-      - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
-      - POST_MEETING_HOOKS=http://agent-api:8100/internal/webhooks/meeting-completed
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - vexa_agentic
-    depends_on:
-      - redis
-      - postgres
-      - admin-api
-    restart: unless-stopped
-
   meeting-api:
     build:
       context: ../../..
@@ -224,12 +181,21 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
+      - RUNTIME_API_URL=http://runtime-api:8090
+      - MEETING_API_URL=http://meeting-api:8080
+      - BOT_IMAGE_NAME=vexa-bot:dev
+      - DOCKER_NETWORK=vexa-agentic_vexa_agentic
+      - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
+      - POST_MEETING_HOOKS=http://agent-api:8100/internal/webhooks/meeting-completed
+      - TRANSCRIPTION_COLLECTOR_URL=http://meeting-api:8080
       - STORAGE_BACKEND=minio
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
       - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
       - MINIO_SECURE=false
+      - RECORDING_ENABLED=true
+      - CAPTURE_MODES=audio
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -238,6 +204,7 @@ services:
     depends_on:
       - redis
       - postgres
+      - runtime-api
     restart: unless-stopped
 
 
@@ -245,8 +212,10 @@ services:
 
   runtime-api:
     build:
-      context: ../../..
-      dockerfile: services/runtime-api/Dockerfile
+      context: ../../../packages/runtime-api
+      dockerfile: Dockerfile
+    group_add:
+      - "${DOCKER_GID:-998}"
     ports:
       - "${RUNTIME_API_PORT:-8090}:8090"
     environment:
@@ -261,15 +230,19 @@ services:
       - CLAUDE_CREDENTIALS_PATH=${CLAUDE_CREDENTIALS_PATH}
       - CLAUDE_JSON_PATH=${CLAUDE_JSON_PATH}
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
+      - API_KEYS=${BOT_API_TOKEN:-}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-vexa_agentic}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_SSL_MODE=disable
+      - PROFILES_PATH=/app/profiles.yaml
+      - ALLOW_PRIVATE_CALLBACKS=1
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../packages/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
     networks:
       - vexa_agentic
     depends_on:
@@ -292,7 +265,7 @@ services:
       - DB_SSL_MODE=disable
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - BOT_MANAGER_URL=http://bot-manager:8080
+      - MEETING_API_URL=http://meeting-api:8080
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
       - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
       - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
@@ -301,7 +274,7 @@ services:
       - vexa_agentic
     depends_on:
       - postgres
-      - bot-manager
+      - meeting-api
     restart: unless-stopped
 
 volumes:

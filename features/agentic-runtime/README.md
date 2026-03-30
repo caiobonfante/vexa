@@ -262,7 +262,7 @@ Start with Claude Code subscription (free for development). Explore open-source 
 - All features that need container orchestration
 
 **Replaces / subsumes:**
-- bot-manager container orchestration -> Runtime API + Meeting API (Phase 4 refactoring, 2026-03-26). Bot-manager source deleted in commit `65f033d3`. A stale cached Docker image still runs in the agentic compose — to be removed once meeting-api handles all bot creation.
+- Container orchestration now handled by Runtime API + Meeting API (Phase 4 refactoring, 2026-03-26).
 - scheduler HTTP executor -> Runtime API container spawn
 - quorum ContainerManager + ChatManager -> Agent API + Runtime API
 
@@ -452,7 +452,7 @@ MVP0-MVP2 built, MVP3 wired meeting pipeline + dashboard. Currently hardening au
 ```
 User: "Join my meeting"
   → Agent: vexa meeting join --platform teams --url {url}
-    → Bot-manager spawns bot container → joins meeting → transcribes
+    → Meeting API spawns bot container → joins meeting → transcribes
       → Segments: bot → Redis stream → TC → Postgres + Redis hash
       → Live WS: bot PUBLISH tc:meeting:{id}:mutable → api-gateway → dashboard
     → Meeting ends: bot exit callback → status=completed
@@ -533,7 +533,7 @@ npm install && npm run dev
 |---------|---------------|-----------|
 | API Gateway | 8000 | 8066 |
 | Admin API | 8001 | 8067 |
-| Bot Manager | 8080 | 8070 |
+| Meeting API | 8080 | (internal) |
 | Runtime API | 8090 | 8090 |
 | Agent API | 8100 | 8100 |
 | Transcription Collector | 8000 | 8060 |

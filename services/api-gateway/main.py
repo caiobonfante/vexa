@@ -34,7 +34,7 @@ load_dotenv()
 
 # Configuration - Service endpoints are now mandatory environment variables
 ADMIN_API_URL = os.getenv("ADMIN_API_URL")
-BOT_MANAGER_URL = os.getenv("BOT_MANAGER_URL")
+MEETING_API_URL = os.getenv("MEETING_API_URL")
 TRANSCRIPTION_COLLECTOR_URL = os.getenv("TRANSCRIPTION_COLLECTOR_URL")
 MCP_URL = os.getenv("MCP_URL")
 CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")  # Optional — calendar-service
@@ -63,12 +63,12 @@ ROUTE_SCOPES = {
 }
 
 # --- Validation at startup ---
-if not all([ADMIN_API_URL, BOT_MANAGER_URL, TRANSCRIPTION_COLLECTOR_URL, MCP_URL]):
+if not all([ADMIN_API_URL, MEETING_API_URL, TRANSCRIPTION_COLLECTOR_URL, MCP_URL]):
     missing_vars = [
         var_name
         for var_name, var_value in {
             "ADMIN_API_URL": ADMIN_API_URL,
-            "BOT_MANAGER_URL": BOT_MANAGER_URL,
+            "MEETING_API_URL": MEETING_API_URL,
             "TRANSCRIPTION_COLLECTOR_URL": TRANSCRIPTION_COLLECTOR_URL,
             "MCP_URL": MCP_URL,
         }.items()
@@ -413,7 +413,7 @@ async def root():
 # Function signature remains generic for forwarding
 async def request_bot_proxy(request: Request): 
     """Forward request to Bot Manager to start a bot."""
-    url = f"{BOT_MANAGER_URL}/bots"
+    url = f"{MEETING_API_URL}/bots"
     # forward_request handles reading and passing the body from the original request
     return await forward_request(app.state.http_client, "POST", url, request)
 
@@ -425,7 +425,7 @@ async def request_bot_proxy(request: Request):
            dependencies=[Depends(api_key_scheme)])
 async def stop_bot_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward request to Bot Manager to stop a bot."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 # --- ADD Route for PUT /bots/.../config ---
@@ -438,7 +438,7 @@ async def stop_bot_proxy(platform: Platform, native_meeting_id: str, request: Re
 # Need to accept request body for PUT
 async def update_bot_config_proxy(platform: Platform, native_meeting_id: str, request: Request): 
     """Forward request to Bot Manager to update bot config."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/config"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/config"
     # forward_request handles reading and passing the body from the original request
     return await forward_request(app.state.http_client, "PUT", url, request)
 # -------------------------------------------
@@ -452,7 +452,7 @@ async def update_bot_config_proxy(platform: Platform, native_meeting_id: str, re
          dependencies=[Depends(api_key_scheme)])
 async def get_bots_status_proxy(request: Request):
     """Forward request to Bot Manager to get running bot status."""
-    url = f"{BOT_MANAGER_URL}/bots/status"
+    url = f"{MEETING_API_URL}/bots/status"
     return await forward_request(app.state.http_client, "GET", url, request)
 # --- END Route for GET /bots/status ---
 
@@ -476,7 +476,7 @@ async def get_bots_status_proxy(request: Request):
           })
 async def speak_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward speak request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/speak"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/speak"
     return await forward_request(app.state.http_client, "POST", url, request)
 
 @app.delete("/bots/{platform}/{native_meeting_id}/speak",
@@ -486,7 +486,7 @@ async def speak_proxy(platform: Platform, native_meeting_id: str, request: Reque
             dependencies=[Depends(api_key_scheme)])
 async def speak_stop_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward speak stop request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/speak"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/speak"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 @app.post("/bots/{platform}/{native_meeting_id}/chat",
@@ -507,7 +507,7 @@ async def speak_stop_proxy(platform: Platform, native_meeting_id: str, request: 
           })
 async def chat_send_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward chat send request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/chat"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/chat"
     return await forward_request(app.state.http_client, "POST", url, request)
 
 @app.get("/bots/{platform}/{native_meeting_id}/chat",
@@ -518,7 +518,7 @@ async def chat_send_proxy(platform: Platform, native_meeting_id: str, request: R
          dependencies=[Depends(api_key_scheme)])
 async def chat_read_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward chat read request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/chat"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/chat"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.post("/bots/{platform}/{native_meeting_id}/screen",
@@ -539,7 +539,7 @@ async def chat_read_proxy(platform: Platform, native_meeting_id: str, request: R
           })
 async def screen_show_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward screen content request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/screen"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/screen"
     return await forward_request(app.state.http_client, "POST", url, request)
 
 @app.delete("/bots/{platform}/{native_meeting_id}/screen",
@@ -549,7 +549,7 @@ async def screen_show_proxy(platform: Platform, native_meeting_id: str, request:
             dependencies=[Depends(api_key_scheme)])
 async def screen_stop_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward screen stop request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/screen"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/screen"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 
@@ -560,7 +560,7 @@ async def screen_stop_proxy(platform: Platform, native_meeting_id: str, request:
          dependencies=[Depends(api_key_scheme)])
 async def avatar_set_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward avatar set request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/avatar"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/avatar"
     return await forward_request(app.state.http_client, "PUT", url, request)
 
 
@@ -571,7 +571,7 @@ async def avatar_set_proxy(platform: Platform, native_meeting_id: str, request: 
             dependencies=[Depends(api_key_scheme)])
 async def avatar_reset_proxy(platform: Platform, native_meeting_id: str, request: Request):
     """Forward avatar reset request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/bots/{platform.value}/{native_meeting_id}/avatar"
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/avatar"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 # --- END Voice Agent Interaction Routes ---
@@ -639,7 +639,7 @@ async def calendar_preferences_proxy(request: Request):
          dependencies=[Depends(api_key_scheme)])
 async def list_recordings_proxy(request: Request):
     """Forward request to Bot Manager to list recordings."""
-    url = f"{BOT_MANAGER_URL}/recordings"
+    url = f"{MEETING_API_URL}/recordings"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.get("/recordings/{recording_id}",
@@ -649,7 +649,7 @@ async def list_recordings_proxy(request: Request):
          dependencies=[Depends(api_key_scheme)])
 async def get_recording_proxy(recording_id: int, request: Request):
     """Forward request to Bot Manager to get recording details."""
-    url = f"{BOT_MANAGER_URL}/recordings/{recording_id}"
+    url = f"{MEETING_API_URL}/recordings/{recording_id}"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.get("/recordings/{recording_id}/media/{media_file_id}/download",
@@ -659,7 +659,7 @@ async def get_recording_proxy(recording_id: int, request: Request):
          dependencies=[Depends(api_key_scheme)])
 async def download_media_proxy(recording_id: int, media_file_id: int, request: Request):
     """Forward request to Bot Manager for presigned download URL."""
-    url = f"{BOT_MANAGER_URL}/recordings/{recording_id}/media/{media_file_id}/download"
+    url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/download"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.get("/recordings/{recording_id}/media/{media_file_id}/raw",
@@ -669,7 +669,7 @@ async def download_media_proxy(recording_id: int, media_file_id: int, request: R
          dependencies=[Depends(api_key_scheme)])
 async def download_media_raw_proxy(recording_id: int, media_file_id: int, request: Request):
     """Forward request to Bot Manager for raw media streaming."""
-    url = f"{BOT_MANAGER_URL}/recordings/{recording_id}/media/{media_file_id}/raw"
+    url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/raw"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.delete("/recordings/{recording_id}",
@@ -679,7 +679,7 @@ async def download_media_raw_proxy(recording_id: int, media_file_id: int, reques
             dependencies=[Depends(api_key_scheme)])
 async def delete_recording_proxy(recording_id: int, request: Request):
     """Forward request to Bot Manager to delete a recording."""
-    url = f"{BOT_MANAGER_URL}/recordings/{recording_id}"
+    url = f"{MEETING_API_URL}/recordings/{recording_id}"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
 @app.get("/recording-config",
@@ -689,7 +689,7 @@ async def delete_recording_proxy(recording_id: int, request: Request):
          dependencies=[Depends(api_key_scheme)])
 async def get_recording_config_proxy(request: Request):
     """Forward request to Bot Manager to get recording config."""
-    url = f"{BOT_MANAGER_URL}/recording-config"
+    url = f"{MEETING_API_URL}/recording-config"
     return await forward_request(app.state.http_client, "GET", url, request)
 
 @app.put("/recording-config",
@@ -699,7 +699,7 @@ async def get_recording_config_proxy(request: Request):
          dependencies=[Depends(api_key_scheme)])
 async def update_recording_config_proxy(request: Request):
     """Forward request to Bot Manager to update recording config."""
-    url = f"{BOT_MANAGER_URL}/recording-config"
+    url = f"{MEETING_API_URL}/recording-config"
     return await forward_request(app.state.http_client, "PUT", url, request)
 
 # --- Deferred Transcription Route ---
@@ -710,7 +710,7 @@ async def update_recording_config_proxy(request: Request):
           dependencies=[Depends(api_key_scheme)])
 async def transcribe_meeting_proxy(meeting_id: int, request: Request):
     """Forward transcribe request to Bot Manager."""
-    url = f"{BOT_MANAGER_URL}/meetings/{meeting_id}/transcribe"
+    url = f"{MEETING_API_URL}/meetings/{meeting_id}/transcribe"
     return await forward_request(app.state.http_client, "POST", url, request)
 
 # --- Transcription Collector Routes ---
@@ -1065,7 +1065,7 @@ async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optio
         active_meetings = []
         bot_platforms = {}  # meeting_id -> platform for active bots
 
-        resp = await client.get(f"{BOT_MANAGER_URL}/bots/status", headers=headers, timeout=5.0)
+        resp = await client.get(f"{MEETING_API_URL}/bots/status", headers=headers, timeout=5.0)
         has_running_bots = False
         if resp.status_code == 200:
             bots_data = resp.json()
@@ -1301,7 +1301,8 @@ async def agent_session_delete_proxy(session_id: str, request: Request):
 @app.api_route("/mcp", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
                tags=["MCP"],
                summary="Forward MCP requests to MCP service",
-               description="Forwards requests to the separate MCP service. MCP protocol endpoint for Model Context Protocol.")
+               description="Forwards requests to the separate MCP service. MCP protocol endpoint for Model Context Protocol.",
+               dependencies=[Depends(api_key_scheme)])
 async def forward_mcp_root(request: Request):
     """Forward MCP root endpoint requests to the separate MCP service."""
     url = f"{MCP_URL}/mcp"
@@ -1359,7 +1360,8 @@ async def forward_mcp_root(request: Request):
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
                tags=["MCP"],
                summary="Forward MCP path requests",
-               description="Forwards MCP requests with paths to the separate MCP service.")
+               description="Forwards MCP requests with paths to the separate MCP service.",
+               dependencies=[Depends(api_key_scheme)])
 async def forward_mcp_path(request: Request, path: str):
     """Forward MCP path requests to the separate MCP service."""
     url = f"{MCP_URL}/mcp/{path}"
@@ -1412,14 +1414,7 @@ async def forward_mcp_path(request: Request, path: str):
 
 # --- Removed internal ID resolution and full transcript fetching from Gateway ---
 
-# --- Auth routes (proxied to bot-manager) ---
-
-@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE"],
-               tags=["Auth"], include_in_schema=False)
-async def proxy_auth(path: str, request: Request):
-    """Proxy /auth/* routes to bot-manager."""
-    url = f"{BOT_MANAGER_URL}/auth/{path}"
-    return await forward_request(app.state.http_client, request.method, url, request, require_auth=False)
+# --- Auth routes removed (/auth/* endpoints no longer exist) ---
 
 
 # --- Remote Browser Session Routes ---
@@ -1793,7 +1788,7 @@ async def browser_cdp_ws(websocket: WebSocket, token: str):
 
 @app.post("/b/{token}/save", tags=["Remote Browser"], summary="Save browser storage to MinIO")
 async def browser_save_storage(token: str):
-    """Convenience proxy: save browser userdata to MinIO via bot-manager."""
+    """Convenience proxy: save browser userdata to MinIO via meeting-api."""
     session = await resolve_browser_session(token)
     if not session:
         raise HTTPException(status_code=404, detail="Browser session not found or expired")
@@ -1802,17 +1797,17 @@ async def browser_save_storage(token: str):
     if not meeting_id:
         raise HTTPException(status_code=500, detail="Session missing meeting_id")
 
-    # Forward to bot-manager (internal call, no user API key needed)
+    # Forward to meeting-api (internal call, no user API key needed)
     try:
         resp = await app.state.http_client.post(
-            f"{BOT_MANAGER_URL}/internal/browser-sessions/{token}/save",
+            f"{MEETING_API_URL}/internal/browser-sessions/{token}/save",
             timeout=60.0,  # sync can take a while
         )
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
         return resp.json()
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to reach bot-manager: {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to reach meeting-api: {exc}")
 
 
 @app.delete("/b/{token}/storage", tags=["Remote Browser"], summary="Delete stored browser data from S3")
@@ -1828,14 +1823,14 @@ async def browser_delete_storage(token: str):
 
     try:
         resp = await app.state.http_client.delete(
-            f"{BOT_MANAGER_URL}/internal/browser-sessions/{user_id}/storage",
+            f"{MEETING_API_URL}/internal/browser-sessions/{user_id}/storage",
             timeout=60.0,
         )
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
         return resp.json()
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to reach bot-manager: {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to reach meeting-api: {exc}")
 
 
 # --- End Remote Browser Session Routes ---

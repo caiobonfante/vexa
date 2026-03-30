@@ -38,7 +38,9 @@ _BLOCKED_HOSTNAMES = frozenset([
     # Vexa Docker services
     "api-gateway",
     "admin-api",
-    "bot-manager",
+    "meeting-api",
+    "runtime-api",
+    "bot-manager",  # legacy name, kept as belt-and-suspenders
     "transcription-collector",
     "redis",
     "postgres",

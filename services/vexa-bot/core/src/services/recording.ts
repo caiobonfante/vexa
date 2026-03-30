@@ -113,7 +113,7 @@ export class RecordingService {
   }
 
   /**
-   * Upload the finalized recording to the bot-manager's internal upload endpoint.
+   * Upload the finalized recording to the meeting-api internal upload endpoint.
    * Retries up to 3 times with exponential backoff on transient failures.
    */
   async upload(callbackUrl: string, token: string): Promise<void> {

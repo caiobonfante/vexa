@@ -650,7 +650,7 @@ state_path.write_text(json.dumps(state, indent=2) + '\n')
     local owned_dirs
     owned_dirs=$(grep -E '^\s*(services|packages|libs)/' "$feature_readme" 2>/dev/null | sed 's/→.*//' | xargs 2>/dev/null || true)
     for dir in $owned_dirs; do
-      # Strip trailing whitespace and path suffixes like (bot-manager routes)
+      # Strip trailing whitespace and path suffixes like (meeting-api routes)
       dir=$(echo "$dir" | sed 's/(.*//' | xargs)
       local svc_readme="$REPO/$dir/README.md"
       if [[ -f "$svc_readme" ]]; then

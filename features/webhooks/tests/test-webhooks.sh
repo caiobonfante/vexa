@@ -9,7 +9,7 @@
 #   all         — run all tests
 #
 # Prerequisites:
-#   - Compose stack running (api-gateway, bot-manager, admin-api)
+#   - Compose stack running (api-gateway, meeting-api, admin-api)
 #   - Webhook receiver running: make receiver (in another terminal)
 #
 # Usage:
@@ -31,7 +31,7 @@ API_TOKEN="${API_TOKEN:-}"
 ADMIN_TOKEN="${ADMIN_TOKEN:-changeme}"
 TEST_USER_ID="${TEST_USER_ID:-1}"
 RECEIVER_PORT="${WEBHOOK_RECEIVER_PORT:-9999}"
-# Use host.docker.internal so bot-manager (in Docker) can reach the receiver on host
+# Use host.docker.internal so meeting-api (in Docker) can reach the receiver on host
 WEBHOOK_URL="${WEBHOOK_URL:-http://host.docker.internal:$RECEIVER_PORT/webhook}"
 
 CMD="${1:-all}"

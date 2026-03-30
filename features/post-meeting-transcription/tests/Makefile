@@ -8,7 +8,7 @@ export
 
 # Fallback defaults
 export API_GATEWAY_URL ?= http://localhost:8066
-export BOT_MANAGER_URL ?= http://localhost:8066
+export MEETING_API_URL ?= http://localhost:8066
 export TRANSCRIPTION_SERVICE_URL ?= http://localhost:8083/v1/audio/transcriptions
 export MINIO_ENDPOINT ?= localhost:9000
 export ADMIN_PORT ?= 8057
@@ -20,7 +20,7 @@ help:
 	@echo ""
 	@echo "  Stage 0: Infra verification"
 	@echo "    make env-check           — verify .env exists and show config"
-	@echo "    make smoke               — verify transcription-service, MinIO, bot-manager are reachable"
+	@echo "    make smoke               — verify transcription-service, MinIO, meeting-api are reachable"
 	@echo ""
 	@echo "  Stage 1: Pipeline checks (after a meeting completes)"
 	@echo "    make check-recording  MEETING_ID=N  — verify recording exists in MinIO"
@@ -52,10 +52,10 @@ smoke: env-check
 	@curl -sf $(TRANSCRIPTION_SERVICE_URL)/../health > /dev/null 2>&1 \
 		&& echo "  OK: transcription-service reachable" \
 		|| echo "  FAIL: transcription-service not reachable at $(TRANSCRIPTION_SERVICE_URL)"
-	@echo "2/3 Checking bot-manager..."
-	@curl -sf $(BOT_MANAGER_URL)/health > /dev/null 2>&1 \
-		&& echo "  OK: bot-manager reachable" \
-		|| echo "  FAIL: bot-manager not reachable at $(BOT_MANAGER_URL)"
+	@echo "2/3 Checking meeting-api..."
+	@curl -sf $(MEETING_API_URL)/health > /dev/null 2>&1 \
+		&& echo "  OK: meeting-api reachable" \
+		|| echo "  FAIL: meeting-api not reachable at $(MEETING_API_URL)"
 	@echo "3/3 Checking MinIO..."
 	@curl -sf http://$(MINIO_ENDPOINT)/minio/health/live > /dev/null 2>&1 \
 		&& echo "  OK: MinIO reachable" \
@@ -66,19 +66,19 @@ smoke: env-check
 check-recording:
 	@if [ -z "$(MEETING_ID)" ]; then echo "ERROR: MEETING_ID required"; exit 1; fi
 	@echo "Checking recording for meeting $(MEETING_ID)..."
-	@curl -sf "$(BOT_MANAGER_URL)/meetings/$(MEETING_ID)" \
+	@curl -sf "$(MEETING_API_URL)/meetings/$(MEETING_ID)" \
 		-H "X-API-Key: $(API_TOKEN)" | jq '.data.recordings // "no recordings in meeting.data"'
 
 check-speaker-events:
 	@if [ -z "$(MEETING_ID)" ]; then echo "ERROR: MEETING_ID required"; exit 1; fi
 	@echo "Checking speaker_events for meeting $(MEETING_ID)..."
-	@curl -sf "$(BOT_MANAGER_URL)/meetings/$(MEETING_ID)" \
+	@curl -sf "$(MEETING_API_URL)/meetings/$(MEETING_ID)" \
 		-H "X-API-Key: $(API_TOKEN)" | jq '{speaker_events_count: (.data.speaker_events | length), speaker_events: .data.speaker_events[:5]}'
 
 check-transcribe:
 	@if [ -z "$(MEETING_ID)" ]; then echo "ERROR: MEETING_ID required"; exit 1; fi
 	@echo "Triggering transcription for meeting $(MEETING_ID)..."
-	@curl -sf -X POST "$(BOT_MANAGER_URL)/meetings/$(MEETING_ID)/transcribe" \
+	@curl -sf -X POST "$(MEETING_API_URL)/meetings/$(MEETING_ID)/transcribe" \
 		-H "X-API-Key: $(API_TOKEN)" \
 		-H "Content-Type: application/json" \
 		-d '{}' | jq .
@@ -89,7 +89,7 @@ check-playback:
 		echo "ERROR: PLATFORM and NATIVE_MEETING_ID required"; exit 1; \
 	fi
 	@echo "Checking transcript for $(PLATFORM)/$(NATIVE_MEETING_ID)..."
-	@curl -sf "$(BOT_MANAGER_URL)/transcripts/$(PLATFORM)/$(NATIVE_MEETING_ID)" \
+	@curl -sf "$(MEETING_API_URL)/transcripts/$(PLATFORM)/$(NATIVE_MEETING_ID)" \
 		-H "X-API-Key: $(API_TOKEN)" | jq '{segment_count: (.segments | length), speakers: [.segments[].speaker] | unique, first_segment: .segments[0]}'
 
 score:

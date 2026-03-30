@@ -118,7 +118,7 @@ If these files are missing, bot creation may return `201` initially, but the mee
 
 Implementation detail:
 
-- Dashboard and bot-manager resolve OAuth credentials with fallback:
+- Dashboard and meeting-api resolve OAuth credentials with fallback:
   `ZOOM_OAUTH_CLIENT_ID/SECRET` -> `ZOOM_CLIENT_ID/SECRET`.
 - Dashboard state signing secret fallback is:
   `ZOOM_OAUTH_STATE_SECRET` -> `NEXTAUTH_SECRET` -> `VEXA_ADMIN_API_KEY`.
@@ -136,8 +136,8 @@ Current behavior when creating a Zoom bot:
 
 Code references:
 
-- `vexa/services/bot-manager/app/main.py`
-- `vexa/services/bot-manager/app/zoom_obf.py`
+- `vexa/packages/meeting-api/meeting_api/meetings.py`
+- `vexa/packages/meeting-api/meeting_api/zoom_obf.py`
 - `vexa/services/vexa-bot/core/src/types.ts`
 - `vexa/services/vexa-bot/core/src/platforms/zoom/sdk-manager.ts`
 - `vexa/services/vexa-bot/core/src/platforms/zoom/native/src/zoom_wrapper.cpp`

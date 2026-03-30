@@ -1,6 +1,6 @@
 """Integration tests for bot management proxy routes.
 
-Verifies that /bots/* routes correctly proxy to BOT_MANAGER_URL,
+Verifies that /bots/* routes correctly proxy to MEETING_API_URL,
 forward headers (especially X-API-Key), and handle backend errors.
 """
 import pytest
@@ -31,7 +31,7 @@ def mock_http_client(mock_response):
 
 @pytest.mark.asyncio
 class TestPostBots:
-    async def test_post_bots_proxies_to_bot_manager(self, mock_http_client, mock_response):
+    async def test_post_bots_proxies_to_meeting_api(self, mock_http_client, mock_response):
         mock_http_client.request = AsyncMock(return_value=mock_response(201, {"id": 1}))
         app.state.http_client = mock_http_client
 

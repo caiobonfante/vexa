@@ -19,7 +19,7 @@ This feature fires HTTP POST requests to user-configured URLs when bot status ch
 
 ### Event types
 
-- **Bot status change**: fired by meeting-api when a bot joins, leaves, errors, etc. (moved from bot-manager in Phase 4 refactoring)
+- **Bot status change**: fired by meeting-api when a bot joins, leaves, errors, etc. (ported to meeting-api in Phase 4 refactoring)
 - **Transcript ready**: fired by meeting-api collector when transcription completes
 
 ### Data flow

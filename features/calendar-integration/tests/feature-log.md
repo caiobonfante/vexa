@@ -32,7 +32,7 @@ Both use same network pattern. Add calendar-service to both with identical env v
 Port assignment: check PORT-MAP.md to avoid collision before assigning host port.
 
 ## [PRACTICE] API Gateway proxy pattern
-gateway uses forward_request() helper + BOT_MANAGER_URL env pattern.
+gateway uses forward_request() helper + MEETING_API_URL env pattern.
 Adding calendar: add CALENDAR_SERVICE_URL env var + new @app.{method}("/calendar/...") routes
 that call forward_request(app.state.http_client, METHOD, f"{CALENDAR_SERVICE_URL}/...", request).
 Require X-API-Key header (same as /bots endpoint).
