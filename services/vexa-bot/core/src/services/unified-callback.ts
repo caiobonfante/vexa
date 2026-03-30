@@ -131,10 +131,13 @@ export async function callStatusChangeCallback(
         const delay = baseDelay * Math.pow(2, attempt);
         log(`Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
-      } else {log(`All ${maxRetries} callback attempts failed. Bot-manager may not have received the status change.`);
+      } else {log(`All ${maxRetries} callback attempts failed for ${status} status change.`);
+        throw new Error(`All ${maxRetries} callback attempts failed for ${status} status change`);
       }
     }
   }
+  // If we get here without returning (success), all retries were exhausted via non-exception path
+  throw new Error(`${status} callback failed: server rejected after ${maxRetries} attempts`);
 }
 
 /**

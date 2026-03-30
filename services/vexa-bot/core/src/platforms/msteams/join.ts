@@ -270,12 +270,9 @@ export async function joinMicrosoftTeams(page: Page, botConfig: BotConfig): Prom
   await page.goto(botConfig.meetingUrl!, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(500);
   
-  try {
-    await callJoiningCallback(botConfig);
-    log("Joining callback sent successfully");
-  } catch (callbackError: any) {
-    log(`Warning: Failed to send joining callback: ${callbackError.message}. Continuing with join process...`);
-  }
+  // Fix 2: Propagate JOINING callback failure — bot must NOT proceed if server rejected
+  await callJoiningCallback(botConfig);
+  log("Joining callback sent successfully");
 
   log("Step 2: Looking for 'Continue on this browser' button...");
   try {

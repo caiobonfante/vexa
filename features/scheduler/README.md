@@ -188,11 +188,45 @@ HTTP request (method, url, headers, body, timeout)
 
 | Feature | What it schedules | When |
 |---------|-------------------|------|
+| **bot-lifecycle** | `DELETE /bots/{platform}/{meeting_id}` — max_bot_time enforcement | Bot creation + max_bot_time (default 2h). Cancelled if bot exits normally. |
 | **calendar-integration** | `POST /bots` with meeting URL | 1 min before calendar event |
 | **webhooks** | Retry failed webhook delivery | Backoff schedule (1m, 5m, 30m, 2h) |
 | **post-meeting-transcription** | `POST /meetings/{id}/transcribe` | Meeting end + 30s |
 | **recording-cleanup** | `DELETE /recordings/{id}` | Retention period expiry |
 | **MCP** | Any scheduled tool call | User-specified time |
+
+### Bot Lifecycle Integration (first consumer)
+
+The scheduler's first real consumer is bot-lifecycle's `max_bot_time` enforcement. This is the server-side anti-zombie safety net — kills bots that exceed their maximum lifetime even if the bot process is hung or unresponsive.
+
+**Flow:**
+```
+POST /bots (meeting-api)
+  ├─ Create meeting record (status=requested)
+  ├─ Resolve max_bot_time: per-request → user.data.bot_config → default (2h)
+  ├─ POST /scheduler/jobs (runtime-api)
+  │   execute_at: now + max_bot_time
+  │   request: DELETE http://meeting-api:8080/bots/{platform}/{meeting_id}
+  │   headers: X-Admin-API-Key (internal)
+  │   metadata: {type: "bot_timeout", meeting_id, user_id}
+  │   idempotency_key: "bot_timeout_{meeting_id}"
+  ├─ Store scheduler_job_id in meeting.data
+  └─ Spawn bot container via runtime-api
+
+Bot exits normally (callback → completed/failed)
+  └─ DELETE /scheduler/jobs/{job_id} — cancel the timeout job
+
+User stops bot (DELETE /bots)
+  └─ DELETE /scheduler/jobs/{job_id} — cancel the timeout job
+
+Timeout fires (bot still alive after max_bot_time)
+  └─ Scheduler fires DELETE /bots/{platform}/{meeting_id}
+     └─ meeting-api sets status=stopping → signals container → completed (reason=max_bot_time_exceeded)
+```
+
+**Why scheduler and not bot-internal timeout?** The bot can hang, lose network, or have bugs. A bot-internal timeout requires the bot to be functioning. The scheduler is completely independent — it fires an HTTP DELETE regardless of bot state. Defense in depth.
+
+See `features/bot-lifecycle/README.md` for the full timeout model.
 
 ### Data stages
 

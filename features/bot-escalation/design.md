@@ -166,7 +166,7 @@ When escalation triggers:
    x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
    websockify 6080 localhost:5900 &
    ```
-2. Bot writes `browser_session:{token}` to Redis (token = meeting's session token or a newly generated one)
+2. Meeting-api writes `browser_session:{meeting_id}` to Redis on receiving the `needs_human_help` callback (with `session_token: str(meeting.id)` in escalation data)
 3. VNC is accessible within ~1 second
 
 **Why lazy over always-on:** Meeting bots are high-frequency. Running VNC on every bot wastes ~20MB RAM per container and opens an unnecessary attack surface. Starting on-demand adds ~1s latency, which is acceptable since the user still needs to click through the notification.

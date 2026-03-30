@@ -79,11 +79,8 @@ export async function joinZoomWebMeeting(page: Page | null, botConfig: BotConfig
   }
 
   // Notify meeting-api: joining
-  try {
-    await callJoiningCallback(botConfig);
-  } catch (e: any) {
-    log(`[Zoom Web] Warning: joining callback failed: ${e.message}`);
-  }
+  // Fix 2: Propagate JOINING callback failure — bot must NOT proceed if server rejected
+  await callJoiningCallback(botConfig);
 
   // Handle the "Use microphone and camera" permission dialog(s).
   // Zoom shows this dialog up to twice (camera+mic, then mic-only).

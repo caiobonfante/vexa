@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import secrets
+import time
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -124,7 +125,19 @@ async def update_meeting_status(
     transition_reason: Optional[str] = None,
     transition_metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    """Update meeting status with validation and transition tracking."""
+    """Update meeting status with validation and transition tracking.
+
+    Uses SELECT FOR UPDATE to prevent TOCTOU race on concurrent callbacks.
+    """
+    # Fix 4: Re-fetch with row lock to prevent concurrent callback race
+    locked_stmt = (
+        select(Meeting)
+        .where(Meeting.id == meeting.id)
+        .with_for_update()
+    )
+    result = await db.execute(locked_stmt)
+    meeting = result.scalar_one()
+
     try:
         current_status = MeetingStatus(meeting.status)
     except ValueError:
@@ -197,6 +210,11 @@ async def update_meeting_status(
 
     await db.refresh(meeting)
     logger.info(f"Meeting {meeting.id} status: '{old_status}' -> '{new_status.value}'")
+
+    # Cancel scheduler timeout job when reaching terminal state
+    if new_status in (MeetingStatus.COMPLETED, MeetingStatus.FAILED):
+        asyncio.create_task(_cancel_bot_timeout(meeting))
+
     return True
 
 
@@ -259,6 +277,72 @@ def _get_httpx_client() -> httpx.AsyncClient:
         # Fallback for cases where app hasn't started yet (tests, etc.)
         return httpx.AsyncClient(timeout=30.0)
     return client
+
+
+async def _schedule_bot_timeout(
+    meeting_id: int,
+    user_id: int,
+    platform: str,
+    native_meeting_id: str,
+    max_bot_time_ms: int,
+) -> Optional[str]:
+    """Schedule a timeout job to kill the bot after max_bot_time.
+
+    Returns the scheduler job_id on success, None on failure.
+    """
+    try:
+        client = _get_httpx_client()
+        execute_at = time.time() + (max_bot_time_ms / 1000.0)
+        resp = await client.post(
+            f"{RUNTIME_API_URL}/scheduler/jobs",
+            json={
+                "execute_at": execute_at,
+                "request": {
+                    "method": "DELETE",
+                    "url": f"{MEETING_API_URL}/bots/internal/timeout/{meeting_id}",
+                    "timeout": 30,
+                },
+                "metadata": {
+                    "type": "bot_timeout",
+                    "meeting_id": meeting_id,
+                    "user_id": user_id,
+                },
+                "idempotency_key": f"bot_timeout_{meeting_id}",
+            },
+            timeout=10.0,
+        )
+        if resp.status_code == 201:
+            job = resp.json()
+            job_id = job.get("job_id")
+            logger.info(f"Scheduled bot timeout job {job_id} for meeting {meeting_id} (max_bot_time={max_bot_time_ms}ms)")
+            return job_id
+        else:
+            logger.error(f"Failed to schedule bot timeout: HTTP {resp.status_code}: {resp.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to schedule bot timeout for meeting {meeting_id}: {e}")
+        return None
+
+
+async def _cancel_bot_timeout(meeting: "Meeting") -> None:
+    """Cancel the scheduler timeout job for a meeting, if one exists."""
+    if not meeting.data or not isinstance(meeting.data, dict):
+        return
+    job_id = meeting.data.get("scheduler_job_id")
+    if not job_id:
+        return
+    try:
+        client = _get_httpx_client()
+        resp = await client.delete(
+            f"{RUNTIME_API_URL}/scheduler/jobs/{job_id}",
+            timeout=10.0,
+        )
+        if resp.status_code in (200, 404):
+            logger.info(f"Cancelled bot timeout job {job_id} for meeting {meeting.id}")
+        else:
+            logger.warning(f"Failed to cancel bot timeout job {job_id}: HTTP {resp.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to cancel bot timeout for meeting {meeting.id}: {e}")
 
 
 async def _spawn_via_runtime_api(
@@ -372,6 +456,12 @@ async def _get_running_bots_from_runtime(user_id: int) -> list:
                         meeting_data = meeting.data or {}
                         meeting_start_time = meeting.start_time.isoformat() if meeting.start_time else None
                         meeting_status = meeting.status
+                        # Refresh browser_session Redis TTL for active bots
+                        if redis_client:
+                            await redis_client.expire(f"browser_session:{meeting.id}", 86400)
+                            session_token = meeting_data.get("session_token")
+                            if session_token:
+                                await redis_client.expire(f"browser_session:{session_token}", 86400)
                 except Exception as e:
                     logger.error(f"DB error fetching meeting {meeting_id_int}: {e}")
 
@@ -419,11 +509,20 @@ async def _delayed_container_stop(container_name: str, meeting_id: int, delay_se
             terminal_states = [MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value]
             if meeting.status not in terminal_states:
                 logger.warning(f"[Delayed Stop] Meeting {meeting_id} still '{meeting.status}' after stop. Finalizing.")
+                # Use pending_completion_reason if set (e.g., scheduler timeout), otherwise default to STOPPED
+                reason = MeetingCompletionReason.STOPPED
+                if meeting.data and isinstance(meeting.data, dict):
+                    pending = meeting.data.get("pending_completion_reason")
+                    if pending:
+                        try:
+                            reason = MeetingCompletionReason(pending)
+                        except ValueError:
+                            pass
                 success = await update_meeting_status(
                     meeting,
                     MeetingStatus.COMPLETED,
                     db,
-                    completion_reason=MeetingCompletionReason.STOPPED,
+                    completion_reason=reason,
                     transition_reason="delayed_stop_finalizer",
                     transition_metadata={"container_name": container_name, "finalized_by": "delayed_stop"},
                 )
@@ -433,6 +532,13 @@ async def _delayed_container_stop(container_name: str, meeting_id: int, delay_se
                         meeting.platform, meeting.platform_specific_id, meeting.user_id,
                     )
                     asyncio.create_task(run_all_tasks(meeting.id))
+
+            # Clean up browser_session Redis keys
+            if redis_client:
+                session_token = (meeting.data or {}).get("session_token")
+                if session_token:
+                    await redis_client.delete(f"browser_session:{session_token}")
+                await redis_client.delete(f"browser_session:{meeting.id}")
     except Exception as e:
         logger.error(f"[Delayed Stop] Finalizer error for meeting {meeting_id}: {e}", exc_info=True)
 
@@ -689,11 +795,52 @@ async def request_bot(
 
     # Build BOT_CONFIG
     user_recording_config = {}
+    user_bot_config = {}
     try:
         if current_user.data and isinstance(current_user.data, dict):
             user_recording_config = current_user.data.get("recording_config", {})
+            user_bot_config = current_user.data.get("bot_config", {})
     except Exception:
         pass
+
+    # System defaults for timeouts (ms)
+    SYSTEM_DEFAULTS = {
+        "max_bot_time": 7200000,          # 2h
+        "max_wait_for_admission": 900000, # 15 min
+        "max_time_left_alone": 900000,    # 15 min
+        "no_one_joined_timeout": 120000,  # 2 min
+    }
+
+    # Resolution order: per-request → user.data.bot_config → system defaults
+    def resolve_timeout(field_name: str) -> int:
+        # Per-request override
+        if req.automatic_leave:
+            val = getattr(req.automatic_leave, field_name, None)
+            if val is not None:
+                return val
+        # User-level default from user.data.bot_config
+        if isinstance(user_bot_config, dict):
+            val = user_bot_config.get(field_name)
+            if val is not None:
+                return int(val)
+        # System default
+        return SYSTEM_DEFAULTS[field_name]
+
+    resolved_max_bot_time = resolve_timeout("max_bot_time")
+    resolved_max_wait_for_admission = resolve_timeout("max_wait_for_admission")
+    resolved_max_time_left_alone = resolve_timeout("max_time_left_alone")
+    resolved_no_one_joined_timeout = resolve_timeout("no_one_joined_timeout")
+
+    # Store resolved timeouts in meeting.data for GET /bots visibility
+    meeting_data["resolved_timeouts"] = {
+        "max_bot_time": resolved_max_bot_time,
+        "max_wait_for_admission": resolved_max_wait_for_admission,
+        "max_time_left_alone": resolved_max_time_left_alone,
+        "no_one_joined_timeout": resolved_no_one_joined_timeout,
+    }
+    new_meeting.data = meeting_data
+    await db.commit()
+    await db.refresh(new_meeting)
 
     connection_id = str(uuid_lib.uuid4())
     bot_config = {
@@ -708,10 +855,11 @@ async def request_bot(
         "task": req.task,
         "transcriptionTier": req.transcription_tier or "realtime",
         "redisUrl": REDIS_URL,
+        # Map API names → bot-side frozen names
         "automaticLeave": {
-            "waitingRoomTimeout": 900000,    # 15 min
-            "noOneJoinedTimeout": 120000,    # 2 min
-            "everyoneLeftTimeout": 300000,   # 5 min
+            "waitingRoomTimeout": resolved_max_wait_for_admission,
+            "noOneJoinedTimeout": resolved_no_one_joined_timeout,
+            "everyoneLeftTimeout": resolved_max_time_left_alone,
         },
         "meetingApiCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
         "recordingEnabled": user_recording_config.get("enabled", os.getenv("RECORDING_ENABLED", "false").lower() == "true"),
@@ -721,14 +869,6 @@ async def request_bot(
         "transcriptionServiceUrl": os.getenv("TRANSCRIPTION_SERVICE_URL"),
         "transcriptionServiceToken": os.getenv("TRANSCRIPTION_SERVICE_TOKEN"),
     }
-    if req.automatic_leave:
-        al = bot_config["automaticLeave"]
-        if req.automatic_leave.waiting_room_timeout is not None:
-            al["waitingRoomTimeout"] = req.automatic_leave.waiting_room_timeout
-        if req.automatic_leave.everyone_left_timeout is not None:
-            al["everyoneLeftTimeout"] = req.automatic_leave.everyone_left_timeout
-        if req.automatic_leave.no_one_joined_timeout is not None:
-            al["noOneJoinedTimeout"] = req.automatic_leave.no_one_joined_timeout
     if req.recording_enabled is not None:
         bot_config["recordingEnabled"] = bool(req.recording_enabled)
     if req.voice_agent_enabled is not None:
@@ -818,6 +958,21 @@ async def request_bot(
             json.dumps({"container_name": container_name, "meeting_id": meeting_id, "user_id": current_user.id}),
             ex=86400,
         )
+
+    # Schedule bot timeout job (max_bot_time enforcement via scheduler)
+    scheduler_job_id = await _schedule_bot_timeout(
+        meeting_id=meeting_id,
+        user_id=current_user.id,
+        platform=req.platform.value,
+        native_meeting_id=native_meeting_id,
+        max_bot_time_ms=resolved_max_bot_time,
+    )
+    if scheduler_job_id:
+        current_data = dict(new_meeting.data or {})
+        current_data["scheduler_job_id"] = scheduler_job_id
+        new_meeting.data = current_data
+        await db.commit()
+        await db.refresh(new_meeting)
 
     return MeetingResponse.model_validate(new_meeting)
 
@@ -1086,6 +1241,85 @@ async def stop_bot(
         await publish_meeting_status_change(meeting.id, "stopping", redis_client, platform_value, native_meeting_id, meeting.user_id)
 
     return {"message": "Stop request accepted and is being processed."}
+
+
+@router.delete(
+    "/bots/internal/timeout/{meeting_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Internal: scheduler-triggered bot timeout",
+    include_in_schema=False,
+)
+async def scheduler_timeout_stop(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Called by the scheduler when max_bot_time expires.
+
+    No user auth required — this is an internal endpoint called by runtime-api scheduler.
+    Transitions the bot to stopping → completed with reason=max_bot_time_exceeded.
+    """
+    meeting = await db.get(Meeting, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Already terminal — idempotent, no error
+    if meeting.status in [MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value]:
+        return {"message": f"Meeting already in terminal state: {meeting.status}"}
+
+    # Already stopping — let it complete naturally
+    if meeting.status == MeetingStatus.STOPPING.value:
+        return {"message": "Meeting already stopping"}
+
+    platform_value = meeting.platform
+    native_meeting_id = meeting.platform_specific_id
+
+    # Find container to stop
+    container_name = meeting.bot_container_id
+    if not container_name:
+        # No container — just complete the meeting
+        success = await update_meeting_status(
+            meeting, MeetingStatus.COMPLETED, db,
+            completion_reason=MeetingCompletionReason.MAX_BOT_TIME_EXCEEDED,
+            transition_reason="scheduler_timeout",
+        )
+        if success:
+            await publish_meeting_status_change(
+                meeting.id, MeetingStatus.COMPLETED.value, redis_client,
+                platform_value, native_meeting_id, meeting.user_id,
+            )
+            background_tasks.add_task(run_all_tasks, meeting.id)
+        return {"message": "Bot timed out (no container)"}
+
+    # Send leave command
+    if redis_client:
+        try:
+            command_channel = f"bot_commands:meeting:{meeting.id}"
+            await redis_client.publish(command_channel, json.dumps({"action": "leave", "meeting_id": meeting.id, "reason": "max_bot_time_exceeded"}))
+        except Exception as e:
+            logger.error(f"Failed to publish leave command for timeout: {e}")
+
+    # Store pending completion reason so the delayed stop finalizer uses it
+    current_data = dict(meeting.data or {})
+    current_data["pending_completion_reason"] = MeetingCompletionReason.MAX_BOT_TIME_EXCEEDED.value
+    meeting.data = current_data
+    await db.commit()
+
+    # Schedule delayed container stop
+    background_tasks.add_task(_delayed_container_stop, container_name, meeting.id, BOT_STOP_DELAY_SECONDS)
+
+    # Transition to STOPPING, then the delayed stop finalizer will complete it
+    await update_meeting_status(
+        meeting, MeetingStatus.STOPPING, db,
+        transition_reason="scheduler_timeout_max_bot_time",
+        transition_metadata={"timeout_trigger": "scheduler"},
+    )
+    await publish_meeting_status_change(
+        meeting.id, "stopping", redis_client,
+        platform_value, native_meeting_id, meeting.user_id,
+    )
+
+    return {"message": "Bot timeout triggered, stopping."}
 
 
 # --- Recording Config ---

@@ -116,10 +116,17 @@ telegram-bot :8888
 
 ### Resource limits
 
+**Declarative bot counting.** `max_concurrent_bots` counts meetings with DB status in `(REQUESTED, JOINING, AWAITING_ADMISSION, ACTIVE)`. When a user calls `DELETE /bots`, status moves to `stopping` — that slot frees immediately even if the container is still shutting down. The limit respects the user's *intent* to have a bot, not container state. See `features/bot-lifecycle/README.md` for the full declarative state model.
+
 ```
 meeting-api:
     user.max_concurrent_bots     checked before bot creation     ENFORCED
+                                 counts DB state, not containers  DECLARATIVE
     runtime-api concurrency      429 if too many containers      ENFORCED
+    user.data.bot_config         user-managed timeout defaults   PLANNED
+        max_bot_time             server-enforced via scheduler   PLANNED
+        max_wait_for_admission   bot-internal enforcement        ENFORCED (as waitingRoomTimeout)
+        max_time_left_alone      bot-internal enforcement        ENFORCED (as everyoneLeftTimeout)
 
 agent-api:
     max containers per user      NONE — no limits defined yet

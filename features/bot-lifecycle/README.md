@@ -1,16 +1,91 @@
 # Bot Lifecycle
 
-> **Confidence: 0** — Feature scaffolded, no E2E tests implemented yet.
+> **Confidence: 0** — Design updated 2026-03-30 with declarative state model, user-managed timeouts, scheduler integration. No implementation yet.
 > **Tested:** Unit tests (mocked) cover individual callbacks and transition rules. Live integration tests cover health/status/create only.
-> **Not tested:** Full E2E lifecycle against real meetings, error paths with real bots, join speed metrics.
+> **Not tested:** Full E2E lifecycle against real meetings, error paths with real bots, declarative stop semantics, scheduler-enforced max_bot_time.
 
 ## Why
 
-Every bot follows a lifecycle: requested → joining → awaiting_admission → active → stopping → completed/failed. The state machine is well-defined in `meeting_api/schemas.py` with transition rules, completion reasons, and failure stages. But all tests are mocked — no test actually sends a real bot into a real meeting and watches it walk through the state machine. We've seen issues where mocked tests pass but real bots behave differently (timing, race conditions, platform quirks).
+Every bot follows a lifecycle: requested → joining → awaiting_admission → active → stopping → completed/failed. The state machine is well-defined in `meeting_api/schemas.py` with transition rules, completion reasons, and failure stages. But we have three gaps:
 
-This feature ensures the lifecycle contract is verified end-to-end against real meetings with real bots, and that error paths produce actionable reports.
+1. **No zombie protection.** A bot with a hung container or lost network can live forever. There's no server-side hard ceiling on bot lifetime.
+2. **User intent vs container state.** The concurrent bot limit should respect the user's *decision* to have a bot, not whether the container is still running. When a user stops a bot, that slot should free immediately.
+3. **Timeout defaults are hardcoded.** Users can't configure how long their bots wait for admission, stay when alone, or run in total. This should be user-managed with sensible defaults.
 
 ## What
+
+### Core Principles
+
+#### A. Declarative User-Defined Bot State
+
+**Database state is the source of truth.** Meeting API manages user intent (I want a bot in this meeting). Runtime API manages container lifecycle (the bot container is running/stopped). These are separate concerns.
+
+- **User's stop action is declarative** — `DELETE /bots` sets `status = stopping` in the database immediately. This is the user's declaration: "I no longer want this bot." The concurrent bot slot frees immediately, even if the container takes 90 seconds to die.
+- **Concurrent bot limit counts DB state, not containers** — `max_concurrent_bots` counts meetings with status in `(REQUESTED, JOINING, AWAITING_ADMISSION, ACTIVE)`. Once status moves to `stopping`, the slot is free. Meeting API does not care about container state — it limits users from requesting more bots than allowed.
+- **Container state is the runtime API's responsibility** — Runtime API manages spawning, killing, idle cleanup. Meeting API tells it what to do; runtime API figures out how.
+
+#### B. User-Managed Bot Timeouts (Anti-Zombie)
+
+Three timeout parameters prevent zombie bots, all user-configurable with defaults:
+
+| Param | Default | Enforced by | Purpose |
+|-------|---------|-------------|---------|
+| `max_bot_time` | 7200000 (2h) | **Scheduler** (server-side) | Absolute max lifetime from bot creation. Server kills bot even if it's hung or unresponsive. |
+| `max_wait_for_admission` | 900000 (15 min) | **Bot internal** | Bot self-terminates if not admitted to the meeting within this time. |
+| `max_time_left_alone` | 900000 (15 min) | **Bot internal** | Bot self-terminates if all other participants leave for this long. |
+
+**Why the enforcement split?**
+- `max_bot_time` needs **server-side enforcement** — if the bot hangs, loses network, or has a bug, the scheduler fires a DELETE and the container gets killed regardless. No bot cooperation needed.
+- `max_wait_for_admission` and `max_time_left_alone` are conditions only the **bot can detect** (waiting room state, participant count), so the bot enforces them internally and reports completion via callback.
+
+**Zombie protection cascade (defense in depth):**
+1. Bot internal timeouts (left_alone, wait_for_admission) — bot self-terminates, sends callback
+2. Scheduler max_bot_time — server kills bot after absolute max, no bot cooperation needed
+3. Container exit callback — if container dies for any reason, exited callback updates DB to terminal state
+
+#### User-Level Defaults (`user.data.bot_config`)
+
+Users can configure their default timeouts via the admin API. These are stored in `user.data`:
+
+```json
+PATCH /admin/users/{id}
+{
+  "data": {
+    "bot_config": {
+      "max_bot_time": 7200000,
+      "max_wait_for_admission": 900000,
+      "max_time_left_alone": 900000
+    }
+  }
+}
+```
+
+**Resolution order:** per-request override → `user.data.bot_config` → system defaults.
+
+Per-request overrides via `automatic_leave` in POST /bots:
+
+```json
+POST /bots {
+  "platform": "google_meet",
+  "native_meeting_id": "abc-defg-hij",
+  "automatic_leave": {
+    "max_bot_time": 3600000,
+    "max_wait_for_admission": 60000,
+    "max_time_left_alone": 30000
+  }
+}
+```
+
+#### Scheduler Integration for `max_bot_time`
+
+When POST /bots creates a meeting:
+1. Resolve `max_bot_time` (request → user.data.bot_config → default 2h)
+2. Schedule a timeout job via Runtime API scheduler: `POST /scheduler/jobs` with `execute_at = now + max_bot_time`, targeting `DELETE /bots/{platform}/{meeting_id}`
+3. Store `scheduler_job_id` in `meeting.data` for cancellation
+4. When bot reaches any terminal state (completed/failed) → cancel the scheduler job
+5. When user calls DELETE /bots → cancel the scheduler job (user already stopped it)
+
+See `features/scheduler/README.md` for scheduler capabilities.
 
 ### The State Machine
 
@@ -33,7 +108,7 @@ Plus `needs_human_help` escalation from joining/awaiting_admission/active.
 | awaiting_admission | bot callback | Bot in waiting room |
 | active | bot callback | Bot in meeting, transcribing |
 | needs_human_help | bot callback | Unknown blocker, needs VNC intervention |
-| stopping | DELETE /bots | User requested stop, graceful shutdown |
+| stopping | DELETE /bots | User declared stop — slot freed, graceful shutdown in progress |
 | completed | bot callback / delayed stop | Bot finished normally |
 | failed | bot callback / validation | Something went wrong |
 
@@ -42,10 +117,11 @@ Plus `needs_human_help` escalation from joining/awaiting_admission/active.
 | Reason | Trigger |
 |--------|---------|
 | stopped | User called DELETE /bots |
+| max_bot_time_exceeded | Scheduler killed bot after max lifetime |
 | validation_error | Post-bot validation failed |
-| awaiting_admission_timeout | Timed out in waiting room |
+| awaiting_admission_timeout | Timed out in waiting room (max_wait_for_admission) |
 | awaiting_admission_rejected | Host rejected admission |
-| left_alone | All other participants left |
+| left_alone | All other participants left (max_time_left_alone) |
 | evicted | Kicked from meeting UI |
 
 ### Failure Stages (status=failed)
@@ -69,19 +145,31 @@ Valid transitions (from `schemas.py`):
 
 Invalid transitions are rejected. Each transition is logged in `meeting.data["status_transition"]` with from/to/timestamp/source/reason.
 
+Note: `JOINING → ACTIVE` (skipping `awaiting_admission`) is VALID when there is no waiting room. Not all meetings have waiting rooms.
+
 ### Timeouts
 
-Production defaults (passed via `automatic_leave` in POST /bots):
+| Param | API field | Bot-side field | Default | Enforced by |
+|-------|-----------|----------------|---------|-------------|
+| Max bot time | `automatic_leave.max_bot_time` | N/A (server-side) | 7200000 (2h) | Scheduler job → DELETE /bots |
+| Max wait for admission | `automatic_leave.max_wait_for_admission` | `automaticLeave.waitingRoomTimeout` | 900000 (15 min) | Bot internal timeout |
+| Max time left alone | `automatic_leave.max_time_left_alone` | `automaticLeave.everyoneLeftTimeout` | 900000 (15 min) | Bot internal timeout |
+| No one joined | `automatic_leave.no_one_joined_timeout` | `automaticLeave.noOneJoinedTimeout` | 120000 (2 min) | Bot internal timeout |
 
-| Timeout | Default | Purpose |
-|---------|---------|---------|
-| waiting_room_timeout | 900000 (15 min) | How long bot waits in lobby before giving up |
-| everyone_left_timeout | 300000 (5 min) | How long bot stays after all participants leave |
-| no_one_joined_timeout | 120000 (2 min) | How long bot waits if nobody joins |
+`BOT_STOP_DELAY_SECONDS` = 90 (env var on meeting-api, controls graceful shutdown delay after DELETE /bots).
 
-These are API fields with defaults — tests can override with shorter values for speed.
+**Field mapping:** The API uses descriptive names (`max_wait_for_admission`). The bot-side config uses the legacy names (`waitingRoomTimeout`, `everyoneLeftTimeout`). Meeting-api maps between them when building BOT_CONFIG. The legacy bot-side names are a frozen internal contract — rename only when we touch the bot code.
 
-`BOT_STOP_DELAY_SECONDS` = 90 (env var on meeting-api, controls graceful shutdown delay).
+### Known Status Lifecycle Bugs (to fix in this refactor)
+
+See `conductor/missions/bot-status-lifecycle.md` for full research.
+
+| # | Bug | Severity | Location |
+|---|-----|----------|----------|
+| 1 | ACTIVE callback handler returns `{"status": "processed"}` on rejected transition — bot thinks it succeeded, dashboard stays stuck | CRITICAL | `callbacks.py:327-398` |
+| 2 | Bot swallows JOINING callback failure — proceeds to send ACTIVE, server rejects REQUESTED→ACTIVE silently | CRITICAL | `unified-callback.ts`, platform `join.ts` files |
+| 3 | Webhook fires unconditionally even for rejected transitions | MEDIUM | `callbacks.py:389` |
+| 4 | No DB lock on status update — TOCTOU race on concurrent callbacks | MEDIUM | `meetings.py:140-196` |
 
 ### What Tests Verify
 
@@ -91,6 +179,7 @@ For every scenario:
 3. **Timing** — `start_time` set on ACTIVE, `end_time` set on terminal state
 4. **Terminal metadata** — completion_reason OR failure_stage + error_details
 5. **Redis events** — `bm:meeting:{id}:status` channel publishes each change
+6. **Scheduler job** — max_bot_time timeout job created on bot start, cancelled on bot exit
 
 Verification is via Redis pub/sub + GET /bots response. No webhook HTTP receiver needed.
 
@@ -200,27 +289,33 @@ Existing coverage (all in `packages/meeting-api/tests/`):
 
 ### Implementation Prerequisites
 
-1. **Add `automatic_leave` to POST /bots API** — optional fields in `MeetingCreate` schema with defaults matching production values. Tests pass shorter timeouts, production gets safe defaults.
+1. **Add `max_bot_time` to `automatic_leave` in POST /bots API** — extend MeetingCreate schema with new field:
 
 ```json
 POST /bots {
   "platform": "google_meet",
   "native_meeting_id": "abc-defg-hij",
   "automatic_leave": {
-    "waiting_room_timeout": 60000,
-    "everyone_left_timeout": 30000
+    "max_bot_time": 3600000,
+    "max_wait_for_admission": 60000,
+    "max_time_left_alone": 30000
   }
 }
 ```
 
-2. **Update production timeout defaults** in `meetings.py:713-716`:
-   - waitingRoomTimeout: 300000 → 900000 (15 min)
-   - everyoneLeftTimeout: 60000 → 300000 (5 min)
+2. **User-level defaults in `user.data.bot_config`** — resolution: per-request → user.data → system defaults.
+
+3. **Scheduler integration** — meeting-api schedules a timeout job on bot creation, cancels on bot exit. Requires meeting-api to call runtime-api scheduler API.
+
+4. **Fix status lifecycle bugs** — the 4 bugs listed above must be fixed as part of this refactor.
+
+5. **New completion reason** — `max_bot_time_exceeded` for scheduler-killed bots.
 
 ### Open Questions
 
 - [ ] **needs_human_help**: How to trigger in E2E without real VNC scenario?
 - [ ] **Teams**: Meeting creation flow for Teams (later)
+- [ ] **Scheduler auth**: How does meeting-api authenticate to runtime-api scheduler? Internal network only, or needs a token?
 
 ### Key Files
 

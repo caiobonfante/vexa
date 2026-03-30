@@ -1,8 +1,8 @@
 # Bot Browser View
 
-> **Confidence: 30** — Unified bot/browser architecture implemented. Every bot has VNC. Gateway routes by meeting ID. Dashboard shows browser view for any active meeting.
-> **Tested:** VNC in meeting mode, meeting-ID gateway routing, dashboard tab toggle, full-screen layout.
-> **Not tested:** MinIO persistence for meeting bots, authenticated bot flow, CDP proxy for meeting bots.
+> **Confidence: 45** — Unified bot/browser architecture implemented. Every bot has VNC. Gateway routes by meeting ID. Dashboard shows browser view for any active meeting. Redis session lifecycle hardened: TTL refresh on status poll, key cleanup on bot exit, escalation session_token fixed.
+> **Tested:** VNC in meeting mode, meeting-ID gateway routing, dashboard tab toggle, full-screen layout, Redis TTL refresh (verified: 77k→86400 on poll), Redis key cleanup on exit (verified: keys deleted, VNC returns 404).
+> **Not tested:** MinIO persistence for meeting bots, authenticated bot flow, CDP proxy for meeting bots, escalation VNC button (needs live escalation event), container health check in resolve_browser_session.
 > **Contributions welcome:** Authenticated meeting joins, MinIO sync for browser profiles, CDP proxy through gateway ([#122](https://github.com/Vexa-ai/vexa/issues/122)).
 
 ## Why
@@ -107,6 +107,26 @@ Dashboard /meetings/{id}
 
 Gateway /b/{id}/vnc/websockify
   └─ Redis lookup browser_session:{id} → proxy to container:6080
+```
+
+### Redis session lifecycle
+
+```
+CREATE (POST /bots)
+  ├─ browser_session:{meeting_id} → container info (TTL 24h)
+  └─ browser_session:{session_token} → container info (TTL 24h, browser_session mode only)
+
+REFRESH (GET /bots/status — on every dashboard poll)
+  ├─ EXPIRE browser_session:{meeting_id} 86400
+  └─ EXPIRE browser_session:{session_token} 86400 (if exists)
+
+ESCALATION (needs_human_help callback)
+  └─ browser_session:{meeting_id} → container info (TTL 24h, with escalation flag)
+      escalation data includes session_token: str(meeting.id)
+
+CLEANUP (bot exit callback OR delayed stop finalizer)
+  ├─ DEL browser_session:{session_token} (if exists)
+  └─ DEL browser_session:{meeting_id}
 ```
 
 ### Container layout (browser session mode)

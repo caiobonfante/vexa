@@ -67,6 +67,7 @@ class MeetingCompletionReason(str, Enum):
     AWAITING_ADMISSION_REJECTED = "awaiting_admission_rejected"  # Rejected during awaiting admission
     LEFT_ALONE = "left_alone"  # Timeout for being alone
     EVICTED = "evicted"  # Kicked out from meeting using meeting UI
+    MAX_BOT_TIME_EXCEEDED = "max_bot_time_exceeded"  # Scheduler killed bot after max lifetime
 
 class MeetingFailureStage(str, Enum):
     """
@@ -374,12 +375,30 @@ class MeetingBase(BaseModel):
     # Removed get_bot_platform method, use Platform.get_bot_name(self.platform.value) if needed
 
 class AutomaticLeave(BaseModel):
-    """Optional overrides for automatic-leave timeouts (milliseconds)."""
+    """Optional overrides for automatic-leave timeouts (milliseconds).
+
+    New field names: max_wait_for_admission, max_time_left_alone, max_bot_time.
+    Old field names (waiting_room_timeout, everyone_left_timeout) still accepted
+    for backward compatibility via model_validator.
+    """
     model_config = {"extra": "forbid"}
 
-    waiting_room_timeout: Optional[int] = Field(None, description="Waiting room timeout in ms")
-    everyone_left_timeout: Optional[int] = Field(None, description="Everyone left timeout in ms")
+    max_bot_time: Optional[int] = Field(None, description="Absolute max bot lifetime in ms (server-enforced via scheduler)")
+    max_wait_for_admission: Optional[int] = Field(None, description="Max time to wait for admission in ms")
+    max_time_left_alone: Optional[int] = Field(None, description="Max time left alone before leaving in ms")
     no_one_joined_timeout: Optional[int] = Field(None, description="No one joined timeout in ms")
+    # Old names kept as aliases for backward compatibility (D1)
+    waiting_room_timeout: Optional[int] = Field(None, description="[DEPRECATED] Use max_wait_for_admission")
+    everyone_left_timeout: Optional[int] = Field(None, description="[DEPRECATED] Use max_time_left_alone")
+
+    @model_validator(mode='after')
+    def merge_deprecated_aliases(self):
+        """Map old field names to new ones. Old names only used if new names not set."""
+        if self.waiting_room_timeout is not None and self.max_wait_for_admission is None:
+            self.max_wait_for_admission = self.waiting_room_timeout
+        if self.everyone_left_timeout is not None and self.max_time_left_alone is None:
+            self.max_time_left_alone = self.everyone_left_timeout
+        return self
 
 
 class MeetingCreate(BaseModel):

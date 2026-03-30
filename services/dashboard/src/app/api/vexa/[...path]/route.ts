@@ -52,7 +52,9 @@ async function proxyRequest(
           });
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error("[proxy] /bots/status failed:", e);
+    }
 
     // 2. Meeting history from api-gateway → TC
     try {
@@ -80,7 +82,9 @@ async function proxyRequest(
           });
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error("[proxy] /meetings failed:", e);
+    }
 
     return NextResponse.json({ meetings });
   }

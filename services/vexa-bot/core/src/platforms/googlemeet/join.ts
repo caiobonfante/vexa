@@ -22,12 +22,9 @@ export async function joinGoogleMeeting(
   log("📸 Screenshot taken: After navigation to meeting URL");
 
   // --- Call joining callback to notify meeting-api that bot is joining ---
-  try {
-    await callJoiningCallback(botConfig);
-    log("Joining callback sent successfully");
-  } catch (callbackError: any) {
-    log(`Warning: Failed to send joining callback: ${callbackError.message}. Continuing with join process...`);
-  }
+  // Fix 2: Propagate JOINING callback failure — bot must NOT proceed if server rejected
+  await callJoiningCallback(botConfig);
+  log("Joining callback sent successfully");
 
   // Brief wait for page elements to settle (networkidle already ensures page loaded)
   await page.waitForTimeout(1000);

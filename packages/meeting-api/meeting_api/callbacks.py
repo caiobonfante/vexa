@@ -175,6 +175,13 @@ async def bot_exit_callback(
         await db.commit()
         await db.refresh(meeting)
 
+        # Clean up browser_session Redis keys
+        if redis_client:
+            session_token = (meeting.data or {}).get("session_token")
+            if session_token:
+                await redis_client.delete(f"browser_session:{session_token}")
+            await redis_client.delete(f"browser_session:{meeting.id}")
+
         if new_status:
             await publish_meeting_status_change(meeting.id, new_status, redis_client, meeting.platform, meeting.platform_specific_id, meeting.user_id)
 
@@ -341,6 +348,9 @@ async def bot_status_change_callback(
                 await db.commit()
                 await db.refresh(meeting)
             return {"status": "container_updated", "meeting_id": meeting.id, "meeting_status": meeting.status}
+        else:
+            # Status not in allowed pre-check list and not already ACTIVE — reject
+            success = False
 
     elif new_status == MeetingStatus.NEEDS_HUMAN_HELP:
         success = await update_meeting_status(meeting, MeetingStatus.NEEDS_HUMAN_HELP, db)
@@ -353,6 +363,7 @@ async def bot_status_change_callback(
             d["escalation"] = {
                 "reason": escalation_reason,
                 "escalated_at": escalated_at,
+                "session_token": str(meeting.id),
                 "vnc_url": f"/b/{meeting.id}",
             }
             meeting.data = d
@@ -363,7 +374,7 @@ async def bot_status_change_callback(
                 await redis_client.set(
                     f"browser_session:{meeting.id}",
                     json.dumps({"container_name": payload.container_id or meeting.bot_container_id, "meeting_id": meeting.id, "user_id": meeting.user_id, "escalation": True}),
-                    ex=3600,
+                    ex=86400,
                 )
             await db.commit()
             await db.refresh(meeting)
@@ -373,6 +384,10 @@ async def bot_status_change_callback(
         success = await update_meeting_status(meeting, new_status, db)
         if not success:
             return {"status": "error", "detail": "Failed to update meeting status"}
+
+    # Fix 1: Return error when transition was rejected (success is False or None)
+    if success is False:
+        return {"status": "error", "detail": f"Invalid transition: {old_status} → {new_status.value}", "meeting_id": meeting.id, "meeting_status": meeting.status}
 
     # Publish status change
     if success or (new_status == MeetingStatus.ACTIVE and meeting.status == MeetingStatus.ACTIVE.value):
@@ -385,14 +400,15 @@ async def bot_status_change_callback(
             }
         await publish_meeting_status_change(meeting.id, new_status.value, redis_client, meeting.platform, meeting.platform_specific_id, meeting.user_id, extra_data=publish_extra)
 
-    # Webhook for every status change
-    await schedule_status_webhook_task(
-        meeting=meeting,
-        background_tasks=background_tasks,
-        old_status=old_status,
-        new_status=new_status.value,
-        reason=reason,
-        transition_source="bot_callback",
-    )
+    # Fix 3: Webhook gated on success — only fire for accepted transitions
+    if success:
+        await schedule_status_webhook_task(
+            meeting=meeting,
+            background_tasks=background_tasks,
+            old_status=old_status,
+            new_status=new_status.value,
+            reason=reason,
+            transition_source="bot_callback",
+        )
 
     return {"status": "processed", "meeting_id": meeting.id, "meeting_status": meeting.status}
