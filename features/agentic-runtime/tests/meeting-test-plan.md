@@ -107,11 +107,11 @@ Must pass all checks. Key vars:
 ### 3. Docker images built
 
 ```bash
-# Agent container image
-docker build -t vexa-agent:dev -f containers/agent/Dockerfile .
+# Agent container image (use immutable YYMMDD-HHMM tags)
+docker build -t vexaai/vexa-agent:$(date +%y%m%d-%H%M) -f containers/agent/Dockerfile .
 
 # Bot container image
-docker build -t vexa-bot:dev -f services/vexa-bot/Dockerfile .
+docker build -t vexaai/vexa-bot:$(date +%y%m%d-%H%M) -f services/vexa-bot/Dockerfile .
 ```
 
 ### 4. Database migrated

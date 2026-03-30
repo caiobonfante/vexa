@@ -48,7 +48,7 @@ apiGateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/vexa-ai/api-gateway
+    repository: vexaai/api-gateway
     tag: staging
   resources:
     requests:
@@ -63,7 +63,7 @@ adminApi:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/vexa-ai/admin-api
+    repository: vexaai/admin-api
     tag: staging
 
 # ---------- Transcription Collector (meeting-api) ----------
@@ -71,7 +71,7 @@ transcriptionCollector:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/vexa-ai/transcription-collector
+    repository: vexaai/transcription-collector
     tag: staging
   config:
     redisStreamName: "transcription_segments"
@@ -92,7 +92,7 @@ mcp:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/vexa-ai/mcp
+    repository: vexaai/mcp
     tag: staging
 
 # ---------- Dashboard ----------
@@ -100,7 +100,7 @@ dashboard:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/vexa-ai/dashboard
+    repository: vexaai/dashboard
     tag: staging
   env:
     VEXA_PUBLIC_API_URL: "https://gateway.staging.vexa.ai"
@@ -123,7 +123,7 @@ dashboard:
 migrations:
   enabled: true
   image:
-    repository: ghcr.io/vexa-ai/transcription-collector
+    repository: vexaai/transcription-collector
     tag: staging
 
 # ---------- Ingress (API Gateway) ----------

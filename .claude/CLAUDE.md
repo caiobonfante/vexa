@@ -28,6 +28,8 @@ Read these before starting work. These are lessons from past failures.
 
 **G6: Search ALL case variants when renaming.** When cleaning up references to a renamed component, search every casing pattern: `kebab-case` (bot-manager), `snake_case` (bot_manager), `SCREAMING_SNAKE` (BOT_MANAGER), `camelCase` (botManager), `PascalCase` (BotManager). Missing one pattern leaves live references in wire protocols, type definitions, and config keys. (2026-03-30: team grepped bot-manager/bot_manager/BOT_MANAGER across 107 files, reported 90/100 confidence. Human found 14 `botManagerCallbackUrl` references in live wire protocol code + `VEXA_BOT_MANAGER` env var in vexa-agent — all missed because camelCase was never searched.)
 
+**G7: Convention changes require full-codebase consumer search.** When changing a naming convention (image names, env var defaults, registry prefixes), don't just update the files in your plan — search for ALL consumers of the old convention across the entire codebase. Default values in Python config files, feature-specific compose files, env templates, shell scripts, and test Makefiles all hardcode conventions. A plan that touches 10 "obvious" files will miss the 9 files with hardcoded defaults that nobody planned around. Run the adversarial search BEFORE declaring the refactoring done, not as a follow-up. (2026-03-30: agent updated compose, Helm, and deploy Makefiles for image tagging convention but missed 14 stale references in Python configs, feature compose files, bot scripts, and env templates — all found only after explicit stale-reference sweep.)
+
 ## Deep Reference
 
 Full confidence framework paper with math model, research citations, and changelog: `.claude/confidence-framework.md`

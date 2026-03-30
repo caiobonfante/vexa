@@ -48,7 +48,7 @@ profiles:
 
   # Claude Code agent — runs Claude CLI for interactive AI sessions
   agent:
-    image: "${AGENT_IMAGE:-vexa-agent:dev}"
+    image: "${AGENT_IMAGE:-vexaai/vexa-agent:dev}"
     command: ["sleep", "infinity"]
     resources:
       cpu_request: "500m"

@@ -35,7 +35,7 @@ MINIO_CONSOLE_HOST_PORT=9001
 ADMIN_API_TOKEN=changeme
 
 # Bot image (built by `make build`)
-BOT_IMAGE_NAME=vexa-bot:dev
+BOT_IMAGE_NAME=vexaai/vexa-bot:dev
 
 # Database (embedded postgres by default)
 DB_NAME=vexa

@@ -14,7 +14,7 @@ RUNTIME_API_URL = os.environ.get("RUNTIME_API_URL", "http://runtime-api:8000")
 MEETING_API_URL = os.environ.get("MEETING_API_URL", "http://meeting-api:8080")
 
 # Bot image / profile
-BOT_IMAGE_NAME = os.environ.get("BOT_IMAGE_NAME", "vexa-bot:latest")
+BOT_IMAGE_NAME = os.environ.get("BOT_IMAGE_NAME", "vexaai/vexa-bot:latest")
 
 # CORS
 CORS_ORIGINS = [

@@ -1,5 +1,5 @@
 # Hot Dev Kit (local to vexa-bot)
-IMAGE_NAME ?= vexa-bot:test
+IMAGE_NAME ?= vexaai/vexa-bot:test
 MEETING_URL ?=
 DOCKER_NETWORK ?= vexa_dev_vexa_default
 HOT_CHANNEL := bot_commands:meeting:999

@@ -37,4 +37,4 @@ docker run --rm \
   -e "BOT_CONFIG=$BOT_CONFIG" \
   -e "ZOOM_CLIENT_ID=$ZOOM_CLIENT_ID" \
   -e "ZOOM_CLIENT_SECRET=$ZOOM_CLIENT_SECRET" \
-  vexa-bot:dev
+  vexaai/vexa-bot:dev

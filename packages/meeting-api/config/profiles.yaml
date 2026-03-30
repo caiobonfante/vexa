@@ -3,7 +3,7 @@
 
 profiles:
   meeting:
-    image: "${BOT_IMAGE_NAME:-vexa-bot:latest}"
+    image: "${BOT_IMAGE_NAME:-vexaai/vexa-bot:latest}"
     resources:
       cpu_request: "500m"
       cpu_limit: "2000m"

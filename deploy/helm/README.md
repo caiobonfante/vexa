@@ -17,9 +17,22 @@ Helm charts for deploying Vexa on Kubernetes. Includes the Vexa Dashboard.
 
 - Kubernetes cluster (v1.22+ recommended)
 - Helm v3
-- Container images for Vexa services available in your registry
+- Container images published to DockerHub (`vexaai/` namespace)
 
-Note: The charts default to local image repos/tags for development. Override image repositories and tags for production.
+### Image tags
+
+Charts default to `vexaai/*:latest`. For production, pin to a specific immutable tag:
+
+```bash
+helm install vexa ./deploy/helm/charts/vexa \
+  --set apiGateway.image.tag=260330-1415 \
+  --set adminApi.image.tag=260330-1415 \
+  --set meetingApi.image.tag=260330-1415
+```
+
+Mutable tags (`:staging`, `:latest`) are pointers managed by `make promote-staging` / `make promote-latest` in the compose Makefile. They always point to a known immutable `YYMMDD-HHMM` build.
+
+The staging values file (`values-staging.yaml`) uses `:staging` which is updated via promotion.
 
 ### Quickstart
 
@@ -70,7 +83,8 @@ Key values in `charts/vexa-lite/values.yaml`:
 
 ### Notes
 
-- For production, set explicit image repositories/tags and configure external Postgres/Redis and secrets management.
+- All images are on DockerHub under `vexaai/`. No GHCR setup required.
+- For production, pin image tags to specific `YYMMDD-HHMM` builds rather than using `:latest`.
 
 ## Development Notes
 

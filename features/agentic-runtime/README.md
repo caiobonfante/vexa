@@ -496,9 +496,10 @@ User: "Join my meeting"
 # Edit .env: set CLAUDE_CREDENTIALS_PATH, CLAUDE_JSON_PATH, TRANSCRIPTION_SERVICE_URL
 vi .env
 
-# 2. Build container images (agent + bot)
-docker build -t vexa-agent:dev -f containers/agent/Dockerfile .
-docker build -t vexa-bot:dev -f services/vexa-bot/Dockerfile services/vexa-bot/
+# 2. Build container images (agent + bot) — uses immutable YYMMDD-HHMM tags
+docker build -t vexaai/vexa-agent:$(date +%y%m%d-%H%M) -f containers/agent/Dockerfile .
+docker build -t vexaai/vexa-bot:$(date +%y%m%d-%H%M) -f services/vexa-bot/Dockerfile services/vexa-bot/
+# Or: cd deploy/compose && make build  (tags all services with same timestamp)
 
 # 3. Start the stack
 cd features/agentic-runtime/deploy

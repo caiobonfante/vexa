@@ -38,16 +38,39 @@ That's it. Copies env-example → .env, builds images, starts services, runs mig
 |--------|-------------|
 | `make all` | Full setup: env → build → up → migrate → test |
 | `make env` | Create .env from template (if not exists) |
-| `make build` | Build Docker images |
-| `make up` | Start all services |
+| `make build` | Build all images with immutable timestamp tag |
+| `make up` | Start services using last-built tag |
 | `make down` | Stop all services |
 | `make ps` | Show running containers |
 | `make logs` | Tail all service logs |
-| `make test` | Health check all services + show URLs |
+| `make test` | Health check all services + show URLs + current tag |
+| `make publish` | Push all images to DockerHub + update `:dev` pointer |
+| `make promote-staging` | Set `:staging` to TAG= (or last built) |
+| `make promote-latest` | Set `:latest` to TAG= (or last built) |
+| `make help-tags` | Show tagging workflow help |
 | `make migrate` | Run database migrations |
 | `make migrate-or-init` | Smart: init fresh DB or migrate existing |
 | `make makemigrations M="msg"` | Create new migration |
 | `make migration-status` | Show current migration version |
+
+### Image tagging
+
+Every `make build` produces immutable timestamp-tagged images (`YYMMDD-HHMM`):
+
+```bash
+make build              # → vexaai/api-gateway:260330-1415, vexaai/admin-api:260330-1415, etc.
+make up                 # runs those exact images (tag read from .last-tag)
+```
+
+You always know what you're running. Mutable tags (`:dev`, `:staging`, `:latest`) are only updated during publication:
+
+```bash
+make publish                         # pushes + updates :dev on DockerHub
+make promote-staging TAG=260330-1415 # re-points :staging
+make promote-latest TAG=260330-1415  # re-points :latest
+```
+
+The tag is saved to `deploy/compose/.last-tag` (gitignored). Override with `IMAGE_TAG=custom make build`.
 
 ### Configuration
 
@@ -67,7 +90,7 @@ Everything else has working defaults for local dev.
 | DASHBOARD_HOST_PORT | 3001 | Dashboard port |
 | REMOTE_DB | false | Use external Postgres instead of local |
 | LOCAL_TRANSCRIPTION | false | Run transcription-service locally (needs GPU) |
-| BOT_IMAGE_NAME | vexa-bot:dev | Bot Docker image name |
+| BOT_IMAGE_NAME | vexaai/vexa-bot:${IMAGE_TAG} | Bot Docker image (uses same tag as all services) |
 | API_GATEWAY_HOST_PORT | 8056 | API Gateway port |
 | ADMIN_API_HOST_PORT | 8057 | Admin API port |
 

@@ -4,6 +4,7 @@ services:
     build:
       context: ../..
       dockerfile: services/api-gateway/Dockerfile
+    image: vexaai/api-gateway:${IMAGE_TAG:-dev}
     mem_limit: 1g
     ports:
       - "${API_GATEWAY_HOST_PORT:-8056}:8000"
@@ -41,6 +42,7 @@ services:
     build:
       context: ../..
       dockerfile: services/admin-api/Dockerfile
+    image: vexaai/admin-api:${IMAGE_TAG:-dev}
     mem_limit: 512m
     expose:
       - "8001"
@@ -68,6 +70,7 @@ services:
     build:
       context: ../../packages/runtime-api
       dockerfile: Dockerfile
+    image: vexaai/runtime-api:${IMAGE_TAG:-dev}
     mem_limit: 512m
     group_add:
       - "${DOCKER_GID:-998}"
@@ -95,6 +98,7 @@ services:
     build:
       context: ../..
       dockerfile: packages/meeting-api/Dockerfile
+    image: vexaai/meeting-api:${IMAGE_TAG:-dev}
     mem_limit: 1g
     expose:
       - "8080"
@@ -102,7 +106,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-vexa-redis-dev}@redis:6379/0
       - RUNTIME_API_URL=http://runtime-api:8090
       - MEETING_API_URL=http://meeting-api:8080
-      - BOT_IMAGE_NAME=${BOT_IMAGE_NAME:-vexa-bot:dev}
+      - BOT_IMAGE_NAME=${BOT_IMAGE_NAME:-vexaai/vexa-bot:${IMAGE_TAG:-dev}}
       - TTS_SERVICE_URL=http://tts-service:8002
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa_default
       - LOG_LEVEL=DEBUG
@@ -167,6 +171,7 @@ services:
     build:
       context: ../..
       dockerfile: services/mcp/Dockerfile
+    image: vexaai/mcp:${IMAGE_TAG:-dev}
     mem_limit: 512m
     ports:
       - "${MCP_HOST_PORT:-18888}:18888"
@@ -185,6 +190,7 @@ services:
     build:
       context: ${DASHBOARD_PATH:?Set DASHBOARD_PATH in .env}/..
       dockerfile: dashboard/Dockerfile
+    image: vexaai/dashboard:${IMAGE_TAG:-dev}
     mem_limit: 1g
     ports:
       - "${DASHBOARD_HOST_PORT:-3001}:3000"
@@ -208,6 +214,7 @@ services:
     build:
       context: ../..
       dockerfile: packages/tts-service/Dockerfile
+    image: vexaai/tts-service:${IMAGE_TAG:-dev}
     mem_limit: 1g
     expose:
       - "8002"

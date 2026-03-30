@@ -2,8 +2,8 @@ replicaCount: 1
 
 image:
   # Build locally from the Vexa repo (deploy/lite) and tag as vexa-lite:local
-  repository: vexa-lite
-  tag: local
+  repository: vexaai/vexa-lite
+  tag: latest
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -101,7 +101,7 @@ dashboard:
   replicaCount: 1
 
   image:
-    repository: vexa/vexa-dashboard
+    repository: vexaai/dashboard
     tag: latest
     pullPolicy: IfNotPresent
 

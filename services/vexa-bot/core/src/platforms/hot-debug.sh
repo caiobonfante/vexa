@@ -55,7 +55,7 @@ else
 fi
 
 # Configuration
-IMAGE_NAME="vexa-bot:test"
+IMAGE_NAME="vexaai/vexa-bot:test"
 DOCKER_NETWORK="${DOCKER_NETWORK:-vexa_dev_vexa_default}"
 
 # Resolve core/dist for bind mount

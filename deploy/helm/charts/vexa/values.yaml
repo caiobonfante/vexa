@@ -1,7 +1,8 @@
 # Default values for the vexa chart.
 # This chart is designed for LOCAL development builds:
 #   - imagePullPolicy defaults to IfNotPresent
-#   - images default to repos/tags you build locally (see scripts/build-images.sh)
+#   - images default to DockerHub repos with :latest tag
+#   - Override tags with specific YYMMDD-HHMM timestamps for traceability
 
 global:
   imagePullPolicy: IfNotPresent
@@ -42,8 +43,8 @@ apiGateway:
   enabled: true
   replicaCount: 1
   image:
-    repository: vexa/api-gateway
-    tag: local
+    repository: vexaai/api-gateway
+    tag: latest
   mcpUrl: ""
   service:
     type: ClusterIP
@@ -61,8 +62,8 @@ adminApi:
   enabled: true
   replicaCount: 1
   image:
-    repository: vexa/admin-api
-    tag: local
+    repository: vexaai/admin-api
+    tag: latest
   service:
     type: ClusterIP
     port: 8001
@@ -79,8 +80,8 @@ meetingApi:
   enabled: true
   replicaCount: 1
   image:
-    repository: vexa/meeting-api
-    tag: local
+    repository: vexaai/meeting-api
+    tag: latest
   service:
     type: ClusterIP
     port: 8080
@@ -97,8 +98,8 @@ transcriptionCollector:
   enabled: true
   replicaCount: 1
   image:
-    repository: vexa/transcription-collector
-    tag: local
+    repository: vexaai/transcription-collector
+    tag: latest
   service:
     type: ClusterIP
     port: 8000
@@ -126,8 +127,8 @@ transcriptionService:
   enabled: false
   replicaCount: 1
   image:
-    repository: vexa/transcription-service
-    tag: local
+    repository: vexaai/transcription-service
+    tag: latest
   service:
     type: ClusterIP
     port: 8000
@@ -148,8 +149,8 @@ mcp:
   enabled: true
   replicaCount: 1
   image:
-    repository: vexa/mcp
-    tag: local
+    repository: vexaai/mcp
+    tag: latest
   service:
     type: ClusterIP
     port: 18888
@@ -166,8 +167,8 @@ dashboard:
   enabled: false
   replicaCount: 1
   image:
-    repository: vexa/vexa-dashboard
-    tag: local
+    repository: vexaai/dashboard
+    tag: latest
   service:
     type: ClusterIP
     port: 3000

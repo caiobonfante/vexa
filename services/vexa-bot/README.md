@@ -84,11 +84,14 @@ The bot is normally launched by meeting-api (via Runtime API), which passes a `B
 environment variable. For standalone testing:
 
 ```bash
-docker build -t vexa-bot .
+# Build with immutable timestamp tag (convention: YYMMDD-HHMM)
+docker build -t vexaai/vexa-bot:$(date +%y%m%d-%H%M) .
+
+# Or use make build from deploy/compose/ which tags all services consistently
 docker run --rm --platform linux/amd64 --network vexa_dev_vexa_default \
   -e BOT_CONFIG='{"platform":"google_meet","meetingUrl":"https://meet.google.com/abc-defg-hij","botName":"Vexa","token":"jwt","connectionId":"id","nativeMeetingId":"abc","meeting_id":1,"redisUrl":"redis://redis:6379/0","automaticLeave":{"waitingRoomTimeout":300000,"noOneJoinedTimeout":300000,"everyoneLeftTimeout":300000}}' \
   -e TRANSCRIPTION_SERVICE_URL=http://transcription-service:8083/v1/audio/transcriptions \
-  vexa-bot
+  vexaai/vexa-bot:dev
 ```
 
 Dev workflow (bind-mounts dist/ for fast iteration):

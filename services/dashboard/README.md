@@ -39,7 +39,7 @@ Main backend repo: [Vexa](https://github.com/Vexa-ai/vexa)
 docker run --rm -p 3000:3000 \
   -e VEXA_API_URL=http://your-vexa-host:8056 \
   -e VEXA_ADMIN_API_KEY=your_admin_api_key \
-  vexaai/vexa-dashboard:latest
+  vexaai/dashboard:latest
 ```
 
 Then open `http://localhost:3000`. (The container listens on port 3000; the `npm run dev` server uses port 3001.)
@@ -115,7 +115,7 @@ See `.env.example` for a complete template.
 ```yaml
 services:
   vexa-dashboard:
-    image: vexaai/vexa-dashboard:latest
+    image: vexaai/dashboard:latest
     ports:
       - "3000:3000"
     environment:

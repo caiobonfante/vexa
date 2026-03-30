@@ -69,7 +69,7 @@ services:
       - "${CHAT_API_PORT:-8100}:8100"
     environment:
       - DOCKER_NETWORK=vexa-agentic_vexa_agentic
-      - AGENT_IMAGE=vexa-agent:dev
+      - AGENT_IMAGE=vexaai/vexa-agent:dev
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
@@ -183,7 +183,7 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
       - RUNTIME_API_URL=http://runtime-api:8090
       - MEETING_API_URL=http://meeting-api:8080
-      - BOT_IMAGE_NAME=vexa-bot:dev
+      - BOT_IMAGE_NAME=vexaai/vexa-bot:dev
       - DOCKER_NETWORK=vexa-agentic_vexa_agentic
       - TTS_SERVICE_URL=${TTS_SERVICE_URL:-http://tts-service:8002}
       - POST_MEETING_HOOKS=http://agent-api:8100/internal/webhooks/meeting-completed
@@ -220,8 +220,8 @@ services:
       - "${RUNTIME_API_PORT:-8090}:8090"
     environment:
       - DOCKER_NETWORK=vexa-agentic_vexa_agentic
-      - AGENT_IMAGE=vexa-agent:dev
-      - BROWSER_IMAGE=vexa-bot:dev
+      - AGENT_IMAGE=vexaai/vexa-agent:dev
+      - BROWSER_IMAGE=vexaai/vexa-bot:dev
       - REDIS_URL=redis://redis:6379
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}

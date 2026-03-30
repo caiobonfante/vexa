@@ -27,6 +27,36 @@ All self-hosted deployments need a transcription service:
 - **Ready to go:** Use Vexa transcription — sign up at [vexa.ai](https://vexa.ai), get a transcription API key. No GPU needed.
 - **Self-host:** Run [packages/transcription-service](../packages/transcription-service/) on your own GPU for full data sovereignty.
 
+## Image Tagging
+
+Every build produces an immutable timestamp tag (`YYMMDD-HHMM`). Mutable tags (`dev`, `staging`, `latest`) are pointers updated only during publication — never during builds.
+
+### Tag hierarchy
+
+| Tag | Created by | Mutates? | Purpose |
+|-----|-----------|----------|---------|
+| `YYMMDD-HHMM` | `make build` | Never | The actual identity of a build |
+| `dev` | `make publish` | Yes — re-pointed | Latest published development build |
+| `staging` | `make promote-staging` | Yes — re-pointed | Staging cluster deployment |
+| `latest` | `make promote-latest` | Yes — re-pointed | Production-ready release |
+
+### Registry
+
+All images live on DockerHub under the `vexaai/` namespace:
+- `vexaai/api-gateway`, `vexaai/admin-api`, `vexaai/meeting-api`, `vexaai/mcp`, `vexaai/dashboard`, `vexaai/tts-service`, `vexaai/runtime-api`, `vexaai/vexa-bot`
+
+### Dev cycle
+
+```bash
+make build              # builds all images → vexaai/*:260330-1415 (saved to .last-tag)
+make up                 # runs those exact images
+make publish            # pushes to DockerHub + updates :dev pointer
+make promote-staging    # re-points :staging → specific build
+make promote-latest     # re-points :latest → specific build
+```
+
+During development, you always run images with a specific timestamp tag, so you know exactly what code is in each container.
+
 ## How
 
 ### Environment variables

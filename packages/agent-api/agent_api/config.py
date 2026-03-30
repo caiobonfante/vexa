@@ -13,7 +13,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 RUNTIME_API_URL = os.getenv("RUNTIME_API_URL", "http://runtime-api:8090")
 
 # Container defaults
-AGENT_IMAGE = os.getenv("AGENT_IMAGE", "agent:latest")
+AGENT_IMAGE = os.getenv("AGENT_IMAGE", "vexaai/vexa-agent:latest")
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "")
 CONTAINER_PREFIX = os.getenv("CONTAINER_PREFIX", "agent-")
 IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))

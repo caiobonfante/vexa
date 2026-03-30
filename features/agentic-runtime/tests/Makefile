@@ -3,8 +3,8 @@ include ../.env
 .PHONY: infra-up infra-down test test-mvp0 build clean
 
 build:
-	cd ../../.. && docker build -t vexa-agent:dev -f containers/agent/Dockerfile .
-	cd ../../.. && docker build -t vexa-agent-api:dev -f packages/agent-api/Dockerfile .
+	cd ../../.. && docker build -t vexaai/vexa-agent:dev -f containers/agent/Dockerfile .
+	cd ../../.. && docker build -t vexaai/agent-api:dev -f packages/agent-api/Dockerfile .
 
 infra-up:
 	docker compose -f ../deploy/docker-compose.yml --env-file ../.env up -d

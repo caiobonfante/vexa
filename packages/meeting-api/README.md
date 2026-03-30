@@ -56,7 +56,7 @@ Bot lifecycle management service. Handles meeting CRUD, voice agent controls (TT
 | `DATABASE_URL` | yes | — | PostgreSQL async connection string |
 | `RUNTIME_API_URL` | no | `http://runtime-api:8000` | Runtime API base URL |
 | `MEETING_API_URL` | no | `http://meeting-api:8080` | Self URL for bot callbacks |
-| `BOT_IMAGE_NAME` | no | `vexa-bot:latest` | Bot container image |
+| `BOT_IMAGE_NAME` | no | `vexaai/vexa-bot:latest` | Bot container image (use immutable `YYMMDD-HHMM` tags in dev) |
 | `CORS_ORIGINS` | no | `http://localhost:3000,...` | Comma-separated CORS origins |
 | `ADMIN_TOKEN` | yes | — | Secret for minting meeting JWTs |
 | `TRANSCRIPTION_COLLECTOR_URL` | no | `http://transcription-collector:8000` | Transcription collector |
