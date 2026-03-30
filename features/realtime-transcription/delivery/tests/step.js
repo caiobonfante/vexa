@@ -63,7 +63,7 @@ function mintToken(meetingId, userId, platform, nativeId) {
   const now = Math.floor(Date.now() / 1000);
   const payload = Buffer.from(JSON.stringify({
     meeting_id: meetingId, user_id: userId, platform, native_meeting_id: nativeId,
-    scope: 'transcribe:write', iss: 'bot-manager', aud: 'transcription-collector',
+    scope: 'transcribe:write', iss: 'meeting-api', aud: 'transcription-collector',
     iat: now, exp: now + 7200, jti: crypto.randomUUID(),
   })).toString('base64url');
   const sig = crypto.createHmac('sha256', ADMIN_TOKEN_SECRET)

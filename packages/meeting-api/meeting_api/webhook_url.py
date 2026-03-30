@@ -40,7 +40,6 @@ _BLOCKED_HOSTNAMES = frozenset([
     "admin-api",
     "meeting-api",
     "runtime-api",
-    "bot-manager",  # legacy name, kept as belt-and-suspenders
     "transcription-collector",
     "redis",
     "postgres",

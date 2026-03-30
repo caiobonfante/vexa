@@ -2,7 +2,7 @@
 
 ## Certainty Table
 
-> **Post-refactoring re-validation (2026-03-27).** Architecture changed: bot-manager → meeting-api, transcription-collector → meeting-api/db_writer, shared-models → meeting-api own models, auth via gateway header injection. Bot code (vexa-bot), Whisper, ScriptProcessor, speaker identity, VAD, confirmation logic, and gateway WS code are all unchanged.
+> **Post-refactoring re-validation (2026-03-27).** Architecture changed: meeting-api now owns bot lifecycle + transcription collection, shared-models → meeting-api own models, auth via gateway header injection. Bot code (vexa-bot), Whisper, ScriptProcessor, speaker identity, VAD, confirmation logic, and gateway WS code are all unchanged.
 
 | Check | Score | Evidence | Last checked | To reach 95 |
 |-------|-------|----------|-------------|-------------|
