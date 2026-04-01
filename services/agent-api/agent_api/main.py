@@ -108,11 +108,30 @@ async def startup():
     logger.info("Redis connected")
 
     await cm.startup()
+
+    # Periodic workspace sync — S3-only safety net (no git commit).
+    # Catches workspace changes even if the agent forgets to save or the
+    # SSE stream is cancelled by client disconnect / scheduler timeout.
+    # Agent's explicit `vexa workspace save` still does git commit + S3.
+    async def _periodic_workspace_sync():
+        interval = int(os.getenv("WORKSPACE_SYNC_INTERVAL", "60"))
+        while True:
+            await asyncio.sleep(interval)
+            for user_id, info in list(cm._containers.items()):
+                if await cm._is_alive(info.name):
+                    try:
+                        await workspace.sync_up_s3_only(user_id, info.name)
+                    except Exception as e:
+                        logger.warning(f"Periodic sync failed for {user_id}: {e}")
+
+    app.state._periodic_sync_task = asyncio.create_task(_periodic_workspace_sync())
     logger.info(f"Agent API ready on port {config.PORT}")
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    if hasattr(app.state, "_periodic_sync_task"):
+        app.state._periodic_sync_task.cancel()
     await cm.shutdown()
     await app.state.redis.close()
 

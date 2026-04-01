@@ -183,6 +183,21 @@ See `templates/knowledge/.claude/CLAUDE.md` — full agent instructions ported f
 
 Workspaces are ephemeral in memory but persistent in storage. Every container start restores the workspace; every save persists it. This section documents the three core user flows and how the platform delivers them.
 
+### Two-tier workspace persistence
+
+Workspace persistence has two tiers, each serving a different purpose:
+
+| Tier | Trigger | What it does | Git commit? | When |
+|------|---------|-------------|-------------|------|
+| **Explicit save** | Agent calls `vexa workspace save` | `git add -A && git commit` + `aws s3 sync` | Yes — meaningful commit message | Agent decides (CLAUDE.md instructs) |
+| **Periodic S3 sync** | Background task every 60s | `aws s3 sync` only | No | Automatic while container is alive |
+
+**Why two tiers:** SSE streaming responses (used for chat) have unreliable cleanup — code after the stream ends may not execute if the client disconnects (scheduler timeout, browser close). The periodic sync catches workspace changes even if the agent forgets to save or the stream is cancelled. The explicit save creates meaningful git commits for history.
+
+**Git push to a remote** (e.g., GitHub) is the agent's responsibility. The platform never pushes — the agent runs `git push` from bash when CLAUDE.md instructs it. This keeps the platform generic (no knowledge of remotes) and gives the agent control over push frequency.
+
+`WORKSPACE_SYNC_INTERVAL` env var controls the periodic sync interval (default: 60 seconds).
+
 ### Why sync_down before agent runs
 
 Containers are ephemeral — they die on idle timeout, scale-to-zero, or restart. The workspace directory `/workspace/` dies with them. Without sync_down, every new container starts empty — the agent loses all prior work. sync_down restores from MinIO before the agent CLI runs, so the agent sees accumulated state from all prior sessions.
@@ -228,11 +243,15 @@ ensure_container(user_id)
          4. Run agent CLI (claude -p "...")
               │
               ▼
-         5. Agent calls `vexa workspace save`
+         5. Agent calls `vexa workspace save` (explicit, from CLAUDE.md)
               └── git commit + aws s3 sync → MinIO
               │
               ▼
-         6. Container idles out (300s) → runtime-api removes it
+         6. Periodic S3 sync (every 60s, background task)
+              └── S3-only, no git commit — safety net
+              │
+              ▼
+         7. Container idles out (300s) → runtime-api removes it
 ```
 
 ### Flow 1: Returning user — scheduled agent

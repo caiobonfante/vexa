@@ -87,7 +87,15 @@ If the agent can do it from bash inside the container (git push, git pull, file 
 
 Applications declare what they need ("I need GITHUB_TOKEN in my container"). How Vexa stores and delivers that (Redis, env files, admin API) is Vexa's internal business. Application missions must not reference Redis, MinIO paths, or internal storage details.
 
-### 6. Fail safe on sync_down errors
+### 6. Two-tier workspace persistence
+
+Workspace persistence has two tiers:
+- **Explicit save** (`vexa workspace save` / `POST /internal/workspace/save`): git commit + S3 sync. Agent-initiated, meaningful commit messages. This is the primary save path.
+- **Periodic S3 sync** (background task, every 60s): S3-only, no git commit. Safety net that catches changes if the agent forgets to save or the SSE stream is cancelled. Configurable via `WORKSPACE_SYNC_INTERVAL` env var.
+
+Git push to a remote (GitHub) is entirely the agent's responsibility — the platform never pushes. The agent does it from bash when CLAUDE.md instructs.
+
+### 7. Fail safe on sync_down errors
 
 If sync_down fails (MinIO down, network error):
 - **Existing user** (MinIO has content): abort with error. Don't run agent with empty workspace — user has data to lose. The agent would create duplicate files, overwrite with template, or produce garbage.

@@ -95,6 +95,23 @@ async def sync_up(user_id: str, container: str) -> bool:
     return rc == 0
 
 
+async def sync_up_s3_only(user_id: str, container: str) -> bool:
+    """Upload workspace to S3 WITHOUT git commit. Safety-net sync —
+    catches changes even if the agent didn't explicitly save.
+    The agent's `vexa workspace save` does git commit + S3 (sync_up).
+    This only does S3."""
+    if config.STORAGE_BACKEND != "s3":
+        return True
+
+    s3_uri = _s3_uri(user_id)
+    ws = config.WORKSPACE_PATH
+    cmd = f"aws s3 sync {ws}/ {s3_uri} {_env_args()} --delete {_SYNC_EXCLUDES} 2>&1"
+    rc, out = await _exec(container, cmd)
+    if rc != 0:
+        logger.warning(f"Periodic S3 sync failed for {user_id} (rc={rc}): {out}")
+    return rc == 0
+
+
 async def git_commit(user_id: str, container: str) -> bool:
     """Git add + commit inside workspace. Returns True if commit was made."""
     workspace = config.WORKSPACE_PATH
