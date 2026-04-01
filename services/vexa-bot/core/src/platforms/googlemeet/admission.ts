@@ -33,6 +33,18 @@ export async function checkForGoogleRejection(page: Page): Promise<boolean> {
 
 // Helper function to check for any visible and enabled admission indicators
 export async function checkForGoogleAdmissionIndicators(page: Page): Promise<boolean> {
+  // 1. NEGATIVE GUARD: If any waiting room indicator is visible,
+  // the bot is NOT admitted — lobby toolbar buttons are false positives.
+  const inWaitingRoom = await checkForWaitingRoomIndicators(page);
+  if (inWaitingRoom) {
+    log(`⚠️ Waiting room indicator visible — suppressing admission (lobby buttons are false positives)`);
+    return false;
+  }
+
+  // 2. DOM SELECTORS: participant tiles, self-name, share/present buttons.
+  // NOTE: MediaStream-based detection was tested but Google Meet's lobby has
+  // active media elements (self-preview audio tracks), causing false positives.
+  // Filtering self vs. remote streams is needed — tracked as follow-up.
   for (const selector of googleInitialAdmissionIndicators) {
     try {
       const element = page.locator(selector).first();

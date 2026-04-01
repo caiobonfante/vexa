@@ -1,4 +1,0 @@
-services:
-  meeting-api:
-    environment:
-      - DOCKER_NETWORK=vexa-restore_vexa_default

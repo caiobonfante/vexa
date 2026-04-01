@@ -21,9 +21,12 @@ export async function GET() {
     wsUrl = wsUrl.endsWith('/ws') ? wsUrl : `${wsUrl.replace(/\/$/, '')}/ws`;
   }
 
-  // Get user's auth token from cookie for WebSocket authentication
+  // Auth token for WebSocket: same fallback chain as the HTTP proxy in /api/vexa/[...path].
+  // cookie (logged-in user) → VEXA_API_KEY env var (self-hosted service token)
   const cookieStore = await cookies();
-  const authToken = cookieStore.get("vexa-token")?.value;
+  const authToken = cookieStore.get("vexa-token")?.value
+    || process.env.VEXA_API_KEY
+    || null;
 
   // Get default bot name from environment (optional)
   const defaultBotName = process.env.DEFAULT_BOT_NAME || null;

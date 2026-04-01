@@ -443,6 +443,16 @@ async def update_bot_config_proxy(platform: Platform, native_meeting_id: str, re
     return await forward_request(app.state.http_client, "PUT", url, request)
 # -------------------------------------------
 
+# --- GET /bots — meeting history (all statuses) from meeting-api DB ---
+@app.get("/bots",
+         tags=["Bot Management"],
+         summary="List recent meetings/bots for the user",
+         dependencies=[Depends(api_key_scheme)])
+async def list_bots_proxy(request: Request):
+    """Forward to meeting-api GET /bots — returns all meetings (active + completed)."""
+    url = f"{MEETING_API_URL}/bots"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
 # --- ADD Route for GET /bots/status ---
 @app.get("/bots/status",
          tags=["Bot Management"],
@@ -1414,7 +1424,22 @@ async def forward_mcp_path(request: Request, path: str):
 
 # --- Removed internal ID resolution and full transcript fetching from Gateway ---
 
-# --- Auth routes removed (/auth/* endpoints no longer exist) ---
+# --- Auth: /auth/me returns caller identity from API key ---
+@app.get("/auth/me", tags=["Auth"])
+async def auth_me(request: Request):
+    """Return identity of the caller based on their API key."""
+    api_key = request.headers.get("x-api-key")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    user_data = await _resolve_token(app.state.http_client, api_key)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return {
+        "user_id": user_data["user_id"],
+        "email": user_data.get("email", ""),
+        "scopes": user_data.get("scopes", []),
+        "max_concurrent": user_data.get("max_concurrent", 1),
+    }
 
 
 # --- Remote Browser Session Routes ---

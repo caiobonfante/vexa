@@ -21,13 +21,25 @@ async function proxyRequest(
   const { path } = await params;
   let pathString = path.join("/");
 
-  // /meetings list: api-gateway doesn't have a combined list endpoint,
-  // so we build it from /bots/status + /meetings (TC)
+  // /meetings list: primary source is GET /bots (meeting-api DB — all statuses).
+  // Fallback to /bots/status (running containers only) if /bots fails.
   if (pathString === "meetings" && method === "GET") {
-    const meetings: any[] = [];
-    const seenIds = new Set<string>();
+    // Try GET /bots first — returns all meetings from DB (active + completed)
+    try {
+      const botsResp = await fetch(`${VEXA_API_URL}/bots`, {
+        headers: { "X-API-Key": VEXA_API_KEY },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (botsResp.ok) {
+        const data = await botsResp.json();
+        return NextResponse.json({ meetings: data.meetings || [] });
+      }
+    } catch (e) {
+      console.error("[proxy] GET /bots failed, falling back to /bots/status:", e);
+    }
 
-    // 1. Active bots from api-gateway → meeting-api
+    // Fallback: running containers only (no history)
+    const meetings: any[] = [];
     try {
       const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
         headers: { "X-API-Key": VEXA_API_KEY },
@@ -35,10 +47,8 @@ async function proxyRequest(
       if (statusResp.ok) {
         const data = await statusResp.json();
         for (const b of data.running_bots || []) {
-          // Skip bots without platform/native_meeting_id — they can't be subscribed to
           if (!b.platform || !b.native_meeting_id) continue;
           const id = b.meeting_id_from_name || b.container_name;
-          seenIds.add(id);
           meetings.push({
             id: parseInt(id) || 0,
             platform: b.platform,
@@ -46,7 +56,6 @@ async function proxyRequest(
             status: b.meeting_status || "active",
             start_time: b.start_time || b.created_at,
             end_time: null,
-            bot_container_id: b.container_id,
             data: b.data || {},
             created_at: b.created_at,
           });
@@ -55,37 +64,6 @@ async function proxyRequest(
     } catch (e) {
       console.error("[proxy] /bots/status failed:", e);
     }
-
-    // 2. Meeting history from api-gateway → TC
-    try {
-      const tcResp = await fetch(`${VEXA_API_URL}/meetings`, {
-        headers: { "X-API-Key": VEXA_API_KEY },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (tcResp.ok) {
-        const tcData = await tcResp.json();
-        const tcMeetings = Array.isArray(tcData) ? tcData : tcData.meetings || [];
-        for (const m of tcMeetings) {
-          const id = (m.id || "").toString();
-          if (seenIds.has(id)) continue;
-          seenIds.add(id);
-          meetings.push({
-            id: m.id,
-            platform: m.platform,
-            native_meeting_id: m.native_meeting_id || m.platform_specific_id,
-            status: m.status || "completed",
-            start_time: m.start_time,
-            end_time: m.end_time,
-            bot_container_id: null,
-            data: m.data || {},
-            created_at: m.created_at || m.start_time,
-          });
-        }
-      }
-    } catch (e) {
-      console.error("[proxy] /meetings failed:", e);
-    }
-
     return NextResponse.json({ meetings });
   }
 

@@ -106,7 +106,15 @@ async def bot_exit_callback(
         meeting_id = meeting.id
 
         if exit_code == 0:
-            provided_reason = payload.completion_reason or MeetingCompletionReason.STOPPED
+            # Check pending_completion_reason (set by scheduler timeout) — overrides bot-reported reason
+            pending = (meeting.data or {}).get("pending_completion_reason") if isinstance(meeting.data, dict) else None
+            if pending:
+                try:
+                    provided_reason = MeetingCompletionReason(pending)
+                except ValueError:
+                    provided_reason = payload.completion_reason or MeetingCompletionReason.STOPPED
+            else:
+                provided_reason = payload.completion_reason or MeetingCompletionReason.STOPPED
             meta = {"exit_code": exit_code}
             if payload.platform_specific_error:
                 meta["platform_specific_error"] = payload.platform_specific_error
@@ -295,7 +303,15 @@ async def bot_status_change_callback(
     success = None
 
     if new_status == MeetingStatus.COMPLETED:
-        success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=payload.completion_reason)
+        # Check pending_completion_reason (set by scheduler timeout) — overrides bot-reported reason
+        effective_reason = payload.completion_reason
+        pending = (meeting.data or {}).get("pending_completion_reason") if isinstance(meeting.data, dict) else None
+        if pending:
+            try:
+                effective_reason = MeetingCompletionReason(pending)
+            except ValueError:
+                pass
+        success = await update_meeting_status(meeting, MeetingStatus.COMPLETED, db, completion_reason=effective_reason)
         if success:
             meeting.end_time = datetime.utcnow()
             if payload.speaker_events:

@@ -2,17 +2,13 @@
 // Keep this file free of runtime logic; export constants only.
 
 export const googleInitialAdmissionIndicators: string[] = [
-  // Most reliable indicators: UI controls that appear when in meeting
-  'button[aria-label*="People"]',
-  'button[aria-label*="people"]',
-  'button[aria-label*="Chat"]',
-  'button[aria-label*="chat"]',
-  'button[aria-label*="Leave call"]',
-  'button[aria-label*="Leave meeting"]',
-  '[role="toolbar"]',
+  // DOM fallback selectors — only indicators that do NOT appear in the lobby.
+  // DANGER: Leave call, toolbar, mic/camera toggles all exist in the lobby too!
+  // Primary admission signal is active MediaStreams (checked in admission.ts).
   '[data-participant-id]',
-  'button[aria-label*="Turn off microphone"]',
-  'button[aria-label*="Turn on microphone"]'
+  '[data-self-name]',
+  'button[aria-label*="Share screen"]',
+  'button[aria-label*="Present now"]',
 ];
 
 export const googleWaitingRoomIndicators: string[] = [

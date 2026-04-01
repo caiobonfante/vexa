@@ -1,4 +1,4 @@
-.PHONY: all env build build-bot-image up down ps logs test migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker publish promote-staging promote-latest help-tags
+.PHONY: all env build build-bot-image up down ps logs test migrate migrate-or-init makemigrations init-db stamp-db migration-status check_docker publish promote-staging promote-latest help-tags setup-api-key
 
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -34,7 +34,7 @@ endif
 # Main targets
 # ============================================================================
 
-all: env build up migrate-or-init test
+all: env build up migrate-or-init setup-api-key test
 	@echo "Vexa is running. API: http://localhost:$${API_GATEWAY_HOST_PORT:-8056}/docs"
 
 help-tags:
@@ -105,6 +105,29 @@ up: check_docker
 down: check_docker
 	$(COMPOSE_CMD) down
 	@cd $(ROOT)/packages/transcription-service && docker compose down 2>/dev/null || true
+
+# --- Service API key (dashboard WS auth) ---
+# Creates a bot-scope API key for user 5 and writes it to .env as VEXA_API_KEY.
+# The dashboard uses this for WebSocket auth so it works without manual login.
+setup-api-key: check_docker
+	@if grep -qE '^VEXA_API_KEY=.+' $(ENV_FILE) 2>/dev/null; then \
+		echo "VEXA_API_KEY already set in .env — skipping."; \
+	else \
+		API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2); \
+		API_PORT=$${API_PORT:-8056}; \
+		ADMIN_TOKEN=$$(grep -E '^ADMIN_API_TOKEN=' $(ENV_FILE) 2>/dev/null | cut -d= -f2); \
+		ADMIN_TOKEN=$${ADMIN_TOKEN:-changeme}; \
+		TOKEN=$$(curl -sf -X POST "http://localhost:$$API_PORT/admin/users/5/tokens?scope=bot&name=dashboard-ws" \
+			-H "X-Admin-API-Key: $$ADMIN_TOKEN" 2>/dev/null \
+			| python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null); \
+		if [ -n "$$TOKEN" ]; then \
+			echo "VEXA_API_KEY=$$TOKEN" >> $(ENV_FILE); \
+			echo "Created VEXA_API_KEY for dashboard WS auth."; \
+			$(COMPOSE_CMD) up -d dashboard; \
+		else \
+			echo "WARNING: Could not create VEXA_API_KEY (admin API not ready?). Dashboard WS will require login."; \
+		fi; \
+	fi
 
 # --- Status ---
 ps: check_docker

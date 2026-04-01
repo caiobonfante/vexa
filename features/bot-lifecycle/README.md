@@ -170,6 +170,9 @@ See `conductor/missions/bot-status-lifecycle.md` for full research.
 | 2 | Bot swallows JOINING callback failure — proceeds to send ACTIVE, server rejects REQUESTED→ACTIVE silently | CRITICAL | `unified-callback.ts`, platform `join.ts` files |
 | 3 | Webhook fires unconditionally even for rejected transitions | MEDIUM | `callbacks.py:389` |
 | 4 | No DB lock on status update — TOCTOU race on concurrent callbacks | MEDIUM | `meetings.py:140-196` |
+| 5 | **Google Meet bot falsely reports `active` while in waiting room** — admission detection checks for "Leave call" button which exists in lobby UI. Bot sends ACTIVE callback, server accepts it, dashboard shows "Active" but bot is actually stuck in lobby. Host sees "Admit 1 guest". This breaks `awaiting_admission` state entirely — bot never enters it, so `waitingRoomTimeout` never fires. | **CRITICAL** | `googlemeet/admission.ts` |
+
+**Bug 5 is this feature's responsibility.** Correct state identification is the core contract of bot lifecycle. If the bot reports the wrong state, all downstream behavior (timeouts, dashboard, user decisions) is wrong. The feature must ensure the bot's reported state matches observable reality — verified via Playwright CDP screenshots, not bot self-reports.
 
 ### What Tests Verify
 

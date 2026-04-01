@@ -1,51 +1,63 @@
 import { runBot } from "."
 import { z } from 'zod';
-import { BotConfig, BrowserSessionConfig } from "./types"; // Import the BotConfig type
+import { BotConfig, BrowserSessionConfig } from "./types";
 
-// Define a schema that matches your JSON configuration
+// Browser session mode schema — only needs Redis + S3/workspace config
+const BrowserSessionConfigSchema = z.object({
+  mode: z.literal("browser_session"),
+  meeting_id: z.number().int().optional(),
+  redisUrl: z.string(),
+  container_name: z.string().optional(),
+  meetingApiCallbackUrl: z.string().url().optional(),
+  s3Endpoint: z.string().optional(),
+  s3Bucket: z.string().optional(),
+  s3AccessKey: z.string().optional(),
+  s3SecretKey: z.string().optional(),
+  userdataS3Path: z.string().optional(),
+  workspaceGitRepo: z.string().optional(),
+  workspaceGitToken: z.string().optional(),
+  workspaceGitBranch: z.string().optional(),
+});
+
+// Meeting mode schema — requires platform, meetingUrl, botName
 export const BotConfigSchema = z.object({
   mode: z.enum(["meeting", "browser_session"]).default("meeting"),
-  platform: z.enum(["google_meet", "zoom", "teams"]).optional(),
-  meetingUrl: z.string().url().nullable().optional(), // Allow null from BOT_CONFIG
-  botName: z.string().optional(),
+  platform: z.enum(["google_meet", "zoom", "teams"]),
+  meetingUrl: z.string().url().nullable(),
+  botName: z.string(),
   token: z.string().optional(),
   connectionId: z.string().optional(),
-  nativeMeetingId: z.string().optional(), // *** ADDED schema field ***
-  language: z.string().nullish(), // Optional language
-  task: z.string().nullish(),     // Optional task
-  allowedLanguages: z.array(z.string()).optional(), // Whitelist of allowed language codes
+  nativeMeetingId: z.string().optional(),
+  language: z.string().nullish(),
+  task: z.string().nullish(),
+  allowedLanguages: z.array(z.string()).optional(),
   transcribeEnabled: z.boolean().optional(),
   transcriptionTier: z.enum(["realtime", "deferred"]).optional(),
-  redisUrl: z.string(),         // Required Redis URL
-  container_name: z.string().optional(), // ADDED: Optional container name
+  redisUrl: z.string(),
+  container_name: z.string().optional(),
   automaticLeave: z.object({
-    waitingRoomTimeout: z.number().int().default(300000),      // 5 minutes
-    noOneJoinedTimeout: z.number().int().default(600000),      // 10 minutes
-    everyoneLeftTimeout: z.number().int().default(120000)      // 2 minutes
+    waitingRoomTimeout: z.number().int().default(300000),
+    noOneJoinedTimeout: z.number().int().default(600000),
+    everyoneLeftTimeout: z.number().int().default(120000)
   }).default({}),
-  reconnectionIntervalMs: z.number().int().optional(), // ADDED: Optional reconnection interval
-  meeting_id: z.number().int().optional(), // Allow optional internal ID
-  meetingApiCallbackUrl: z.string().url().optional(), // ADDED: Optional callback URL
+  reconnectionIntervalMs: z.number().int().optional(),
+  meeting_id: z.number().int().optional(),
+  meetingApiCallbackUrl: z.string().url().optional(),
   recordingEnabled: z.boolean().optional(),
   captureModes: z.array(z.string()).optional(),
   recordingUploadUrl: z.string().url().optional(),
-  // Per-speaker transcription
   transcriptionServiceUrl: z.string().optional(),
   transcriptionServiceToken: z.string().optional(),
-  // Voice agent / meeting interaction interface
   voiceAgentEnabled: z.boolean().optional(),
   defaultAvatarUrl: z.string().url().optional(),
-  // Independent capability flags
   videoReceiveEnabled: z.boolean().optional(),
   cameraEnabled: z.boolean().optional(),
-  // Authenticated meeting mode / browser session S3 config
   authenticated: z.boolean().optional(),
   userdataS3Path: z.string().optional(),
   s3Endpoint: z.string().optional(),
   s3Bucket: z.string().optional(),
   s3AccessKey: z.string().optional(),
   s3SecretKey: z.string().optional(),
-  // Git-based workspace
   workspaceGitRepo: z.string().optional(),
   workspaceGitToken: z.string().optional(),
   workspaceGitBranch: z.string().optional(),
@@ -60,27 +72,11 @@ if (!rawConfig) {
 }
 
   try {
-  // Parse the JSON string from the environment variable
   const parsedConfig = JSON.parse(rawConfig);
-  // Validate and parse the config using zod
-  const validatedConfig = BotConfigSchema.parse(parsedConfig);
 
-  if (validatedConfig.mode === "browser_session") {
-    // Browser session mode — interactive browser with VNC + CDP
-    const sessionConfig: BrowserSessionConfig = {
-      mode: "browser_session",
-      redisUrl: validatedConfig.redisUrl,
-      container_name: validatedConfig.container_name,
-      meetingApiCallbackUrl: validatedConfig.meetingApiCallbackUrl,
-      s3Endpoint: validatedConfig.s3Endpoint,
-      s3Bucket: validatedConfig.s3Bucket,
-      s3AccessKey: validatedConfig.s3AccessKey,
-      s3SecretKey: validatedConfig.s3SecretKey,
-      userdataS3Path: validatedConfig.userdataS3Path,
-      workspaceGitRepo: validatedConfig.workspaceGitRepo,
-      workspaceGitToken: validatedConfig.workspaceGitToken,
-      workspaceGitBranch: validatedConfig.workspaceGitBranch,
-    };
+  // Check mode BEFORE Zod validation — each mode has its own schema
+  if (parsedConfig.mode === "browser_session") {
+    const sessionConfig = BrowserSessionConfigSchema.parse(parsedConfig);
     import('./browser-session').then(({ runBrowserSession }) => {
       runBrowserSession(sessionConfig).catch((error) => {
         console.error("Error running browser session:", error);
@@ -88,7 +84,7 @@ if (!rawConfig) {
       });
     });
   } else {
-    // Meeting mode — validate required meeting fields and run bot
+    const validatedConfig = BotConfigSchema.parse(parsedConfig);
     const botConfig: BotConfig = validatedConfig as BotConfig;
     runBot(botConfig).catch((error) => {
       console.error("Error running bot:", error);

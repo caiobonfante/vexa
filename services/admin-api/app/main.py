@@ -10,7 +10,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, attributes
 from typing import List, Optional  # Import List for response model
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, cast, literal
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Text
 from pydantic import BaseModel, Field, HttpUrl
 
 # Import admin models (User, APIToken) from admin-models package
@@ -869,12 +871,15 @@ async def backfill_token_scopes():
 
     async with AsyncSession(admin_engine) as session:
         # Find tokens that need updating: empty scopes OR containing removed scopes
+        # Use cardinality + raw text SQL to avoid asyncpg type mismatch with text[] comparisons
+        from sqlalchemy import text as sa_text
         result = await session.execute(
             select(APIToken).where(
                 or_(
-                    func.array_length(APIToken.scopes, 1).is_(None),
-                    APIToken.scopes.op('@>')(['user']),
-                    APIToken.scopes.op('@>')(['admin']),
+                    func.cardinality(APIToken.scopes) == 0,
+                    APIToken.scopes.is_(None),
+                    sa_text("scopes @> ARRAY['user']::text[]"),
+                    sa_text("scopes @> ARRAY['admin']::text[]"),
                 )
             )
         )

@@ -21,7 +21,7 @@ import httpx
 import redis.asyncio as aioredis
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func
+from sqlalchemy import and_, desc, func, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
@@ -213,7 +213,9 @@ async def update_meeting_status(
 
     # Cancel scheduler timeout job when reaching terminal state
     if new_status in (MeetingStatus.COMPLETED, MeetingStatus.FAILED):
-        asyncio.create_task(_cancel_bot_timeout(meeting))
+        job_id = (meeting.data or {}).get("scheduler_job_id") if isinstance(meeting.data, dict) else None
+        if job_id:
+            asyncio.create_task(_cancel_bot_timeout(job_id, meeting.id))
 
     return True
 
@@ -324,13 +326,8 @@ async def _schedule_bot_timeout(
         return None
 
 
-async def _cancel_bot_timeout(meeting: "Meeting") -> None:
+async def _cancel_bot_timeout(job_id: str, meeting_id: int) -> None:
     """Cancel the scheduler timeout job for a meeting, if one exists."""
-    if not meeting.data or not isinstance(meeting.data, dict):
-        return
-    job_id = meeting.data.get("scheduler_job_id")
-    if not job_id:
-        return
     try:
         client = _get_httpx_client()
         resp = await client.delete(
@@ -338,11 +335,11 @@ async def _cancel_bot_timeout(meeting: "Meeting") -> None:
             timeout=10.0,
         )
         if resp.status_code in (200, 404):
-            logger.info(f"Cancelled bot timeout job {job_id} for meeting {meeting.id}")
+            logger.info(f"Cancelled bot timeout job {job_id} for meeting {meeting_id}")
         else:
             logger.warning(f"Failed to cancel bot timeout job {job_id}: HTTP {resp.status_code}")
     except Exception as e:
-        logger.error(f"Failed to cancel bot timeout for meeting {meeting.id}: {e}")
+        logger.error(f"Failed to cancel bot timeout for meeting {meeting_id}: {e}")
 
 
 async def _spawn_via_runtime_api(
@@ -793,13 +790,18 @@ async def request_bot(
         await db.commit()
         raise HTTPException(status_code=500, detail="Failed to mint meeting token")
 
-    # Build BOT_CONFIG
+    # Build BOT_CONFIG — load user data directly from DB (UserProxy doesn't carry it)
     user_recording_config = {}
     user_bot_config = {}
     try:
-        if current_user.data and isinstance(current_user.data, dict):
-            user_recording_config = current_user.data.get("recording_config", {})
-            user_bot_config = current_user.data.get("bot_config", {})
+        user_row = await db.execute(
+            sa_text("SELECT data FROM users WHERE id = :uid"),
+            {"uid": current_user.id},
+        )
+        user_data = user_row.scalar()
+        if user_data and isinstance(user_data, dict):
+            user_recording_config = user_data.get("recording_config", {})
+            user_bot_config = user_data.get("bot_config", {})
     except Exception:
         pass
 
@@ -1072,6 +1074,44 @@ async def delete_browser_storage(user_id: int):
         return {"message": f"Deleted {deleted} files for user {user_id}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
+@router.get(
+    "/bots",
+    summary="List recent meetings/bots for the authenticated user",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def list_user_bots(
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+):
+    """Returns recent meetings (all statuses) from the database."""
+    _, current_user = auth_data
+    stmt = (
+        select(Meeting)
+        .where(Meeting.user_id == current_user.id)
+        .order_by(desc(Meeting.created_at))
+        .limit(limit)
+    )
+    meetings = (await db.execute(stmt)).scalars().all()
+    return {
+        "meetings": [
+            {
+                "id": m.id,
+                "platform": m.platform,
+                "native_meeting_id": m.platform_specific_id,
+                "status": m.status,
+                "bot_container_id": m.bot_container_id,
+                "start_time": m.start_time.isoformat() if m.start_time else None,
+                "end_time": m.end_time.isoformat() if m.end_time else None,
+                "data": m.data or {},
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+            }
+            for m in meetings
+        ]
+    }
 
 
 @router.get(

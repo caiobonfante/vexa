@@ -111,13 +111,13 @@ These missions contain detailed research. Don't duplicate — reference them.
 
 **Goal:** API accepts new timeout fields, resolves from user.data, passes to bot.
 
-- [ ] Add `max_bot_time` to `AutomaticLeave` schema in `schemas.py`
-- [ ] Rename API fields: `waiting_room_timeout` → `max_wait_for_admission`, `everyone_left_timeout` → `max_time_left_alone` (keep old names as aliases for backward compat in schema only)
-- [ ] Read `user.data.bot_config` in `meetings.py` when building BOT_CONFIG — apply resolution order (request → user.data → system defaults)
-- [ ] Map API names to bot-side names: `max_wait_for_admission` → `waitingRoomTimeout`, `max_time_left_alone` → `everyoneLeftTimeout`
-- [ ] Update system defaults: `max_wait_for_admission` = 900000, `max_time_left_alone` = 900000
-- [ ] Add `max_bot_time_exceeded` to completion reasons enum
-- [ ] Verify: `stopping` status already excluded from concurrent bot count (it is — `meetings.py:624`)
+- [x] Add `max_bot_time` to `AutomaticLeave` schema in `schemas.py`
+- [x] Rename API fields: `waiting_room_timeout` → `max_wait_for_admission`, `everyone_left_timeout` → `max_time_left_alone` (keep old names as aliases for backward compat in schema only)
+- [x] Read `user.data.bot_config` in `meetings.py` when building BOT_CONFIG — apply resolution order (request → user.data → system defaults)
+- [x] Map API names to bot-side names: `max_wait_for_admission` → `waitingRoomTimeout`, `max_time_left_alone` → `everyoneLeftTimeout`
+- [x] Update system defaults: `max_wait_for_admission` = 900000, `max_time_left_alone` = 900000
+- [x] Add `max_bot_time_exceeded` to completion reasons enum
+- [x] Verify: `stopping` status already excluded from concurrent bot count (it is — `meetings.py:624`)
 
 **Verify:** POST /bots with `automatic_leave.max_bot_time` accepted. GET /bots shows resolved timeout values. User with `bot_config` in data gets their defaults applied.
 
@@ -125,9 +125,9 @@ These missions contain detailed research. Don't duplicate — reference them.
 
 **Goal:** Fix the 4 critical/medium bugs from `bot-status-lifecycle.md` research.
 
-- [ ] **Fix 1 (CRITICAL):** ACTIVE callback handler in `callbacks.py` returns `{"status": "error"}` when `update_meeting_status()` returns False (currently returns "processed")
-- [ ] **Fix 2 (CRITICAL):** Bot propagates JOINING callback failure — does NOT proceed to send ACTIVE when JOINING failed all retries. Platform join functions surface failure instead of swallowing.
-- [ ] **Fix 3 (MEDIUM):** Webhook delivery in ACTIVE handler gated on `success` flag (currently fires unconditionally at `callbacks.py:389`)
+- [x] **Fix 1 (CRITICAL):** ACTIVE callback handler in `callbacks.py` returns `{"status": "error"}` when `update_meeting_status()` returns False (currently returns "processed")
+- [x] **Fix 2 (CRITICAL):** Bot propagates JOINING callback failure — does NOT proceed to send ACTIVE when JOINING failed all retries. Platform join functions surface failure instead of swallowing.
+- [x] **Fix 3 (MEDIUM):** Webhook delivery in ACTIVE handler gated on `success` flag (currently fires unconditionally at `callbacks.py:389`)
 - [ ] **Fix 4 (MEDIUM):** Add `SELECT FOR UPDATE` or equivalent lock in `update_meeting_status()` to prevent TOCTOU race on concurrent callbacks
 
 **Verify:** Simulated JOINING callback failure → bot does NOT send ACTIVE → server stays in REQUESTED → bot reports error. ACTIVE handler returns error on invalid transition. No spurious webhooks for rejected transitions.
@@ -136,29 +136,50 @@ These missions contain detailed research. Don't duplicate — reference them.
 
 **Goal:** Server-side hard ceiling on bot lifetime via scheduler.
 
-- [ ] Meeting-api calls `POST http://runtime-api:8066/scheduler/jobs` on bot creation with timeout job spec
-- [ ] Store `scheduler_job_id` in `meeting.data`
-- [ ] Cancel scheduler job when bot reaches terminal state (in `update_meeting_status()` when new status is completed/failed)
-- [ ] Cancel scheduler job when user calls DELETE /bots (in stop handler)
-- [ ] When timeout fires → DELETE /bots → status=stopping → completed (reason=max_bot_time_exceeded)
-- [ ] Handle edge case: timeout fires but bot already in terminal state (idempotent — DELETE returns 404/409, scheduler marks job as failed, no harm)
+- [x] Meeting-api calls `POST http://runtime-api:8066/scheduler/jobs` on bot creation with timeout job spec
+- [x] Store `scheduler_job_id` in `meeting.data`
+- [x] Cancel scheduler job when bot reaches terminal state (in `update_meeting_status()` when new status is completed/failed)
+- [x] Cancel scheduler job when user calls DELETE /bots (in stop handler)
+- [x] When timeout fires → DELETE /bots → status=stopping → completed (reason=max_bot_time_exceeded)
+- [x] Handle edge case: timeout fires but bot already in terminal state (idempotent — DELETE returns 404/409, scheduler marks job as failed, no harm)
 
 **Verify:** Create bot with short max_bot_time (60s). Bot joins, stays active. After 60s, scheduler fires DELETE. Bot transitions to stopping → completed with reason=max_bot_time_exceeded. Scheduler job visible in `GET /scheduler/jobs`.
 
-### Phase 4: E2E Tests
+### Phase 4: Fix Google Meet Admission Detection (CRITICAL — found during E2E)
+
+**Discovery (2026-03-30):** Bot reports `active` while ACTUALLY in the waiting room. Host browser shows "Admit 1 guest" pill, but bot found "Leave call" button DOM element and declared itself admitted. The bot's admission detection in `googlemeet/admission.ts` is broken — it checks for DOM elements that exist in both the lobby view and the actual meeting view.
+
+**Impact:** D5 (admission timeout) cannot pass. The bot never enters `awaiting_admission` state, so `waitingRoomTimeout` never fires. The bot falsely reports `active` and sits in the lobby forever (until `max_bot_time` kills it via scheduler).
+
+**Root cause:** `admission.ts` checks for `button[aria-label*="Leave call"]` as proof of admission. This element IS present in the Google Meet lobby/waiting room UI. The bot needs a different signal to distinguish "in lobby" from "in meeting".
+
+**Fix approach:** The admission check must verify actual meeting participation, not just UI element presence. Possible signals:
+- Participant count > 0 in the meeting (lobby shows 0 other participants)
+- Media elements present (audio/video streams only exist after admission)
+- Meeting toolbar has specific controls only visible after admission
+- The "Waiting for the host" / "Ask to join" overlay is gone
+
+- [x] Fix `googlemeet/admission.ts` — negative guard on waiting room indicators + meeting-exclusive DOM elements (G8: signal specificity)
+- [x] Rebuild vexa-bot image after fix (260331-1330)
+- [x] Verify with Playwright CDP: host screenshot shows "Admit 1 guest" → bot reports `awaiting_admission` (not `active`) ✅ 2026-03-31
+- [x] Verify admission timeout: bot stays in `awaiting_admission` for 60s → `completed` with `awaiting_admission_timeout` ✅ 2026-03-31
+
+### Phase 5: E2E Tests (all scenarios)
 
 **Goal:** Verify all lifecycle paths with real bots in real meetings.
 
-Test scenarios from `bot-lifecycle-e2e.md`:
-- [ ] T1.1 — Full lifecycle with waiting room (requested → joining → awaiting_admission → active → stopping → completed)
-- [ ] T1.2 — Bot stop while active (30s soak)
-- [ ] T2.1 — Left alone (host leaves, bot detects → completed reason=left_alone)
-- [ ] T2.2 — Admission timeout (no auto-admit, bot times out → completed reason=awaiting_admission_timeout)
-- [ ] T3.1 — Invalid meeting URL → failed (stage=joining)
-- [ ] **T_NEW** — max_bot_time timeout (short max_bot_time, scheduler kills bot → completed reason=max_bot_time_exceeded)
-- [ ] **T_NEW** — User.data.bot_config defaults applied (set user config, create bot without overrides, verify resolved values)
+**CRITICAL RULE: Bot self-reports are NOT evidence.** Every test that checks bot state must verify via Playwright CDP screenshot of the host's browser AND/OR the bot's browser. `meeting_status=active` in the API means nothing if the host screenshot shows "Admit 1 guest".
 
-**Verify:** All tests pass against real Google Meet. Each test verifies status transitions, transition history, timing, terminal metadata, and scheduler job lifecycle.
+Test scenarios:
+- [x] T1.1 — Full lifecycle with waiting room (requested → joining → awaiting_admission → active → stopping → completed). ✅ 2026-03-31 CDP evidence
+- [ ] T1.2 — Bot stop while active (30s soak)
+- [ ] T2.1 — Left alone (host leaves via CDP → bot detects → completed reason=left_alone).
+- [x] T2.2 — Admission timeout: host does NOT click admit. Bot transitions: joining → awaiting_admission → completed (reason=awaiting_admission_timeout). ✅ 2026-03-31 CDP evidence
+- [ ] T3.1 — Invalid meeting URL → failed (stage=joining)
+- [x] **T_NEW** — max_bot_time timeout (short max_bot_time, scheduler kills bot → completed reason=max_bot_time_exceeded) ✅ 2026-03-31
+- [x] **T_NEW** — User.data.bot_config defaults applied (set user config, create bot without overrides, verify resolved values) ✅ 2026-03-30
+
+**Verify:** All tests pass against real Google Meet. Each test uses Playwright CDP screenshots as evidence, not bot self-reports.
 
 ---
 
@@ -167,6 +188,34 @@ Test scenarios from `bot-lifecycle-e2e.md`:
 **Every item has an exact test.** No item is done until the test command runs and shows the expected output. "Code looks correct" = 0 confidence.
 
 **Testing environment:** All tests run on a **freshly built** docker compose deployment (`docker compose build --no-cache && docker compose up -d`). Not against a long-running dev environment with stale state — a clean build proves the code ships correctly.
+
+### Confidence = weighted DoD
+
+Each DoD item has a **weight** reflecting its risk and importance. Confidence is the weighted sum of passing items, not a simple count. API curl tests are low-weight; live meeting tests with CDP screenshot evidence are high-weight.
+
+| DoD | Weight | Why |
+|-----|--------|-----|
+| D0 (fresh build) | 5 | Infra prerequisite, low risk |
+| D1 (backward compat) | 5 | Schema validation, testable offline |
+| D2 (declarative stop) | 5 | DB query logic, testable offline |
+| D3 (user.data defaults) | 5 | Resolution logic, testable offline |
+| **D4 (max_bot_time scheduler)** | **15** | **New feature, real meeting + scheduler, high risk** |
+| **D16 (admission detection)** | **15** | **CRITICAL bug fix, can only verify with CDP screenshot** |
+| **D17 (admission timeout)** | **15** | **Core timeout path, real meeting, CDP evidence required** |
+| D7 (callback error) | 3 | Server code fix, testable offline |
+| D8 (JOINING propagation) | 3 | Bot code fix, testable offline |
+| D9 (webhook gating) | 2 | Server code fix, testable offline |
+| D10 (scheduler cancel) | 5 | Scheduler integration, verifiable via Redis |
+| D11 (idempotent timeout) | 3 | Edge case, testable offline |
+| **D12 (full lifecycle E2E)** | **15** | **End-to-end, real meeting, all transitions, CDP evidence** |
+| D13 (edge cases) | 3 | Edge cases, testable offline |
+| **D14 (dashboard)** | **10** | **Human visual verification, real-time updates. Ceiling=80 without it.** |
+| D15 (no regressions) | 5 | Regression check |
+| | **= 114 total** | |
+
+**Confidence formula:** `sum(passing_item_weights) / 114 * 100`
+
+Example: D0-D3 + D7-D11 + D13 + D15 all pass (API-level) = 44 points = **39%**. Cannot reach 70% without D4 + D12 + D16 + D17 passing with real meeting evidence.
 
 ---
 
@@ -503,18 +552,135 @@ Human confirms: "I can see the full lifecycle on the dashboard."
 
 **FAIL if:** any existing integration breaks. FAIL if: response fields removed or renamed. FAIL if: Redis channel format changed.
 
+### D16. Admission detection — bot reports awaiting_admission when in lobby (NOT active)
+
+```bash
+# Host creates meeting with waiting room (meet.new from authenticated account).
+# Send non-authenticated bot (user 11) to the meeting. Do NOT admit.
+#
+# VERIFY VIA PLAYWRIGHT CDP — not bot self-report:
+CDP_URL="http://localhost:8066/b/$HOST_SESSION/cdp"
+node -e "
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.connectOverCDP('$CDP_URL');
+  const page = b.contexts()[0].pages()[0];
+  await page.screenshot({ path: '/tmp/host-admission.png' });
+  // Check for 'Admit' pill on host page
+  const admitPill = page.locator('text=Admit');
+  const visible = await admitPill.isVisible();
+  console.log('Admit pill visible:', visible);
+})();
+"
+# → Admit pill visible: true (bot is in waiting room)
+
+# SIMULTANEOUSLY check meeting-api status:
+curl http://localhost:8056/bots/status -H "X-API-Key: $API_KEY_11"
+# → meeting_status = "awaiting_admission" (NOT "active")
+
+# Check bot's status_transition:
+# → requested → joining → awaiting_admission (STOPPED HERE, not active)
+```
+
+**FAIL if:** host screenshot shows "Admit N guest" but meeting-api shows `active`. The bot falsely detected admission.
+**FAIL if:** bot never enters `awaiting_admission` state (goes straight to `active`).
+
+### D17. Admission timeout — bot times out in lobby after max_wait_for_admission
+
+```bash
+# Same setup as D16. Bot is in awaiting_admission. Host does NOT admit.
+# Wait for max_wait_for_admission (60s).
+#
+# VERIFY VIA PLAYWRIGHT CDP at T+30s:
+# → Host screenshot still shows "Admit N guest" (bot still waiting)
+# → meeting-api still shows awaiting_admission
+#
+# VERIFY at T+70s:
+# → Bot exited. meeting-api shows completed, reason=awaiting_admission_timeout
+# → Host screenshot: "Admit" pill gone (bot left the lobby)
+# → status_transition: requested → joining → awaiting_admission → completed
+```
+
+**FAIL if:** bot exits with any reason other than `awaiting_admission_timeout`.
+**FAIL if:** bot ever reaches `active` state during this test.
+
 ---
+
+## Mission Gotchas (learned during this mission)
+
+These are specific to bot lifecycle work. Read before continuing.
+
+### Deployment & Environment
+
+**MG1: Two stacks = two realities.** The restore stack (:8056) and agentic stack (:8066) share the same source code but have different DBs, different Redis configs, different admin tokens, and different bot images. Testing on one and deploying to the other proves nothing. `dashboard.dev.vexa.ai` points to the agentic stack. Always verify which stack you're targeting BEFORE testing. (2026-03-31: entire E2E suite passed on restore stack. Dashboard showed broken behavior because it points to agentic stack where nothing was deployed.)
+
+**MG2: Bot image tag drift.** The `:dev` tag gets overwritten on rebuild. Old running containers keep the old image. New containers get the new image. You can have two bots in the same meeting running different code. After every rebuild, tag with `YYMMDD-HHMM` and update `.env` with the new tag. (2026-03-31: browser session ran old `:dev` for 14 hours. New bot containers got admission fix. Caused false sense that "some bots work, some don't.")
+
+**MG3: Browser session Zod validation.** `docker.ts` validates BOT_CONFIG with a Zod schema that requires `platform`. Browser session mode doesn't set `platform`. The code must check `mode === "browser_session"` BEFORE running meeting-mode validation. If the bot image rebuild breaks browser sessions, this is why.
+
+### Bot Behavior
+
+**MG4: Google Meet "Leave call" button exists in lobby.** The button that says "Leave call" (or similar) is present in BOTH the lobby/waiting room AND the actual meeting. Do NOT use it as an admission signal. Meeting-exclusive signals: `[data-participant-id]` tiles, `[data-self-name]`, `button[aria-label*="Share screen"]`. Always combine with a negative guard on waiting room text.
+
+**MG5: Lobby has active MediaStream objects.** Google Meet's lobby has self-preview audio/video streams with `srcObject` containing audio tracks. `document.querySelectorAll('audio, video').some(el => el.srcObject)` returns true in the lobby. To use media streams as admission signal, must filter self vs. remote streams. (See G8 in CLAUDE.md for the general principle.)
+
+**MG6: Authenticated accounts skip the waiting room.** User 5's authenticated Google account (g5-admin-test@test.com) bypasses the lobby even on external meetings. To test waiting room behavior, use a different user (user 11) without stored Google cookies. Auto-admit also defeats waiting room tests — kill it first (`pkill -f auto-admit.js`).
+
+### Server-Side
+
+**MG7: UserProxy.data is always empty.** `get_user_and_token()` creates a `UserProxy` with hardcoded `data = {}`. To read `user.data.bot_config`, query the users table directly via the DB session. Fixed in Phase 4.
+
+**MG8: pending_completion_reason must be read in ALL exit paths.** When the scheduler timeout fires, it stores `pending_completion_reason = max_bot_time_exceeded` in `meeting.data`. But the bot exits gracefully (via Redis leave command) within seconds — the exit callback fires BEFORE the 90s delayed stop finalizer. Both `bot_exit_callback` and `status_change COMPLETED handler` in `callbacks.py` must check `meeting.data.pending_completion_reason` and use it over the bot's reported reason. Fixed in callbacks.py.
+
+**MG9: asyncio.create_task with SQLAlchemy objects.** `_cancel_bot_timeout(meeting)` called via `asyncio.create_task` fails because by the time the task runs, the DB session is closed and `meeting.data` throws a detached instance error. Extract primitives (job_id, meeting_id) before creating the task. Fixed in meetings.py.
 
 ## Key Files
 
 | File | What changes |
 |------|-------------|
 | `packages/meeting-api/meeting_api/schemas.py` | AutomaticLeave schema (add max_bot_time, rename fields), completion reasons enum |
-| `packages/meeting-api/meeting_api/meetings.py` | BOT_CONFIG building (resolution order, user.data.bot_config), scheduler job creation/cancellation |
+| `packages/meeting-api/meeting_api/meetings.py` | BOT_CONFIG building, scheduler, `GET /bots` meeting history endpoint |
 | `packages/meeting-api/meeting_api/callbacks.py` | Fix ACTIVE handler error response, gate webhook on success |
-| `services/vexa-bot/core/src/services/unified-callback.ts` | (Read-only for Phase 2 research — bot-side fix is in join.ts files) |
 | `services/vexa-bot/core/src/platforms/*/join.ts` | Propagate JOINING callback failure |
-| `packages/runtime-api/runtime_api/scheduler.py` | Already implemented — first real consumer |
-| `packages/runtime-api/runtime_api/scheduler_api.py` | Already implemented — REST endpoints |
+| `services/vexa-bot/core/src/platforms/googlemeet/admission.ts` | Fix false admission detection — negative guard + meeting-exclusive selectors |
+| `services/api-gateway/main.py` | `GET /auth/me` (user identity), `GET /bots` proxy (meeting history) |
+| `services/dashboard/src/app/api/auth/me/route.ts` | Calls gateway `/auth/me` instead of admin-api directly |
+| `services/dashboard/src/app/api/vexa/[...path]/route.ts` | `/meetings` proxy uses `GET /bots` (all statuses from DB) |
+| `services/dashboard/.env` | Simplified — only VEXA_API_URL (gateway), no INTERNAL_API_SECRET |
+| `deploy/compose/.env` | Real file (was symlink), all config from root `.env` |
+
+---
+
+## Session Log
+
+### 2026-04-01: Dashboard + env simplification (78/100)
+
+**Changes:**
+- Deleted `deploy/compose/docker-compose.override.yml` — merged DOCKER_NETWORK into main compose (was already there)
+- Deleted `deploy/compose/.env` symlink — replaced with real file copied from root `.env`
+- Deleted `services/dashboard/.env.local` — was band-aid over broken `.env`
+- Added `IMAGE_TAG=260331-2108` to root `.env` (G9: immutable tags)
+- Added gateway `GET /auth/me` — dashboard resolves user identity via gateway, no `INTERNAL_API_SECRET` needed
+- Added meeting-api `GET /bots` — returns all meetings from DB (active + completed)
+- Added gateway `GET /bots` proxy
+- Rewrote dashboard auth/me to call gateway instead of admin-api directly
+- Rewrote dashboard meetings proxy to use `GET /bots` as primary source
+
+**Evidence:**
+- `auth/me` returns `user_id=5, email=g5-admin-test@test.com` (was `id=0`)
+- Dashboard Playwright screenshot: 50 meetings visible including completed (was "No meetings yet")
+- D11 (idempotent timeout): status stays `completed/stopped` after scheduler fires — PASS
+- D13 (double stop): 202 "already completed", zero 500s — PASS
+- D15 (regressions): all endpoints respond, response shapes correct — PASS
+
+**Update 2026-04-01 14:00:** D7, D8, D9, D14 WS all verified with hard evidence.
+- D7: `requested→active` callback returns `{"status":"error"}` — PASS
+- D8: Zero instances of ACTIVE without JOINING in 20-meeting transition history — PASS  
+- D9: Zero webhook log entries for rejected transition — PASS
+- D14 WS: `joining`, `stopping`, `completed` events received over WebSocket in real time — PASS
+
+**Remaining gaps:**
+- Phase 2 Fix 4 (SELECT FOR UPDATE): not implemented
+- T1.2, T2.1, T3.1: not tested with real meetings
 | `features/bot-lifecycle/README.md` | Updated with full design (done 2026-03-30) |
 | `features/scheduler/README.md` | Updated with bot-lifecycle consumer (done 2026-03-30) |
