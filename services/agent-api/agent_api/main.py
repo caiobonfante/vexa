@@ -19,6 +19,7 @@ import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
 import redis.asyncio as aioredis
@@ -170,7 +171,7 @@ def _chat_stream(req: ChatRequest, context_prefix: str = ""):
                     context_prefix=context_prefix,
                 ):
                     yield data
-                return
+                break
             except Exception as e:
                 retries += 1
                 if retries <= max_retries:
@@ -186,6 +187,11 @@ def _chat_stream(req: ChatRequest, context_prefix: str = ""):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+    # NOTE: Auto-save after SSE stream is unreliable in async generators.
+    # Workspace persistence relies on:
+    # 1. Agent calling `vexa workspace save` (CLAUDE.md instruction, DNS + auth fixed)
+    # 2. The /internal/workspace/save endpoint (vexa CLI inside container)
 
 
 @app.post("/api/chat", dependencies=[Depends(require_api_key)])
@@ -382,7 +388,7 @@ async def put_workspace_file(req: FileWriteRequest):
     return {"path": req.path, "status": "written"}
 
 
-@app.post("/internal/workspace/save", dependencies=[Depends(require_api_key)])
+@app.post("/internal/workspace/save")
 async def workspace_save(req: UserIdRequest):
     """Sync workspace from container to S3."""
     container = cm.get_container_name(req.user_id)
@@ -394,7 +400,7 @@ async def workspace_save(req: UserIdRequest):
     return {"status": "saved"}
 
 
-@app.get("/internal/workspace/status", dependencies=[Depends(require_api_key)])
+@app.get("/internal/workspace/status")
 async def workspace_status(user_id: str):
     """Check workspace and container status."""
     exists = await workspace.workspace_exists(user_id)

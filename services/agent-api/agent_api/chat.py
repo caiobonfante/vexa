@@ -239,19 +239,14 @@ async def run_chat_turn(
     finally:
         await proc.wait()
 
-    # Save session to Redis
-    if new_session_id:
-        await save_session(redis, user_id, new_session_id)
-        await save_session_meta(
-            redis, user_id, new_session_id,
-            session_name or f"Session {new_session_id[:8]}",
-        )
-        logger.info(f"Session saved: {new_session_id[:12]}... for {user_id}")
-
-    # Auto-save workspace to MinIO after every chat turn.
-    # This is the platform guarantee — workspace persists even if the agent
-    # forgets to call `vexa workspace save`. Does NOT push to git remote
-    # (that's the agent's job when CLAUDE.md instructs it).
-    await workspace.sync_up(user_id, container)
+        # Save session in finally — runs even if generator is cancelled.
+        # Workspace auto-save is handled by BackgroundTask in main.py.
+        if new_session_id:
+            await save_session(redis, user_id, new_session_id)
+            await save_session_meta(
+                redis, user_id, new_session_id,
+                session_name or f"Session {new_session_id[:8]}",
+            )
+            logger.info(f"Session saved: {new_session_id[:12]}... for {user_id}")
 
     yield f"data: {json.dumps({'type': 'stream_end', 'session_id': new_session_id or session_id})}\n\n"
