@@ -144,7 +144,6 @@ All inter-service calls use **container names** (not localhost). Services are on
 | `AGENT_API_URL` | YES (`http://localhost:8100`) | `/api/agent/` proxy route | Server-side proxy to agent-api |
 | `AGENT_API_TOKEN` | YES (matches `BOT_API_TOKEN`) | `/api/agent/` proxy route | Must match `BOT_API_TOKEN` in compose .env |
 | `TC_URL` | YES (`http://localhost:8060`) | transcript retrieval | Direct transcription-collector access |
-| `NEXT_PUBLIC_VEXA_WS_URL` | YES (`ws://localhost:8066/ws`) | client-side WebSocket | Live transcript streaming |
 | `NEXT_PUBLIC_APP_URL` | YES (`http://localhost:3002`) | Next.js app URL | |
 | `NEXTAUTH_URL` | YES (`http://localhost:3002`) | NextAuth callbacks | |
 | `NEXTAUTH_SECRET` | YES | session signing | |

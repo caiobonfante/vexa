@@ -106,7 +106,7 @@ Zoom meeting joins require additional setup in the Vexa backend (Zoom Meeting SD
 | Registration policy | `ALLOW_REGISTRATIONS`, `ALLOWED_EMAIL_DOMAINS` |
 | Bot defaults | `DEFAULT_BOT_NAME` |
 | Hosted mode | `NEXT_PUBLIC_HOSTED_MODE` |
-| Frontend/public URLs | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_TRANSCRIPT_SHARE_BASE_URL`, `NEXT_PUBLIC_VEXA_WS_URL`, `NEXT_PUBLIC_WEBAPP_URL` |
+| Frontend/public URLs | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_BASE_URL`, `NEXT_PUBLIC_TRANSCRIPT_SHARE_BASE_URL`, `NEXT_PUBLIC_WEBAPP_URL` |
 
 See `.env.example` for a complete template.
 

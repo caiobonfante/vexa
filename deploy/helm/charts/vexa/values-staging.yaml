@@ -104,7 +104,6 @@ dashboard:
     tag: staging
   env:
     VEXA_PUBLIC_API_URL: "https://gateway.staging.vexa.ai"
-    NEXT_PUBLIC_VEXA_WS_URL: "wss://gateway.staging.vexa.ai/ws"
     NEXT_PUBLIC_APP_URL: "https://dashboard.staging.vexa.ai"
     NEXT_PUBLIC_HOSTED_MODE: "false"
     COOKIE_DOMAIN: ".staging.vexa.ai"

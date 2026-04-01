@@ -83,8 +83,12 @@ export function getWsUrl(): string {
   if (cachedConfig) {
     return cachedConfig.wsUrl;
   }
-  // Fallback to default (runtime config should always be available)
-  return "ws://localhost:18056/ws";
+  // Fallback: derive from current window location (WS goes through dashboard proxy)
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/ws`;
+  }
+  return "ws://localhost:3001/ws";
 }
 
 /**

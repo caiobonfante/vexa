@@ -45,7 +45,7 @@ async function fetchConfig(): Promise<{ wsUrl: string; authToken: string | null 
   } catch {
     console.error("[WS] Failed to fetch config for WebSocket URL");
     const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = typeof window !== "undefined" ? window.location.host : "localhost:8066";
+    const host = typeof window !== "undefined" ? window.location.host : "localhost:3001"; // SSR-only fallback; WS is browser-only
     return {
       wsUrl: `${proto}//${host}/ws`,
       authToken: null

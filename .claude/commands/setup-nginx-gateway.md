@@ -43,7 +43,6 @@ The dashboard must use `gateway.dev.vexa.ai` as its public API URL:
 ```bash
 # In services/dashboard/.env:
 NEXT_PUBLIC_VEXA_API_URL=https://gateway.dev.vexa.ai
-NEXT_PUBLIC_VEXA_WS_URL=wss://gateway.dev.vexa.ai/ws
 ```
 
 ## Verify

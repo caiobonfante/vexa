@@ -337,7 +337,6 @@ else
   check_env_in_file "$DASHBOARD_ENV" AGENT_API_TOKEN yes
   check_env_in_file "$DASHBOARD_ENV" NEXTAUTH_SECRET yes
   check_env_in_file "$DASHBOARD_ENV" JWT_SECRET yes
-  check_env_in_file "$DASHBOARD_ENV" NEXT_PUBLIC_VEXA_WS_URL yes
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────

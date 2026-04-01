@@ -49,6 +49,10 @@ const nextConfig: NextConfig = {
         source: "/b/:path*",
         destination: `${VEXA_API_URL}/b/:path*`,
       },
+      {
+        source: "/ws",
+        destination: `${VEXA_API_URL}/ws`,
+      },
     ];
   },
 };

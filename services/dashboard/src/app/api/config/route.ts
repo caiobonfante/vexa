@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 /**
@@ -6,20 +6,15 @@ import { cookies } from "next/headers";
  * This solves the Next.js limitation where NEXT_PUBLIC_* vars are only available at build time.
  * Also returns the user's auth token for WebSocket authentication.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const apiUrl = process.env.VEXA_API_URL || "http://localhost:18056";
   const decisionListenerUrl =
     process.env.NEXT_PUBLIC_DECISION_LISTENER_URL || "http://localhost:8765";
 
-  // Derive WebSocket URL from API URL (can be overridden with NEXT_PUBLIC_VEXA_WS_URL)
-  let wsUrl = process.env.NEXT_PUBLIC_VEXA_WS_URL;
-
-  if (!wsUrl) {
-    // Convert http(s) to ws(s)
-    wsUrl = apiUrl.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
-    // Append /ws if not already there
-    wsUrl = wsUrl.endsWith('/ws') ? wsUrl : `${wsUrl.replace(/\/$/, '')}/ws`;
-  }
+  // WS goes through the dashboard via Next.js rewrite — derive from request host
+  const host = request.headers.get('host')!;
+  const proto = request.headers.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
+  const wsUrl = `${proto}://${host}/ws`;
 
   // Auth token for WebSocket: same fallback chain as the HTTP proxy in /api/vexa/[...path].
   // cookie (logged-in user) → VEXA_API_KEY env var (self-hosted service token)

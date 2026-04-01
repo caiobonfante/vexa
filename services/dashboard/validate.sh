@@ -101,7 +101,7 @@ check_health
 
 # 4. Config endpoint returns correct values
 echo "[Config]"
-check_json "wsUrl set" "$BASE/api/config" "['wsUrl']" "ws://localhost:8066/ws"
+check_json "wsUrl set" "$BASE/api/config" "['wsUrl']" "ws://localhost:3001/ws"
 check_json "apiUrl set" "$BASE/api/config" "['apiUrl']" "http://localhost:8066"
 
 # 5. API proxy works (dashboard proxies to gateway)
