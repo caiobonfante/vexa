@@ -248,4 +248,10 @@ async def run_chat_turn(
         )
         logger.info(f"Session saved: {new_session_id[:12]}... for {user_id}")
 
+    # Auto-save workspace to MinIO after every chat turn.
+    # This is the platform guarantee — workspace persists even if the agent
+    # forgets to call `vexa workspace save`. Does NOT push to git remote
+    # (that's the agent's job when CLAUDE.md instructs it).
+    await workspace.sync_up(user_id, container)
+
     yield f"data: {json.dumps({'type': 'stream_end', 'session_id': new_session_id or session_id})}\n\n"

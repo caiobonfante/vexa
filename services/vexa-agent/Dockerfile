@@ -8,14 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm
 
 # System layer (read-only in practice)
-COPY containers/agent/system/CLAUDE.md /system/CLAUDE.md
-COPY containers/agent/system/bin/vexa /system/bin/vexa
+COPY services/vexa-agent/system/bin/vexa /system/bin/vexa
 RUN chmod +x /system/bin/vexa
 
 ENV PATH="/system/bin:$PATH"
 
 # Workspace templates (copied into /workspace on first init)
-COPY features/agentic-runtime/workspaces/templates/knowledge/ /templates/knowledge/
+COPY features/knowledge-workspace/templates/knowledge/ /templates/knowledge/
 
 # Git config for auto-commits
 RUN git config --global user.email "vexa@agent" && \
