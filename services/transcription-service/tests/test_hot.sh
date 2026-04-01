@@ -6,7 +6,7 @@
 # Self-contained — knows its own port, API contract, test data, baselines.
 #
 # Usage:
-#   cd packages/transcription-service
+#   cd services/transcription-service
 #   bash tests/test_hot.sh              # full: start → verify → load → stop
 #   bash tests/test_hot.sh --verify     # just verify (service already running)
 #   bash tests/test_hot.sh --load       # just load test (service already running)

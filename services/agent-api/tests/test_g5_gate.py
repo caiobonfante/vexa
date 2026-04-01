@@ -2,13 +2,13 @@
 
 Run with:
     docker run --rm -d --name redis-g5 -p 6399:6379 redis:7-alpine
-    docker build -f packages/agent-api/Dockerfile -t agent-api:g5 .
+    docker build -f services/agent-api/Dockerfile -t agent-api:g5 .
     docker run --rm -d --name agent-api-g5 --network host \
       -e REDIS_URL=redis://localhost:6399/0 \
       -e RUNTIME_API_URL=http://localhost:8090 \
       -e API_KEY=test-key -e LOG_LEVEL=DEBUG -e STORAGE_BACKEND=local \
       agent-api:g5
-    pytest packages/agent-api/tests/test_g5_gate.py -v
+    pytest services/agent-api/tests/test_g5_gate.py -v
 
 Results (2026-03-27):
 

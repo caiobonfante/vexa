@@ -131,7 +131,7 @@ Update all imports (they already use `from shared_models import ...` so this is 
 
 ## Phase 1: Extract Runtime API (the generic CaaS)
 
-### 1.1 Create packages/runtime-api/
+### 1.1 Create services/runtime-api/
 
 Start with current `services/runtime-api/` code. Add:
 - Backend ABC from architecture plan
@@ -217,7 +217,7 @@ Meeting API returns exact same response shapes:
 
 ## Phase 3: Extract Agent API
 
-### 3.1 Create packages/agent-api/
+### 3.1 Create services/agent-api/
 
 Move from `services/agent-api/`:
 - Chat streaming (SSE via docker exec)
@@ -234,7 +234,7 @@ Move from `services/agent-api/`:
 ### 3.3 Agent API becomes thin Vexa wrapper
 
 ```
-services/agent-api/  → imports from packages/agent-api/
+services/agent-api/  → imports from services/agent-api/
                      → adds Vexa-specific auth, config, TTS integration
 ```
 

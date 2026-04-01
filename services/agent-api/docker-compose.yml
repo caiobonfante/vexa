@@ -4,7 +4,7 @@ services:
   agent-api:
     build:
       context: ../..
-      dockerfile: packages/agent-api/Dockerfile
+      dockerfile: services/agent-api/Dockerfile
     ports:
       - "8100:8100"
     environment:
@@ -25,7 +25,7 @@ services:
   runtime-api:
     build:
       context: ../..
-      dockerfile: packages/runtime-api/Dockerfile
+      dockerfile: services/runtime-api/Dockerfile
     ports:
       - "8090:8090"
     environment:

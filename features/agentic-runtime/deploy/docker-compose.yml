@@ -64,7 +64,7 @@ services:
   agent-api:
     build:
       context: ../../..
-      dockerfile: packages/agent-api/Dockerfile
+      dockerfile: services/agent-api/Dockerfile
     ports:
       - "${CHAT_API_PORT:-8100}:8100"
     environment:
@@ -167,7 +167,7 @@ services:
   meeting-api:
     build:
       context: ../../..
-      dockerfile: packages/meeting-api/Dockerfile
+      dockerfile: services/meeting-api/Dockerfile
     expose:
       - "8080"
     environment:
@@ -212,7 +212,7 @@ services:
 
   runtime-api:
     build:
-      context: ../../../packages/runtime-api
+      context: ../../../services/runtime-api
       dockerfile: Dockerfile
     group_add:
       - "${DOCKER_GID:-998}"
@@ -242,7 +242,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ../../../packages/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
+      - ../../../services/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
     networks:
       - vexa_agentic
     depends_on:

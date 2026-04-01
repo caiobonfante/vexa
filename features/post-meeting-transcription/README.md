@@ -95,11 +95,11 @@ seek audio to segment.start_time
 
 ```
 services/vexa-bot                          → recording, speaker events
-packages/meeting-api                       → POST /transcribe, speaker mapping
-packages/transcription-service             → Whisper inference (ffmpeg + model)
+services/meeting-api                       → POST /transcribe, speaker mapping
+services/transcription-service             → Whisper inference (ffmpeg + model)
 services/transcription-collector           → segment persistence, GET /transcripts
 services/dashboard                         → transcript viewer, audio player, seek
-packages/meeting-api                       → Transcription, Recording, MediaFile models
+services/meeting-api                       → Transcription, Recording, MediaFile models
 ```
 
 ---

@@ -108,11 +108,11 @@ Uses only the first 16 characters of the token for the Redis cache key. Token fo
 
 ### 6. Agent-API Exposed on Host Network (violates mission constraint)
 
-**File:** `packages/agent-api/docker-compose.yml:9`, `.env:66`
+**File:** `services/agent-api/docker-compose.yml:9`, `.env:66`
 **Risk:** Unauthenticated access to agent containers
 
 The mission explicitly states: "Port 8100 must not be externally reachable — network/firewall level, not code." However:
-- `packages/agent-api/docker-compose.yml` maps `ports: "8100:8100"` to the host
+- `services/agent-api/docker-compose.yml` maps `ports: "8100:8100"` to the host
 - `.env` has `AGENT_API_URL=http://172.24.0.1:8100` (Docker bridge IP — accessible from host)
 - Agent-api has no auth by default (`API_KEY` defaults to empty string)
 - `user_id` comes from the request body — any caller can impersonate any user
@@ -123,7 +123,7 @@ The mission explicitly states: "Port 8100 must not be externally reachable — n
 
 ### 7. Agent-API Trusts Client-Supplied user_id
 
-**File:** `packages/agent-api/agent_api/main.py:60`
+**File:** `services/agent-api/agent_api/main.py:60`
 **Risk:** User impersonation
 
 ```python
@@ -259,7 +259,7 @@ def check_token_scope(token, allowed_scopes):
 
 ### 15. CORS Wildcard in Agent-API
 
-**File:** `packages/agent-api/agent_api/config.py:47`
+**File:** `services/agent-api/agent_api/config.py:47`
 **Risk:** Cross-origin attacks
 
 ```python

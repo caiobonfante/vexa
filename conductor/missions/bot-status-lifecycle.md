@@ -46,7 +46,7 @@ Teams bot adds `setTimeout(1000)` to avoid race conditions (`msteams/admission.t
 
 **Key clarification:** Skipping `awaiting_admission` is LEGITIMATE when there is no waiting room. `JOINING → ACTIVE` is valid and correct. The bug is specifically about `JOINING` itself being skipped (REQUESTED → ACTIVE) or intermediate states being invisible on the dashboard.
 
-### 1. Complete State Machine (from `packages/meeting-api/meeting_api/schemas.py:82-128`)
+### 1. Complete State Machine (from `services/meeting-api/meeting_api/schemas.py:82-128`)
 
 ```
 REQUESTED ──→ JOINING ──→ AWAITING_ADMISSION ──→ ACTIVE ──→ STOPPING ──→ COMPLETED

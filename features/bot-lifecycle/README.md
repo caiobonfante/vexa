@@ -285,7 +285,7 @@ cd features/realtime-transcription/scripts && nohup node auto-admit.js "$CDP_URL
 
 **No E2E tests implemented yet.** This feature is in requirements collection phase.
 
-Existing coverage (all in `packages/meeting-api/tests/`):
+Existing coverage (all in `services/meeting-api/tests/`):
 - `test_callbacks.py` — mocked unit tests per callback endpoint
 - `test_integration.py` — mocked full flows (create → callback → exit)
 - `test_integration_live.py` — live but only health/status/create
@@ -324,10 +324,10 @@ POST /bots {
 
 | File | Role |
 |------|------|
-| `packages/meeting-api/meeting_api/schemas.py` | State machine, transition rules, MeetingCreate |
-| `packages/meeting-api/meeting_api/meetings.py` | Bot CRUD, lifecycle control, timeout config (L713) |
-| `packages/meeting-api/meeting_api/callbacks.py` | Callback handlers |
-| `packages/meeting-api/meeting_api/config.py` | BOT_STOP_DELAY_SECONDS |
+| `services/meeting-api/meeting_api/schemas.py` | State machine, transition rules, MeetingCreate |
+| `services/meeting-api/meeting_api/meetings.py` | Bot CRUD, lifecycle control, timeout config (L713) |
+| `services/meeting-api/meeting_api/callbacks.py` | Callback handlers |
+| `services/meeting-api/meeting_api/config.py` | BOT_STOP_DELAY_SECONDS |
 | `services/vexa-bot/core/src/docker.ts` | Bot-side timeout defaults (L22-24) |
 | `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` | Bot-side lifecycle flow |
 | `services/vexa-bot/core/src/services/unified-callback.ts` | Bot→API callback logic |

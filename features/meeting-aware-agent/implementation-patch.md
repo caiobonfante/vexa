@@ -2,7 +2,7 @@
 
 Applied to containers (images built and running), need to be re-committed to branch.
 
-## File 1: packages/agent-api/agent_api/chat.py
+## File 1: services/agent-api/agent_api/chat.py
 
 ### Change 1: save_session_meta accepts meeting_aware param
 ```python
@@ -36,7 +36,7 @@ async def get_session_meta(redis, user_id: str, session_id: str) -> dict | None:
     return None
 ```
 
-## File 2: packages/agent-api/agent_api/main.py
+## File 2: services/agent-api/agent_api/main.py
 
 ### Change 1: Import get_session_meta
 ```python

@@ -59,7 +59,7 @@ client -> api-gateway -> meeting-api (detect platform from URL)
 
 Default: bot joins as unauthenticated guest, goes through waiting room, host must admit. With `authenticated: true`: bot joins as signed-in Google user, skips name entry and lobby — no admission needed. See `conductor/missions/authenticated-bots.md`.
 
-**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
+**Native ID validation** (from `services/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - Standard: `^[a-z]{3}-[a-z]{4}-[a-z]{3}$`
 - Custom nickname: `^[a-z0-9][a-z0-9-]{3,38}[a-z0-9]$`
 
@@ -84,7 +84,7 @@ All Teams types: bot joins as anonymous guest, may go through lobby, host must a
 
 **Upcoming: Microsoft bot detection (May 2026, MC1077547).** Microsoft is rolling out automatic third-party bot detection in Teams meetings. Bots will be labeled in the lobby and organizers must explicitly admit them individually. This affects all meeting bot companies and changes the UX — users need to tell meeting organizers to expect the bot.
 
-**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
+**Native ID validation** (from `services/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - Numeric: `^\d{10,15}$`
 - Hex hash: `^[0-9a-f]{16}$`
 
@@ -102,7 +102,7 @@ All Teams types: bot joins as anonymous guest, may go through lobby, host must a
 
 Zoom requires OAuth + Meeting SDK (self-hosted only).
 
-**Native ID validation** (from `packages/meeting-api/meeting_api/schemas.py`, moving from shared-models):
+**Native ID validation** (from `services/meeting-api/meeting_api/schemas.py`, moving from shared-models):
 - `^\d{9,11}$`
 
 **Out of scope:**

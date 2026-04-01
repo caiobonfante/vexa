@@ -253,9 +253,9 @@ This is the target. Getting there from current state:
 
 | Step | What | Breaks anything? |
 |------|------|-------------------|
-| 1 | Move `tts-service` → `packages/tts-service/` | No — same code, new location |
-| 2 | Move `transcription-service` → `packages/transcription-service/` | No |
-| 3 | Move `meeting-api` → `packages/meeting-api/` | No |
+| 1 | Move `tts-service` → `services/tts-service/` | No — same code, new location |
+| 2 | Move `transcription-service` → `services/transcription-service/` | No |
+| 3 | Move `meeting-api` → `services/meeting-api/` | No |
 | 4 | Add `X-User-ID` header injection to gateway | No — additive |
 | 5 | Meeting-api reads `X-User-ID` from headers instead of querying User | Requires gateway change deployed first |
 | 6 | Split shared-models: meeting models → meeting-api, agent models → agent-api | Biggest change — needs migration coordination |

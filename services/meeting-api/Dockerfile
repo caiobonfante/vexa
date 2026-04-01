@@ -14,11 +14,11 @@ COPY libs/admin-models /admin-models
 RUN pip install --no-cache-dir /admin-models
 
 # Install Python deps (includes pydantic[email] which adds email-validator)
-COPY packages/meeting-api/requirements.txt .
+COPY services/meeting-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app code
-COPY packages/meeting-api .
+COPY services/meeting-api .
 
 # Run as non-root
 RUN useradd -r -s /bin/false appuser

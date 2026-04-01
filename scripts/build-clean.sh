@@ -148,7 +148,7 @@ commit_group "$DIMA" \
 API gateway with auth middleware and CORS. Admin API for user/bot/meeting
 management. Agent API for chat sessions, scheduling, workspaces.
 Runtime API for container orchestration and profiles." \
-  "services/api-gateway/" "services/admin-api/" "packages/agent-api/" "packages/runtime-api/"
+  "services/api-gateway/" "services/admin-api/" "services/agent-api/" "services/runtime-api/"
 
 # 3. Meeting API and orchestrators
 commit_group "$DIMA" \
@@ -157,7 +157,7 @@ commit_group "$DIMA" \
 Bot lifecycle management, concurrent launch control, meeting state machine.
 Post-meeting hooks, webhook delivery, status callbacks.
 Pluggable orchestrators: Docker, Kubernetes, process-based." \
-  "packages/meeting-api/"
+  "services/meeting-api/"
 
 # 4. Transcription pipeline
 commit_group "$DIMA" \
@@ -166,7 +166,7 @@ commit_group "$DIMA" \
 Transcription collector with streaming consumer, DB writer, filters.
 Transcription service with WhisperLive integration, remote transcriber.
 Hallucination filtering (en, es, pt, ru). Speaker mapping and identity." \
-  "services/transcription-collector/" "packages/transcription-service/" "services/WhisperLive/"
+  "services/transcription-service/" "services/WhisperLive/"
 
 # 5. Vexa bot — platforms
 commit_group "$DIMA" \
@@ -184,7 +184,7 @@ commit_group "$DIMA" \
 
 Text-to-speech service with OpenAI integration. TTS playback service
 in the bot for real-time meeting participation." \
-  "packages/tts-service/"
+  "services/tts-service/"
 
 # 7. Dashboard — agrogov contributions (PRs #2-6)
 commit_group "$AGROGOV" \

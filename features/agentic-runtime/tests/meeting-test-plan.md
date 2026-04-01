@@ -10,7 +10,7 @@
 
 **This MUST be fixed before live testing.** The agent-api Redis subscriber will silently fail to extract any fields from meeting-api events.
 
-### What meeting-api publishes (`publish_meeting_status_change` in packages/meeting-api/meeting_api/meetings.py)
+### What meeting-api publishes (`publish_meeting_status_change` in services/meeting-api/meeting_api/meetings.py)
 
 ```json
 {

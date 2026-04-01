@@ -10,9 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc curl ca-cer
     && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
-COPY packages/agent-api/requirements.txt .
+COPY services/agent-api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY packages/agent-api .
+COPY services/agent-api .
 
 CMD ["uvicorn", "agent_api.main:app", "--host", "0.0.0.0", "--port", "8100"]

@@ -5,13 +5,13 @@ on:
     branches: [main, feature/*]
     paths:
       - 'tests/contracts/**'
-      - 'packages/meeting-api/meeting_api/schemas.py'
-      - 'packages/meeting-api/meeting_api/models.py'
+      - 'services/meeting-api/meeting_api/schemas.py'
+      - 'services/meeting-api/meeting_api/models.py'
       - '.github/workflows/test-contracts.yml'
   pull_request:
     paths:
       - 'tests/contracts/**'
-      - 'packages/meeting-api/**'
+      - 'services/meeting-api/**'
 
 jobs:
   test:
@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e libs/admin-models/
-          pip install -e packages/meeting-api/
+          pip install -e services/meeting-api/
           pip install pytest
       - name: Run contract tests
         run: pytest tests/contracts/ -v

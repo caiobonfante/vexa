@@ -76,7 +76,7 @@ if segment_speaker:
 
 ### Post-meeting speaker mapping
 
-`packages/meeting-api/meeting_api/post_meeting.py:_map_speakers_to_segments()`:
+`services/meeting-api/meeting_api/post_meeting.py:_map_speakers_to_segments()`:
 1. Read `meeting.data.speaker_events` array
 2. Build time ranges per speaker: `{name: [[start_ms, end_ms], ...]}`
 3. For each deferred segment, find speaker with **maximum overlap**
@@ -143,8 +143,8 @@ All field names match. Collector handles producer-labeled speaker field.
 | `core/src/services/speaker-identity.ts` | Name resolution + cache |
 | `platforms/googlemeet/recording.ts` | Browser-side audio + speaker detection + flush |
 | `platforms/googlemeet/leave.ts:106-112` | Flush recording on manual leave |
-| `packages/meeting-api/meeting_api/callbacks.py` | Persist speaker_events to meeting.data |
-| `packages/meeting-api/meeting_api/post_meeting.py` | _map_speakers_to_segments (deferred) |
+| `services/meeting-api/meeting_api/callbacks.py` | Persist speaker_events to meeting.data |
+| `services/meeting-api/meeting_api/post_meeting.py` | _map_speakers_to_segments (deferred) |
 | `transcription-collector/streaming/processors.py` | Segment consumption + Postgres persistence |
 
 ## Test results (2026-03-15)

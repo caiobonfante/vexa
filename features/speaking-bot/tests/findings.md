@@ -24,9 +24,9 @@ Additional: `meeting_id` added to BrowserSessionConfig (types.ts:51), passed in 
 ## Implementation status (validated 2026-03-24)
 
 Implementation is **code-complete for regular bots**, broken for browser_session bots:
-- `packages/tts-service/` — Piper TTS, OpenAI-compatible `/v1/audio/speech` endpoint, ONNX voices, generates ~53KB WAV for "hello world" in <100ms
+- `services/tts-service/` — Piper TTS, OpenAI-compatible `/v1/audio/speech` endpoint, ONNX voices, generates ~53KB WAV for "hello world" in <100ms
 - `services/vexa-bot/core/src/index.ts:470` — speak handler: subscribes to `bot_commands:meeting:{id}`, calls TTS, plays via `paplay --device=tts_sink`
-- `packages/meeting-api/meeting_api/meetings.py` — relays speak commands via Redis pub/sub
+- `services/meeting-api/meeting_api/meetings.py` — relays speak commands via Redis pub/sub
 - `services/api-gateway/` — `POST /bots/{platform}/{native_meeting_id}/speak` returns 202
 
 TTS service is also used by collection runs (send-tts-bots), but that's a DIFFERENT code path — bots call TTS directly from their script. The speak API uses the full relay chain: client → gateway → meeting-api → Redis → bot → TTS → PulseAudio.

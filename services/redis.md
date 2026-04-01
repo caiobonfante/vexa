@@ -97,7 +97,7 @@ Collector stores these in sorted set `speaker_events:{session_uid}` (score = tim
 
 - Stream producer (bot): [`services/vexa-bot/core/src/services/segment-publisher.ts`](vexa-bot/core/src/services/segment-publisher.ts) -- XADD + PUBLISH per segment
 - Stream consumer: [`services/transcription-collector/streaming/consumer.py`](transcription-collector/streaming/consumer.py) -- `XREADGROUP` loop
-- Pub/Sub producer: [`packages/meeting-api/meeting_api/callbacks.py`](../packages/meeting-api/meeting_api/callbacks.py) -- `publish_meeting_status_change()`
+- Pub/Sub producer: [`services/meeting-api/meeting_api/callbacks.py`](../services/meeting-api/meeting_api/callbacks.py) -- `publish_meeting_status_change()`
 - Pub/Sub consumer: [`services/api-gateway/main.py`](api-gateway/main.py) -- `websocket_multiplex()` subscribes for real-time updates
 - Webhook retry: [`libs/shared-models/shared_models/webhook_retry_worker.py`](../libs/shared-models/shared_models/webhook_retry_worker.py) -- `BRPOP` loop with backoff
 - Webhook enqueue: [`libs/shared-models/shared_models/webhook_delivery.py`](../libs/shared-models/shared_models/webhook_delivery.py) -- `LPUSH` on failure

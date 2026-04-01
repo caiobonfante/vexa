@@ -4,7 +4,7 @@ include ../.env
 
 build:
 	cd ../../.. && docker build -t vexaai/vexa-agent:dev -f containers/agent/Dockerfile .
-	cd ../../.. && docker build -t vexaai/agent-api:dev -f packages/agent-api/Dockerfile .
+	cd ../../.. && docker build -t vexaai/agent-api:dev -f services/agent-api/Dockerfile .
 
 infra-up:
 	docker compose -f ../deploy/docker-compose.yml --env-file ../.env up -d

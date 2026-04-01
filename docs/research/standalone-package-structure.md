@@ -128,7 +128,7 @@ Tests/                  # Full test suite included
 
 ### What This Means for Us
 
-**All files the standalone repo needs must exist inside `packages/runtime-api/` in the monorepo.** This includes:
+**All files the standalone repo needs must exist inside `services/runtime-api/` in the monorepo.** This includes:
 
 **Must have (extracted with the split):**
 - `LICENSE`
@@ -272,7 +272,7 @@ Most common pattern for CI specifically. No compose file needed.
 ### Recommended conftest.py Architecture
 
 ```
-packages/runtime-api/
+services/runtime-api/
   conftest.py              # Root: markers, CI detection, warning filters
   tests/
     conftest.py            # Unit: mocks, test data, fixtures
@@ -362,10 +362,10 @@ Users install with: `helm install runtime-api oci://ghcr.io/vexa-ai/charts/runti
 
 ## 6. Recommended Structure for runtime-api
 
-Based on all research above, here is the target file layout for `packages/runtime-api/` (= what the standalone repo will look like after splitsh-lite extraction):
+Based on all research above, here is the target file layout for `services/runtime-api/` (= what the standalone repo will look like after splitsh-lite extraction):
 
 ```
-packages/runtime-api/
+services/runtime-api/
 ├── .dockerignore
 ├── .gitattributes                    # export-ignore for tests, dev files
 ├── .gitignore

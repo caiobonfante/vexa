@@ -144,7 +144,7 @@ Mission says: Focus = meeting-aware-agent
 Conductor reads features/meeting-aware-agent/README.md
     → Code Ownership section lists:
         services/api-gateway
-        packages/agent-api
+        services/agent-api
     |
     v
 Conductor reads each service README

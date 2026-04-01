@@ -331,7 +331,7 @@ If CAPTCHA blocks step 4, investigate:
 | `services/vexa-bot/core/src/platforms/zoom/web/*` | All 8 modules (join, admission, prepare, recording, leave, removal, selectors, index) |
 | `services/vexa-bot/core/src/platforms/zoom/index.ts` | Routes to web path when `ZOOM_WEB=true` |
 | `services/vexa-bot/core/entrypoint.sh` | Xvfb, PulseAudio, zoom_sink already configured |
-| `packages/meeting-api/meeting_api/orchestrator_utils.py` | Detects `ZOOM_WEB=true`, passes to container |
+| `services/meeting-api/meeting_api/orchestrator_utils.py` | Detects `ZOOM_WEB=true`, passes to container |
 | `features/agentic-runtime/deploy/docker-compose.yml` | `ZOOM_WEB=true` in meeting-api env |
 
 ### May need changes (based on testing)
@@ -341,14 +341,14 @@ If CAPTCHA blocks step 4, investigate:
 | `services/vexa-bot/core/src/platforms/zoom/web/selectors.ts` | Selector updates if Zoom DOM changed |
 | `services/vexa-bot/core/src/platforms/zoom/web/join.ts` | CAPTCHA handling if encountered |
 | `services/vexa-bot/core/src/platforms/zoom/web/recording.ts` | Speaker detection tuning based on real meeting behavior |
-| `packages/meeting-api/meeting_api/orchestrator_utils.py` | Zoom-specific container config (memory, timeout) if needed |
+| `services/meeting-api/meeting_api/orchestrator_utils.py` | Zoom-specific container config (memory, timeout) if needed |
 
 ### For RTMS path (future)
 
 | Component | Changes |
 |-----------|---------|
 | New service: `zoom-rtms-bridge` | Webhook receiver + RTMS client + audio pipeline |
-| `packages/meeting-api/meeting_api/meetings.py` | New "rtms" mode for Zoom bots |
+| `services/meeting-api/meeting_api/meetings.py` | New "rtms" mode for Zoom bots |
 | `services/api-gateway` | Webhook endpoint for Zoom `meeting.rtms_started` |
 | Dashboard OAuth | Additional RTMS scopes in Zoom app configuration |
 

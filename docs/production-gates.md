@@ -26,7 +26,7 @@ A component at G0 builds but might not start. At G3 it handles requests but migh
 
 | Gate | Test | Pass criteria |
 |------|------|--------------|
-| G0 | `docker build -t runtime-api:gate packages/runtime-api/` | Exit 0 |
+| G0 | `docker build -t runtime-api:gate services/runtime-api/` | Exit 0 |
 | G1 | Start runtime-api + Redis via `docker-compose.yml`. `curl /health` | `{"status": "ok"}` within 30s |
 | G2 | Health reports Redis connected | Health response includes container count (proves Redis read works) |
 | G3 | `POST /containers` → `GET /containers` → `DELETE /containers/{name}` | Container appears in list after create, disappears after delete |
@@ -49,7 +49,7 @@ A component at G0 builds but might not start. At G3 it handles requests but migh
 
 | Gate | Test | Pass criteria |
 |------|------|--------------|
-| G0 | `docker build -f packages/meeting-api/Dockerfile -t meeting-api:gate .` | Exit 0 |
+| G0 | `docker build -f services/meeting-api/Dockerfile -t meeting-api:gate .` | Exit 0 |
 | G1 | Start meeting-api + Redis + Postgres + runtime-api. `curl /health` | `{"status": "ok"}` within 30s, DB tables created |
 | G2 | Health reports Redis + Postgres + runtime-api connected | All three dependencies reachable |
 | G3 | Create user token (via admin-api or X-User-ID header) → `POST /bots` → `GET /bots/status` → `DELETE /bots/{platform}/{id}` | Meeting created in Postgres, appears in status, deleted cleanly |
@@ -119,7 +119,7 @@ A component at G0 builds but might not start. At G3 it handles requests but migh
 
 | Gate | Test | Pass criteria |
 |------|------|--------------|
-| G0 | `docker build -f packages/agent-api/Dockerfile -t agent-api:gate .` | Exit 0 |
+| G0 | `docker build -f services/agent-api/Dockerfile -t agent-api:gate .` | Exit 0 |
 | G1 | Start agent-api + Redis + runtime-api. `curl /health` | `{"status": "ok"}` within 30s |
 | G2 | Health reports Redis connected, runtime-api reachable | Both dependencies OK |
 | G3 | `POST /api/sessions` → creates session in Redis → `GET /api/sessions/{id}` → returns it → `DELETE /api/sessions/{id}` | Session CRUD |
@@ -187,10 +187,10 @@ Each gate should be runnable as a single command:
 
 ```bash
 # Per-component
-make -C packages/runtime-api gate-g0    # build
-make -C packages/runtime-api gate-g1    # build + start + health
-make -C packages/runtime-api gate-g3    # build + start + CRUD
-make -C packages/runtime-api gate-g5    # build + start + full flow
+make -C services/runtime-api gate-g0    # build
+make -C services/runtime-api gate-g1    # build + start + health
+make -C services/runtime-api gate-g3    # build + start + CRUD
+make -C services/runtime-api gate-g5    # build + start + full flow
 
 # Full stack
 make gate-stack-g1    # all services start

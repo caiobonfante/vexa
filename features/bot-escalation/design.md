@@ -107,7 +107,7 @@ export async function callNeedsHumanHelpCallback(
 
 ### Meeting-API Handling
 
-**File:** `packages/meeting-api/meeting_api/callbacks.py`, in `bot_status_change_callback()`:
+**File:** `services/meeting-api/meeting_api/callbacks.py`, in `bot_status_change_callback()`:
 
 When `new_status == "needs_human_help"`:
 1. Update meeting status in DB
@@ -314,8 +314,8 @@ If the block was a CAPTCHA or auth wall (not a waiting room), the bot may be in 
 | `services/vexa-bot/core/src/platforms/zoom/web/admission.ts` | Add `checkEscalation()` in poll loop |
 | `services/vexa-bot/core/src/platforms/googlemeet/admission.ts` | Add `checkEscalation()` in poll loops |
 | `services/vexa-bot/core/src/platforms/msteams/admission.ts` | Add `checkEscalation()` in poll loops |
-| `packages/meeting-api/meeting_api/callbacks.py` | Handle `needs_human_help` status in callback, register VNC session in Redis |
-| `packages/meeting-api/meeting_api/meetings.py` | Expose port 6080 on meeting bot containers (via runtime-api) |
+| `services/meeting-api/meeting_api/callbacks.py` | Handle `needs_human_help` status in callback, register VNC session in Redis |
+| `services/meeting-api/meeting_api/meetings.py` | Expose port 6080 on meeting bot containers (via runtime-api) |
 | `services/dashboard/src/components/meetings/bot-status-indicator.tsx` | Add `needs_human_help` visual state |
 | `services/dashboard/src/app/meetings/[id]/page.tsx` | Add escalation banner with VNC link |
 | `services/dashboard/src/types/vexa.ts` | Add `needs_human_help` to `MeetingStatus` type |

@@ -161,7 +161,7 @@ Every major infrastructure project ships:
 ### Recommendation for the proposed packages
 
 ```
-packages/runtime-api/
+services/runtime-api/
   docker-compose.yml          ← quickstart (includes Postgres, Redis)
   docker-compose.dev.yml      ← development overrides (hot reload, debug ports)
   deploy/

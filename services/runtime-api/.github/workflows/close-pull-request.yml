@@ -15,7 +15,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `Thanks for your interest in contributing! This repository is a **read-only mirror** of [vexa-ai/vexa](https://github.com/vexa-ai/vexa/tree/main/packages/runtime-api).
+              body: `Thanks for your interest in contributing! This repository is a **read-only mirror** of [vexa-ai/vexa](https://github.com/vexa-ai/vexa/tree/main/services/runtime-api).
 
             Please submit your pull request there instead. Your contribution is welcome!`
             });

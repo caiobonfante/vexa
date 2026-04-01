@@ -244,8 +244,8 @@ script_location = alembic
 version_path_separator = os
 version_locations =
     %(here)s/libs/shared-models/alembic/versions
-    %(here)s/packages/meeting-api/alembic/versions
-    %(here)s/packages/agent-api/alembic/versions
+    %(here)s/services/meeting-api/alembic/versions
+    %(here)s/services/agent-api/alembic/versions
 ```
 
 Create independent branches:
@@ -257,13 +257,13 @@ Create independent branches:
 alembic revision -m "meeting-api base" \
   --head=base \
   --branch-label=meeting_api \
-  --version-path=packages/meeting-api/alembic/versions
+  --version-path=services/meeting-api/alembic/versions
 
 # New branch for agent-api
 alembic revision -m "agent-api base" \
   --head=base \
   --branch-label=agent_api \
-  --version-path=packages/agent-api/alembic/versions
+  --version-path=services/agent-api/alembic/versions
 ```
 
 Cross-branch FK dependencies:
@@ -384,11 +384,11 @@ libs/shared-models/shared_models/
   models.py     # Base + User + APIToken only
   database.py   # init_db(), session factory (imports all model packages for MetaData)
 
-packages/meeting-api/meeting_api/
+services/meeting-api/meeting_api/
   models.py     # Meeting, MeetingSession, Transcription, Recording, MediaFile, CalendarEvent
                 # imports Base from shared_models.models
 
-packages/agent-api/agent_api/
+services/agent-api/agent_api/
   models.py     # AgentSession, Workspace (new tables)
                 # imports Base from shared_models.models
 ```

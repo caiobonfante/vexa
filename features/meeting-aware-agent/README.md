@@ -83,8 +83,8 @@ Every chat turn in a meeting-aware session:
 
 ```
 services/api-gateway              → meeting context injection logic (new middleware)
-packages/agent-api                → session config (meeting_aware flag), context parsing
-packages/meeting-api              → GET /bots?user_id=&status= endpoint (may exist)
+services/agent-api                → session config (meeting_aware flag), context parsing
+services/meeting-api              → GET /bots?user_id=&status= endpoint (may exist)
 services/transcription-collector  → GET /transcripts with limit (exists)
 ```
 
@@ -146,7 +146,7 @@ Flag off → no injection              95  Normal sessions skip bots/status enti
 ```
 Code changes:
     services/api-gateway/       → new middleware for meeting context injection
-    packages/agent-api/         → parse X-Meeting-Context, inject into system prompt
+    services/agent-api/         → parse X-Meeting-Context, inject into system prompt
     deploy/compose/             → env vars if needed (none expected)
 
 Containers to rebuild:

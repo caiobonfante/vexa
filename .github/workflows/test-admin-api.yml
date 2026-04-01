@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e libs/admin-models/
-          pip install -e packages/meeting-api/
+          pip install -e services/meeting-api/
           pip install -e services/admin-api/ 2>/dev/null || pip install -r services/admin-api/requirements.txt
           pip install pytest pytest-asyncio httpx
       - name: Run tests

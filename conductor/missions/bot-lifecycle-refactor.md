@@ -82,7 +82,7 @@ When POST /bots creates a meeting:
 4. When bot reaches terminal state (completed/failed) → cancel scheduler job
 5. When user calls DELETE /bots → cancel scheduler job
 
-Scheduler already exists in `packages/runtime-api/runtime_api/scheduler.py` with full API. This is its first real consumer.
+Scheduler already exists in `services/runtime-api/runtime_api/scheduler.py` with full API. This is its first real consumer.
 
 ---
 
@@ -638,9 +638,9 @@ These are specific to bot lifecycle work. Read before continuing.
 
 | File | What changes |
 |------|-------------|
-| `packages/meeting-api/meeting_api/schemas.py` | AutomaticLeave schema (add max_bot_time, rename fields), completion reasons enum |
-| `packages/meeting-api/meeting_api/meetings.py` | BOT_CONFIG building, scheduler, `GET /bots` meeting history endpoint |
-| `packages/meeting-api/meeting_api/callbacks.py` | Fix ACTIVE handler error response, gate webhook on success |
+| `services/meeting-api/meeting_api/schemas.py` | AutomaticLeave schema (add max_bot_time, rename fields), completion reasons enum |
+| `services/meeting-api/meeting_api/meetings.py` | BOT_CONFIG building, scheduler, `GET /bots` meeting history endpoint |
+| `services/meeting-api/meeting_api/callbacks.py` | Fix ACTIVE handler error response, gate webhook on success |
 | `services/vexa-bot/core/src/platforms/*/join.ts` | Propagate JOINING callback failure |
 | `services/vexa-bot/core/src/platforms/googlemeet/admission.ts` | Fix false admission detection — negative guard + meeting-exclusive selectors |
 | `services/api-gateway/main.py` | `GET /auth/me` (user identity), `GET /bots` proxy (meeting history) |

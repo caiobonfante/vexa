@@ -74,9 +74,9 @@ A generic, bullet-proof job scheduler backed by Redis sorted sets. Two component
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **scheduler.py** | `packages/runtime-api/runtime_api/scheduler.py` | Core API: `schedule_job()`, `cancel_job()`, `list_jobs()`, `get_job()` |
-| **scheduler_api.py** | `packages/runtime-api/runtime_api/scheduler_api.py` | REST endpoints for scheduling |
-| **test_scheduler.py** | `packages/runtime-api/tests/test_scheduler.py` | Unit tests |
+| **scheduler.py** | `services/runtime-api/runtime_api/scheduler.py` | Core API: `schedule_job()`, `cancel_job()`, `list_jobs()`, `get_job()` |
+| **scheduler_api.py** | `services/runtime-api/runtime_api/scheduler_api.py` | REST endpoints for scheduling |
+| **test_scheduler.py** | `services/runtime-api/tests/test_scheduler.py` | Unit tests |
 
 ### Job spec
 
@@ -251,7 +251,7 @@ The scheduler core is implemented and tested in runtime-api:
 
 ```bash
 # Run unit tests
-cd packages/runtime-api
+cd services/runtime-api
 python3 -m pytest tests/test_scheduler.py -v
 ```
 

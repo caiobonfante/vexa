@@ -5,8 +5,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install meeting-api (schemas, security headers)
-COPY ./packages/meeting-api /app/packages/meeting-api
-RUN pip install --no-cache-dir /app/packages/meeting-api
+COPY ./services/meeting-api /app/services/meeting-api
+RUN pip install --no-cache-dir /app/services/meeting-api
 
 # Copy application code and requirements
 COPY ./services/api-gateway/requirements.txt /app/

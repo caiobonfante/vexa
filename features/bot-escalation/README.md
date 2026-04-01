@@ -93,8 +93,8 @@ Since the unified bot/browser architecture, every meeting bot starts with VNC (f
 |-----------|------|----------|
 | **escalation** | Detection logic, `triggerEscalation()` (VNC already running) | `services/vexa-bot/core/src/platforms/shared/escalation.ts` (new) |
 | **bot callback** | `callNeedsHumanHelpCallback()` sends status | `services/vexa-bot/core/src/utils.ts` (modified) |
-| **meeting-api** | Handles `needs_human_help` callback, escalation metadata in meeting.data | `packages/meeting-api/meeting_api/callbacks.py` (modified) |
-| **schemas** | `NEEDS_HUMAN_HELP` status + valid transitions | `packages/meeting-api/meeting_api/schemas.py` (modified) |
+| **meeting-api** | Handles `needs_human_help` callback, escalation metadata in meeting.data | `services/meeting-api/meeting_api/callbacks.py` (modified) |
+| **schemas** | `NEEDS_HUMAN_HELP` status + valid transitions | `services/meeting-api/meeting_api/schemas.py` (modified) |
 | **dashboard** | Escalation banner + VNC link on meeting page | `services/dashboard/src/app/meetings/[id]/page.tsx` (modified) |
 | **bot-status-indicator** | Pulsing amber state for `needs_human_help` | `services/dashboard/src/components/meetings/bot-status-indicator.tsx` (modified) |
 

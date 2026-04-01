@@ -56,7 +56,7 @@ ffmpeg x11grab (10fps, VP9/H.264)
 | Meeting flow hook | `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` (line 186) | Complete |
 | Audio muxing | `VideoRecordingService.muxAudio()` | Complete |
 | Upload to meeting-api | `VideoRecordingService.upload()` | Complete |
-| Meeting-api upload endpoint | `packages/meeting-api/meeting_api/recordings.py` (`POST /internal/recordings/upload`) | Complete |
+| Meeting-api upload endpoint | `services/meeting-api/meeting_api/recordings.py` (`POST /internal/recordings/upload`) | Complete |
 | MediaFile DB model | meeting-api DB (type="video" supported) | Complete |
 | Recording config API | Per-user recording_config in user.data (set via meeting creation) | Complete |
 | Content-type handling | meeting-api download endpoints (video/webm, video/mp4 routing) | Complete |
@@ -180,7 +180,7 @@ All core recording, encoding, muxing, and upload logic is built and integrated i
 | Bot config type | `services/vexa-bot/core/src/types.ts:25` |
 | Bot Dockerfile | `services/vexa-bot/core/Dockerfile` |
 | Xvfb setup | `services/vexa-bot/core/entrypoint.sh:9` (1920x1080x24) |
-| Meeting-api upload endpoint | `packages/meeting-api/meeting_api/recordings.py` |
+| Meeting-api upload endpoint | `services/meeting-api/meeting_api/recordings.py` |
 | Recording config API | Per-user recording_config in user.data |
 | Dashboard VideoPlayer | `services/dashboard/src/components/recording/video-player.tsx` |
 | Dashboard meeting page | `services/dashboard/src/app/meetings/[id]/page.tsx` |

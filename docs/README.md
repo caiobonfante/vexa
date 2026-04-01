@@ -18,10 +18,10 @@ Each service owns its documentation pages. The docs structure owns navigation, c
 | Service | README | Docs pages |
 |---------|--------|------------|
 | api-gateway | services/api-gateway/README.md | quickstart, getting-started, errors-and-retries, websocket, token-scoping, security, user_api_guide |
-| meeting-api | packages/meeting-api/README.md | bot-overview, api/bots, interactive-bots, api/interactive-bots |
+| meeting-api | services/meeting-api/README.md | bot-overview, api/bots, interactive-bots, api/interactive-bots |
 | vexa-bot | services/vexa-bot/README.md | bot-overview, meeting-ids, platforms/google-meet, platforms/microsoft-teams, platforms/zoom |
 | transcription-collector | services/transcription-collector/README.md | api/transcripts, api/meetings, speaker-events, deferred-transcription, per-speaker-audio |
-| transcription-service | packages/transcription-service/README.md | concepts, recording-storage |
+| transcription-service | services/transcription-service/README.md | concepts, recording-storage |
 | admin-api | services/admin-api/README.md | self-hosted-management, api/settings |
 | dashboard | services/dashboard/README.md | ui-dashboard, zoom-app-setup |
 | mcp | services/mcp/README.md | vexa-mcp |

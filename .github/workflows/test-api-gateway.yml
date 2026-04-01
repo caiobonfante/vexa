@@ -5,12 +5,12 @@ on:
     branches: [main, feature/*]
     paths:
       - 'services/api-gateway/**'
-      - 'packages/meeting-api/meeting_api/schemas.py'
+      - 'services/meeting-api/meeting_api/schemas.py'
       - '.github/workflows/test-api-gateway.yml'
   pull_request:
     paths:
       - 'services/api-gateway/**'
-      - 'packages/meeting-api/**'
+      - 'services/meeting-api/**'
 
 jobs:
   test:
@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e libs/admin-models/
-          pip install -e packages/meeting-api/
+          pip install -e services/meeting-api/
           pip install -r services/api-gateway/requirements.txt
           pip install pytest pytest-asyncio httpx
       - name: Run tests

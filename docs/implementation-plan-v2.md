@@ -6,14 +6,14 @@
 
 | Component | Location | DB models used | Auth mechanism |
 |-----------|----------|---------------|----------------|
-| runtime-api | `packages/runtime-api/` | None (Redis only) | API_KEYS env var, middleware |
-| agent-api | `packages/agent-api/` | None (Redis only) | API_KEY env var, FastAPI dep |
+| runtime-api | `services/runtime-api/` | None (Redis only) | API_KEYS env var, middleware |
+| agent-api | `services/agent-api/` | None (Redis only) | API_KEY env var, FastAPI dep |
 | meeting-api | `services/meeting-api/` | User, APIToken, Meeting, Transcription, MeetingSession, Recording, MediaFile | Queries User+APIToken via DB join |
 | admin-api | `services/admin-api/` | User, APIToken, Meeting, Transcription, MeetingSession | ADMIN_API_TOKEN env var |
 | api-gateway | `services/api-gateway/` | None (imports schemas for OpenAPI docs) | Pass-through (forwards X-API-Key) |
 | transcription-collector | `services/transcription-collector/` | User, Meeting, Transcription, MeetingSession, APIToken | JWT meeting token + DB queries |
-| transcription-service | `packages/transcription-service/` | None | API_TOKEN env var |
-| tts-service | `packages/tts-service/` | None | TTS_API_TOKEN env var |
+| transcription-service | `services/transcription-service/` | None | API_TOKEN env var |
+| tts-service | `services/tts-service/` | None | TTS_API_TOKEN env var |
 | shared-models | `libs/shared-models/` | All models, database.py, schemas.py, token_scope.py, webhook_delivery.py, storage.py | N/A |
 
 **Key insight:** runtime-api, agent-api, transcription-service, and tts-service are already standalone (no Postgres). The heavy lifting is meeting-api (absorbs meeting models + TC) and admin-api (keeps user models).
@@ -27,7 +27,7 @@
 ### What moves
 
 ```
-services/tts-service/ → packages/tts-service/
+services/tts-service/ → services/tts-service/
 ```
 
 ### File changes
@@ -45,7 +45,7 @@ None. tts-service is pure compute (Piper TTS).
 Already has one (`verify_api_key` in `main.py:152`). Reads `TTS_API_TOKEN` env var. Add dual-mode:
 
 ```python
-# packages/tts-service/tts_service/auth.py
+# services/tts-service/tts_service/auth.py
 async def validate_request(request: Request) -> dict:
     # 1. X-User-ID header (gateway mode)
     user_id = request.headers.get("X-User-ID")
@@ -62,7 +62,7 @@ async def validate_request(request: Request) -> dict:
 ### docker-compose.yml (standalone)
 
 ```yaml
-# packages/tts-service/docker-compose.yml
+# services/tts-service/docker-compose.yml
 services:
   tts-service:
     build: .
@@ -87,7 +87,7 @@ None. tts-service has zero imports from other packages.
 ### What moves
 
 ```
-services/transcription-service/ → packages/transcription-service/
+services/transcription-service/ → services/transcription-service/
 ```
 
 ### File changes
@@ -117,7 +117,7 @@ None.
 ### What moves
 
 ```
-services/meeting-api/ → packages/meeting-api/
+services/meeting-api/ → services/meeting-api/
 ```
 
 At this step: same code, new location. Model ownership changes come in Step 6.
@@ -218,12 +218,12 @@ async def validate_token(payload: dict, db: AsyncSession = Depends(get_db)):
 
 ### What changes
 
-**File:** `packages/meeting-api/meeting_api/auth.py`
+**File:** `services/meeting-api/meeting_api/auth.py`
 
 Current auth (`auth.py:18-65`) does a DB join on APIToken + User to get the user object. Replace with header-based auth:
 
 ```python
-# packages/meeting-api/meeting_api/auth.py
+# services/meeting-api/meeting_api/auth.py
 """Dual-mode auth: gateway headers or standalone API keys."""
 
 import os
@@ -325,11 +325,11 @@ async def get_user_and_token(request: Request) -> tuple:
 |-------|-----------------|-----------------|-------|
 | `User` | shared_models.models | libs/admin-models/admin_models/models.py | Admin-api owns |
 | `APIToken` | shared_models.models | libs/admin-models/admin_models/models.py | Admin-api owns |
-| `Meeting` | shared_models.models | packages/meeting-api/meeting_api/models.py | meeting-api owns |
-| `Transcription` | shared_models.models | packages/meeting-api/meeting_api/models.py | meeting-api owns |
-| `MeetingSession` | shared_models.models | packages/meeting-api/meeting_api/models.py | meeting-api owns |
-| `Recording` | shared_models.models | packages/meeting-api/meeting_api/models.py | meeting-api owns |
-| `MediaFile` | shared_models.models | packages/meeting-api/meeting_api/models.py | meeting-api owns |
+| `Meeting` | shared_models.models | services/meeting-api/meeting_api/models.py | meeting-api owns |
+| `Transcription` | shared_models.models | services/meeting-api/meeting_api/models.py | meeting-api owns |
+| `MeetingSession` | shared_models.models | services/meeting-api/meeting_api/models.py | meeting-api owns |
+| `Recording` | shared_models.models | services/meeting-api/meeting_api/models.py | meeting-api owns |
+| `MediaFile` | shared_models.models | services/meeting-api/meeting_api/models.py | meeting-api owns |
 | `CalendarEvent` | shared_models.models | services/calendar-service/ or meeting-api | Calendar-service related |
 
 | Module | Current | Target | Notes |
@@ -337,12 +337,12 @@ async def get_user_and_token(request: Request) -> tuple:
 | database.py | shared_models | Each package gets its own copy | Minimal: engine + session + get_db |
 | schemas.py | shared_models | Split: meeting schemas → meeting-api, admin schemas → admin-models | Platform enum shared via tiny util |
 | token_scope.py | shared_models | libs/admin-models | Only admin-api and gateway need this |
-| webhook_delivery.py | shared_models | packages/meeting-api | Only meeting-api uses webhooks |
-| webhook_retry_worker.py | shared_models | packages/meeting-api | Only meeting-api uses this |
-| storage.py | shared_models | packages/meeting-api | Only meeting-api + TC use storage |
+| webhook_delivery.py | shared_models | services/meeting-api | Only meeting-api uses webhooks |
+| webhook_retry_worker.py | shared_models | services/meeting-api | Only meeting-api uses this |
+| storage.py | shared_models | services/meeting-api | Only meeting-api + TC use storage |
 | security_headers.py | shared_models | services/api-gateway or shared util | Middleware used by gateway + admin |
 
-### New file: packages/meeting-api/meeting_api/models.py
+### New file: services/meeting-api/meeting_api/models.py
 
 ```python
 """Meeting domain models — owned by meeting-api."""
@@ -397,7 +397,7 @@ class MediaFile(Base):
 
 **Critical change:** `user_id` columns become plain `Integer` with no `ForeignKey("users.id")` in the ORM. The FK constraint stays in the database (added via raw SQL migration) but the Python model doesn't know about it.
 
-### New file: packages/meeting-api/meeting_api/database.py
+### New file: services/meeting-api/meeting_api/database.py
 
 ```python
 """Database setup for meeting-api standalone or Vexa deployment."""
@@ -450,17 +450,17 @@ class APIToken(Base):
 | Old file | New location |
 |----------|-------------|
 | models.py (User, APIToken) | libs/admin-models/admin_models/models.py |
-| models.py (Meeting, Transcription, etc.) | packages/meeting-api/meeting_api/models.py |
+| models.py (Meeting, Transcription, etc.) | services/meeting-api/meeting_api/models.py |
 | database.py | Each package gets a minimal copy |
-| schemas.py (MeetingCreate, MeetingResponse, Platform, etc.) | packages/meeting-api/meeting_api/schemas.py |
+| schemas.py (MeetingCreate, MeetingResponse, Platform, etc.) | services/meeting-api/meeting_api/schemas.py |
 | schemas.py (UserCreate, UserResponse, etc.) | libs/admin-models/admin_models/schemas.py |
 | token_scope.py | libs/admin-models/admin_models/token_scope.py |
-| webhook_delivery.py | packages/meeting-api/meeting_api/webhook_delivery.py |
-| webhook_retry_worker.py | packages/meeting-api/meeting_api/webhook_retry_worker.py |
-| storage.py | packages/meeting-api/meeting_api/storage.py |
+| webhook_delivery.py | services/meeting-api/meeting_api/webhook_delivery.py |
+| webhook_retry_worker.py | services/meeting-api/meeting_api/webhook_retry_worker.py |
+| storage.py | services/meeting-api/meeting_api/storage.py |
 | security_headers.py | libs/admin-models/admin_models/security_headers.py |
-| webhook_url.py | packages/meeting-api/meeting_api/webhook_url.py |
-| scheduler.py, scheduler_worker.py | packages/runtime-api/runtime_api/scheduler.py (already there) |
+| webhook_url.py | services/meeting-api/meeting_api/webhook_url.py |
+| scheduler.py, scheduler_worker.py | services/runtime-api/runtime_api/scheduler.py (already there) |
 
 ### Import changes by consumer
 
@@ -639,7 +639,7 @@ meeting-api:
 ### Tests that move
 
 ```
-services/transcription-collector/tests/ → packages/meeting-api/tests/collector/
+services/transcription-collector/tests/ → services/meeting-api/tests/collector/
 ```
 
 Files: `test_config.py`, `test_filters.py`, `test_processors.py`, `test_db_writer.py`, `test_endpoints.py`, `conftest.py`

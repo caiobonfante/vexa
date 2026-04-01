@@ -17,8 +17,8 @@ Bots join Google Meet as a signed-in Google user, skipping guest flow. Uses brow
 3. Live E2E on hosted Google Meet — bot joins without manual admission, appears as authenticated user, transcription flows
 
 ### Key files
-- `packages/meeting-api/meeting_api/meetings.py` — bot_config construction
-- `packages/meeting-api/meeting_api/schemas.py` — BotRequest schema
+- `services/meeting-api/meeting_api/meetings.py` — bot_config construction
+- `services/meeting-api/meeting_api/schemas.py` — BotRequest schema
 - `services/vexa-bot/core/src/platforms/googlemeet/join.ts` — Google Meet join flow
 - `services/vexa-bot/core/src/s3-sync.ts` — S3 browser data sync
 

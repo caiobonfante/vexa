@@ -85,8 +85,8 @@ Group chat:
 ```
 services/telegram-bot/bot.py     → all Telegram integration, SSE streaming, commands
 services/telegram-bot/tests/     → unit + E2E tests
-packages/agent-api               → chat SSE, sessions, workspace API
-packages/runtime-api             → container lifecycle for agent sessions
+services/agent-api               → chat SSE, sessions, workspace API
+services/runtime-api             → container lifecycle for agent sessions
 services/admin-api               → user creation, token minting
 ```
 

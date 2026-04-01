@@ -29,10 +29,10 @@
 </p>
 
 <p align="center">
-  <a href="#whats-new">What’s new</a> •
-  <a href="#quickstart">Quickstart</a> •
+  <a href="#meeting-api">Meeting API</a> •
   <a href="#agent-api">Agent API</a> •
-  <a href="#2-get-transcripts">API</a> •
+  <a href="#runtime-api">Runtime API</a> •
+  <a href="#quickstart">Quickstart</a> •
   <a href="https://docs.vexa.ai">Docs</a> •
   <a href="#roadmap">Roadmap</a> •
   <a href="https://discord.gg/Ga9duGkVz9">Discord</a>
@@ -306,7 +306,13 @@ Same agent, same memory, every surface:
 
 ---
 
-## 1. Send bot to meeting:
+<a id="meeting-api"></a>
+
+## Meeting API — The Data Layer
+
+The Meeting API is the foundation of the platform. It sends bots to meetings, captures real-time transcripts with per-speaker audio, and provides interactive controls (speak, chat, share screen). This is the data layer that feeds everything else — agents, webhooks, knowledge extraction.
+
+### 1. Send bot to meeting:
 
 Set `API_BASE` to your deployment:
 
@@ -364,7 +370,7 @@ curl -X POST "$API_BASE/bots" \
   }'
 ```
 
-## 2. Get transcripts:
+### 2. Get transcripts:
 
 ### Get transcripts over REST
 
@@ -408,9 +414,9 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 |---------|---------|
 | [api-gateway](./services/api-gateway) | Reverse proxy — routes REST, WebSocket, VNC, CDP to backends |
 | [admin-api](./services/admin-api) | User/org CRUD, scoped API tokens, team management |
-| [meeting-api](./packages/meeting-api) | Bot lifecycle, meeting CRUD, recordings, transcription collector, interactive bot controls |
-| [agent-api](./packages/agent-api) | Agent sessions, Claude CLI streaming, workspace sync, scheduling |
-| [runtime-api](./packages/runtime-api) | Container CRUD — spawn/stop/exec, port mapping, idle timeout |
+| [meeting-api](./services/meeting-api) | **Data layer** — bot lifecycle, meeting CRUD, recordings, transcription collector, interactive bot controls |
+| [agent-api](./services/agent-api) | **Intelligence layer** — agent sessions, Claude CLI streaming, workspace sync, scheduling |
+| [runtime-api](./services/runtime-api) | **Infrastructure layer** — container CRUD, spawn/stop/exec, port mapping, idle timeout. Docker, Kubernetes, or process backend |
 
 **Meeting & AI services:**
 
@@ -436,7 +442,15 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | **agent** | ~200MB | Claude CLI, post-meeting processing, automation |
 | **worker** | ~50MB | Webhook delivery, file processing |
 
-- Database models: `libs/admin-models/` (users, tokens), `packages/meeting-api/` (meetings, transcriptions)
+- Database models: `libs/admin-models/` (users, tokens), `services/meeting-api/` (meetings, transcriptions)
+
+<a id="runtime-api"></a>
+
+### Runtime API — The Infrastructure Layer
+
+The [Runtime API](./services/runtime-api) abstracts container lifecycle behind a single REST API. It's what allows Meeting API to spawn bot containers and Agent API to spawn agent sandboxes — without either caring whether the backend is Docker, Kubernetes, or bare processes.
+
+`POST /containers` with a profile name → get a managed container back. It idles out automatically, fires a callback when it exits, and enforces per-user limits. Switch from Docker in dev to Kubernetes in prod by changing one env var.
 
 > 💫 If you're building with Vexa, we'd love your support! [Star our repo](https://github.com/Vexa-ai/vexa/stargazers) to help us reach 2000 stars.
 

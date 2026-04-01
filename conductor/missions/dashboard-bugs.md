@@ -8,7 +8,7 @@ Stop-when: All 3 bugs fixed and verified OR 10 iterations
 
 ### Bug 1: WS subscribe error "meetings[0] not authorized or not found for user"
 - Error in `use-live-transcripts.ts:292`
-- Server-side: `packages/meeting-api/meeting_api/collector/endpoints.py:392`
+- Server-side: `services/meeting-api/meeting_api/collector/endpoints.py:392`
 - The collector queries `Meeting.user_id == current_user.id, Meeting.platform == platform_value, Meeting.platform_specific_id == native_id`
 - Root cause investigation: check what platform/native_id the dashboard sends vs what's in DB. Also check if the auth token resolves to the correct user.
 - `/bots/status` returns `platform: null` for browser_session containers — dashboard proxy hardcodes `status: "active"` with null platform, which then gets subscribed
@@ -31,7 +31,7 @@ Stop-when: All 3 bugs fixed and verified OR 10 iterations
 - `services/dashboard/src/lib/api.ts` — API client
 - `services/dashboard/src/app/api/vexa/[...path]/route.ts` — proxy layer
 - `services/api-gateway/main.py` — WS handler (line ~1767)
-- `packages/meeting-api/meeting_api/collector/endpoints.py` — authorize-subscribe + transcripts
+- `services/meeting-api/meeting_api/collector/endpoints.py` — authorize-subscribe + transcripts
 - `services/dashboard/src/components/meetings/meeting-card.tsx` — status display
 - `services/dashboard/src/components/transcript/transcript-viewer.tsx` — transcript display
 

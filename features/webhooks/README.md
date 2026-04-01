@@ -80,7 +80,7 @@ This is a cross-service feature. Testing requires the full compose stack plus a 
 
 | Component | Location |
 |-----------|----------|
-| Webhook delivery | `packages/meeting-api/meeting_api/webhook_delivery.py` (moved from shared-models) |
+| Webhook delivery | `services/meeting-api/meeting_api/webhook_delivery.py` (moved from shared-models) |
 | Webhook config | `services/admin-api/main.py:140-192` (PUT /user/webhook) |
 | Gateway proxy | `services/api-gateway/main.py:789` |
 | Dashboard UI | `services/dashboard/app/webhooks/page.tsx` |

@@ -51,7 +51,7 @@ Supported formats: `wav` (default), `pcm` (raw Int16LE 24kHz mono)
 docker compose up tts-service
 
 # Standalone
-cd packages/tts-service
+cd services/tts-service
 uvicorn main:app --host 0.0.0.0 --port 8002
 ```
 

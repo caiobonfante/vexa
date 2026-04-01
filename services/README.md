@@ -32,7 +32,7 @@ Vexa is a dozen services, not a monolith. Each service owns one concern (transcr
                     infra   │
                             │
                    ┌────────▼────────┐
-                   │  Runtime API    │  ← packages/runtime-api/
+                   │  Runtime API    │  ← services/runtime-api/
                    │                 │
                    │ • CRUD API      │
                    │ • YAML profiles │
@@ -69,8 +69,8 @@ These live in `packages/` and are designed to be independently publishable with 
 
 | Package | Description |
 |---------|-------------|
-| [runtime-api](../packages/runtime-api/) | Generic container lifecycle API — Docker, K8s, and process backends |
-| [agent-api](../packages/agent-api/) | AI agent runtime — chat streaming, workspace sync, scheduling |
+| [runtime-api](runtime-api/) | Generic container lifecycle API — Docker, K8s, and process backends |
+| [agent-api](agent-api/) | AI agent runtime — chat streaming, workspace sync, scheduling |
 | ~~[shared-models](../libs/shared-models/)~~ | **DEPRECATED — being deleted.** Models live in `admin-models` and `meeting-api`. Utilities being redistributed. |
 
 ## Services
@@ -81,8 +81,8 @@ These live in `packages/` and are designed to be independently publishable with 
 |---------|------|-------------|
 | [api-gateway](api-gateway/) | 8000 | Entry point. Auth middleware, routing, CORS |
 | [admin-api](admin-api/) | 8001 | User management, API tokens, meeting CRUD |
-| [agent-api](../packages/agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces. Lives in `packages/`. |
-| [runtime-api](../packages/runtime-api/) | 8090 | Container lifecycle API — Docker, K8s, process backends. Lives in `packages/`. |
+| [agent-api](agent-api/) | 8100 | Chat sessions, TTS, scheduling (in-process worker), workspaces. |
+| [runtime-api](runtime-api/) | 8090 | Container lifecycle API — Docker, K8s, process backends. |
 
 ### Domain Services
 
@@ -96,16 +96,16 @@ These live in `packages/` and are designed to be independently publishable with 
 
 | Service | Port | Description |
 |---------|------|-------------|
-| [transcription-service](../packages/transcription-service/) | 8083 | Whisper API — speech-to-text (in `packages/`) |
-| [transcript-rendering](../packages/transcript-rendering/) | — | TypeScript library for dedup, grouping, timestamps. Lives in `packages/`. |
+| [transcription-service](transcription-service/) | 8083 | Whisper API — speech-to-text |
+| [transcript-rendering](../packages/transcript-rendering/) | — | TypeScript library for dedup, grouping, timestamps.  |
 
-> **Note:** The transcription collector is now built into [meeting-api](../packages/meeting-api/). It consumes Redis streams and writes segments to PostgreSQL as part of the meeting domain service.
+> **Note:** The transcription collector is now built into [meeting-api](meeting-api/). It consumes Redis streams and writes segments to PostgreSQL as part of the meeting domain service.
 
 ### Supporting Services
 
 | Service | Port | Description |
 |---------|------|-------------|
-| [tts-service](../packages/tts-service/) | 8084 | Text-to-speech for voice agent participation (in `packages/`) |
+| [tts-service](tts-service/) | 8084 | Text-to-speech for voice agent participation |
 | [mcp](mcp/) | 8010 | Model Context Protocol server for AI tool integration |
 | [calendar-service](calendar-service/) | 8085 | Google Calendar sync, auto-join scheduling |
 | [telegram-bot](telegram-bot/) | — | Telegram interface for mobile meeting management |
@@ -132,7 +132,7 @@ The scheduler is not a standalone service — it runs as an in-process worker in
 
 **Flow:** Calendar Service syncs events → Agent API scheduler queues timed job → job fires → API Gateway → Meeting API spawns bot.
 
-**Code:** `packages/runtime-api/runtime_api/scheduler.py` + `scheduler_api.py` (moved from shared-models)
+**Code:** `services/runtime-api/runtime_api/scheduler.py` + `scheduler_api.py` (moved from shared-models)
 
 ## Infrastructure Dependencies
 

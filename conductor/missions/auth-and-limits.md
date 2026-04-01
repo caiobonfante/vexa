@@ -334,7 +334,7 @@ PASS: all UI elements render correctly, create/revoke flows work
 | `libs/admin-models/admin_models/models.py` | APIToken model — add scopes, name, last_used_at, expires_at |
 | `libs/admin-models/admin_models/database.py` | Call ensure_schema() from init_db() |
 | `libs/admin-models/admin_models/token_scope.py` | Scope parsing — already updated (admin removed) |
-| `packages/meeting-api/meeting_api/database.py` | Call ensure_schema() from init_db() |
+| `services/meeting-api/meeting_api/database.py` | Call ensure_schema() from init_db() |
 | `services/admin-api/app/main.py` | Token creation, /internal/validate — use DB scopes |
 | `services/api-gateway/main.py` | Rate limiting middleware |
 | `features/auth-and-limits/README.md` | Feature README — update after validation |

@@ -15,7 +15,7 @@ Runs all Vexa services via Docker Compose:
 - PostgreSQL + Redis + MinIO
 - Bots spawn as Docker containers (needs Docker socket)
 
-**You provide:** A transcription service — use [Vexa transcription](https://vexa.ai) (ready to go) or [self-host](../../packages/transcription-service/) with GPU.
+**You provide:** A transcription service — use [Vexa transcription](https://vexa.ai) (ready to go) or [self-host](../../services/transcription-service/) with GPU.
 
 ## How
 
@@ -30,7 +30,7 @@ That's it. Copies env-example → .env, builds images, starts services, runs mig
 
 **Before running**, edit `.env`:
 1. Set `DASHBOARD_PATH` to your [vexa-dashboard](https://github.com/Vexa-ai/vexa-dashboard) checkout (absolute path)
-2. Set `TRANSCRIPTION_SERVICE_URL` — get a key at [vexa.ai](https://vexa.ai) or [self-host](../../packages/transcription-service/)
+2. Set `TRANSCRIPTION_SERVICE_URL` — get a key at [vexa.ai](https://vexa.ai) or [self-host](../../services/transcription-service/)
 
 ### Make targets
 
@@ -80,7 +80,7 @@ Edit `.env` at repo root. Created from [deploy/env/env-example](../env/env-examp
 | Variable | Description |
 |----------|-------------|
 | DASHBOARD_PATH | Absolute path to [vexa-dashboard](https://github.com/Vexa-ai/vexa-dashboard) checkout |
-| TRANSCRIPTION_SERVICE_URL | Your transcription endpoint. Get at [vexa.ai](https://vexa.ai) or [self-host](../../packages/transcription-service/). |
+| TRANSCRIPTION_SERVICE_URL | Your transcription endpoint. Get at [vexa.ai](https://vexa.ai) or [self-host](../../services/transcription-service/). |
 
 Everything else has working defaults for local dev.
 
@@ -113,7 +113,7 @@ DB_PASSWORD=your-password
 ```bash
 # In .env:
 LOCAL_TRANSCRIPTION=true
-# Then make up will also start packages/transcription-service/
+# Then make up will also start services/transcription-service/
 ```
 
 ### Files

@@ -268,10 +268,10 @@ POST /bots {
 
 ## Key Files
 
-- `packages/meeting-api/meeting_api/schemas.py` — state machine, transition rules, MeetingCreate
-- `packages/meeting-api/meeting_api/meetings.py` — bot CRUD, lifecycle control, timeout config (line 713)
-- `packages/meeting-api/meeting_api/callbacks.py` — callback handlers
-- `packages/meeting-api/meeting_api/config.py` — BOT_STOP_DELAY_SECONDS
+- `services/meeting-api/meeting_api/schemas.py` — state machine, transition rules, MeetingCreate
+- `services/meeting-api/meeting_api/meetings.py` — bot CRUD, lifecycle control, timeout config (line 713)
+- `services/meeting-api/meeting_api/callbacks.py` — callback handlers
+- `services/meeting-api/meeting_api/config.py` — BOT_STOP_DELAY_SECONDS
 - `services/vexa-bot/core/src/docker.ts` — bot-side timeout defaults (line 22-24)
 - `services/vexa-bot/core/src/platforms/shared/meetingFlow.ts` — bot-side lifecycle flow
 - `services/vexa-bot/core/src/services/unified-callback.ts` — bot→API callback logic

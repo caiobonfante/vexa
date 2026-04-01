@@ -7,7 +7,7 @@ Stop-when: all phases addressed AND full stack deploys AND every affected route 
 
 ## Context
 
-Phase 4 (commit `65f033d3`) deleted `services/bot-manager/` and created `packages/meeting-api` + `packages/runtime-api`. The structural refactoring is done — all endpoints are ported or intentionally stubbed (deferred transcription = 501). The remaining work is naming cleanup.
+Phase 4 (commit `65f033d3`) deleted `services/bot-manager/` and created `services/meeting-api` + `services/runtime-api`. The structural refactoring is done — all endpoints are ported or intentionally stubbed (deferred transcription = 501). The remaining work is naming cleanup.
 
 **Verified non-gaps** (investigated and confirmed NOT missing):
 - Agent Chat → routes to `agent-api`, never was meeting-api's job
@@ -41,14 +41,14 @@ The most impactful change. ~15 files, ~40 line changes.
 
 12. `services/vexa-bot/core/src/` — TypeScript comments referencing bot-manager. Update to meeting-api
 13. `services/admin-api/app/main.py` — comments: "Reuse logic from bot-manager", "Copied from bot-manager"
-14. `packages/meeting-api/meeting_api/*.py` — internal comments still say "bot-manager". Update (except frozen contract notes in webhook_url.py)
+14. `services/meeting-api/meeting_api/*.py` — internal comments still say "bot-manager". Update (except frozen contract notes in webhook_url.py)
 15. `services/vexa-bot/hot-run.sh` — dev script URL replacement references bot-manager
 16. `scripts/build-clean.sh` — cleanup references to deleted directory
 
 ## Phase 3 — Clean stale references in docs
 
 17. Feature READMEs still referencing bot-manager (~15 files in features/)
-18. `services/api-gateway/README.md`, `packages/meeting-api/README.md`
+18. `services/api-gateway/README.md`, `services/meeting-api/README.md`
 19. `docs/*.mdx` files (external-facing docs)
 20. Test findings files (`**/tests/findings.md`)
 21. Conductor missions and evaluator verdicts that reference bot-manager
@@ -65,7 +65,7 @@ Alternative: delete or archive `deploy/lite/` entirely if it's abandoned.
 
 ## Frozen contracts (DO NOT RENAME)
 
-- `packages/meeting-api/meeting_api/webhook_url.py` — JWT issuer list includes `"bot-manager"` (legacy tokens still in circulation)
+- `services/meeting-api/meeting_api/webhook_url.py` — JWT issuer list includes `"bot-manager"` (legacy tokens still in circulation)
 - Redis channel prefix `bm:` — frozen, used by vexa-bot and meeting-api
 - `/bots/*` API paths — frozen external contract
 - NO fallback env var — `BOT_MANAGER_URL` is dead, replaced everywhere by `MEETING_API_URL`

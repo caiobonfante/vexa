@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Update packages/transcription-service/.env with DEVICE and COMPUTE_TYPE.
+Update services/transcription-service/.env with DEVICE and COMPUTE_TYPE.
 
 This replaces the previous huge `python -c` one-liners that were prone to
 IndentationError in Makefile execution.

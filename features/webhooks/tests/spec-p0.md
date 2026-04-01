@@ -98,9 +98,9 @@ def build_envelope(event_type: str, data: dict, event_id: str = None) -> dict:
 ### Files to modify
 
 1. `libs/shared-models/shared_models/webhook_delivery.py` — add `build_envelope()`
-2. `packages/meeting-api/meeting_api/webhooks.py` — use `build_envelope()`, remove `bot_container_id`, filter `meeting.data`
-3. `packages/meeting-api/meeting_api/webhook_delivery.py` — use `build_envelope()`, wrap in `data.meeting`
-4. `packages/meeting-api/meeting_api/post_meeting.py` — use `build_envelope()`, change `event` to `event_type`
+2. `services/meeting-api/meeting_api/webhooks.py` — use `build_envelope()`, remove `bot_container_id`, filter `meeting.data`
+3. `services/meeting-api/meeting_api/webhook_delivery.py` — use `build_envelope()`, wrap in `data.meeting`
+4. `services/meeting-api/meeting_api/post_meeting.py` — use `build_envelope()`, change `event` to `event_type`
 5. `services/dashboard/src/app/api/webhooks/test/route.ts` — fix signing to use `timestamp.payload`
 
 ### Meeting data filtering

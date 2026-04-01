@@ -213,7 +213,7 @@ One pipeline on mixed stream. Whisper transcribes everything. Caption speaker ch
 |-----------|------|----------|
 | **speaker-streams** | Core buffering, submission, confirmation, emission | `services/vexa-bot/core/src/services/speaker-streams.ts` |
 | **transcription-client** | HTTP POST WAV to transcription-service, requests word timestamps | `services/vexa-bot/core/src/services/transcription-client.ts` |
-| **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `packages/transcription-service/main.py` |
+| **transcription-service** | faster-whisper inference, returns segments with word-level timestamps | `services/transcription-service/main.py` |
 | **segment-publisher** | Redis XADD + PUBLISH to `tc:meeting:{id}:mutable` channel | `services/vexa-bot/core/src/services/segment-publisher.ts` |
 | **transcription-collector** | Consumes Redis stream, persists to Postgres after 30s (persistence only, no mapping/dedup) | `services/transcription-collector/main.py` |
 | **api-gateway** | WebSocket (live) + REST (historical) | `services/api-gateway/` |
