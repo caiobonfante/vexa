@@ -12,6 +12,7 @@ from typing import AsyncGenerator, Optional
 from agent_api import config
 from agent_api.container_manager import ContainerManager
 from agent_api.stream_parser import parse_event
+from agent_api import workspace
 
 logger = logging.getLogger("agent_api.chat")
 
@@ -83,6 +84,51 @@ async def delete_session_meta(redis, user_id: str, session_id: str):
     await redis.hdel(f"{SESSIONS_INDEX}{user_id}", session_id)
 
 
+# --- Workspace init on new container ---
+
+
+async def _workspace_init(cm: ContainerManager, user_id: str, container: str):
+    """Restore workspace from storage, init from template or git if empty.
+
+    Called once when a new container is created (_new_container=True).
+    Order: sync_down → if empty → git clone or template copy.
+    Fail-safe: existing user with failed sync_down = abort (raise).
+    """
+    # 1. sync_down from MinIO
+    had_workspace = await workspace.workspace_exists(user_id)
+    sync_ok = await workspace.sync_down(user_id, container)
+
+    if not sync_ok and had_workspace:
+        # Existing user, sync failed — abort. Don't run agent with empty workspace.
+        raise RuntimeError(
+            f"sync_down failed for {user_id} but workspace exists in storage. "
+            "Aborting to prevent data loss."
+        )
+
+    if not sync_ok:
+        logger.warning(f"sync_down failed for {user_id} (first-time user), continuing with init")
+
+    # 2. Check if workspace is still empty after sync
+    if await workspace.is_workspace_empty(container):
+        # Try git clone if configured (get_user_data is cached per user_id, no extra HTTP)
+        user_data = await cm.get_user_data(user_id)
+        git_config = user_data.get("workspace_git", {})
+        if git_config and git_config.get("repo"):
+            repo = git_config["repo"]
+            branch = git_config.get("branch", "main")
+            token = git_config.get("token", "")
+            logger.info(f"Git clone init for {user_id}: {repo} ({branch})")
+            clone_ok = await workspace.git_clone_init(container, repo, branch, token)
+            if not clone_ok:
+                raise RuntimeError(f"Git clone failed for {user_id} from {repo}")
+        else:
+            # Default: copy template
+            logger.info(f"Template init for {user_id}")
+            await workspace.init_from_template(container)
+
+    logger.info(f"Workspace init complete for {user_id}")
+
+
 # --- Core chat turn ---
 
 async def run_chat_turn(
@@ -110,9 +156,10 @@ async def run_chat_turn(
     cm._new_container = False
     container = await cm.ensure_container(user_id)
 
-    # Signal frontend if container was recreated
+    # Workspace init on new container
     if cm._new_container:
         yield f"data: {json.dumps({'type': 'session_reset', 'reason': 'Container was recreated. Previous session context is no longer available.'})}\n\n"
+        await _workspace_init(cm, user_id, container)
 
     # Session from Redis — skip if container was just recreated
     if not cm._new_container:

@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -86,6 +87,16 @@ class FileWriteRequest(BaseModel):
     content: str
 
 
+class ScheduleRequest(BaseModel):
+    user_id: str
+    action: str = "chat"  # "chat" or "http"
+    message: Optional[str] = None
+    cron: Optional[str] = None
+    execute_at: Optional[str] = None
+    url: Optional[str] = None
+    method: Optional[str] = "POST"
+
+
 # ── Lifecycle ──────────────────────────────────────────────────────────────
 
 
@@ -143,13 +154,9 @@ def _format_meeting_context(context_json: str) -> str:
     return "\n".join(parts)
 
 
-@app.post("/api/chat", dependencies=[Depends(require_api_key)])
-async def chat(req: ChatRequest, request: Request):
-    """Send a message to the agent. Returns SSE stream.
-    Retries once with a fresh container if the first attempt fails."""
-    # Read meeting context from gateway-injected header
-    meeting_context_header = request.headers.get("x-meeting-context", "")
-    context_prefix = _format_meeting_context(meeting_context_header) if meeting_context_header else ""
+def _chat_stream(req: ChatRequest, context_prefix: str = ""):
+    """Shared SSE generator for /api/chat and /internal/chat.
+    Retries once with a fresh container on failure."""
 
     async def generate():
         retries = 0
@@ -179,6 +186,25 @@ async def chat(req: ChatRequest, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/chat", dependencies=[Depends(require_api_key)])
+async def chat(req: ChatRequest, request: Request):
+    """Send a message to the agent. Returns SSE stream."""
+    meeting_context_header = request.headers.get("x-meeting-context", "")
+    context_prefix = _format_meeting_context(meeting_context_header) if meeting_context_header else ""
+    return _chat_stream(req, context_prefix=context_prefix)
+
+
+@app.post("/internal/chat")
+async def internal_chat(req: ChatRequest, request: Request):
+    """Internal chat endpoint for scheduler — no user API key required.
+    Protected by INTERNAL_API_SECRET if configured."""
+    if config.INTERNAL_API_SECRET:
+        provided = request.headers.get("x-internal-secret", "")
+        if provided != config.INTERNAL_API_SECRET:
+            raise HTTPException(403, "Invalid internal secret")
+    return _chat_stream(req)
 
 
 @app.delete("/api/chat", dependencies=[Depends(require_api_key)])
@@ -229,6 +255,77 @@ async def rename_session(session_id: str, req: SessionRenameRequest):
     """Rename a session."""
     await save_session_meta(app.state.redis, req.user_id, session_id, req.name)
     return {"status": "renamed", "name": req.name}
+
+
+# ── Workspace endpoints ────────────────────────────────────────────────────
+
+
+# ── Schedule bridge ───────────────────────────────────────────────────────
+
+
+@app.post("/api/schedule", dependencies=[Depends(require_api_key)])
+async def schedule_bridge(req: ScheduleRequest):
+    """Bridge: vexa CLI -> agent-api -> runtime-api scheduler.
+
+    Translates agent-friendly schedule requests into scheduler job specs.
+    The scheduler is generic — it fires HTTP callbacks. This endpoint
+    builds the callback URL pointing to /internal/chat on agent-api.
+    """
+    import time as _time
+
+    # Build the target request for the scheduler
+    if req.action == "chat":
+        if not req.message:
+            raise HTTPException(400, "message required for action=chat")
+        callback_headers = {"Content-Type": "application/json"}
+        if config.INTERNAL_API_SECRET:
+            callback_headers["X-Internal-Secret"] = config.INTERNAL_API_SECRET
+        target_request = {
+            "method": "POST",
+            "url": f"{config.AGENT_API_INTERNAL_URL}/internal/chat",
+            "body": {"user_id": req.user_id, "message": req.message},
+            "headers": callback_headers,
+        }
+    elif req.action == "http":
+        if not req.url:
+            raise HTTPException(400, "url required for action=http")
+        # SSRF protection: reject internal/private URLs
+        from urllib.parse import urlparse
+        parsed = urlparse(req.url)
+        hostname = parsed.hostname or ""
+        if hostname in ("localhost", "127.0.0.1", "0.0.0.0") or hostname.endswith(".internal"):
+            raise HTTPException(400, "Cannot schedule requests to internal URLs")
+        if any(hostname.startswith(prefix) for prefix in ("10.", "172.", "192.168.")):
+            raise HTTPException(400, "Cannot schedule requests to private network URLs")
+        if "." not in hostname:
+            raise HTTPException(400, "Cannot schedule requests to internal service names")
+        target_request = {
+            "method": req.method or "POST",
+            "url": req.url,
+        }
+    else:
+        raise HTTPException(400, f"Unknown action: {req.action}")
+
+    # Determine execute_at
+    execute_at = req.execute_at or _time.time() + 60  # default: 1 minute from now
+
+    # Build scheduler job spec
+    job_spec = {
+        "execute_at": execute_at,
+        "request": target_request,
+        "metadata": {"user_id": req.user_id, "action": req.action, "source": "agent-api"},
+    }
+    if req.cron:
+        job_spec["metadata"]["cron"] = req.cron
+
+    # Forward to runtime-api scheduler
+    try:
+        resp = await cm._http.post("/scheduler/jobs", json=job_spec)
+        if resp.status_code not in (200, 201):
+            raise HTTPException(502, f"Scheduler error: {resp.status_code} {resp.text[:200]}")
+        return resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Scheduler unreachable: {e}")
 
 
 # ── Workspace endpoints ────────────────────────────────────────────────────

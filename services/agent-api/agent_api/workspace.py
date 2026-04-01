@@ -6,6 +6,7 @@ Supports both S3/MinIO backends and local filesystem fallback.
 
 import asyncio
 import logging
+import shlex
 from typing import Optional, Protocol
 
 from agent_api import config
@@ -137,6 +138,93 @@ async def workspace_exists(user_id: str) -> bool:
     except Exception as e:
         logger.warning(f"workspace_exists check failed: {e}")
         return False
+
+
+# --- Workspace init operations ---
+
+
+async def is_workspace_empty(container: str) -> bool:
+    """Check if /workspace/ is empty (no user files, ignoring .git)."""
+    workspace = config.WORKSPACE_PATH
+    rc, out = await _exec(
+        container,
+        f"find {workspace} -not -path '*/.git/*' -not -name '.git' "
+        f"-not -name '.gitkeep' -type f | head -1",
+        timeout=10,
+    )
+    return rc != 0 or not out.strip()
+
+
+async def init_from_template(container: str, template: str = "knowledge") -> bool:
+    """Copy template files into an empty workspace."""
+    workspace = config.WORKSPACE_PATH
+    template_path = f"/templates/{template}"
+    # Check template exists in the container image
+    rc, _ = await _exec(container, f"test -d {template_path} && echo OK", timeout=5)
+    if rc != 0:
+        logger.warning(f"Template {template} not found at {template_path}")
+        return False
+
+    cmd = f"cp -r {template_path}/. {workspace}/"
+    rc, out = await _exec(container, cmd, timeout=30)
+    if rc != 0:
+        logger.error(f"Template init failed: {out}")
+        return False
+
+    # Init git repo in workspace
+    git_cmd = (
+        f"cd {workspace} && "
+        "git init && "
+        'git config user.name "vexa" && '
+        'git config user.email "vexa@system" && '
+        "git add -A && "
+        'git commit -m "init from template"'
+    )
+    rc, out = await _exec(container, git_cmd, timeout=30)
+    if rc != 0:
+        logger.warning(f"Git init after template copy: {out}")
+
+    logger.info(f"Template '{template}' initialized in {container}")
+    return True
+
+
+async def git_clone_init(container: str, repo_url: str, branch: str = "main",
+                         token: str = "") -> bool:
+    """Clone a git repo into an empty workspace."""
+    workspace = config.WORKSPACE_PATH
+
+    # Validate URL scheme — only https:// allowed
+    if not repo_url.startswith("https://"):
+        logger.error(f"Rejected git clone URL with non-https scheme: {repo_url[:50]}")
+        return False
+
+    # Build clone URL with token if provided
+    if token and "://" in repo_url:
+        # Insert token into URL: https://github.com/... → https://{token}@github.com/...
+        proto, rest = repo_url.split("://", 1)
+        clone_url = f"{proto}://{token}@{rest}"
+    else:
+        clone_url = repo_url
+
+    # Clone to temp dir, move contents into workspace (which may already exist as a mountpoint)
+    safe_branch = shlex.quote(branch)
+    safe_url = shlex.quote(clone_url)
+    cmd = (
+        f"git clone --branch {safe_branch} --single-branch {safe_url} /tmp/_ws_clone && "
+        f"cp -a /tmp/_ws_clone/. {workspace}/ && "
+        f"rm -rf /tmp/_ws_clone"
+    )
+    rc, out = await _exec(container, cmd, timeout=120)
+    if rc != 0:
+        logger.error(f"Git clone failed for {repo_url}: {out}")
+        return False
+
+    # Strip token from remote URL to prevent leaking to workspace/MinIO
+    safe_repo = shlex.quote(repo_url)
+    await _exec(container, f"cd {workspace} && git remote set-url origin {safe_repo}", timeout=10)
+
+    logger.info(f"Git cloned {repo_url} ({branch}) into {container}")
+    return True
 
 
 # --- File operations for REST API ---

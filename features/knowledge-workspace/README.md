@@ -1,9 +1,9 @@
 # Knowledge Workspace
 
-> **Confidence: 0** — RESET after architecture refactoring. agent-api renamed from agent-runtime. Workspace module moved. Storage imports changed.
-> **Tested:** Template structure deployed, agent CLAUDE.md instructions working, MinIO workspace sync, vexa schedule integration, streams/entities/timeline structure.
-> **Not tested:** Git-backed workspace init, workspace index injection per chat turn, entity extraction from meeting transcripts, script execution via worker containers, multi-workspace API.
-> **Contributions welcome:** Git init on workspace creation, workspace index injection (scan filesystem → inject summary into prompt), entity extraction from transcripts, script execution in worker containers, additional templates (project, meeting-notes).
+> **Confidence: 70** — Workspace lifecycle validated end-to-end (2026-04-01). Template init, save→die→restore, git clone init, per-user env vars all passing. Entity extraction and workspace index injection not started.
+> **Tested (2026-04-01):** Template deployed and auto-copied on first use, MinIO persistence across container restarts (3 cycles), git clone init from public repos, per-user env vars, scheduler→chat integration, security (SSRF, path traversal, auth).
+> **Not tested:** Workspace index injection per chat turn, entity extraction from meeting transcripts, script execution via worker containers, multi-workspace API, git clone with private repos (token auth).
+> **Contributions welcome:** Workspace index injection (scan filesystem → inject summary into prompt), entity extraction from transcripts, script execution in worker containers, additional templates (project, meeting-notes).
 
 ## Why
 
@@ -90,20 +90,42 @@ scripts/                       # User automation, scheduled via vexa schedule
 - **Quorum** — predecessor workspace system, ported for Vexa's container architecture
 - **Obsidian** — wiki-link knowledge graph pattern
 
+## Workspace Lifecycle (platform layer)
+
+The workspace lifecycle (persist/restore/clone) is a platform feature in agent-api, not specific to the knowledge template. See [agentic-runtime/workspaces/README.md](../agentic-runtime/workspaces/README.md) for full design. Summary:
+
+1. **sync_down** on every new container start — restores `/workspace/` from MinIO
+2. **Template init** for first-time users — copies knowledge template into empty workspace
+3. **Git clone init** — if `workspace_git.repo` configured, clones repo instead of template
+4. **Per-user env vars** — `user.data['env']` injected into container at creation time
+5. **sync_up** on `vexa workspace save` — git commit + s3 sync to MinIO
+
+The knowledge template (`.claude/CLAUDE.md`, streams/, knowledge/, etc.) is what gets copied in step 2. After that, the workspace is the user's — the agent evolves it through conversations and meetings.
+
+### Code ownership
+
+```
+services/agent-api/agent_api/workspace.py   → sync_down, sync_up, git_commit, workspace_exists
+services/agent-api/agent_api/chat.py        → calls sync_down + init before agent exec
+services/agent-api/agent_api/container_manager.py → per-user env var injection
+features/knowledge-workspace/templates/     → template files copied on first use
+```
+
 ## Implementation status
 
 | Phase | What | Status |
 |-------|------|--------|
 | 1 | Knowledge template files (CLAUDE.md, structure, seeds) | **Done** |
-| 2 | MinIO workspace persistence | **Done** |
+| 2 | MinIO workspace persistence (sync_down + sync_up) | **Done** (validated 2026-04-01) |
 | 3 | Agent chat with workspace context (Telegram, web) | **Done** |
 | 4 | `vexa schedule` CLI + scheduler integration | **Done** |
-| 5 | Git init on workspace creation | Not started |
-| 6 | Workspace index injection per chat turn | Not started |
-| 7 | Entity extraction from meeting transcripts | Not started |
-| 8 | Script execution via worker containers | Not started |
-| 9 | Multi-workspace support (workspace CRUD API) | Not started |
-| 10 | Additional templates (project, meeting-notes, blank) | Not started |
+| 5 | Workspace lifecycle: template init, git clone, per-user env vars | **Done** (validated 2026-04-01) |
+| 6 | /internal/chat + /api/schedule endpoints | **Done** (validated 2026-04-01) |
+| 7 | Workspace index injection per chat turn | Not started |
+| 8 | Entity extraction from meeting transcripts | Not started |
+| 9 | Script execution via worker containers | Not started |
+| 10 | Multi-workspace support (workspace CRUD API) | Not started |
+| 11 | Additional templates (project, meeting-notes, blank) | Not started |
 
 ## Development Notes
 
@@ -113,9 +135,11 @@ scripts/                       # User automation, scheduled via vexa schedule
 |-----------|----------|--------|
 | Knowledge template | `features/knowledge-workspace/templates/knowledge/` | Done |
 | Agent CLAUDE.md | `templates/knowledge/.claude/CLAUDE.md` | Done |
-| Workspace sync | `services/agent-api/app/workspace_sync.py` | Done |
-| Workspace endpoints | `services/agent-api/app/workspace_endpoints.py` | Done |
-| Workspace context | `services/agent-api/app/workspace_context.py` | Done |
+| Workspace sync (sync_down, sync_up) | `services/agent-api/agent_api/workspace.py` | Done |
+| Workspace init (template, git clone) | `services/agent-api/agent_api/chat.py` | Done |
+| Container env injection | `services/agent-api/agent_api/container_manager.py` | Done |
+| Endpoints (/internal/chat, /api/schedule) | `services/agent-api/agent_api/main.py` | Done |
+| Config (ADMIN_API_URL, S3, etc.) | `services/agent-api/agent_api/config.py` | Done |
 | Entity extraction | TBD | Not started |
 | Git integration | TBD | Not started |
 

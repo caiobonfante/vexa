@@ -1,9 +1,9 @@
 # Workspaces — Knowledge That Builds Itself From Meetings
 
-> **Confidence: 60** — Knowledge template complete and functional. MinIO persistence working. Git backing, workspace index injection, and multi-workspace support not yet implemented.
-> **Tested:** Template structure, agent CLAUDE.md instructions, MinIO workspace sync, vexa schedule integration.
-> **Not tested:** Git init on workspace creation, workspace index injection per chat turn, script execution via worker containers, multi-workspace API.
-> **Contributions welcome:** Git-backed workspace init, workspace index injection (scan filesystem → inject into prompt), additional templates (project, meeting-notes), script execution in worker containers.
+> **Confidence: 75** — Workspace lifecycle (persist/restore/clone) validated end-to-end. 8/8 DoD checks passed, 8/8 security checks passed. Missing: workspace index injection, entity extraction, script execution, multi-workspace API.
+> **Tested (2026-04-01):** Template init on first-time user, save→die→restore cycle (3 cycles), git clone init (public repos), per-user env vars injected into container, /internal/chat with INTERNAL_API_SECRET, /api/schedule bridge to scheduler, SSRF protection, path traversal blocked.
+> **Not tested:** Workspace index injection per chat turn, entity extraction from meeting transcripts, script execution via worker containers, multi-workspace API, git clone with private repos (token auth).
+> **Contributions welcome:** Workspace index injection (scan filesystem → inject into prompt), additional templates (project, meeting-notes), script execution in worker containers.
 
 ## Why
 
@@ -179,15 +179,209 @@ See `templates/knowledge/.claude/CLAUDE.md` — full agent instructions ported f
 8. **Soul** — agent's self-reflection on the relationship
 9. **Onboarding** — gradual feature introduction over weeks
 
+## Workspace Lifecycle — Persist, Restore, Clone
+
+Workspaces are ephemeral in memory but persistent in storage. Every container start restores the workspace; every save persists it. This section documents the three core user flows and how the platform delivers them.
+
+### Why sync_down before agent runs
+
+Containers are ephemeral — they die on idle timeout, scale-to-zero, or restart. The workspace directory `/workspace/` dies with them. Without sync_down, every new container starts empty — the agent loses all prior work. sync_down restores from MinIO before the agent CLI runs, so the agent sees accumulated state from all prior sessions.
+
+### Why template init for first-time users
+
+A first-time user has no MinIO content. Without a template, the agent starts in an empty directory with no CLAUDE.md, no structure, no personality. The template provides the workspace skeleton that teaches the agent what it is and how to behave.
+
+### Why git clone as workspace init
+
+Some workspaces start from a git repository instead of the built-in template. The repo provides its own CLAUDE.md and initial content. After cloning, the workspace persists independently in MinIO — the agent handles upstream pulls via CLAUDE.md instructions (that's agentic, not platform).
+
+### Why per-user env vars
+
+Different users need different secrets (API keys, tokens) injected into their containers. These come from `user.data['env']` in PostgreSQL (via admin-api), not from shared env files. Secrets never touch workspace files or MinIO.
+
+### Container lifecycle diagram
+
+```
+POST /api/chat or /internal/chat
+       │
+       ▼
+ensure_container(user_id)
+       │
+       ├── container exists & alive? → touch, return
+       │
+       └── create new container via runtime-api
+              │
+              ▼
+         _new_container = True
+              │
+              ├── 1. Fetch user.data from admin-api
+              │      └── inject user.data['env'] into container env
+              │
+              ├── 2. sync_down from MinIO → /workspace/
+              │      ├── content found → workspace restored, skip init
+              │      └── empty (first time) ──┐
+              │                                │
+              ├── 3a. git_repo_url configured?─┤── YES → git clone {repo} into /workspace/
+              │                                └── NO  → copy /templates/{template}/ into /workspace/
+              │
+              ▼
+         4. Run agent CLI (claude -p "...")
+              │
+              ▼
+         5. Agent calls `vexa workspace save`
+              └── git commit + aws s3 sync → MinIO
+              │
+              ▼
+         6. Container idles out (300s) → runtime-api removes it
+```
+
+### Flow 1: Returning user — scheduled agent
+
+```
+Day 1:
+  Scheduler fires → POST /internal/chat {user_id: "agent-x", message: "[scheduled:daily]"}
+  agent-api: ensure_container → new container, _new_container=True
+  agent-api: sync_down → MinIO empty (first time) → template init
+  agent CLI runs → writes files → vexa workspace save → MinIO
+  container idles out, dies
+
+Day 2:
+  Scheduler fires → POST /internal/chat {user_id: "agent-x", message: "[scheduled:daily]"}
+  agent-api: ensure_container → new container, _new_container=True
+  agent-api: sync_down → MinIO has Day 1 content → restored
+  agent CLI runs → reads prior files, adds more → vexa workspace save
+  container dies
+
+Day 30:
+  Workspace has 30 days of accumulated work. Each sync_down restores everything.
+```
+
+### Flow 2: Interactive user via Telegram
+
+```
+Session 1:
+  User sends message → POST /api/chat {user_id: "alice", message: "hello"}
+  New container → sync_down → empty → template init
+  Agent reads CLAUDE.md, writes soul.md with user preferences → save
+
+Session 2 (next day, container died):
+  User sends message → POST /api/chat {user_id: "alice", message: "what did we discuss?"}
+  New container → sync_down → restores soul.md, notes.md, etc.
+  Agent reads workspace → remembers user context → responds
+```
+
+### Flow 3: Workspace from git repo
+
+```
+Admin sets: PATCH /admin/users/traderx {data: {workspace_git: {repo: "https://github.com/org/traderx-knowledge", branch: "main"}}}
+
+First chat:
+  POST /api/chat {user_id: "traderx", message: "start"}
+  New container → sync_down → empty → workspace_git configured → git clone
+  Agent reads cloned CLAUDE.md and project files → works
+
+Subsequent chats:
+  sync_down restores from MinIO (not re-cloned)
+  Agent uses `git pull` from bash if it needs upstream updates (agentic, not platform)
+```
+
+### API surface
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `POST /internal/chat` | `X-Internal-Secret` header (INTERNAL_API_SECRET) | Scheduler → agent-api. Same as /api/chat, no X-API-Key. |
+| `POST /api/schedule` | X-API-Key | vexa CLI → agent-api → runtime-api scheduler. Translates `{action, message, cron}` into scheduler job spec. SSRF-protected: rejects private/internal URLs. |
+
+### Per-user env var flow
+
+```
+Admin sets user env: PATCH /admin/users/{id} {data: {env: {MY_TOKEN: "secret"}}}
+       │
+       ▼
+ensure_container → GET /admin/users/{id} → reads user.data['env']
+       │
+       ▼
+Injects {MY_TOKEN: "secret"} into container environment
+       │
+       ▼
+Agent runs `echo $MY_TOKEN` → prints "secret"
+```
+
+Env vars are injected at container creation time. They live only in the container's environment — never written to workspace files, never synced to MinIO.
+
+### Fail-safe behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| sync_down fails, existing user (MinIO has content) | **Abort.** Don't run agent with empty workspace — user has data to lose. |
+| sync_down fails, first-time user (MinIO empty) | Continue with template/clone init. Nothing to lose. |
+| admin-api unreachable | Continue without per-user env vars. Log warning. |
+| git clone fails | Abort. Log error. Don't fall back to template — user configured git for a reason. |
+
 ## Implementation plan
 
 | Phase | What | Status |
 |-------|------|--------|
 | 1 | Knowledge template files (CLAUDE.md, structure, .gitignore) | Done |
-| 2 | Git init on workspace creation (instead of bare MinIO) | Not started |
-| 3 | Workspace index injection per chat turn | Not started |
-| 4 | `vexa schedule` CLI + scheduler API integration | Done |
-| 5 | Internal chat messages (scheduled jobs fire as agent prompts) | Done |
-| 6 | Script execution via worker containers | Not started |
-| 7 | Multi-workspace support (workspace CRUD API) | Not started |
-| 8 | Additional templates (project, meeting-notes, blank) | Not started |
+| 2 | Workspace persistence: sync_down on container start | **Done** (2026-04-01) |
+| 3 | Template init for first-time users | **Done** (2026-04-01) |
+| 4 | Git clone init from configured repo | **Done** (2026-04-01) |
+| 5 | Per-user env var injection from user.data | **Done** (2026-04-01) |
+| 6 | `vexa schedule` CLI + scheduler API integration | Done |
+| 7 | Internal chat endpoint for scheduler | **Done** (2026-04-01) |
+| 8 | `/api/schedule` bridge endpoint | **Done** (2026-04-01) |
+| 9 | Workspace index injection per chat turn | Not started |
+| 10 | Script execution via worker containers | Not started |
+| 11 | Multi-workspace support (workspace CRUD API) | Not started |
+| 12 | Additional templates (project, meeting-notes, blank) | Not started |
+
+---
+
+## State (validated 2026-04-01)
+
+### DoD results — 8/8 passed
+
+| # | Check | Result | Evidence |
+|---|-------|--------|----------|
+| 1 | Save → die → restore (3 cycles) | **PASS** | User writes file, saves, container killed, new container restores file from MinIO. Repeated 3x — content accumulates. |
+| 2 | First-time user gets template | **PASS** | New user_id → sync_down returns empty → template 'knowledge' copied → `.claude/CLAUDE.md`, `notes.md`, `soul.md`, `timeline.md`, `streams/`, `knowledge/` present. |
+| 3 | Existing workspace not clobbered | **PASS** | Modified notes.md, saved, container killed, restored → custom content preserved, not template default. |
+| 4 | Per-user env vars injected | **PASS** | `user.data['env']` fetched from admin-api, injected as container env vars at creation time. |
+| 5 | Env vars not leaked to workspace | **PASS** | `grep -r` inside /workspace/ returns no secrets. Git config clean. |
+| 6 | Scheduler reaches agent via /internal/chat | **PASS** | Scheduler job fires → POST /internal/chat with X-Internal-Secret → agent responds. |
+| 7 | Git clone as initial workspace | **PASS** | Configured user.data['workspace_git'] → first container clones repo → agent reads cloned files. Tested with github.com/octocat/Hello-World. |
+| 8 | Two users clone same repo, diverge | **PASS** | User 20 and 21 clone same repo, write different content, save → independent workspaces in MinIO. |
+
+### Security results — 8/8 passed
+
+| Check | Result |
+|-------|--------|
+| /internal/chat without X-Internal-Secret | 403 Forbidden |
+| /internal/chat with wrong secret | 403 Forbidden |
+| /api/schedule action=http to internal service (admin-api:8001) | 400 rejected |
+| /api/schedule action=http to localhost | 400 rejected |
+| /api/schedule action=http to private IP (10.x) | 400 rejected |
+| Path traversal (../../../etc/passwd) | 400 Bad Request |
+| Absolute path (/etc/passwd) | 400 Bad Request |
+| Git clone with non-https URL | Rejected (https-only) |
+
+### Config vars (actual, in compose)
+
+```
+STORAGE_BACKEND=s3
+S3_ENDPOINT=http://minio:9000
+S3_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
+S3_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
+S3_BUCKET=${MINIO_BUCKET:-vexa-agentic}
+ADMIN_API_URL=http://admin-api:8001
+ADMIN_API_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
+INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-vexa-internal-secret}
+AGENT_API_INTERNAL_URL=http://agent-api:8100
+```
+
+### Known limitations
+
+- Per-user env vars only work for numeric user_ids (admin-api requires integer primary key)
+- Git clone only supports https:// URLs (ssh/git:// rejected for security)
+- User data cache not invalidated until container dies — admin changes require container restart
+- No SSE progress events during workspace init (client waits silently during slow git clones)

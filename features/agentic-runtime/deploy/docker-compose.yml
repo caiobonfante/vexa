@@ -70,15 +70,21 @@ services:
     environment:
       - DOCKER_NETWORK=vexa-agentic_vexa_agentic
       - AGENT_IMAGE=vexaai/vexa-agent:dev
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
-      - MINIO_BUCKET=${MINIO_BUCKET:-vexa-agentic}
+      - STORAGE_BACKEND=s3
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=${MINIO_ACCESS_KEY:-vexa-access-key}
+      - S3_SECRET_KEY=${MINIO_SECRET_KEY:-vexa-secret-key}
+      - S3_BUCKET=${MINIO_BUCKET:-vexa-agentic}
       - CLAUDE_CREDENTIALS_PATH=${CLAUDE_CREDENTIALS_PATH}
       - CLAUDE_JSON_PATH=${CLAUDE_JSON_PATH}
       - IDLE_TIMEOUT=${IDLE_TIMEOUT:-300}
       - REDIS_URL=redis://redis:6379
       - RUNTIME_API_URL=http://runtime-api:8090
+      - ADMIN_API_URL=http://admin-api:8001
+      - ADMIN_API_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-vexa-internal-secret}
+      - AGENT_API_INTERNAL_URL=http://agent-api:8100
+      - API_KEY=${BOT_API_TOKEN:-}
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
@@ -242,7 +248,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ../../../services/meeting-api/config/profiles.yaml:/app/profiles.yaml:ro
+      - ../../../services/runtime-api/profiles.yaml:/app/profiles.yaml:ro
     networks:
       - vexa_agentic
     depends_on:

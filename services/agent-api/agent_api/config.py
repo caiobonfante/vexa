@@ -12,6 +12,10 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 # Runtime API (container lifecycle)
 RUNTIME_API_URL = os.getenv("RUNTIME_API_URL", "http://runtime-api:8090")
 
+# Admin API (user data, config)
+ADMIN_API_URL = os.getenv("ADMIN_API_URL", "http://admin-api:8001")
+ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "")
+
 # Container defaults
 AGENT_IMAGE = os.getenv("AGENT_IMAGE", "vexaai/vexa-agent:latest")
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "")
@@ -20,6 +24,10 @@ IDLE_TIMEOUT = int(os.getenv("IDLE_TIMEOUT", "300"))
 
 # Auth
 API_KEY = os.getenv("API_KEY", "")
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
+
+# Self-reference URL (for scheduler callback targets)
+AGENT_API_INTERNAL_URL = os.getenv("AGENT_API_INTERNAL_URL", "http://agent-api:8100")
 
 # Anthropic API key (passed to agent containers for Claude CLI auth)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
