@@ -7,6 +7,7 @@ Streams the response back as Server-Sent Events.
 import base64
 import json
 import logging
+import shlex
 from typing import AsyncGenerator, Optional
 
 from agent_api import config
@@ -140,6 +141,7 @@ async def run_chat_turn(
     session_id: Optional[str] = None,
     session_name: Optional[str] = None,
     context_prefix: str = "",
+    cli_flags: Optional[list] = None,
 ) -> AsyncGenerator[str, None]:
     """Run a single chat turn. Yields SSE data strings.
 
@@ -152,6 +154,7 @@ async def run_chat_turn(
         session_id: Optional specific session to resume.
         session_name: Human-readable name for new sessions.
         context_prefix: Optional text prepended to the prompt (workspace context, etc).
+        cli_flags: Optional extra flags forwarded verbatim to agent CLI.
     """
     cm._new_container = False
     container = await cm.ensure_container(user_id)
@@ -197,6 +200,10 @@ async def run_chat_turn(
         parts.extend(["--resume", session_id])
     if model or config.DEFAULT_MODEL:
         parts.extend(["--model", model or config.DEFAULT_MODEL])
+    # Forward extra CLI flags (shell-escaped to prevent injection)
+    if cli_flags:
+        for flag in cli_flags:
+            parts.append(shlex.quote(str(flag)))
     parts.extend(["-p", '"$(cat /tmp/.chat-prompt.txt)"'])
 
     workspace = config.WORKSPACE_PATH

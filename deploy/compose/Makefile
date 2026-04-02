@@ -3,7 +3,6 @@
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
 COMPOSE_FILE := $(ROOT)/deploy/compose/docker-compose.yml
-COMPOSE_LOCAL_DB := $(ROOT)/deploy/compose/docker-compose.local-db.yml
 ENV_FILE := $(ROOT)/.env
 ENV_EXAMPLE := $(ROOT)/deploy/env/env-example
 
@@ -19,16 +18,12 @@ export IMAGE_TAG
 DOCKERHUB_USER ?= vexaai
 
 # All images that get built and published
-IMAGES := api-gateway admin-api runtime-api meeting-api mcp dashboard tts-service
+IMAGES := api-gateway admin-api runtime-api meeting-api agent-api mcp dashboard tts-service telegram-bot calendar-service
 BOT_IMAGE := vexa-bot
 
 -include $(ENV_FILE)
 
-# --- Compose files: add local-db overlay unless REMOTE_DB=true ---
 COMPOSE_CMD = docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
-ifneq ($(REMOTE_DB),true)
-  COMPOSE_CMD += -f $(COMPOSE_LOCAL_DB)
-endif
 
 # ============================================================================
 # Main targets

@@ -64,6 +64,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     session_name: Optional[str] = None
     model: Optional[str] = None
+    cli_flags: Optional[list] = None  # extra flags forwarded to agent CLI
 
 
 class UserIdRequest(BaseModel):
@@ -188,6 +189,7 @@ def _chat_stream(req: ChatRequest, context_prefix: str = ""):
                     req.user_id, req.message, req.model,
                     req.session_id, req.session_name,
                     context_prefix=context_prefix,
+                    cli_flags=req.cli_flags,
                 ):
                     yield data
                 break
