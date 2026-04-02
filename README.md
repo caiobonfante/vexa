@@ -115,6 +115,7 @@ Run everything including your own GPU transcription service.
 ## What's new
 
 **Agent API (preview)**
+- **Vexa CLI** — `vexa` replaces `claude` CLI, routes through ephemeral containers with persistent workspaces ([install](#vexa-cli))
 - **Ephemeral agent containers** — browser, agent, worker profiles with zero idle cost
 - **Agent API** — agent sessions, Claude CLI streaming, workspace sync, scheduling
 - **Scheduler** — cron, relative delays, `on_success`/`on_failure` container chaining
@@ -192,6 +193,31 @@ Full guide: [Deployment Guide](https://docs.vexa.ai/deployment)
 ### Option 4: Helm (production K8s)
 
 For Kubernetes production deployments. See [deploy/helm/README.md](deploy/helm/README.md).
+
+<a id="vexa-cli"></a>
+
+### Vexa CLI
+
+Local terminal client for the agent runtime. Works like `claude` but routes through ephemeral containers with persistent workspaces.
+
+```bash
+# Install
+pip install "git+https://github.com/Vexa-ai/vexa.git#subdirectory=packages/vexa-cli"
+
+# Configure
+vexa config
+
+# Chat (one-shot)
+vexa -p "what files are in my workspace?"
+
+# Chat (interactive REPL)
+vexa
+
+# Forward any claude CLI flags
+vexa -p "review this" --flags "--effort high --permission-mode auto"
+```
+
+Sessions persist across container restarts. Workspace files sync to S3. See [packages/vexa-cli/README.md](packages/vexa-cli/README.md) for full docs.
 
 ### Recording storage (local and cloud)
 
