@@ -402,7 +402,7 @@ class AutomaticLeave(BaseModel):
 
 
 class MeetingCreate(BaseModel):
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
     platform: Optional[Platform] = Field(None, description="Meeting platform. Required unless agent_enabled=true with no meeting.")
     native_meeting_id: Optional[str] = Field(None, description="The platform-specific ID for the meeting (e.g., Google Meet code, Teams ID). Required unless agent_enabled=true with no meeting.")
@@ -462,6 +462,10 @@ class MeetingCreate(BaseModel):
         False,
         description="Use stored browser userdata for authenticated join. Requires prior browser_session setup."
     )
+    # Workspace fields — used by browser_session mode for git workspace setup
+    workspaceGitRepo: Optional[str] = Field(None, description="Git repo URL for workspace setup in browser_session mode")
+    workspaceGitToken: Optional[str] = Field(None, description="Git token for workspace repo access")
+    workspaceGitBranch: Optional[str] = Field(None, description="Git branch for workspace (default: main)")
 
     @field_validator('platform')
     @classmethod
@@ -964,7 +968,7 @@ class SpeakRequest(BaseModel):
     audio_base64: Optional[str] = Field(None, description="Base64-encoded audio data")
     format: Optional[str] = Field("wav", description="Audio format: wav, mp3, pcm, opus")
     sample_rate: Optional[int] = Field(24000, description="Sample rate for PCM audio (Hz)")
-    provider: Optional[str] = Field("openai", description="TTS provider: openai, cartesia, elevenlabs")
+    provider: Optional[str] = Field("piper", description="TTS provider: piper (default, local), openai, cartesia, elevenlabs")
     voice: Optional[str] = Field("alloy", description="Voice ID for TTS")
 
     @field_validator('text', 'audio_url', 'audio_base64')

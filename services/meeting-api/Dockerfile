@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system deps
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+# Install system deps (gcc for building, ffmpeg for audio conversion in deferred transcription)
+RUN apt-get update && apt-get install -y --no-install-recommends gcc ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # Install schema-sync library
 COPY libs/schema-sync /schema-sync

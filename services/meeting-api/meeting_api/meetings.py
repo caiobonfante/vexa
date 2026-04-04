@@ -643,11 +643,20 @@ async def request_bot(
         await db.commit()
         await db.refresh(new_meeting)
 
-        # S3/MinIO config for browser data persistence
-        minio_endpoint = os.environ.get("MINIO_ENDPOINT", "minio:9000")
-        minio_secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
-        s3_endpoint_url = f"{'https' if minio_secure else 'http'}://{minio_endpoint}"
-        s3_bucket = os.environ.get("MINIO_BUCKET", "vexa-recordings")
+        # S3/MinIO config for browser data persistence.
+        # When MINIO_ENDPOINT is set, browser userdata syncs to S3 (survives restarts).
+        # When empty, userdata lives only in the container filesystem (local-only mode).
+        minio_endpoint = (os.environ.get("MINIO_ENDPOINT") or "").strip()
+        s3_config = {}
+        if minio_endpoint:
+            minio_secure = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+            s3_config = {
+                "userdataS3Path": f"users/{current_user.id}/browser-userdata",
+                "s3Endpoint": f"{'https' if minio_secure else 'http'}://{minio_endpoint}",
+                "s3Bucket": os.environ.get("MINIO_BUCKET", "vexa-recordings"),
+                "s3AccessKey": os.environ.get("MINIO_ACCESS_KEY", ""),
+                "s3SecretKey": os.environ.get("MINIO_SECRET_KEY", ""),
+            }
 
         bot_config = {
             "mode": "browser_session",
@@ -655,11 +664,7 @@ async def request_bot(
             "session_token": session_token,
             "redisUrl": REDIS_URL,
             "meetingApiCallbackUrl": f"{MEETING_API_URL}/bots/internal/callback/exited",
-            "userdataS3Path": f"users/{current_user.id}/browser-userdata",
-            "s3Endpoint": s3_endpoint_url,
-            "s3Bucket": s3_bucket,
-            "s3AccessKey": os.environ.get("MINIO_ACCESS_KEY", ""),
-            "s3SecretKey": os.environ.get("MINIO_SECRET_KEY", ""),
+            **s3_config,
         }
 
         result = await _spawn_via_runtime_api(
@@ -1424,14 +1429,52 @@ async def update_recording_config(
 
 # --- Deferred Transcription ---
 
+def _map_speakers_to_segments(speaker_events, segments):
+    """Map speaker names to transcription segments using speaking_start/stop events."""
+    ranges = []
+    active = {}
+    for event in sorted(speaker_events, key=lambda e: e.get('relative_timestamp_ms', 0)):
+        name = event.get('participant_name', 'Unknown')
+        ts_sec = event.get('relative_timestamp_ms', 0) / 1000.0
+        etype = event.get('event_type', '')
+        if etype in ('SPEAKER_START', 'speaking_start'):
+            active[name] = ts_sec
+        elif etype in ('SPEAKER_END', 'speaking_stop') and name in active:
+            ranges.append((name, active.pop(name), ts_sec))
+    for name, start in active.items():
+        ranges.append((name, start, float('inf')))
+
+    for seg in segments:
+        best_speaker = "Unknown"
+        best_overlap = 0
+        for speaker, r_start, r_end in ranges:
+            overlap = max(0, min(seg['end'], r_end) - max(seg['start'], r_start))
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_speaker = speaker
+        seg['speaker'] = best_speaker
+    return segments
+
+
+class TranscribeRequest(BaseModel):
+    language: Optional[str] = Field(None, description="Language code (e.g., 'en'). If omitted, auto-detect.")
+
+
+class TranscribeResponse(BaseModel):
+    meeting_id: int
+    segment_count: int
+    message: str
+
+
 @router.post(
     "/meetings/{meeting_id}/transcribe",
     summary="Trigger deferred transcription for a completed meeting",
+    response_model=TranscribeResponse,
     dependencies=[Depends(get_user_and_token)],
 )
 async def transcribe_meeting(
     meeting_id: int,
-    background_tasks: BackgroundTasks,
+    req: TranscribeRequest = TranscribeRequest(),
     auth_data: tuple = Depends(get_user_and_token),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1444,12 +1487,160 @@ async def transcribe_meeting(
     if meeting.status not in ("completed", "failed"):
         raise HTTPException(status_code=400, detail=f"Meeting status is '{meeting.status}', expected 'completed' or 'failed'")
 
-    # Deferred transcription not yet implemented.
-    # POST /meetings/{id}/transcribe is stubbed — the logic
-    # (download recording → Whisper → speaker mapping → persist) hasn't been
-    # migrated to meeting-api yet. Return 501 so callers get a clear signal.
-    raise HTTPException(
-        status_code=501,
-        detail="Deferred transcription not yet implemented in meeting-api. "
-               "Real-time transcription during meetings works normally.",
+    # 1. Find recording — check recordings table first, then meeting.data (legacy)
+    from .models import Recording, MediaFile, Transcription
+    from .storage import create_storage_client
+    import subprocess
+    import tempfile
+
+    storage_path = None
+    media_format = "webm"
+    session_uid = None
+
+    recording = (await db.execute(
+        select(Recording).where(Recording.meeting_id == meeting_id, Recording.status == "completed")
+    )).scalars().first()
+    if recording:
+        media_file = (await db.execute(
+            select(MediaFile).where(
+                MediaFile.recording_id == recording.id,
+                MediaFile.type.in_(["audio", "video"]),
+            )
+        )).scalars().first()
+        if media_file:
+            storage_path = media_file.storage_path
+            media_format = media_file.format
+            session_uid = recording.session_uid
+
+    # Fallback: check meeting.data['recordings'] (legacy inline storage)
+    if not storage_path:
+        meeting_data = meeting.data or {}
+        recs = meeting_data.get("recordings", [])
+        for rec in (recs if isinstance(recs, list) else [recs]):
+            if rec.get("status") == "completed":
+                for mf in rec.get("media_files", []):
+                    if mf.get("type") in ("audio", "video") and mf.get("storage_path"):
+                        storage_path = mf["storage_path"]
+                        media_format = mf.get("format", "webm")
+                        session_uid = rec.get("session_uid")
+                        break
+            if storage_path:
+                break
+
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="No completed recording with audio found for this meeting")
+
+    # 2. Download audio from storage
+    try:
+        storage = create_storage_client()
+        audio_data = storage.download_file(storage_path)
+    except Exception as e:
+        logger.error(f"Failed to download recording for meeting {meeting_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to download recording: {e}")
+
+    # 3. Convert to WAV if needed (Whisper requires PCM-decodable formats)
+    if media_format in ("webm", "opus", "ogg", "mp4", "m4a"):
+        try:
+            with tempfile.NamedTemporaryFile(suffix=f".{media_format}", delete=False) as src:
+                src.write(audio_data)
+                src_path = src.name
+            dst_path = src_path.rsplit(".", 1)[0] + ".wav"
+            result = subprocess.run(
+                ["ffmpeg", "-i", src_path, "-ar", "16000", "-ac", "1", "-f", "wav", dst_path, "-y"],
+                capture_output=True, timeout=120,
+            )
+            if result.returncode != 0:
+                logger.error(f"ffmpeg conversion failed: {result.stderr.decode()[:500]}")
+                raise HTTPException(status_code=500, detail="Audio conversion failed")
+            with open(dst_path, "rb") as f:
+                audio_data = f.read()
+            media_format = "wav"
+            os.unlink(src_path)
+            os.unlink(dst_path)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=500, detail="Audio conversion timed out")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Audio conversion error: {e}")
+            raise HTTPException(status_code=500, detail=f"Audio conversion error: {e}")
+
+    # 4. Send to transcription service
+    tx_url = os.environ.get("TRANSCRIPTION_SERVICE_URL", "")
+    tx_token = os.environ.get("TRANSCRIPTION_SERVICE_TOKEN", "")
+    if not tx_url:
+        raise HTTPException(status_code=503, detail="TRANSCRIPTION_SERVICE_URL not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            files = {"file": (f"recording.{media_format}", audio_data, f"audio/{media_format}")}
+            form_data = {"model": "large-v3-turbo"}
+            if req.language:
+                form_data["language"] = req.language
+            headers = {}
+            if tx_token:
+                headers["Authorization"] = f"Bearer {tx_token}"
+
+            resp = await client.post(
+                f"{tx_url}/v1/audio/transcriptions",
+                files=files,
+                data=form_data,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            tx_result = resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Transcription service error: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"Transcription service error: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Transcription service request failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Transcription service unavailable: {e}")
+
+    # 5. Parse and filter segments
+    segments = tx_result.get("segments", [])
+    segments = [s for s in segments if 'start' in s and 'end' in s and s.get('text', '').strip()]
+    detected_language = tx_result.get("language", req.language or "unknown")
+
+    # 6. Map speakers using speaker_events from meeting.data
+    meeting_data = meeting.data or {}
+    speaker_events = meeting_data.get("speaker_events", [])
+    if speaker_events:
+        segments = _map_speakers_to_segments(speaker_events, segments)
+        logger.info(f"Mapped {len(speaker_events)} speaker events to {len(segments)} segments")
+
+    # 7. Store segments in transcriptions table
+    stored = 0
+    for seg in segments:
+        start = float(seg.get("start", 0))
+        end = float(seg.get("end", 0))
+        text = seg.get("text", "").strip()
+        if not text:
+            continue
+        segment_id = f"deferred:{meeting_id}:{start:.3f}"
+        t = Transcription(
+            meeting_id=meeting_id,
+            start_time=start,
+            end_time=end,
+            text=text,
+            speaker=seg.get("speaker"),
+            language=detected_language,
+            session_uid=session_uid,
+            segment_id=segment_id,
+            created_at=datetime.utcnow(),
+        )
+        db.add(t)
+        stored += 1
+
+    # 8. Update meeting.data with transcribed_at timestamp
+    meeting_data["transcribed_at"] = datetime.utcnow().isoformat()
+    meeting.data = meeting_data
+    await db.commit()
+
+    speakers = list(set(seg.get("speaker", "Unknown") for seg in segments if seg.get("text", "").strip()))
+    logger.info(f"Deferred transcription for meeting {meeting_id}: {stored} segments, speakers={speakers}")
+
+    return TranscribeResponse(
+        meeting_id=meeting_id,
+        segment_count=stored,
+        message=f"Transcribed {stored} segments from recording ({len(speakers)} speakers: {', '.join(speakers)})",
     )
