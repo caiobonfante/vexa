@@ -39,8 +39,8 @@ async def _exec(container: str, cmd: str, timeout: int = 120) -> tuple[int, str]
 
 # --- S3 helpers ---
 
-def _s3_uri(user_id: str) -> str:
-    return f"s3://{config.S3_BUCKET}/workspaces/{user_id}/"
+def _s3_uri(user_id: str, workspace_name: str = "default") -> str:
+    return f"s3://{config.S3_BUCKET}/workspaces/{user_id}/{workspace_name}/"
 
 
 def _env_args() -> str:
@@ -59,23 +59,23 @@ _SYNC_EXCLUDES = (
 
 # --- Sync operations ---
 
-async def sync_down(user_id: str, container: str) -> bool:
+async def sync_down(user_id: str, container: str, workspace_name: str = "default") -> bool:
     """Download workspace from S3 into /workspace/ inside the container."""
     if config.STORAGE_BACKEND != "s3":
         logger.debug(f"Storage backend is {config.STORAGE_BACKEND}, skipping sync_down")
         return True
 
-    s3_uri = _s3_uri(user_id)
+    s3_uri = _s3_uri(user_id, workspace_name)
     workspace = config.WORKSPACE_PATH
     cmd = f"aws s3 sync {s3_uri} {workspace}/ {_env_args()} {_SYNC_EXCLUDES} 2>&1"
     logger.info(f"Sync down: {s3_uri} -> {workspace}/ in {container}")
     rc, out = await _exec(container, cmd)
     if rc != 0:
-        logger.error(f"Sync down FAILED for {user_id} (rc={rc}): {out}")
+        logger.error(f"Sync down FAILED for {user_id}/{workspace_name} (rc={rc}): {out}")
     return rc == 0
 
 
-async def sync_up(user_id: str, container: str) -> bool:
+async def sync_up(user_id: str, container: str, workspace_name: str = "default") -> bool:
     """Git commit then upload workspace to S3."""
     if config.STORAGE_BACKEND != "s3":
         logger.debug(f"Storage backend is {config.STORAGE_BACKEND}, skipping sync_up")
@@ -85,17 +85,17 @@ async def sync_up(user_id: str, container: str) -> bool:
     if not committed:
         logger.warning(f"Git commit failed for {user_id}, proceeding with sync anyway")
 
-    s3_uri = _s3_uri(user_id)
+    s3_uri = _s3_uri(user_id, workspace_name)
     workspace = config.WORKSPACE_PATH
     cmd = f"aws s3 sync {workspace}/ {s3_uri} {_env_args()} --delete {_SYNC_EXCLUDES} 2>&1"
     logger.info(f"Sync up: {workspace}/ in {container} -> {s3_uri}")
     rc, out = await _exec(container, cmd)
     if rc != 0:
-        logger.error(f"Sync up FAILED for {user_id} (rc={rc}): {out}")
+        logger.error(f"Sync up FAILED for {user_id}/{workspace_name} (rc={rc}): {out}")
     return rc == 0
 
 
-async def sync_up_s3_only(user_id: str, container: str) -> bool:
+async def sync_up_s3_only(user_id: str, container: str, workspace_name: str = "default") -> bool:
     """Upload workspace to S3 WITHOUT git commit. Safety-net sync —
     catches changes even if the agent didn't explicitly save.
     The agent's `vexa workspace save` does git commit + S3 (sync_up).
@@ -103,12 +103,12 @@ async def sync_up_s3_only(user_id: str, container: str) -> bool:
     if config.STORAGE_BACKEND != "s3":
         return True
 
-    s3_uri = _s3_uri(user_id)
+    s3_uri = _s3_uri(user_id, workspace_name)
     ws = config.WORKSPACE_PATH
     cmd = f"aws s3 sync {ws}/ {s3_uri} {_env_args()} --delete {_SYNC_EXCLUDES} 2>&1"
     rc, out = await _exec(container, cmd)
     if rc != 0:
-        logger.warning(f"Periodic S3 sync failed for {user_id} (rc={rc}): {out}")
+        logger.warning(f"Periodic S3 sync failed for {user_id}/{workspace_name} (rc={rc}): {out}")
     return rc == 0
 
 
@@ -133,28 +133,146 @@ async def git_commit(user_id: str, container: str) -> bool:
     return True
 
 
-async def workspace_exists(user_id: str) -> bool:
+def _get_s3_client():
+    """Get boto3 S3 client with configured credentials."""
+    import boto3
+    return boto3.client(
+        "s3",
+        endpoint_url=config.S3_ENDPOINT or None,
+        aws_access_key_id=config.S3_ACCESS_KEY or None,
+        aws_secret_access_key=config.S3_SECRET_KEY or None,
+        region_name="us-east-1",
+    )
+
+
+async def workspace_exists(user_id: str, workspace_name: str = "default") -> bool:
     """Check if a workspace prefix exists in S3."""
     if config.STORAGE_BACKEND != "s3":
         return False
     try:
-        import boto3
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=config.S3_ENDPOINT or None,
-            aws_access_key_id=config.S3_ACCESS_KEY or None,
-            aws_secret_access_key=config.S3_SECRET_KEY or None,
-            region_name="us-east-1",
-        )
+        s3 = _get_s3_client()
         resp = s3.list_objects_v2(
             Bucket=config.S3_BUCKET,
-            Prefix=f"workspaces/{user_id}/",
+            Prefix=f"workspaces/{user_id}/{workspace_name}/",
             MaxKeys=1,
         )
         return resp.get("KeyCount", 0) > 0
     except Exception as e:
         logger.warning(f"workspace_exists check failed: {e}")
         return False
+
+
+# --- Legacy migration ---
+
+
+async def migrate_legacy_workspaces():
+    """One-time migration: move workspaces/{uid}/ files to workspaces/{uid}/default/.
+
+    Old format: files directly under workspaces/{uid}/
+    New format: files under workspaces/{uid}/{workspace_name}/
+    """
+    if config.STORAGE_BACKEND != "s3":
+        return
+    s3 = _get_s3_client()
+    # List top-level prefixes under workspaces/
+    resp = s3.list_objects_v2(Bucket=config.S3_BUCKET, Prefix="workspaces/", Delimiter="/")
+    for cp in resp.get("CommonPrefixes", []):
+        user_prefix = cp["Prefix"]  # "workspaces/{uid}/"
+        # Check if this has files directly (old format) vs subdirectories (new format)
+        files_resp = s3.list_objects_v2(
+            Bucket=config.S3_BUCKET, Prefix=user_prefix, Delimiter="/", MaxKeys=5,
+        )
+        direct_files = files_resp.get("Contents", [])
+        if direct_files:
+            # Has files directly under user_id — old format, needs migration
+            uid = user_prefix.rstrip("/").split("/")[-1]
+            logger.info(f"Migrating legacy workspace for user {uid}")
+            all_resp = s3.list_objects_v2(
+                Bucket=config.S3_BUCKET, Prefix=user_prefix, MaxKeys=1000,
+            )
+            for obj in all_resp.get("Contents", []):
+                old_key = obj["Key"]
+                rel = old_key[len(user_prefix):]
+                # Skip if already in a subfolder (new format coexists)
+                if "/" in rel and rel.split("/")[0] == "default":
+                    continue
+                new_key = f"{user_prefix}default/{rel}"
+                s3.copy_object(
+                    Bucket=config.S3_BUCKET,
+                    CopySource={"Bucket": config.S3_BUCKET, "Key": old_key},
+                    Key=new_key,
+                )
+                s3.delete_object(Bucket=config.S3_BUCKET, Key=old_key)
+            logger.info(f"Migrated workspace for user {uid} to default/")
+
+
+# --- Workspace template operations (S3, pre-container) ---
+
+
+async def upload_workspace(user_id: str, name: str, tar_bytes: bytes) -> dict:
+    """Extract tar.gz and upload files to S3 workspace prefix."""
+    import io
+    import tarfile
+    s3 = _get_s3_client()
+    prefix = f"workspaces/{user_id}/{name}/"
+
+    with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
+        file_count = 0
+        for member in tar.getmembers():
+            if member.isfile():
+                f = tar.extractfile(member)
+                if f:
+                    key = prefix + member.name.lstrip("./")
+                    s3.put_object(Bucket=config.S3_BUCKET, Key=key, Body=f.read())
+                    file_count += 1
+    return {"name": name, "file_count": file_count}
+
+
+async def list_workspaces(user_id: str) -> list[dict]:
+    """List workspace names for a user from S3 prefixes."""
+    s3 = _get_s3_client()
+    prefix = f"workspaces/{user_id}/"
+    resp = s3.list_objects_v2(Bucket=config.S3_BUCKET, Prefix=prefix, Delimiter="/")
+    workspaces = []
+    for cp in resp.get("CommonPrefixes", []):
+        name = cp["Prefix"].rstrip("/").split("/")[-1]
+        workspaces.append({"name": name})
+    return workspaces
+
+
+async def delete_workspace(user_id: str, name: str) -> bool:
+    """Delete all objects under a workspace prefix."""
+    s3 = _get_s3_client()
+    prefix = f"workspaces/{user_id}/{name}/"
+    resp = s3.list_objects_v2(Bucket=config.S3_BUCKET, Prefix=prefix)
+    objects = resp.get("Contents", [])
+    if objects:
+        s3.delete_objects(
+            Bucket=config.S3_BUCKET,
+            Delete={"Objects": [{"Key": o["Key"]} for o in objects]},
+        )
+    return True
+
+
+async def list_workspace_files_s3(user_id: str, name: str) -> list[str]:
+    """List files in a specific workspace from S3."""
+    s3 = _get_s3_client()
+    prefix = f"workspaces/{user_id}/{name}/"
+    resp = s3.list_objects_v2(Bucket=config.S3_BUCKET, Prefix=prefix)
+    files = []
+    for obj in resp.get("Contents", []):
+        rel = obj["Key"][len(prefix):]
+        if rel:
+            files.append(rel)
+    return files
+
+
+async def write_workspace_file_s3(user_id: str, name: str, path: str, content: str) -> bool:
+    """Write a single file to a workspace in S3."""
+    s3 = _get_s3_client()
+    key = f"workspaces/{user_id}/{name}/{path}"
+    s3.put_object(Bucket=config.S3_BUCKET, Key=key, Body=content.encode())
+    return True
 
 
 # --- Workspace init operations ---

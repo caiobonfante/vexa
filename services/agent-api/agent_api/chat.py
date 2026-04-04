@@ -69,7 +69,7 @@ async def save_session_meta(redis, user_id: str, session_id: str, name: str, ext
     await redis.expire(f"{SESSIONS_INDEX}{user_id}", 86400 * 30)
 
 
-async def get_session_meta(redis, user_id: str, session_id: str) -> dict | None:
+async def get_session_meta(redis, user_id: str, session_id: str) -> Optional[dict]:
     """Get session metadata from Redis index."""
     raw = await redis.hget(f"{SESSIONS_INDEX}{user_id}", session_id)
     if raw:
@@ -88,7 +88,8 @@ async def delete_session_meta(redis, user_id: str, session_id: str):
 # --- Workspace init on new container ---
 
 
-async def _workspace_init(cm: ContainerManager, user_id: str, container: str):
+async def _workspace_init(cm: ContainerManager, user_id: str, container: str,
+                          workspace_name: str = "default"):
     """Restore workspace from storage, init from template or git if empty.
 
     Called once when a new container is created (_new_container=True).
@@ -96,8 +97,8 @@ async def _workspace_init(cm: ContainerManager, user_id: str, container: str):
     Fail-safe: existing user with failed sync_down = abort (raise).
     """
     # 1. sync_down from MinIO
-    had_workspace = await workspace.workspace_exists(user_id)
-    sync_ok = await workspace.sync_down(user_id, container)
+    had_workspace = await workspace.workspace_exists(user_id, workspace_name)
+    sync_ok = await workspace.sync_down(user_id, container, workspace_name)
 
     if not sync_ok and had_workspace:
         # Existing user, sync failed — abort. Don't run agent with empty workspace.
@@ -157,12 +158,25 @@ async def run_chat_turn(
         cli_flags: Optional extra flags forwarded verbatim to agent CLI.
     """
     cm._new_container = False
-    container = await cm.ensure_container(user_id)
+    effective_session = session_id or "default"
+    container = await cm.ensure_container(user_id, session_id=effective_session)
+
+    # Determine workspace name from session metadata
+    workspace_name = "default"
+    if session_id:
+        meta = await get_session_meta(redis, user_id, session_id)
+        if meta and meta.get("workspace"):
+            workspace_name = meta["workspace"]
+
+    # Store workspace_name on container info for periodic sync
+    key = f"{user_id}:{effective_session}"
+    if key in cm._containers:
+        cm._containers[key].workspace_name = workspace_name
 
     # Workspace init on new container
     if cm._new_container:
         yield f"data: {json.dumps({'type': 'session_reset', 'reason': 'Container was recreated. Previous session context is no longer available.'})}\n\n"
-        await _workspace_init(cm, user_id, container)
+        await _workspace_init(cm, user_id, container, workspace_name)
 
     # Session from Redis — skip if container was just recreated
     if not cm._new_container:

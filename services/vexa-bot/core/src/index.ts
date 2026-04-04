@@ -467,9 +467,7 @@ export function createSpeakerActivityMessage(
 // --- MODIFIED: Make async and add page parameter ---
 const handleRedisMessage = async (message: string, channel: string, page: Page | null) => {
   // ++ ADDED: Log entry into handler ++
-  log(`[DEBUG] handleRedisMessage entered for channel ${channel}. Message: ${message.substring(0, 100)}...`);
-  // ++++++++++++++++++++++++++++++++++
-  log(`Received command on ${channel}: ${message}`);
+  log(`Received command on ${channel}: ${message.substring(0, 200)}${message.length > 200 ? '...' : ''}`);
   // --- ADDED: Implement reconfigure command handling --- 
   try {
       const command = JSON.parse(message);
@@ -912,7 +910,7 @@ async function handleSpeakCommand(command: any, page: Page | null): Promise<void
   await publishVoiceEvent('speak.started', { text: command.text });
 
   try {
-    const provider = command.provider || process.env.DEFAULT_TTS_PROVIDER || 'openai';
+    const provider = command.provider || process.env.DEFAULT_TTS_PROVIDER || 'piper';
     const voice = command.voice || process.env.DEFAULT_TTS_VOICE || 'alloy';
     await ttsPlaybackService.synthesizeAndPlay(command.text, provider, voice);
     await publishVoiceEvent('speak.completed');
@@ -946,18 +944,22 @@ async function handleSpeakAudioCommand(command: any): Promise<void> {
 
   try {
     if (command.audio_url) {
+      log(`[SpeakAudio] Playing from URL: ${command.audio_url}`);
       await ttsPlaybackService.playFromUrl(command.audio_url);
     } else if (command.audio_base64) {
       const format = command.format || 'wav';
       const sampleRate = command.sample_rate || 24000;
+      log(`[SpeakAudio] Playing from base64 (${command.audio_base64.length} chars, format=${format}, rate=${sampleRate})`);
       await ttsPlaybackService.playFromBase64(command.audio_base64, format, sampleRate);
     } else {
       log('[SpeakAudio] No audio_url or audio_base64 provided');
       return;
     }
+    log('[SpeakAudio] Playback completed');
     await publishVoiceEvent('speak.completed');
   } catch (err: any) {
     log(`[SpeakAudio] Playback failed: ${err.message}`);
+    log(`[SpeakAudio] Stack: ${err.stack}`);
     await publishVoiceEvent('speak.error', { message: err.message });
   }
 

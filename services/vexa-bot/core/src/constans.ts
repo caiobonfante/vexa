@@ -75,6 +75,8 @@ export function getBrowserSessionArgs(): string[] {
     '--disable-setuid-sandbox',
     '--disable-blink-features=AutomationControlled',
     '--start-maximized',
+    '--window-size=1920,1080',
+    '--window-position=0,0',
     '--remote-debugging-port=9222',
     '--remote-debugging-address=0.0.0.0',
     '--remote-allow-origins=*',

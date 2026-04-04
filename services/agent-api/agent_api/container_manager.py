@@ -22,6 +22,8 @@ logger = logging.getLogger("agent_api.container_manager")
 class ContainerInfo:
     name: str
     user_id: str
+    session_id: str = "default"
+    workspace_name: str = "default"
     last_activity: float = field(default_factory=time.time)
 
 
@@ -31,7 +33,7 @@ class ContainerManager:
     def __init__(self, runtime_api_url: str = "", api_key: str = ""):
         self._runtime_api = runtime_api_url or config.RUNTIME_API_URL
         self._api_key = api_key or config.API_KEY
-        self._containers: dict[str, ContainerInfo] = {}  # user_id -> info
+        self._containers: dict[str, ContainerInfo] = {}  # "user_id:session_id" -> info
         self._http: Optional[httpx.AsyncClient] = None
         self._admin_http: Optional[httpx.AsyncClient] = None
         self._new_container: bool = False
@@ -54,7 +56,8 @@ class ContainerManager:
                 for c in resp.json():
                     if c.get("status") == "running":
                         uid = c.get("user_id", "")
-                        self._containers[uid] = ContainerInfo(name=c["name"], user_id=uid)
+                        key = f"{uid}:default"
+                        self._containers[key] = ContainerInfo(name=c["name"], user_id=uid, session_id="default")
                         logger.info(f"Discovered container {c['name']} for user {uid}")
         except Exception as e:
             logger.warning(f"Could not discover containers from Runtime API: {e}")
@@ -116,25 +119,26 @@ class ContainerManager:
         except Exception:
             return False
 
-    async def ensure_container(self, user_id: str, **create_kwargs) -> str:
+    async def ensure_container(self, user_id: str, session_id: str = "default", **create_kwargs) -> str:
         """Ensure a running agent container exists. Returns container name.
 
         Additional kwargs are passed to the Runtime API POST /containers body.
         """
         self._new_container = False
+        key = f"{user_id}:{session_id}"
 
         # Check local cache
-        info = self._containers.get(user_id)
+        info = self._containers.get(key)
         if info:
             if await self._is_alive(info.name):
                 info.last_activity = time.time()
                 await self._touch(info.name)
                 return info.name
-            self._containers.pop(user_id, None)
+            self._containers.pop(key, None)
             self._last_user_data.pop(user_id, None)  # stale config for dead container
 
         # Create via Runtime API
-        logger.info(f"Requesting container for user {user_id}")
+        logger.info(f"Requesting container for user {user_id} session {session_id}")
         body = {"user_id": user_id, "profile": "agent", **create_kwargs}
 
         # Inject Claude credentials into container config
@@ -177,9 +181,9 @@ class ContainerManager:
 
         data = resp.json()
         name = data["name"]
-        self._containers[user_id] = ContainerInfo(name=name, user_id=user_id)
+        self._containers[key] = ContainerInfo(name=name, user_id=user_id, session_id=session_id)
         self._new_container = True
-        logger.info(f"Container {name} created for user {user_id}")
+        logger.info(f"Container {name} created for user {user_id} session {session_id}")
         return name
 
     async def start_agent(self, session_id: str, agent_config: dict = None,
@@ -195,7 +199,8 @@ class ContainerManager:
             raise RuntimeError(f"Runtime API failed: {resp.status_code} {resp.text[:200]}")
         data = resp.json()
         name = data["name"]
-        self._containers[session_id] = ContainerInfo(name=name, user_id=session_id)
+        key = f"{session_id}:default"
+        self._containers[key] = ContainerInfo(name=name, user_id=session_id)
         return name
 
     async def stop_agent(self, container_id: str):
@@ -205,9 +210,9 @@ class ContainerManager:
         except Exception as e:
             logger.warning(f"Error stopping {container_id}: {e}")
         # Remove from cache if present
-        for uid, info in list(self._containers.items()):
+        for key, info in list(self._containers.items()):
             if info.name == container_id:
-                self._containers.pop(uid, None)
+                self._containers.pop(key, None)
                 break
 
     async def get_status(self, container_id: str) -> dict:
@@ -218,9 +223,10 @@ class ContainerManager:
         resp.raise_for_status()
         return resp.json()
 
-    async def stop_user_container(self, user_id: str):
-        """Stop the container for a specific user."""
-        info = self._containers.get(user_id)
+    async def stop_session_container(self, user_id: str, session_id: str = "default"):
+        """Stop the container for a specific user session."""
+        key = f"{user_id}:{session_id}"
+        info = self._containers.get(key)
         if not info:
             return
         await self.stop_agent(info.name)
@@ -279,9 +285,11 @@ class ContainerManager:
             logger.debug(f"exec_with_stdin failed: {e}")
         return None
 
-    async def interrupt(self, user_id: str, process_pattern: str = "claude.*stream-json"):
+    async def interrupt(self, user_id: str, session_id: str = "default",
+                        process_pattern: str = "claude.*stream-json"):
         """Kill active agent process in user's container."""
-        info = self._containers.get(user_id)
+        key = f"{user_id}:{session_id}"
+        info = self._containers.get(key)
         if not info:
             return
         try:
@@ -289,15 +297,17 @@ class ContainerManager:
                 "sh", "-c", f"pkill -f '{process_pattern}' || true",
             ])
         except Exception as e:
-            logger.warning(f"Interrupt failed for {user_id}: {e}")
+            logger.warning(f"Interrupt failed for {user_id}:{session_id}: {e}")
 
-    async def reset_session(self, user_id: str):
+    async def reset_session(self, user_id: str, session_id: str = "default"):
         """Kill active process and clear session state in container."""
-        await self.interrupt(user_id)
-        info = self._containers.get(user_id)
+        await self.interrupt(user_id, session_id)
+        key = f"{user_id}:{session_id}"
+        info = self._containers.get(key)
         if info:
             await self.exec_simple(info.name, ["rm", "-f", "/tmp/.agent-session"])
 
-    def get_container_name(self, user_id: str) -> Optional[str]:
-        info = self._containers.get(user_id)
+    def get_container_name(self, user_id: str, session_id: str = "default") -> Optional[str]:
+        key = f"{user_id}:{session_id}"
+        info = self._containers.get(key)
         return info.name if info else None

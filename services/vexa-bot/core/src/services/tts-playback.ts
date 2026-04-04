@@ -165,6 +165,7 @@ export class TTSPlaybackService {
    */
   async playFile(filePath: string): Promise<void> {
     this._isPlaying = true;
+    unmuteTtsAudio();
     return new Promise((resolve, reject) => {
       // Use ffmpeg to convert any audio format to raw PCM, pipe to paplay
       const ffmpeg = spawn('ffmpeg', [
@@ -201,6 +202,7 @@ export class TTSPlaybackService {
       paplay.on('exit', (code) => {
         this._isPlaying = false;
         this.paplayProcess = null;
+        muteTtsAudio();
         if (code === 0 || code === null) resolve();
         else reject(new Error(`paplay exited with code ${code}`));
       });
@@ -208,12 +210,14 @@ export class TTSPlaybackService {
       paplay.on('error', (err) => {
         this._isPlaying = false;
         this.paplayProcess = null;
+        muteTtsAudio();
         ffmpeg.kill('SIGTERM');
         reject(err);
       });
 
       ffmpeg.on('error', (err) => {
         this._isPlaying = false;
+        muteTtsAudio();
         paplay.kill('SIGTERM');
         reject(err);
       });

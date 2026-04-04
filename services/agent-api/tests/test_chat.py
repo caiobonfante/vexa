@@ -162,9 +162,12 @@ class TestDeleteSessionMeta:
 
 def _mock_cm(container="agent-user1", new_container=False, exec_simple_output=None):
     """Build a mock ContainerManager for chat turn tests."""
+    from agent_api.container_manager import ContainerInfo
     cm = AsyncMock()
     cm._new_container = new_container
-    cm.ensure_container = AsyncMock(side_effect=lambda uid: _set_new(cm, new_container, container))
+    cm._containers = {}
+    cm.ensure_container = AsyncMock(side_effect=lambda uid, **kw: _set_new(cm, new_container, container))
+    cm.get_user_data = AsyncMock(return_value={})
     cm.exec_simple = AsyncMock(return_value=exec_simple_output)
     cm.exec_with_stdin = AsyncMock()
 

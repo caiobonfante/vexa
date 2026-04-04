@@ -68,14 +68,84 @@ PROFILE_DEFAULTS = {
 }
 
 
+BUILTIN_PROFILES = {
+    "meeting": {
+        "image": "${BOT_IMAGE:-vexaai/vexa-bot:latest}",
+        "resources": {
+            "cpu_request": "500m",
+            "cpu_limit": "2000m",
+            "memory_request": "512Mi",
+            "memory_limit": "2Gi",
+            "shm_size": 2147483648,
+        },
+        "idle_timeout": 600,
+        "auto_remove": False,
+        "ports": {"6080/tcp": {}},
+        "gpu": False,
+    },
+    "browser": {
+        "image": "mcr.microsoft.com/playwright:v1.48.0-jammy",
+        "command": ["npx", "playwright", "run-server", "--port", "3000"],
+        "resources": {
+            "cpu_request": "500m",
+            "cpu_limit": "2000m",
+            "memory_request": "512Mi",
+            "memory_limit": "2Gi",
+            "shm_size": 2147483648,
+        },
+        "idle_timeout": 600,
+        "auto_remove": False,
+        "ports": {"3000/tcp": {}},
+        "gpu": False,
+    },
+    "agent": {
+        "image": "${AGENT_IMAGE:-vexaai/vexa-agent:latest}",
+        "command": ["sleep", "infinity"],
+        "resources": {
+            "cpu_request": "500m",
+            "cpu_limit": "2000m",
+            "memory_request": "512Mi",
+            "memory_limit": "2Gi",
+        },
+        "idle_timeout": 300,
+        "auto_remove": False,
+        "env": {
+            "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY:-}",
+            "LOG_LEVEL": "${LOG_LEVEL:-INFO}",
+        },
+    },
+    "sandbox": {
+        "image": "ubuntu:24.04",
+        "command": ["sleep", "infinity"],
+        "resources": {
+            "cpu_request": "500m",
+            "cpu_limit": "2000m",
+            "memory_request": "512Mi",
+            "memory_limit": "2Gi",
+            "shm_size": 2147483648,
+        },
+        "idle_timeout": 600,
+        "auto_remove": False,
+        "ports": {"8080/tcp": {}},
+        "gpu": False,
+    },
+}
+
+
 def load_profiles(path: str | None = None) -> dict[str, dict]:
-    """Load profiles from YAML file. Thread-safe."""
+    """Load profiles from YAML file, merged on top of built-in defaults. Thread-safe."""
     global _profiles, _mtime
     path = path or config.PROFILES_PATH
 
     if not Path(path).exists():
-        logger.warning(f"Profiles file not found: {path} — using empty profiles")
-        return {}
+        logger.info(f"No profiles file at {path} — using built-in defaults")
+        with _lock:
+            _profiles = {
+                name: {**PROFILE_DEFAULTS, **_expand_env_vars(spec),
+                       "resources": {**PROFILE_DEFAULTS["resources"], **_expand_env_vars(spec).get("resources", {})}}
+                for name, spec in BUILTIN_PROFILES.items()
+            }
+        return _profiles
 
     try:
         current_mtime = Path(path).stat().st_mtime
@@ -86,8 +156,13 @@ def load_profiles(path: str | None = None) -> dict[str, dict]:
         with open(path) as f:
             raw = yaml.safe_load(f) or {}
 
+        # Start with builtins, then overlay YAML definitions
         profiles = {}
+        all_specs = {**BUILTIN_PROFILES}
         for name, spec in raw.get("profiles", raw).items():
+            all_specs[name] = spec  # YAML overrides builtins
+
+        for name, spec in all_specs.items():
             spec = _expand_env_vars(spec)
             merged = {**PROFILE_DEFAULTS}
             merged.update(spec)

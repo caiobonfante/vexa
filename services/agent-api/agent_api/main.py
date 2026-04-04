@@ -74,6 +74,7 @@ class UserIdRequest(BaseModel):
 class SessionCreateRequest(BaseModel):
     user_id: str
     name: str = "New session"
+    workspace: Optional[str] = None
     meeting_aware: bool = False
 
 
@@ -110,6 +111,12 @@ async def startup():
 
     await cm.startup()
 
+    # Migrate legacy S3 workspace paths (workspaces/{uid}/ → workspaces/{uid}/default/)
+    try:
+        await workspace.migrate_legacy_workspaces()
+    except Exception as e:
+        logger.warning(f"Legacy workspace migration failed (non-fatal): {e}")
+
     # Periodic workspace sync — S3-only safety net (no git commit).
     # Catches workspace changes even if the agent forgets to save or the
     # SSE stream is cancelled by client disconnect / scheduler timeout.
@@ -118,12 +125,12 @@ async def startup():
         interval = int(os.getenv("WORKSPACE_SYNC_INTERVAL", "60"))
         while True:
             await asyncio.sleep(interval)
-            for user_id, info in list(cm._containers.items()):
+            for _key, info in list(cm._containers.items()):
                 if await cm._is_alive(info.name):
                     try:
-                        await workspace.sync_up_s3_only(user_id, info.name)
+                        await workspace.sync_up_s3_only(info.user_id, info.name, info.workspace_name)
                     except Exception as e:
-                        logger.warning(f"Periodic sync failed for {user_id}: {e}")
+                        logger.warning(f"Periodic sync failed for {info.user_id}:{info.session_id}: {e}")
 
     app.state._periodic_sync_task = asyncio.create_task(_periodic_workspace_sync())
     logger.info(f"Agent API ready on port {config.PORT}")
@@ -197,7 +204,8 @@ def _chat_stream(req: ChatRequest, context_prefix: str = ""):
                 retries += 1
                 if retries <= max_retries:
                     logger.warning(f"Chat failed for {req.user_id}, retrying ({retries}/{max_retries}): {e}")
-                    cm._containers.pop(req.user_id, None)
+                    key = f"{req.user_id}:{req.session_id or 'default'}"
+                    cm._containers.pop(key, None)
                     yield f"data: {json.dumps({'type': 'reconnecting'})}\n\n"
                 else:
                     logger.error(f"Chat failed for {req.user_id} after {max_retries} retries: {e}", exc_info=True)
@@ -263,11 +271,13 @@ async def get_sessions(user_id: str):
 async def create_session(req: SessionCreateRequest):
     """Create a new named session."""
     session_id = str(uuid.uuid4())
+    extra = {"meeting_aware": req.meeting_aware}
+    if req.workspace:
+        extra["workspace"] = req.workspace
     await save_session_meta(
-        app.state.redis, req.user_id, session_id, req.name,
-        extra={"meeting_aware": req.meeting_aware},
+        app.state.redis, req.user_id, session_id, req.name, extra=extra,
     )
-    return {"session_id": session_id, "name": req.name, "meeting_aware": req.meeting_aware}
+    return {"session_id": session_id, "name": req.name, "workspace": req.workspace}
 
 
 @app.delete("/api/sessions/{session_id}", dependencies=[Depends(require_api_key)])
@@ -284,7 +294,46 @@ async def rename_session(session_id: str, req: SessionRenameRequest):
     return {"status": "renamed", "name": req.name}
 
 
-# ── Workspace endpoints ────────────────────────────────────────────────────
+# ── Workspace template endpoints (S3, pre-container) ─────────────────────
+
+
+@app.post("/api/workspaces", dependencies=[Depends(require_api_key)])
+async def upload_workspace_endpoint(request: Request, user_id: str, name: str):
+    """Upload a workspace from local as tar.gz."""
+    body = await request.body()
+    if not body:
+        raise HTTPException(400, "Empty body")
+    result = await workspace.upload_workspace(user_id, name, body)
+    return result
+
+
+@app.get("/api/workspaces", dependencies=[Depends(require_api_key)])
+async def list_workspaces_endpoint(user_id: str):
+    """List user's named workspaces."""
+    ws = await workspace.list_workspaces(user_id)
+    return {"workspaces": ws}
+
+
+@app.delete("/api/workspaces/{name}", dependencies=[Depends(require_api_key)])
+async def delete_workspace_endpoint(name: str, user_id: str):
+    """Delete a named workspace."""
+    await workspace.delete_workspace(user_id, name)
+    return {"status": "deleted"}
+
+
+@app.get("/api/workspaces/{name}/files", dependencies=[Depends(require_api_key)])
+async def list_workspace_template_files(name: str, user_id: str):
+    """List files in a named workspace (from S3)."""
+    files = await workspace.list_workspace_files_s3(user_id, name)
+    return {"files": files}
+
+
+@app.post("/api/workspaces/{name}/file", dependencies=[Depends(require_api_key)])
+async def write_workspace_template_file(name: str, req: FileWriteRequest):
+    """Write a single file to a named workspace in S3."""
+    _validate_path(req.path)
+    await workspace.write_workspace_file_s3(req.user_id, name, req.path, req.content)
+    return {"path": req.path, "status": "written"}
 
 
 # ── Schedule bridge ───────────────────────────────────────────────────────

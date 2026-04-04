@@ -1616,7 +1616,9 @@ async def browser_vnc_proxy(token: str, path: str, request: Request):
         raise HTTPException(status_code=404, detail="Browser session not found or expired")
 
     container = session["container_name"]
-    target_url = f"http://{container}:6080/{path}"
+    # In single-container (lite) deployments, VNC runs on localhost, not a container hostname
+    vnc_host = os.getenv("VNC_HOST") or container
+    target_url = f"http://{vnc_host}:6080/{path}"
 
     # Forward query string
     qs = str(request.url.query)
@@ -1650,7 +1652,8 @@ async def browser_vnc_ws(websocket: WebSocket, token: str):
         return
 
     container = session["container_name"]
-    upstream_url = f"ws://{container}:6080/websockify"
+    vnc_host = os.getenv("VNC_HOST") or container
+    upstream_url = f"ws://{vnc_host}:6080/websockify"
 
     await websocket.accept(subprotocol="binary")
 
