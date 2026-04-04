@@ -18,7 +18,7 @@ To Vexa, this project is just a user_id (`calm-traderx`) with a workspace, some 
 ```
 1. Vexa platform (infra)
    Generic: containers, workspaces, scheduler, per-user env vars, git clone init.
-   See: conductor/missions/workspace-lifecycle.md
+   See: conductor/missions/260401-workspace-lifecycle.md
    Knows nothing about CALM.
 
 2. FINOS-CALM project (this mission) — user_id: "calm-traderx"
