@@ -63,16 +63,6 @@ Vexa is a dozen services, not a monolith. Each service owns one concern (transcr
 └──────────────┘  └─────────────────┘
 ```
 
-## Publishable Packages
-
-These live in `packages/` and are designed to be independently publishable with no Vexa-specific domain knowledge.
-
-| Package | Description |
-|---------|-------------|
-| [runtime-api](runtime-api/) | Generic container lifecycle API — Docker, K8s, and process backends |
-| [agent-api](agent-api/) | AI agent runtime — chat streaming, workspace sync, scheduling |
-| ~~[shared-models](../libs/shared-models/)~~ | **DEPRECATED — being deleted.** Models live in `admin-models` and `meeting-api`. Utilities being redistributed. |
-
 ## Services
 
 ### API Layer

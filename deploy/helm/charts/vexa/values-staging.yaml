@@ -4,7 +4,6 @@
 global:
   imagePullPolicy: Always
   imagePullSecrets: []
-    # - name: ghcr-secret  # TODO: set up container registry credentials
 
 # ---------- Secrets ----------
 # Override via --set or external secret manager

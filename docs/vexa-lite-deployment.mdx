@@ -25,10 +25,12 @@ Vexa Lite runs the following services internally via supervisord:
 |---------|--------------|-------------|
 | API Gateway | 8056 | Main entry point (the only exposed port) |
 | Admin API | 8057 | User and API token management |
-| Bot Manager | 8080 | Bot lifecycle management (process orchestrator) |
-| Transcription Collector | 8123 | Stores transcription segments in PostgreSQL |
+| Meeting API | 8080 | Bot orchestration + transcription pipeline |
+| Runtime API | 8090 | Container lifecycle — process backend |
+| Agent API | 8100 | AI agent chat runtime |
+| Dashboard | 3000 | Next.js web UI |
 | MCP Service | 18888 | Model Context Protocol for Claude/Cursor |
-| TTS Service | 8059 | Text-to-speech via OpenAI API |
+| TTS Service | 8059 | Text-to-speech |
 | Redis | 6379 | Built-in message broker |
 | Xvfb | — | Virtual display for headless browsers |
 | PulseAudio | — | Audio server for TTS playback |

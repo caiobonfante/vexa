@@ -14,15 +14,17 @@ Self-hosted deployment of the full Vexa stack: bot management, per-speaker trans
 │  (Next.js)   │     │  (FastAPI)    │     │  (FastAPI)          │
 └─────────────┘     └──────┬───────┘     └─────────────────────┘
                            │
-                    ┌──────▼───────┐     ┌─────────────────────┐
-                    │ Meeting API   │────>│  Transcription       │
-                    │ (FastAPI)     │     │  Collector (FastAPI)  │
-                    └──────┬───────┘     └──────────┬──────────┘
-                           │                        │
-                    ┌──────▼───────┐         ┌──────▼──────┐
-                    │  Bot Pods     │         │   Postgres   │
-                    │  (Playwright) │         │   Redis      │
-                    └──────────────┘         └─────────────┘
+          ┌────────────────┼────────────────┐
+          │                │                │
+   ┌──────▼───────┐ ┌─────▼──────┐  ┌──────▼─────┐
+   │ Meeting API   │ │ Agent API  │  │ Runtime API │
+   │ (FastAPI)     │ │ (FastAPI)  │  │ (FastAPI)   │
+   └──────┬───────┘ └────────────┘  └──────┬──────┘
+          │                                │
+   ┌──────▼───────┐                 ┌──────▼──────┐
+   │  Bot Pods     │                │   Postgres   │
+   │  (Playwright) │                │   Redis      │
+   └──────────────┘                └─────────────┘
 ```
 
 ## Services
@@ -31,10 +33,13 @@ Self-hosted deployment of the full Vexa stack: bot management, per-speaker trans
 |---------|-------------|------|
 | api-gateway | HTTP + WebSocket API entry point | 8000 |
 | admin-api | User/token CRUD, meeting management | 8001 |
-| meeting-api | Meeting domain — bot lifecycle, recordings, webhooks | 8080 |
-| transcription-collector | Redis stream -> Postgres persistence | 8000 |
-| transcription-service | GPU inference (Whisper) -- optional, can run externally | 8000 |
+| meeting-api | Meeting domain — bot lifecycle, transcription pipeline, recordings, webhooks | 8080 |
+| agent-api | AI agent chat runtime — streaming, workspaces, scheduling | 8100 |
+| runtime-api | Container lifecycle — Docker, K8s, process backends | 8090 |
+| transcription-service | GPU inference (Whisper) — optional, can run externally | 8000 |
 | mcp | Model Context Protocol server | 18888 |
+| tts-service | Text-to-speech | 8002 |
+| calendar-service | Google Calendar sync, auto-join scheduling | 8050 |
 | dashboard | Next.js meeting dashboard | 3000 |
 | postgres | Database (bundled, optional) | 5432 |
 | redis | Stream + pub/sub (bundled, optional) | 6379 |

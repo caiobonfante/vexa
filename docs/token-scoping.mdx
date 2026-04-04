@@ -36,7 +36,7 @@ Scope enforcement happens at the service level, not the gateway. Each backend se
 | Service | Endpoint examples | Allowed scopes |
 |---------|-------------------|---------------|
 | meeting-api | `POST /bots`, `GET /bots/status` | `bot`, `user`, `admin` |
-| transcription-collector | `GET /meetings`, `GET /transcripts` | `tx`, `user`, `admin` |
+| meeting-api | `GET /meetings`, `GET /transcripts` | `tx`, `user`, `admin` |
 | admin-api | `POST /admin/users`, `GET /admin/tokens` | `user`, `admin` |
 
 A request with an out-of-scope token receives `403 Forbidden`:

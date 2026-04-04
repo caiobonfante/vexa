@@ -13,6 +13,12 @@
             "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/confidence-check.sh",
             "timeout": 30,
             "statusMessage": "Checking confidence protocol..."
+          },
+          {
+            "type": "command",
+            "command": "/home/dima/dev/2/system/hooks/persist-confidence.sh",
+            "timeout": 10,
+            "statusMessage": "Persisting verifications..."
           }
         ]
       }
@@ -25,6 +31,12 @@
             "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/session-start.sh",
             "timeout": 5,
             "statusMessage": "Loading confidence protocol..."
+          },
+          {
+            "type": "command",
+            "command": "/home/dima/dev/2/system/hooks/inject-context.sh",
+            "timeout": 10,
+            "statusMessage": "Loading confidence state..."
           }
         ]
       }
