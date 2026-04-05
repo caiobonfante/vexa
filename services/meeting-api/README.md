@@ -101,6 +101,10 @@ The service has solid domain logic, good test coverage of happy paths, and a wel
 
 8. **No observability**: No Prometheus metrics, no structured logging, no request tracing. The only health signal is `GET /health → {"status": "ok"}` which doesn't check downstream dependencies.
 
+9. **TRANSCRIPTION_SERVICE_URL missing from profiles.yaml (bug #23, FIXED)** — `supervisord.conf` in lite mode was not passing `REDIS_URL` and `TRANSCRIPTION_SERVICE_URL` to meeting-api process. Bots launched by meeting-api couldn't reach the transcription service. Fixed by adding environment variables to supervisord meeting-api config.
+
+10. **GET /chat fails for completed meetings (bug #29)** — `voice_agent.py` uses `_find_active_meeting()` for chat read, which filters by active status. After meeting completion, chat data in Redis becomes inaccessible via API. Fix: use a read-path function that doesn't require active status.
+
 ### Validation Plan (to reach 90+)
 
 1. **Fix MeetingToken issuer** — align `iss` claim between `mint_meeting_token` and `verify_meeting_token`. Add a unit test that mints and verifies in sequence. *Moves confidence: +8*

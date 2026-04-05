@@ -50,20 +50,28 @@ See the setup guide below for connecting MCP clients.
 Welcome! This guide will help you set up and connect Claude (or any other client) to the Vexa Meeting Bot MCP (Model Context Protocol).
 Follow these steps carefully, even if you are new to these tools. In under 5 minutes you will be easily set up. All we have to do is install Node.js and copy paste a config.
 
-## Teams Passcodes and URL Limitations (Important)
+## Teams URL Formats (Updated 2026-04-05)
 
-Vexa can join Microsoft Teams meetings, but **Teams meeting links are tricky** and **many meetings require a passcode**.
+Vexa can join Microsoft Teams meetings using **all major URL formats**. The `parse_meeting_link` tool handles URL parsing automatically.
 
-Key points:
+**Supported formats (all tested 2026-04-05):**
 
-- **Only Teams Free style links are supported**: `https://teams.live.com/meet/<MEETING_ID>?p=<PASSCODE>`
-- **Recommended:** pass the **full Teams URL** via `meeting_url` (Vexa will parse out `native_meeting_id` + `passcode` for you).
-- If you prefer passing parts separately:
-  - `native_meeting_id`: the numeric `<MEETING_ID>` (10-15 digits)
-  - `passcode`: the `<PASSCODE>` from `?p=...` (often required)
-- **Full Teams URLs are not accepted** as `native_meeting_id`. Use `meeting_url` or the numeric ID only.
-- **`teams.microsoft.com/l/meetup-join/...` links are not supported yet** (see issues #105, #110). If you have one of these links, you must obtain a `teams.live.com/meet/...` link instead (or use the REST API with the numeric ID + passcode if you already know them).
-- **Passcode constraints**: Teams passcodes must be **8-20 alphanumeric characters**. If your `p=` value contains non-alphanumeric characters or is longer than 20, it will be rejected.
+| Format | Example | Status |
+|--------|---------|--------|
+| T1: Standard join | `teams.microsoft.com/l/meetup-join/19%3ameeting_{id}%40thread.v2/...` | PASS |
+| T2: Meet shortlink (OeNB) | `teams.microsoft.com/meet/{id}?p={passcode}` | PASS |
+| T3: Channel meeting | `teams.microsoft.com/l/meetup-join/19%3a{channel}%40thread.tacv2/...` | PASS |
+| T4: Custom domain | `{org}.teams.microsoft.com/meet/{id}?p={passcode}` | PASS |
+| T5: Deep link | `msteams:/l/meetup-join/...` | NOT SUPPORTED |
+| T6: Personal/consumer | `teams.live.com/meet/{id}` | PASS |
+
+**Recommended:** Pass the **full Teams URL** via `meeting_url` — Vexa will parse out `native_meeting_id` + `passcode` automatically.
+
+If you prefer passing parts separately:
+- `native_meeting_id`: the numeric meeting ID
+- `passcode`: the `<PASSCODE>` from `?p=...` (often required for anonymous join)
+
+**Passcode constraints**: Teams passcodes must be **8-20 alphanumeric characters**. If your `p=` value contains non-alphanumeric characters or is longer than 20, it will be rejected.
 
 ## 1. Install Node.js (Required for npm)
 
@@ -160,7 +168,7 @@ Once you have completed the above steps:
 
 - If you see errors about missing `npx` or `npm`, make sure Node.js is installed
 - If you get authentication errors, double-check your API key
-- If Teams meetings fail to join, verify you are using a `teams.live.com/meet/...` link and that you extracted both the numeric meeting ID and the `?p=` passcode.
+- If Teams meetings fail to join, verify the URL format is supported (T1-T4, T6 — see table above). Use `parse_meeting_link` to test URL parsing. Ensure passcode is included for anonymous join.
 - For further help, contact Vexa support
 
 ---

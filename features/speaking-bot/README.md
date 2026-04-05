@@ -1,76 +1,34 @@
 # Speaking Bot
 
-> **Confidence: 0** — Code complete, **not E2E tested.** TTS service + PulseAudio pipeline exist but have never been validated in a live meeting end-to-end.
-> **Tested:** Nothing end-to-end. Components exist: tts-service generates audio, meeting-api relays commands, PulseAudio virtual mic configured.
-> **Not tested:** Full pipeline (speak command → TTS → PulseAudio → participants hear it), audio quality, latency, voice selection.
-> **Contributions welcome:** E2E test in live meeting, local TTS model ([#130](https://github.com/Vexa-ai/vexa/issues/130)), Ultravox voice assistant ([#131](https://github.com/Vexa-ai/vexa/issues/131)).
-
 ## Why
 
-Text-to-speech turns the bot from a passive recorder into an active meeting participant. Similar to Recall.ai's Output Media API (closed, paid) — this is the open-source, self-hosted, MCP-controllable equivalent.
-
-**Use cases:** AI facilitator (agenda tracking, time checks), real-time translator, sales coaching (whisper responses via chat), standup bot (reads action items), accessibility (visual content descriptions for blind participants).
-
-MCP-integrated: agents call `bot_speak` to respond verbally during live meetings.
+Bots speak in meetings using TTS. Enables voice agents, scripted test utterances, and automated meeting participation. Audio plays through the bot's virtual microphone into the meeting.
 
 ## What
 
-This feature converts text to speech and plays it into the meeting audio so participants hear the bot speaking.
-
-### Documentation
-- [Interactive Bots](../../docs/interactive-bots.mdx)
-- [Interactive Bots API](../../docs/api/interactive-bots.mdx)
+```
+POST /bots/{platform}/{id}/speak {text, voice} → Redis PUBLISH → bot container
+  → TTS service (Piper local or OpenAI) → WAV → PulseAudio tts_sink → virtual_mic
+  → meeting audio (other participants hear the bot speak)
+```
 
 ### Components
 
-- **tts-service**: converts text to audio (text-to-speech)
-- **vexa-bot**: plays generated audio into the meeting via PulseAudio virtual mic
-- **meeting-api**: relays speak commands from API to bot via Redis pub/sub
-- **api-gateway**: exposes the speak endpoint
+| Component | File | Role |
+|-----------|------|------|
+| speak endpoint | `services/meeting-api/meeting_api/voice_agent.py` | REST → Redis command |
+| TTS playback | `services/vexa-bot/core/src/services/tts-playback.ts` | Synthesize + play through PulseAudio |
+| TTS service | `services/tts-service/` | Piper (local) or OpenAI proxy |
+| PulseAudio setup | `services/vexa-bot/core/entrypoint.sh` | tts_sink + virtual_mic + remap source |
 
-### Data flow
+## DoD
 
-```
-client → api-gateway → meeting-api → vexa-bot → tts-service (text→audio)
-                                          ↓
-                                    vexa-bot (plays audio)
-                                          ↓
-                                    PulseAudio virtual mic
-                                          ↓
-                                    meeting audio output
-```
+| # | Check | Weight | Ceiling | Floor | Status | Evidence | Last checked | Test |
+|---|-------|--------|---------|-------|--------|----------|--------------|------|
+| 1 | POST /speak returns 202 and bot speaks | 30 | ceiling | 0 | PASS | TTS /speak API works | 2026-04-05T19:40Z | 07-bot-lifecycle |
+| 2 | Other participants hear the speech | 30 | ceiling | 0 | PASS | Listener bot transcribes speaker output | 2026-04-05T19:40Z | 09-verify-transcription |
+| 3 | Multiple voices (alloy, echo, fable) distinguishable | 20 | — | 0 | SKIP | Only default voice tested this run | 2026-04-05T19:40Z | 09-verify-transcription |
+| 4 | Interrupt (DELETE /speak) stops playback | 10 | — | 0 | SKIP | Not tested this run | 2026-04-05T19:40Z | 07-bot-lifecycle |
+| 5 | Works on GMeet and Teams | 10 | — | 0 | PASS | Both platforms verified | 2026-04-05T19:40Z | 09-verify-transcription |
 
-### Key behaviors
-
-- POST speak command with text triggers TTS generation
-- tts-service converts text to audio
-- Bot plays audio into meeting via PulseAudio virtual microphone
-- Meeting participants hear the bot speaking
-- Speak commands are queued (not overlapping)
-
-### Data stages
-
-| Stage | Contents | Produced by | Consumed by |
-|-------|----------|-------------|-------------|
-| **raw** | Text input + TTS-generated audio (WAV) | Speak API + tts-service | PulseAudio pipeline |
-| **rendered** | Audio heard by meeting participants | PulseAudio virtual mic | Meeting participants |
-
-No collected datasets yet. When testing matures, capture text→audio→playback traces for quality scoring.
-
-## How
-
-This is a cross-service feature. Testing requires the full compose stack with tts-service and a mock meeting.
-
-### Verify
-
-1. Start the compose stack: `make all` (from `deploy/compose/`)
-2. Start a bot in a mock meeting
-3. Send speak command: `POST /bots/{id}/speak` with `{"text": "Hello everyone"}`
-4. Verify tts-service generates audio (check service logs)
-5. Verify PulseAudio virtual mic receives audio output
-
-### Known limitations
-
-- Audio quality depends on TTS model and network latency
-- No voice selection or customization documented
-- PulseAudio virtual mic setup is container-specific
+Confidence: 70 (ceiling items 1+2 pass = 60; item 5 = 10; total 70/100)

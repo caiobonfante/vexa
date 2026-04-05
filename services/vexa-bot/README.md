@@ -239,6 +239,8 @@ The bot enforces two timeouts internally via `automaticLeave` in BOT_CONFIG:
 
 **Note:** `max_bot_time` (absolute max lifetime) is NOT enforced by the bot. It's enforced server-side by the scheduler, which fires `DELETE /bots` regardless of bot state. This is defense in depth — even if the bot hangs, the scheduler kills it. See `features/bot-lifecycle/README.md`.
 
+**Finding (2026-04-05):** The default `noOneJoinedTimeout` of 120s (2 min) is too short for human-in-the-loop test flows where the human needs to context-switch between terminal and meeting UI to admit bots. Use `no_one_joined_timeout: 300000` (5 min) in bot creation payloads for test scenarios. See `tests/07-bot-lifecycle.md` for details.
+
 ## Project Structure
 
 ```

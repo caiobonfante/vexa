@@ -140,6 +140,16 @@ Runs vitest against `tests/` — covers `parseMeetingInput`, `parseUTCTimestamp`
 - Login or admin routes fail: verify `VEXA_ADMIN_API_KEY` is valid.
 - Dashboard loads but data is empty: verify `VEXA_API_URL` is reachable from the container/runtime.
 - OAuth callbacks fail: verify `NEXTAUTH_URL` and provider redirect URIs match exactly.
+- Transcript page shows no data: verify the dashboard's `VEXA_API_KEY` (or user's token) has `tx` scope. Tokens with only `bot` scope can create bots but can't read transcripts (403 on `/transcripts` endpoints).
+- Browser session creation fails: verify the token has `browser` scope and concurrent bot limit is not exceeded (error: "Concurrent bot limit reached (N/5)").
+- POST /bots returns 422 `[object Object]`: the gateway requires `platform` + `native_meeting_id` fields. The dashboard client-side parses meeting URLs to extract these. If the URL parse fails, the raw URL is sent and the gateway rejects it.
+
+### Verified 2026-04-05 (compose mode)
+
+All backend calls validated from inside the dashboard container:
+- GET: gateway root → 200, /meetings → 401 (correct — needs auth), /bots/status → 401, admin /users → 200, agent-api health → 200, internal auth → 200
+- POST: /api/vexa/bots (browser_session) → 201, /api/vexa/bots (meeting join) → 201
+- Dashboard serving on port 3001 (dev) / 3000 (production Docker)
 
 ## Screenshots
 

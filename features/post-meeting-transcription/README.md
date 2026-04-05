@@ -1,163 +1,54 @@
 # Post-Meeting Transcription
 
-<!-- DESIGN: what we want. Can be ahead of code. Updated before implementation. -->
-
 ## Why
 
-Meetings produce recordings and speaker events, but raw audio isn't useful — users need a searchable transcript with speaker labels. Post-meeting transcription takes the recording after a meeting ends, runs it through Whisper, maps speakers using the collected events, and serves it through the dashboard with click-to-seek playback. This is the core value prop for users who couldn't attend or want to review.
+After a meeting ends, the recording is in MinIO. Deferred transcription runs Whisper on the full recording with speaker mapping from live speaker events. Higher accuracy than realtime (full-file context), and produces segments even if realtime transcription was disabled.
 
-## Data Flow
-
-```
-DURING MEETING (automatic, no user action):
-
-vexa-bot joins meeting via Playwright
-    |
-    v
-captures per-speaker audio streams (ScriptProcessorNode)
-    |                              |
-    v                              v
-audio chunks → recording       speaker events collected from DOM
-    |          (webm format)       |
-    v                              v
-upload to MinIO               bot exits → POST callback to meeting-api
-                                   |
-                                   v
-                              store SPEAKER_START/END events
-                              in meeting.data JSONB (Postgres)
-
----
-
-AFTER MEETING (user triggers):
-
-User clicks "Transcribe" in Dashboard (or API call)
-    |
-    v
-POST /meetings/{id}/transcribe → api-gateway :8056 → meeting-api
-    |
-    v
-already transcribed?
-    yes → 409 Conflict (no re-transcription, no versioning)
-    no  → continue
-    |
-    v
-download webm recording from MinIO
-    |
-    v
-ffmpeg convert webm → WAV (required for Whisper)
-    |
-    v
-POST WAV to transcription-service (faster-whisper)
-    |
-    v
-result: segments[] with text, timestamps, language
-    |
-    v
-_map_speakers_to_segments():
-    for each segment:
-        find speaker events that overlap segment's time range
-        pick speaker with most overlap
-        |
-        segment.start/end overlaps no events? → speaker = "Unknown"
-        segment is very short (1 word)?       → often "Unknown" (known issue)
-        rapid speaker turn?                   → may misattribute (event boundary lag)
-    |
-    v
-INSERT mapped segments into Postgres transcriptions table
-    status = "completed"
-
----
-
-SERVING (dashboard playback):
-
-Dashboard :3001
-    |
-    v
-GET /transcripts/{meeting_id} → api-gateway :8056 → transcription-collector
-    |                                                      |
-    v                                                      v
-display segments with speaker names              query Postgres
-    |
-    v
-audio player loads recording URL from MinIO
-    |
-    v
-user clicks a segment
-    |
-    v
-seek audio to segment.start_time
-    |
-    known issue: duration_seconds=null on some recordings → seek may break
-    known issue: very long segments (confirmation failure) → wrong seek position
-```
-
-## Code Ownership
+## What
 
 ```
-services/vexa-bot                          → recording, speaker events
-services/meeting-api                       → POST /transcribe, speaker mapping
-services/transcription-service             → Whisper inference (ffmpeg + model)
-services/transcription-collector           → segment persistence, GET /transcripts
-services/dashboard                         → transcript viewer, audio player, seek
-services/meeting-api                       → Transcription, Recording, MediaFile models
+Meeting ends → bot uploads recording to MinIO → POST /meetings/{id}/transcribe
+  → meeting-api downloads recording → ffmpeg webm→wav → Whisper (batch)
+  → speaker mapping via speaker_events → segments stored in Postgres
+  → GET /transcripts/{platform}/{id} returns deferred + realtime segments
 ```
 
----
+### Components
 
-<!-- STATE: what we have. Only updated with execution evidence. Never optimistic. -->
+| Component | File | Role |
+|-----------|------|------|
+| deferred transcription | `services/meeting-api/meeting_api/meetings.py` | Download recording, call Whisper, map speakers |
+| recording upload | `services/vexa-bot/core/src/services/recording.ts` | Upload webm to MinIO on bot exit |
+| speaker mapping | `services/meeting-api/meeting_api/meetings.py:_map_speakers_to_segments()` | Map Whisper timestamps to speaker events |
 
-## Quality Bar
+## DoD
 
-```
-Capture rate (2 speakers)       >= 90%     current: 100%      PASS   2026-03-28
-Capture rate (3+ speakers)      >= 80%     current: 92%       PASS   2026-03-23
-Speaker accuracy (2 speakers)   >= 70%     current: 100%      PASS   2026-03-28
-Speaker accuracy (3+ speakers)  >= 70%     current: 82%       PASS   2026-03-23
-WER                             <= 25%     current: 6.6%      PASS   2026-03-23
-Dashboard renders transcript    renders    current: renders    PASS   2026-03-28
-Click segment → audio seeks     < 3s       current: <1s       PASS   2026-03-28
-Video playback                  renders    current: untested   FAIL
-```
+| # | Check | Weight | Ceiling | Floor | Status | Evidence | Last checked | Test |
+|---|-------|--------|---------|-------|--------|----------|--------------|------|
+| 1 | Recording uploaded to MinIO after meeting ends | 20 | ceiling | 0 | PASS | Recordings available for both platforms | 2026-04-05T19:40Z | 10-verify-post-meeting |
+| 2 | POST /meetings/{id}/transcribe returns segments | 25 | ceiling | 0 | PASS | GMeet 3 deferred segments, Teams 5 deferred segments | 2026-04-05T19:40Z | 10-verify-post-meeting |
+| 3 | Speaker names attributed (not all "Unknown") | 25 | ceiling | 0 | PARTIAL | GMeet: 3/3 correct. Teams: names are UUIDs (`Teams Participant (uuid)`), not display names — see Known Issues | 2026-04-05T19:40Z | 10-verify-post-meeting |
+| 4 | Deferred segments consistent with realtime | 15 | — | 0 | FAIL | Duplicate content: API returns both realtime and deferred segments for same utterances — see Known Issues | 2026-04-05T19:40Z | 10-verify-post-meeting |
+| 5 | Works for GMeet and Teams | 15 | — | 0 | PARTIAL | GMeet fully works. Teams speaker mapping broken — see Known Issues | 2026-04-05T19:40Z | 10-verify-post-meeting |
 
-## Gate
-
-**PASS**: POST /transcribe → segments with speakers in Postgres → GET /transcripts returns them → dashboard renders segments → clicking segment plays audio from correct timestamp.
-
-**FAIL**: Any step fails, speaker accuracy < 70%, or playback offset > 5s.
-
-## Certainty
-
-```
-Recording uploaded to MinIO         95   2MB webm in MinIO, downloadable         2026-03-28
-Speaker events persisted            95   150 events, 2 speakers in JSONB         2026-03-28
-Real-time transcription segments    95   6 segments with timestamps in Postgres  2026-03-28
-Speaker mapping >= 70%              95   100% on 2-speaker meeting (6/6)         2026-03-28
-GET /transcripts returns segments   95   6 segments via api-gateway with auth    2026-03-28
-Dashboard renders transcript        90   browser-verified via CDP, segments show 2026-03-28
-Dashboard playback seeks correctly  90   click-to-seek works (<1s accuracy)      2026-03-28
-Video playback in dashboard         30   3 bugs fixed, container rebuild needed  2026-03-24
-3+ speaker stress test              90   82% speaker, 92% capture               2026-03-23
-POST /transcribe endpoint           20   405 — not implemented in meeting-api    2026-03-28
-```
-
-## Constraints
-
-- All client-facing API calls go through api-gateway — dashboard never calls meeting-api or transcription-collector directly
-- meeting-api owns transcription orchestration (download → Whisper → map → persist) — no other service duplicates this
-- Dashboard fetches transcripts via `GET /transcripts` through api-gateway, never queries Postgres directly
-- Auth is `X-API-Key` validated at gateway — services trust injected `X-User-ID` headers
-- No Python imports across service boundaries
-- Recording storage is MinIO only — no local filesystem
-- Speaker mapping runs inside meeting-api — not a separate service
-- Segments are immutable after 30s — no updates to persisted rows
-- README.md MUST be updated when behavior changes and match this manifest
+Confidence: 45 (ceiling items 1-2 pass, item 3 partial, items 4-5 have known bugs)
 
 ## Known Issues
 
-- `duration_seconds=null` on recordings — audio still plays and seek works, but duration display broken
-- `POST /meetings/{id}/transcribe` returns 405 — endpoint not implemented in meeting-api; real-time transcription covers same path
-- Short utterances (1 word) get "Unknown" speaker
-- Rapid speaker turns misattribute due to event boundary lag
-- Whisper splits long monologues → scorer can't match 1:N
-- Video needs container rebuild (ffmpeg added to runtime Dockerfile)
-- Bot only captures other participants' audio (echo cancellation) — single-bot meetings produce no transcription
+### 1. Duplicate segments — deferred transcription does not check for existing realtime segments
+
+`POST /meetings/{id}/transcribe` (`meetings.py:1619`) inserts deferred segments into the `transcriptions` table without checking if realtime segments already exist for the same time range. `GET /transcripts` returns all rows, causing every utterance to appear twice in the dashboard.
+
+**Root cause:** `meetings.py:1619` — `segment_id = f"deferred:{meeting_id}:{start:.3f}"` inserted alongside existing realtime segments.
+
+**Fix applied:** `meetings.py` returns 409: "This meeting is already transcribed (N segments). Multiple transcripts per meeting not implemented." Prevents duplicate insertion at the source.
+
+### 2. Teams deferred speaker names are UUIDs, not display names
+
+Teams `speaker_events` use DOM element extraction (`recording.ts:extractName`). When name selectors fail (common for guests), the fallback at `recording.ts:428` is `Teams Participant ({uuid})`. This UUID is then mapped to deferred segments by `_map_speakers_to_segments()`.
+
+**Root cause:** Teams speaker identity comes from DOM mutation observation, not from captions. The `extractName()` method (`recording.ts:387`) tries `nameSelectors` from the DOM but falls back to `extractId()` when selectors miss. Realtime gets correct names because it uses Teams live captions (`captions.ts`), which include display names directly in `data-tid="author"` elements. Deferred re-transcribes from the recording and relies on `speaker_events` persisted by the bot — which already have the wrong names.
+
+**Evidence from DB (meeting 66):**
+- Realtime: `Alice (Speaker) (Guest)`, `Bob (Speaker) (Guest)`, `Charlie (Speaker) (Guest)` — correct (from captions)
+- Deferred: `Dmitry Grankin`, `Teams Participant (afd164dd-...)`, `Unknown` — wrong (from DOM mutation)

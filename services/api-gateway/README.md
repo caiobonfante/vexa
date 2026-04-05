@@ -183,8 +183,9 @@ open http://localhost:8000/docs
 2. **Token revocation has 60s delay** — cached tokens remain valid for up to 60 seconds after revocation. No cache invalidation endpoint exists.
 3. **Rate limiting implemented** — Redis sliding window, 3 tiers: API (120/min), admin (30/min), WS (20/min). Configurable via env vars. Returns 429 with Retry-After header. ~~Previously no rate limiting.~~ Fixed 2026-03-29. WebSocket subscribe rate limiting still separate (not yet done).
 4. **Debug print statement** — line 1373 uses `print()` instead of `logger.debug()` for CDP proxy URL rewriting.
-5. **No WebSocket integration tests** — the real-time meeting status feature (a key selling point) has zero automated test coverage for actual message delivery.
+5. **WebSocket integration tests exist (2026-04-05)** — 8/8 WS checks pass: connect with valid key, reject without key (4401), ping/pong, subscribe to meeting, unsubscribe, invalid JSON recovery, segment validation (no duplicates, all have text+speaker), unknown action error. Tested on both GMeet and Teams meetings. Live streaming during active meeting not yet tested (protocol-only validation).
 6. **Admin-api response not validated** — if admin-api returns malformed user_data (e.g., `user_id: null`), it gets injected as `X-User-ID: None` and cached for 60s.
+7. **CDP proxy hardcodes port 9223 (bug #21)** — `main.py` CDP proxy targets port 9223 on bot containers. In compose mode, `socat` in the bot entrypoint bridges 9223→9222. In lite mode (process backend), Chrome listens on 9222 directly — no socat. CDP proxy fails with connection refused in lite mode. Fix: make the port configurable or auto-detect.
 
 ### Validation Plan (to reach 90+)
 
