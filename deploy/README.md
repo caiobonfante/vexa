@@ -54,7 +54,7 @@ Every build produces an immutable timestamp tag (`YYMMDD-HHMM`). Mutable tags (`
 
 All images live on DockerHub under the `vexaai/` namespace:
 
-- `vexaai/api-gateway`, `vexaai/admin-api`, `vexaai/meeting-api`, `vexaai/agent-api`, `vexaai/runtime-api`, `vexaai/mcp`, `vexaai/dashboard`, `vexaai/tts-service`, `vexaai/calendar-service`, `vexaai/telegram-bot`, `vexaai/vexa-bot`
+- `vexaai/api-gateway`, `vexaai/admin-api`, `vexaai/meeting-api`, `vexaai/agent-api`, `vexaai/runtime-api`, `vexaai/mcp`, `vexaai/dashboard`, `vexaai/tts-service`, `vexaai/vexa-bot`
 
 ### Dev cycle
 

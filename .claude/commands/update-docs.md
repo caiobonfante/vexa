@@ -26,7 +26,7 @@ Find all READMEs and design docs that reference the affected components:
 features/*/README.md
 features/*/SPEC.md
 services/*/README.md
-packages/*/README.md
+services/*/README.md
 ```
 
 Search for keywords related to the design change (e.g., component names, API routes, concepts being unified or split).

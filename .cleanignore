@@ -6,21 +6,17 @@
 .claude/
 **/.claude/
 
-# Agent memory and orchestrator logs
-features/.claude/
-features/orchestrator-log.md
-features/team.md
-features/system-architecture.md
-features/VALIDATION-REPORT-*.md
-features/blog_articles/
-
-# Feature-level agent artifacts (findings, feature-logs are agent-generated)
-features/**/tests/findings.md
-features/**/tests/feature-log.md
-features/**/tests/*-research.md
+# Management workspace — not part of the product
+features/
 
 # Marketing and presentations
 presentation.html
+
+# Not shipping in 0.10 — zero readiness
+services/calendar-service/
+
+# Not shipping in 0.10 — not properly tested
+services/telegram-bot/
 
 # Dashboard development artifacts
 services/dashboard/agent-flow.js

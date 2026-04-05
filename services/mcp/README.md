@@ -109,7 +109,7 @@ You will need your Vexa API key to connect to the MCP. If you do not have one, p
         "mcp-remote",
         "https://api.cloud.vexa.ai/mcp",
         "--header",
-        "Authorization: Bearer ${VEXA_API_KEY}"
+        "X-API-Key: ${VEXA_API_KEY}"
       ],
       "env": {
         "VEXA_API_KEY": "YOUR_API_KEY_HERE"

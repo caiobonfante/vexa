@@ -49,7 +49,7 @@ curl http://localhost:8083/health
 
 # Transcribe a file
 curl -X POST http://localhost:8083/v1/audio/transcriptions \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "X-API-Key: $API_TOKEN" \
   -F "file=@tests/test_audio.wav" \
   -F "model=whisper-1" \
   -F "response_format=verbose_json"
@@ -112,7 +112,7 @@ Request `timestamp_granularities=word` to get per-word timing in the response:
 
 ```bash
 curl -X POST http://localhost:8083/v1/audio/transcriptions \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "X-API-Key: $API_TOKEN" \
   -F "file=@audio.wav" \
   -F "model=whisper-1" \
   -F "response_format=verbose_json" \

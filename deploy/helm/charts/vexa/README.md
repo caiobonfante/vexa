@@ -39,7 +39,6 @@ Self-hosted deployment of the full Vexa stack: bot management, per-speaker trans
 | transcription-service | GPU inference (Whisper) — optional, can run externally | 8000 |
 | mcp | Model Context Protocol server | 18888 |
 | tts-service | Text-to-speech | 8002 |
-| calendar-service | Google Calendar sync, auto-join scheduling | 8050 |
 | dashboard | Next.js meeting dashboard | 3000 |
 | postgres | Database (bundled, optional) | 5432 |
 | redis | Stream + pub/sub (bundled, optional) | 6379 |

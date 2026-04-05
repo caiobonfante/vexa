@@ -91,7 +91,7 @@ docker build -t vexaai/vexa-bot:$(date +%y%m%d-%H%M) .
 docker run --rm --platform linux/amd64 --network vexa_dev_vexa_default \
   -e BOT_CONFIG='{"platform":"google_meet","meetingUrl":"https://meet.google.com/abc-defg-hij","botName":"Vexa","token":"jwt","connectionId":"id","nativeMeetingId":"abc","meeting_id":1,"redisUrl":"redis://redis:6379/0","automaticLeave":{"waitingRoomTimeout":300000,"noOneJoinedTimeout":300000,"everyoneLeftTimeout":300000}}' \
   -e TRANSCRIPTION_SERVICE_URL=http://transcription-service:8083/v1/audio/transcriptions \
-  vexaai/vexa-bot:dev
+  vexaai/vexa-bot:dev  # For production, use immutable tags (e.g., 0.10.0-260405-0108)
 ```
 
 Dev workflow (bind-mounts dist/ for fast iteration):

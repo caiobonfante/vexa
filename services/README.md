@@ -97,8 +97,6 @@ Vexa is a dozen services, not a monolith. Each service owns one concern (transcr
 |---------|------|-------------|
 | [tts-service](tts-service/) | 8084 | Text-to-speech for voice agent participation |
 | [mcp](mcp/) | 8010 | Model Context Protocol server for AI tool integration |
-| [calendar-service](calendar-service/) | 8085 | Google Calendar sync, auto-join scheduling |
-| [telegram-bot](telegram-bot/) | — | Telegram interface for mobile meeting management |
 | [dashboard](dashboard/) | 3000 | Next.js web UI — meetings, admin, agent chat |
 
 ## Data Flow

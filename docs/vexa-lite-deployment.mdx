@@ -56,6 +56,8 @@ docker run -d \
   vexaai/vexa-lite:latest
 ```
 
+> **Production:** Use immutable tags (e.g., `0.10.0-260405-0108`) instead of `:latest` for reproducible deployments.
+
 ### Development: Local Database
 
 ```bash
@@ -271,6 +273,8 @@ docker run -d \
   -e TRANSCRIBER_API_KEY="your-api-key" \
   vexaai/vexa-lite:latest
 ```
+
+> **Production:** Use immutable tags (e.g., `0.10.0-260405-0108`) instead of `:latest`.
 
 For local development, mount a volume:
 

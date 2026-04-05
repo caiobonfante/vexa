@@ -250,13 +250,13 @@ Model Context Protocol server exposing Vexa APIs as tools.
 Meeting URL parsing, transcript access, recording tools." \
   "services/mcp/"
 
-# 11. Calendar and Telegram
-commit_group "$DIMA" \
-  "feat: calendar service and Telegram bot
-
-Google Calendar sync with auto-scheduling for meetings.
-Telegram bot for mobile meeting management." \
-  "services/calendar-service/" "services/telegram-bot/"
+# 11. Calendar and Telegram — NO-SHIP for 0.10, skipped
+# commit_group "$DIMA" \
+#   "feat: calendar service and Telegram bot
+#
+# Google Calendar sync with auto-scheduling for meetings.
+# Telegram bot for mobile meeting management." \
+#   "services/calendar-service/" "services/telegram-bot/"
 
 # 12. Transcript rendering library
 commit_group "$DIMA" \

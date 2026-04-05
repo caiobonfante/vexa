@@ -167,6 +167,8 @@ docker run -d \
   vexaai/vexa-lite:latest
 ```
 
+> **Production:** Use immutable tags (e.g., `0.10.0-260405-0108`) instead of `:latest` for reproducible deployments.
+
 **Deployment options:**
 - **One-click platform deployments**: [vexa-lite-deploy repository](https://github.com/Vexa-ai/vexa-lite-deploy) (Fly.io ready, more platforms coming)
 - **Complete setup guide**: [Vexa Lite Deployment Guide](https://docs.vexa.ai/vexa-lite-deployment)
@@ -449,8 +451,8 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | Service | Purpose |
 |---------|---------|
 | [vexa-bot](./services/vexa-bot) | Joins meetings, captures per-speaker audio, transcribes, interactive controls |
-| [transcription-service](./packages/transcription-service) | GPU inference — OpenAI-compatible Whisper API |
-| [tts-service](./packages/tts-service) | Text-to-speech for bot voice |
+| [transcription-service](./services/transcription-service) | GPU inference — OpenAI-compatible Whisper API |
+| [tts-service](./services/tts-service) | Text-to-speech for bot voice |
 | [mcp](./services/mcp) | 17-tool MCP server for AI agents (Claude, Cursor, etc.) |
 
 **Frontends & clients:**
@@ -458,7 +460,6 @@ For the up-to-date roadmap and priorities, see GitHub Issues and Milestones. Iss
 | Service | Purpose |
 |---------|---------|
 | [dashboard](./services/dashboard) | Open-source Next.js web UI — meetings, transcripts, agent chat, browser sessions |
-| [telegram-bot](./services/telegram-bot) | Telegram client for agent interaction on mobile |
 
 **Ephemeral containers** (spawned on demand, auto-reclaimed):
 

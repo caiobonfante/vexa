@@ -9,16 +9,17 @@ ENV_EXAMPLE := $(ROOT)/deploy/env/env-example
 LAST_TAG_FILE := $(ROOT)/deploy/compose/.last-tag
 
 # --- Image tagging ---
-# Every build gets an immutable timestamp tag (YYMMDD-HHMM).
+# Every build gets an immutable VERSION-YYMMDD-HHMM tag.
 # Mutable tags (dev, staging, latest) are pointers updated only during publish/promote.
-IMAGE_TAG ?= $(shell date +%y%m%d-%H%M)
+VERSION := $(shell cat $(ROOT)/VERSION 2>/dev/null || echo "0.0.0")
+IMAGE_TAG ?= $(VERSION)-$(shell date +%y%m%d-%H%M)
 export IMAGE_TAG
 
 # DockerHub namespace
 DOCKERHUB_USER ?= vexaai
 
 # All images that get built and published
-IMAGES := api-gateway admin-api runtime-api meeting-api agent-api mcp dashboard tts-service telegram-bot calendar-service
+IMAGES := api-gateway admin-api runtime-api meeting-api agent-api mcp dashboard tts-service vexa-lite
 BOT_IMAGE := vexa-bot
 
 -include $(ENV_FILE)
@@ -71,7 +72,11 @@ build-bot-image: check_docker
 	@echo "Building $(DOCKERHUB_USER)/$(BOT_IMAGE):$(IMAGE_TAG)..."
 	docker build --platform linux/amd64 -t $(DOCKERHUB_USER)/$(BOT_IMAGE):$(IMAGE_TAG) -f $(ROOT)/services/vexa-bot/Dockerfile $(ROOT)/services/vexa-bot
 
-build: check_docker build-bot-image
+build-lite: check_docker
+	@echo "Building $(DOCKERHUB_USER)/vexa-lite:$(IMAGE_TAG)..."
+	docker build --platform linux/amd64 -t $(DOCKERHUB_USER)/vexa-lite:$(IMAGE_TAG) -f $(ROOT)/deploy/lite/Dockerfile.lite $(ROOT)
+
+build: check_docker build-bot-image build-lite
 	@echo "Building all images with tag: $(IMAGE_TAG)"
 	$(COMPOSE_CMD) build
 	@echo "$(IMAGE_TAG)" > $(LAST_TAG_FILE)

@@ -19,8 +19,6 @@ Generated: 2026-03-24. Update this file whenever ports or env vars change.
 | postgres | 5432 | **5458** | `POSTGRES_PORT` | WARNING: host port is NOT 5432. Use 5458 from host. |
 | minio API | 9000 | **9010** | `MINIO_PORT` | Object storage API. WARNING: host port is NOT 9000. |
 | minio console | 9001 | **9011** | `MINIO_CONSOLE_PORT` | MinIO web UI |
-| telegram-bot | 8200 | (internal only) | — | No host binding; webhook only |
-| calendar-service | 8050 | **8050** | `CALENDAR_SERVICE_PORT` | Calendar sync + bot scheduling; optional service |
 
 **Critical: redis and postgres host ports are offset from their defaults.**
 Any tool, test, or script connecting from the host must use 6389 (redis) and 5458 (postgres).
@@ -37,12 +35,9 @@ All inter-service calls use **container names** (not localhost). Services are on
 | api-gateway | meeting-api | `http://meeting-api:8080` | passes through user token (via `MEETING_API_URL` env var) |
 | meeting-api | agent-api | `http://agent-api:8100` | `POST_MEETING_HOOKS` webhook |
 | agent-api | runtime-api | `http://runtime-api:8090` | `BOT_API_TOKEN` |
-| telegram-bot | agent-api | `http://agent-api:8100` | no auth (internal) |
 | dashboard (Next.js server) | api-gateway | `http://localhost:8066` | user JWT token |
 | dashboard (Next.js server) | agent-api | `http://localhost:8100` | `AGENT_API_TOKEN` |
 | dashboard (Next.js server) | admin-api | `http://localhost:8067` | `VEXA_ADMIN_API_KEY` |
-| calendar-service | meeting-api | `http://meeting-api:8080` | `BOT_API_TOKEN` as `X-API-Key` (via `MEETING_API_URL` env var) |
-| api-gateway | calendar-service | `http://calendar-service:8050` | passes through user token |
 
 ---
 

@@ -42,6 +42,8 @@ docker run --rm -p 3000:3000 \
   vexaai/dashboard:latest
 ```
 
+> **Production:** Use immutable tags (e.g., `0.10.0-260405-0108`) instead of `:latest` for reproducible deployments.
+
 Then open `http://localhost:3000`. (The container listens on port 3000; the `npm run dev` server uses port 3001.)
 
 ## Local Development
@@ -115,7 +117,7 @@ See `.env.example` for a complete template.
 ```yaml
 services:
   vexa-dashboard:
-    image: vexaai/dashboard:latest
+    image: vexaai/dashboard:latest  # For production, use immutable tags (e.g., 0.10.0-260405-0108)
     ports:
       - "3000:3000"
     environment:
