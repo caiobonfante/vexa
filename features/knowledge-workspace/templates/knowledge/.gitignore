@@ -1,9 +1,0 @@
-secrets.json
-.claude/.session
-.claude/.chat-prompt.txt
-.claude/.agent-prompt.txt
-streams/images/
-input/
-__pycache__/
-*.pyc
-.env
