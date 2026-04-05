@@ -289,3 +289,23 @@ persistent recordings and browser state (login cookies survive container restart
 | GPU transcription | External only | External only |
 | Scaling | Single machine | Docker Swarm / multiple hosts |
 | Redis persistence | None (in-memory) | Configurable |
+
+## Definition of Done
+
+| # | Item | Weight | Status | Evidence | Last checked |
+|---|------|--------|--------|----------|--------------|
+| 1 | `docker build` produces working image | 15 | PASS | vexa-lite:260405-2120 built and runs | 2026-04-05T18:20Z |
+| 2 | 14 supervisor services running | 15 | PASS | All 14 entered RUNNING state | 2026-04-05T18:20Z |
+| 3 | Transcription startup check works | 10 | PASS | Sends test WAV, verifies text, exits 1 on failure | 2026-04-05T18:20Z |
+| 4 | Post-startup self-check reports healthy | 10 | PASS | "ALL SERVICES HEALTHY" in logs | 2026-04-05T18:20Z |
+| 5 | Bots join meetings + produce transcripts | 15 | PASS | Teams: 19 segs, 4 speakers. GMeet: 9 segs (with loopback dupes) | 2026-04-05T18:40Z |
+| 6 | Browser sessions with saved login | 10 | PASS | Google login saved to MinIO, restored on new session | 2026-04-05T18:00Z |
+| 7 | Dashboard on port 3000 | 5 | PASS | HTML served, backend calls work | 2026-04-05T17:38Z |
+| 8 | Known issues documented | 10 | PASS | Zombies (#20), CDP port (#21), PulseAudio (#30) | 2026-04-05T18:50Z |
+| 9 | Env vars table complete | 10 | PASS | All required + optional vars documented | 2026-04-05T18:50Z |
+
+## Confidence
+
+Score: 80/100
+Last validated: 2026-04-05 (full-stack-lite run)
+Ceiling: Zombie reaper bug (#20) caps operational reliability

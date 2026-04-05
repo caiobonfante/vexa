@@ -96,3 +96,21 @@ One env-example covers both modes: [env/env-example](env/env-example)
 | Production with scaling             | Helm                                 |
 
 
+## Definition of Done
+
+| # | Item | Weight | Status | Evidence | Last checked |
+|---|------|--------|--------|----------|--------------|
+| 1 | Lite option documented and working | 20 | PASS | Lite validated 2026-04-05, 14/14 services, transcription OK | 2026-04-05T18:50Z |
+| 2 | Compose option documented and working | 20 | PASS | Compose validated in previous sessions, make all works | 2026-04-05 |
+| 3 | Helm option documented | 10 | SKIP | Charts exist but not tested on cluster | — |
+| 4 | Image tagging docs match Makefile | 15 | PASS | YYMMDD-HHMM tags confirmed in builds | 2026-04-05 |
+| 5 | Transcription service options explained | 10 | PASS | Hosted + self-host both documented | 2026-04-05 |
+| 6 | Environment variable reference complete | 15 | PARTIAL | env-example exists, lite vars now complete, compose vars need audit | 2026-04-05 |
+| 7 | All registry image names correct | 10 | SKIP | Not verified this run | — |
+
+## Confidence
+
+Score: 65/100
+Last validated: 2026-04-05 (full-stack-lite run)
+Ceiling: Helm untested, compose env vars need audit, registry image names unverified
+

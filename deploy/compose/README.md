@@ -179,3 +179,22 @@ make down && docker compose ps  # should be empty
 - Never log secrets (`ADMIN_API_TOKEN`, DB credentials, API keys). Log that they are set, not their values.
 - Create test users/meetings per run. Do not reuse data from previous runs.
 
+## Definition of Done
+
+| # | Item | Weight | Status | Evidence | Last checked |
+|---|------|--------|--------|----------|--------------|
+| 1 | `make all` from clean clone | 20 | PASS | Validated in previous sessions | 2026-04-04 |
+| 2 | `make build` produces YYMMDD-HHMM tags | 15 | PASS | Tags confirmed: 260405-2029 etc. | 2026-04-05 |
+| 3 | `make up` starts all healthy | 15 | PASS | All services reach healthy state | 2026-04-04 |
+| 4 | Port table matches docker-compose.yml | 10 | SKIP | Not audited this run | — |
+| 5 | Inter-container DNS works | 10 | PASS | Services communicate via Docker network | 2026-04-04 |
+| 6 | `make test` passes | 10 | PASS | Health checks pass | 2026-04-04 |
+| 7 | Transcription reachable from containers | 10 | SKIP | Not tested from inside compose containers this run | — |
+| 8 | Dashboard accessible | 10 | PASS | Dashboard on 3001, all backend calls OK | 2026-04-05 |
+
+## Confidence
+
+Score: 75/100
+Last validated: 2026-04-05 (full-stack-lite run)
+Ceiling: Port table unaudited, transcription not tested from inside compose containers
+

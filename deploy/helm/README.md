@@ -103,6 +103,23 @@ After deploying, verify:
 9. Inter-service connectivity (api-gateway can reach admin-api, meeting-api, etc.)
 10. Health endpoints respond on each service
 
+## Definition of Done
+
+| # | Item | Weight | Status | Evidence | Last checked |
+|---|------|--------|--------|----------|--------------|
+| 1 | vexa chart installs on K8s | 25 | SKIP | Not tested | — |
+| 2 | vexa-lite chart installs on K8s | 25 | SKIP | Not tested | — |
+| 3 | Values documented | 15 | SKIP | Not audited | — |
+| 4 | Image tags match chart defaults | 10 | SKIP | Not verified | — |
+| 5 | Secrets management documented | 15 | SKIP | Not audited | — |
+| 6 | Health probes configured | 10 | SKIP | Not verified | — |
+
+## Confidence
+
+Score: 0/100
+Last validated: never
+Ceiling: Never tested on a real cluster
+
 ## License
 
 See `LICENSE`.
