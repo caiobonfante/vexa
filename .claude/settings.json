@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/confidence-check.sh",
+            "command": "/home/dima/dev/vexa-agentic-runtime/.claude/confidence-check.sh",
             "timeout": 30,
             "statusMessage": "Checking confidence protocol..."
           },
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/dima/dev/vexa-agentic-runtime/conductor/hooks/session-start.sh",
+            "command": "echo 'session started'",
             "timeout": 5,
             "statusMessage": "Loading confidence protocol..."
           },

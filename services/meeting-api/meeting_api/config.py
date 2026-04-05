@@ -9,6 +9,7 @@ if not REDIS_URL:
 
 # Runtime API — where we delegate container operations
 RUNTIME_API_URL = os.environ.get("RUNTIME_API_URL", "http://runtime-api:8000")
+RUNTIME_API_TOKEN = os.environ.get("RUNTIME_API_TOKEN", "")
 
 # Self URL — used for callback_url in container creation
 MEETING_API_URL = os.environ.get("MEETING_API_URL", "http://meeting-api:8080")

@@ -1487,8 +1487,18 @@ async def transcribe_meeting(
     if meeting.status not in ("completed", "failed"):
         raise HTTPException(status_code=400, detail=f"Meeting status is '{meeting.status}', expected 'completed' or 'failed'")
 
-    # 1. Find recording — check recordings table first, then meeting.data (legacy)
+    # 0. Check if realtime segments already exist — deferred would create duplicates
     from .models import Recording, MediaFile, Transcription
+    existing_count = (await db.execute(
+        select(func.count(Transcription.id)).where(Transcription.meeting_id == meeting_id)
+    )).scalar() or 0
+    if existing_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This meeting is already transcribed ({existing_count} segments). Multiple transcripts per meeting not implemented.",
+        )
+
+    # 1. Find recording — check recordings table first, then meeting.data (legacy)
     from .storage import create_storage_client
     import subprocess
     import tempfile
@@ -1582,7 +1592,7 @@ async def transcribe_meeting(
                 headers["Authorization"] = f"Bearer {tx_token}"
 
             resp = await client.post(
-                f"{tx_url}/v1/audio/transcriptions",
+                tx_url,
                 files=files,
                 data=form_data,
                 headers=headers,

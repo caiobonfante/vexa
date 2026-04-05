@@ -74,6 +74,7 @@ export function getBrowserSessionArgs(): string[] {
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-blink-features=AutomationControlled',
+    '--use-fake-ui-for-media-stream',
     '--start-maximized',
     '--window-size=1920,1080',
     '--window-position=0,0',

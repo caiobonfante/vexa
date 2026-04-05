@@ -219,7 +219,7 @@ _TEAMS_ENTERPRISE_HOSTS = {
 }
 
 def _is_teams_enterprise_host(host: str) -> bool:
-    return host in _TEAMS_ENTERPRISE_HOSTS or host.endswith(".teams.microsoft.us")
+    return host in _TEAMS_ENTERPRISE_HOSTS or host.endswith(".teams.microsoft.us") or host.endswith(".teams.microsoft.com")
 
 
 def _parse_meeting_url(meeting_url: str) -> ParseMeetingLinkResponse:

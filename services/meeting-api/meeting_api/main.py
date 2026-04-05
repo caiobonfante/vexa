@@ -167,7 +167,9 @@ async def startup():
         logger.warning("Collector consumers NOT started — Redis unavailable")
 
     # Shared httpx client for connection pooling to Runtime API
-    app.state.httpx_client = httpx.AsyncClient(timeout=30.0)
+    from .config import RUNTIME_API_TOKEN
+    headers = {"X-API-Key": RUNTIME_API_TOKEN} if RUNTIME_API_TOKEN else {}
+    app.state.httpx_client = httpx.AsyncClient(timeout=30.0, headers=headers)
 
     logger.info("Meeting API ready")
 

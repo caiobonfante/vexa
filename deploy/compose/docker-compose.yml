@@ -245,6 +245,7 @@ services:
       - REDIS_PORT=6379
       - ADMIN_TOKEN=${ADMIN_TOKEN:-vexa-admin-token}
       - RUNTIME_API_URL=http://runtime-api:8090
+      - RUNTIME_API_TOKEN=${BOT_API_TOKEN:-}
       - MEETING_API_URL=http://meeting-api:8080
       - BOT_IMAGE_NAME=${BROWSER_IMAGE:-vexaai/vexa-bot:${IMAGE_TAG:-dev}}
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-vexa}_vexa

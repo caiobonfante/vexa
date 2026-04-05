@@ -107,8 +107,8 @@ down: check_docker
 	@cd $(ROOT)/services/transcription-service && docker compose down 2>/dev/null || true
 
 # --- Service API key (dashboard WS auth) ---
-# Creates a bot-scope API key for user 5 and writes it to .env as VEXA_API_KEY.
-# The dashboard uses this for WebSocket auth so it works without manual login.
+# Creates a bot+browser+tx API key for user 5 and writes it to .env as VEXA_API_KEY.
+# The dashboard uses this for WebSocket auth and transcript reads.
 setup-api-key: check_docker
 	@if grep -qE '^VEXA_API_KEY=.+' $(ENV_FILE) 2>/dev/null; then \
 		echo "VEXA_API_KEY already set in .env — skipping."; \
@@ -117,7 +117,7 @@ setup-api-key: check_docker
 		API_PORT=$${API_PORT:-8056}; \
 		ADMIN_TOKEN=$$(grep -E '^ADMIN_API_TOKEN=' $(ENV_FILE) 2>/dev/null | cut -d= -f2); \
 		ADMIN_TOKEN=$${ADMIN_TOKEN:-changeme}; \
-		TOKEN=$$(curl -sf -X POST "http://localhost:$$API_PORT/admin/users/5/tokens?scope=bot&name=dashboard-ws" \
+		TOKEN=$$(curl -sf -X POST "http://localhost:$$API_PORT/admin/users/5/tokens?scopes=bot,browser,tx&name=dashboard-ws" \
 			-H "X-Admin-API-Key: $$ADMIN_TOKEN" 2>/dev/null \
 			| python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null); \
 		if [ -n "$$TOKEN" ]; then \
@@ -140,9 +140,9 @@ logs:
 test: check_docker
 	@echo "Checking services..."
 	@API_PORT=$$(grep -E '^API_GATEWAY_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8056"); \
-	ADMIN_PORT=$$(grep -E '^ADMIN_API_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8057"); \
+	ADMIN_PORT=$$(grep -E '^ADMIN_API_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "8067"); \
 	DASH_PORT=$$(grep -E '^DASHBOARD_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "3001"); \
-	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8057}; DASH_PORT=$${DASH_PORT:-3001}; \
+	API_PORT=$${API_PORT:-8056}; ADMIN_PORT=$${ADMIN_PORT:-8067}; DASH_PORT=$${DASH_PORT:-3001}; \
 	if curl -sf "http://localhost:$$API_PORT/" > /dev/null 2>&1; then \
 		echo "  ✓ API Gateway (port $$API_PORT)"; \
 	else \

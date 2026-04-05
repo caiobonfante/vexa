@@ -25,7 +25,6 @@ import {
   Settings,
   ExternalLink,
   Trash2,
-  Zap,
   Code,
   Download,
   ClipboardCopy,
@@ -92,7 +91,6 @@ import {
 } from "@/lib/export";
 import { getCookie, setCookie } from "@/lib/cookies";
 import { DocsLink } from "@/components/docs/docs-link";
-import { DecisionsPanel } from "@/components/decisions/decisions-panel";
 import { MeetingAgentPanel } from "@/components/agent/meeting-agent-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
 import { BrowserSessionView } from "@/components/meetings/browser-session-view";
@@ -126,9 +124,6 @@ export default function MeetingDetailPage() {
   const authToken = useAuthStore((s) => s.token);
   const { config: runtimeConfig } = useRuntimeConfig();
   const apiBaseUrl = runtimeConfig?.publicApiUrl || runtimeConfig?.apiUrl || "";
-
-  // Decisions panel state
-  const [decisionsOpen, setDecisionsOpen] = useState(false);
 
   // Agent panel state
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
@@ -646,6 +641,13 @@ export default function MeetingDetailPage() {
   const meetingStatus = currentMeeting?.status;
 
   useEffect(() => {
+    // Active browser sessions use VNC — no transcript fetch needed.
+    // Fetching transcripts while active would hit /transcripts which requires 'tx' scope;
+    // if the cookie is unavailable the fallback VEXA_API_KEY (bot-scoped) causes 403.
+    if (isBrowserSession && meetingStatus !== "stopping" && meetingStatus !== "completed") {
+      return;
+    }
+
     // Always refresh transcript/recording artifacts when entering post-meeting flow.
     if ((meetingStatus === "stopping" || meetingStatus === "completed") && meetingPlatform && meetingNativeId) {
       fetchTranscripts(meetingPlatform, meetingNativeId, meetingNumericId);
@@ -658,7 +660,7 @@ export default function MeetingDetailPage() {
       fetchTranscripts(meetingPlatform, meetingNativeId, meetingNumericId);
       fetchChatMessages(meetingPlatform, meetingNativeId);
     }
-  }, [meetingStatus, shouldUseWebSocket, meetingPlatform, meetingNativeId, meetingNumericId, fetchTranscripts, fetchChatMessages]);
+  }, [meetingStatus, shouldUseWebSocket, isBrowserSession, meetingPlatform, meetingNativeId, meetingNumericId, fetchTranscripts, fetchChatMessages]);
 
   // Also fetch chat messages for active meetings (WS handles real-time, REST bootstraps)
   useEffect(() => {
@@ -744,6 +746,13 @@ export default function MeetingDetailPage() {
     return null;
   }, [playbackTime, isPlaybackActive, recordingFragments, sessionStartMsBySessionUid]);
 
+  // Browser session check runs first — transcript errors must not block the VNC view.
+  // The transcript fetch is skipped for active browser sessions, but if a stale error
+  // exists in the store (e.g. from a prior page visit), we still want to show the VNC.
+  if (currentMeeting && currentMeeting.data?.mode === "browser_session") {
+    return <BrowserSessionView meeting={currentMeeting} />;
+  }
+
   if (error) {
     return (
       <div className="space-y-6">
@@ -820,11 +829,6 @@ export default function MeetingDetailPage() {
     const mins = minutes % 60;
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
-
-  // If this is a browser session, show VNC view instead of transcript
-  if (currentMeeting?.data?.mode === "browser_session") {
-    return <BrowserSessionView meeting={currentMeeting} />;
-  }
 
   // Browser view available for any active meeting bot (VNC runs in all bot containers)
   const hasBrowserView = !!(['requested', 'joining', 'awaiting_admission', 'active'].includes(currentMeeting?.status));
@@ -1204,7 +1208,6 @@ export default function MeetingDetailPage() {
                   // Close conflicting panels when opening
                   if (next) {
                     setApiViewOpen(false);
-                    setDecisionsOpen(false);
                   }
                   return next;
                 });
@@ -1237,22 +1240,6 @@ export default function MeetingDetailPage() {
             <span className="hidden sm:inline">API</span>
           </Button>
 
-          {/* Decisions panel toggle */}
-          {process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true" && (
-          <Button
-            variant={decisionsOpen ? "secondary" : "outline"}
-            size="sm"
-            className="gap-1.5 h-9"
-            onClick={() => setDecisionsOpen((v) => {
-              const next = !v;
-              if (next) setAgentPanelOpen(false);
-              return next;
-            })}
-          >
-            <Zap className="h-4 w-4 text-amber-500" />
-            <span className="hidden sm:inline">Decisions</span>
-          </Button>
-          )}
         </div>
       </div>
 
@@ -2136,47 +2123,6 @@ export default function MeetingDetailPage() {
         </div>
       )}
 
-      {/* Decisions slide-over panel */}
-      {/* Backdrop */}
-      {decisionsOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setDecisionsOpen(false)}
-        />
-      )}
-      {/* Panel */}
-      <div
-        className={cn(
-          "fixed inset-y-0 right-0 z-50 flex flex-col w-full sm:w-[420px]",
-          "bg-background border-l shadow-2xl",
-          "transform transition-transform duration-300 ease-in-out",
-          decisionsOpen ? "translate-x-0" : "translate-x-full"
-        )}
-      >
-        {/* Panel header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-500" />
-            <span className="font-semibold text-sm">Decisions</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setDecisionsOpen(false)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        {/* Panel content — scrollable */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <DecisionsPanel
-            meetingId={meetingId}
-            isActive={currentMeeting.status === "active"}
-            embedded
-          />
-        </div>
-      </div>
     </div>
   );
 }

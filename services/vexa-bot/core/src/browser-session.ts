@@ -287,6 +287,16 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
+  // Auto-save browser data every 60s — ensures login state persists
+  // even if the container is killed without graceful shutdown
+  const autoSaveInterval = setInterval(() => {
+    try {
+      syncBrowserDataToS3(config);
+    } catch (err: any) {
+      console.error(`[browser-session] Auto-save failed: ${err.message}`);
+    }
+  }, 60_000);
+
   // Keep alive
   await new Promise(() => {});
 }
