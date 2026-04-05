@@ -20,6 +20,9 @@ profiles:
     env:
       DISPLAY: "${DISPLAY:-:99}"
       NODE_ENV: "production"
+      REDIS_URL: "${REDIS_URL:-redis://localhost:6379/0}"
+      TRANSCRIPTION_SERVICE_URL: "${TRANSCRIPTION_SERVICE_URL:-http://localhost:8085}"
+      TRANSCRIPTION_SERVICE_TOKEN: "${TRANSCRIPTION_SERVICE_TOKEN:-}"
     ports:
       "9222/tcp": {}         # CDP debug port
 

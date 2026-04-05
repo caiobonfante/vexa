@@ -213,22 +213,67 @@ echo "Verifying transcription service..."
 TRANSCRIBER_URL="${TRANSCRIBER_URL:-${REMOTE_TRANSCRIBER_URL:-}}"
 TRANSCRIBER_API_KEY="${TRANSCRIBER_API_KEY:-${REMOTE_TRANSCRIBER_API_KEY:-}}"
 
+# Derive TRANSCRIPTION_SERVICE_URL/TOKEN from TRANSCRIBER_URL/API_KEY.
+# meeting-api reads these names to build BOT_CONFIG for bots.
+# TRANSCRIBER_URL is the full endpoint (http://host:port/v1/audio/transcriptions)
+# TRANSCRIPTION_SERVICE_URL is the base URL (http://host:port)
+if [ -n "$TRANSCRIBER_URL" ]; then
+    export TRANSCRIPTION_SERVICE_URL="${TRANSCRIPTION_SERVICE_URL:-$(echo "$TRANSCRIBER_URL" | sed 's|/v1/.*||')}"
+    export TRANSCRIPTION_SERVICE_TOKEN="${TRANSCRIPTION_SERVICE_TOKEN:-$TRANSCRIBER_API_KEY}"
+fi
+
 if [ -z "$TRANSCRIBER_URL" ]; then
-    echo "  WARNING: TRANSCRIBER_URL is not set — transcription will not work"
+    echo "  ERROR: TRANSCRIBER_URL is not set — transcription will not work"
     echo "  Set TRANSCRIBER_URL and TRANSCRIBER_API_KEY for transcription"
+    exit 1
 elif [ "${SKIP_TRANSCRIPTION_CHECK:-false}" = "true" ]; then
-    echo "  Skipping transcription connectivity check (SKIP_TRANSCRIPTION_CHECK=true)"
+    echo "  Skipping transcription check (SKIP_TRANSCRIPTION_CHECK=true)"
 else
-    if [[ "$TRANSCRIBER_URL" =~ ^(https?://[^/]+) ]]; then
-        BASE_URL="${BASH_REMATCH[1]}"
-        if curl -s -f --max-time 5 "$BASE_URL/health" >/dev/null 2>&1 || \
-           curl -s -f --max-time 5 "$BASE_URL" >/dev/null 2>&1; then
-            echo "  Transcription service reachable at $BASE_URL"
-        else
-            echo "  WARNING: Cannot reach transcription service at $BASE_URL"
-            echo "  Container will start anyway — set SKIP_TRANSCRIPTION_CHECK=true to suppress"
-        fi
+    # Send a real audio file to the transcription service and verify text comes back.
+    # This catches: wrong URL, bad API key, service down, GPU not loaded, model broken.
+    AUTH_HEADER=""
+    if [ -n "$TRANSCRIBER_API_KEY" ]; then
+        AUTH_HEADER="Authorization: Bearer $TRANSCRIBER_API_KEY"
     fi
+
+    if [ -n "$AUTH_HEADER" ]; then
+        HTTP_CODE=$(curl -s --max-time 15 -X POST \
+            -F file=@/app/test-speech-en.wav -F model=large-v3-turbo -F language=en \
+            -H "$AUTH_HEADER" \
+            -o /tmp/transcription-check.json -w '%{http_code}' "$TRANSCRIBER_URL" 2>/dev/null)
+    else
+        HTTP_CODE=$(curl -s --max-time 15 -X POST \
+            -F file=@/app/test-speech-en.wav -F model=large-v3-turbo -F language=en \
+            -o /tmp/transcription-check.json -w '%{http_code}' "$TRANSCRIBER_URL" 2>/dev/null)
+    fi
+    RESULT=$(cat /tmp/transcription-check.json 2>/dev/null)
+    rm -f /tmp/transcription-check.json
+
+    if [ "$HTTP_CODE" = "000" ]; then
+        echo "  ERROR: Transcription service not reachable at $TRANSCRIBER_URL"
+        echo "  Set SKIP_TRANSCRIPTION_CHECK=true to start without transcription"
+        exit 1
+    fi
+
+    if [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then
+        echo "  ERROR: Transcription service returned HTTP $HTTP_CODE"
+        echo "  URL: $TRANSCRIBER_URL"
+        echo "  Response: $RESULT"
+        echo "  Check TRANSCRIBER_API_KEY is set correctly"
+        echo "  Set SKIP_TRANSCRIPTION_CHECK=true to start without transcription"
+        exit 1
+    fi
+
+    # Verify we got actual text back (not empty, not error JSON)
+    TEXT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text',''))" 2>/dev/null)
+    if [ -z "$TEXT" ]; then
+        echo "  ERROR: Transcription service returned HTTP $HTTP_CODE but no text"
+        echo "  Response: $RESULT"
+        echo "  Set SKIP_TRANSCRIPTION_CHECK=true to start without transcription"
+        exit 1
+    fi
+
+    echo "  Transcription OK (HTTP $HTTP_CODE): \"${TEXT:0:60}...\""
 fi
 echo ""
 
@@ -276,6 +321,62 @@ mkdir -p "${LOCAL_STORAGE_DIR:-/var/lib/vexa/recordings}"
 mkdir -p /var/lib/vexa/recordings/spool
 
 # -----------------------------------------------------------------------------
+# Post-Startup Health Validation
+# -----------------------------------------------------------------------------
+# Runs in background after supervisord starts. Verifies all internal services
+# are actually responding. Logs clearly so `docker logs vexa` shows the result.
+
+cat > /usr/local/bin/post-startup-check.sh <<'HEALTH_EOF'
+#!/bin/bash
+sleep 20
+
+echo ""
+echo "=============================================="
+echo "  Post-Startup Health Validation"
+echo "=============================================="
+
+FAILED=0
+
+check() {
+    local name="$1" url="$2"
+    if curl -sf --max-time 5 "$url" >/dev/null 2>&1; then
+        echo "  OK: $name"
+    else
+        echo "  FAIL: $name ($url)"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+check "API Gateway"    "http://localhost:8056/"
+check "Meeting API"    "http://localhost:8080/health"
+check "Runtime API"    "http://localhost:8090/health"
+check "Agent API"      "http://localhost:8100/health"
+check "Dashboard"      "http://localhost:3000/"
+check "TTS Service"    "http://localhost:8059/health"
+
+if redis-cli ping 2>/dev/null | grep -q PONG; then
+    echo "  OK: Redis"
+else
+    echo "  FAIL: Redis"
+    FAILED=$((FAILED + 1))
+fi
+
+if [ "${SKIP_TRANSCRIPTION_CHECK:-false}" != "true" ] && [ -n "$TRANSCRIBER_URL" ]; then
+    BASE_URL=$(echo "$TRANSCRIBER_URL" | sed 's|/v1/.*||')
+    check "Transcription" "$BASE_URL/health"
+fi
+
+echo ""
+if [ $FAILED -eq 0 ]; then
+    echo "  ALL SERVICES HEALTHY"
+else
+    echo "  WARNING: $FAILED service(s) failed — check supervisor logs"
+fi
+echo "=============================================="
+HEALTH_EOF
+chmod +x /usr/local/bin/post-startup-check.sh
+
+# -----------------------------------------------------------------------------
 # Start Services
 # -----------------------------------------------------------------------------
 
@@ -290,7 +391,10 @@ echo "  - Meeting API:    http://localhost:8080"
 echo "  - Runtime API:    http://localhost:8090"
 echo "  - Agent API:      http://localhost:8100"
 echo "  - Dashboard:      http://localhost:3000"
-echo "  - API Docs:       http://localhost:8056/docs"
+echo "  - API Docs:       https://docs.vexa.ai"
 echo ""
+
+# Run post-startup validation in background
+/usr/local/bin/post-startup-check.sh &
 
 exec "$@"
