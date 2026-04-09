@@ -170,7 +170,7 @@ export async function runMeetingFlow(
         // Captions are per-user, so the bot can always enable them for itself.
         if (platform === 'teams') {
           enableTeamsLiveCaptions(page).catch((err: any) => {
-            log(`[Captions] Failed to enable live captions (non-fatal, falling back to DOM signals): ${err?.message || err}`);
+            log(`[Captions] Failed to enable live captions (non-fatal, DOM+VAD is primary): ${err?.message || err}`);
           });
         }
       }

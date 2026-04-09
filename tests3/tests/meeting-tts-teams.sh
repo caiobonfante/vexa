@@ -284,6 +284,50 @@ else
 fi
 
 # ══════════════════════════════════════════════════
+#  PHASE 5b: Verify DOM+VAD routing (not caption-driven)
+# ══════════════════════════════════════════════════
+
+echo "  ── phase 5b: dom+vad routing check ──────────"
+
+BOT_POD=$(find_bot_pod "")
+if [ -n "$BOT_POD" ]; then
+    LOGS=$(pod_logs "$BOT_POD" 2>&1 || true)
+
+    DOM_EVENTS=$(echo "$LOGS" | grep -c '\[Unified\] SPEAKER_START' || true)
+    if [ "${DOM_EVENTS:-0}" -gt 0 ]; then
+        pass "dom: $DOM_EVENTS SPEAKER_START events"
+    else
+        fail "dom: 0 SPEAKER_START events — DOM speaker detection not firing"
+    fi
+
+    VAD_LINE=$(echo "$LOGS" | grep 'TELEMETRY.*vad=' | tail -1 || true)
+    if [ -n "$VAD_LINE" ]; then
+        VAD_PROCESSED=$(echo "$VAD_LINE" | grep -oP 'vad=\K\d+' || echo "0")
+        VAD_REJECTED=$(echo "$VAD_LINE" | grep -oP 'vad=\d+/\K\d+' || echo "0")
+        if [ "${VAD_PROCESSED:-0}" -gt 0 ]; then
+            pass "vad: $VAD_PROCESSED processed, $VAD_REJECTED rejected"
+        else
+            fail "vad: 0 chunks processed — VAD gate not active"
+        fi
+    else
+        fail "vad: no telemetry line found"
+    fi
+
+    WHISPER_CALLS=$(echo "$LOGS" | grep -oP 'whisper=\K\d+' | tail -1 || echo "0")
+    if [ "${WHISPER_CALLS:-0}" -gt 0 ]; then
+        pass "whisper: $WHISPER_CALLS calls"
+    else
+        fail "whisper: 0 calls — audio not reaching transcription"
+    fi
+
+    state_write dom_events "${DOM_EVENTS:-0}"
+    state_write vad_processed "${VAD_PROCESSED:-0}"
+    state_write vad_rejected "${VAD_REJECTED:-0}"
+else
+    info "could not find bot pod — skipping log checks"
+fi
+
+# ══════════════════════════════════════════════════
 #  PHASE 6: Cleanup
 # ══════════════════════════════════════════════════
 

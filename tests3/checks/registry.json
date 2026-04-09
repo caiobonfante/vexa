@@ -578,6 +578,27 @@
       "url": "$DASHBOARD_URL/",
       "method": "HEAD",
       "expect_code": 200
+    },
+
+    {"_": "═══ STATIC — Teams DOM+VAD routing locks ═══"},
+
+    {
+      "id": "TEAMS_VAD_ACTIVE",
+      "tier": "static",
+      "found": "2026-04-09",
+      "proves": "Teams handleTeamsAudioData has VAD gating (not bypassed)",
+      "symptom": "Teams audio reaches Whisper without VAD filtering — noise/hallucinations",
+      "file": "services/vexa-bot/core/src/index.ts",
+      "must_match": "isSpeechStreaming(audioData, vadState)"
+    },
+    {
+      "id": "TEAMS_DOM_ROUTING",
+      "tier": "static",
+      "found": "2026-04-09",
+      "proves": "Teams emitEvent drives activeDomSpeakers for audio routing",
+      "symptom": "Teams audio routing falls back to caption-only — fragile activation",
+      "file": "services/vexa-bot/core/src/platforms/msteams/recording.ts",
+      "must_match": "activeDomSpeakers"
     }
   ]
 }

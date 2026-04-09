@@ -593,6 +593,9 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
               
               // State for tracking speaking status (for cleanup)
               const speakingStates = new Map<string, SpeakingState>();
+
+              // DOM-active speakers — drives audio routing (replaces caption-driven flush)
+              const activeDomSpeakers = new Set<string>();
               
               // Event emission helper
               function sendTeamsSpeakerEvent(eventType: string, identity: ParticipantIdentity) {
@@ -745,6 +748,16 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
 
                 (window as any).logBot(`${emoji} [Unified] ${eventType}: ${identity.name} (ID: ${identity.id}) [signal-based]`);
                 sendTeamsSpeakerEvent(eventType, identity);
+
+                // Drive audio routing — skip self
+                const botNameLower = ((botConfigData as any)?.botName || (botConfigData as any)?.name || 'vexa').toLowerCase();
+                if (identity.name.toLowerCase().includes(botNameLower) || identity.name.toLowerCase().includes('vexa')) return;
+
+                if (state === 'speaking') {
+                  activeDomSpeakers.add(identity.name);
+                } else {
+                  activeDomSpeakers.delete(identity.name);
+                }
               }
 
               function scanAndObserveAll() {
@@ -918,11 +931,24 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                   while (audioQueue.length > 0 && now - audioQueue[0].timestamp > MAX_QUEUE_AGE_MS) {
                     audioQueue.shift();
                   }
+
+                  // Flush to ALL DOM-active speakers in parallel
+                  if (activeDomSpeakers.size > 0) {
+                    while (audioQueue.length > 0) {
+                      const entry = audioQueue.shift()!;
+                      for (const speaker of activeDomSpeakers) {
+                        if (typeof (window as any).__vexaTeamsAudioData === 'function') {
+                          (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
+                        }
+                      }
+                    }
+                  }
+                  // 0 active speakers: chunks stay in queue (up to MAX_QUEUE_AGE_MS), flushed when someone starts
                 };
 
                 source.connect(processor);
                 processor.connect(ctx.destination);
-                (window as any).logBot?.('[Teams PerSpeaker] Audio routing active (caption-aware with ring buffer)');
+                (window as any).logBot?.('[Teams PerSpeaker] Audio routing active (DOM-driven with ring buffer)');
               };
 
               // ─── Caption observer ─────────────────────────────────────────
@@ -986,35 +1012,10 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 if (speakerLower.includes(botNameLower2) || speakerLower.includes('vexa')) return;
 
                 if (speaker !== lastCaptionSpeaker) {
-                  // Speaker changed. Queue contains new speaker's audio
-                  // (~1-1.5s accumulated during caption delay). Flush to
-                  // new speaker to preserve their opening words.
+                  // Speaker changed — log for diagnostics (audio routing is now DOM-driven)
                   lastFlushedTextLength = 0;
-                  const queued = audioQueue.length;
-                  if (queued > 0 && !speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
-                    // Only flush recent chunks (last 2s) — the caption delay lookback.
-                    // Older chunks are stale silence from the gap between speakers.
-                    const lookbackCutoff = now - 2000;
-                    let discarded = 0;
-                    while (audioQueue.length > 0 && audioQueue[0].timestamp < lookbackCutoff) {
-                      audioQueue.shift();
-                      discarded++;
-                    }
-                    let flushed = 0;
-                    while (audioQueue.length > 0) {
-                      const entry = audioQueue.shift()!;
-                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
-                      }
-                      flushed++;
-                    }
-                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
-                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker +
-                      ' (flushed ' + flushed + ' chunks, discarded ' + discarded + ' stale)');
-                  } else {
-                    (window as any).logBot?.('[Teams Captions] Speaker change: ' +
-                      (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
-                  }
+                  (window as any).logBot?.('[Teams Captions] Speaker change: ' +
+                    (lastCaptionSpeaker || '(none)') + ' → ' + speaker);
                 }
 
                 lastCaptionSpeaker = speaker;
@@ -1031,20 +1032,7 @@ export async function startTeamsRecording(page: Page, botConfig: BotConfig): Pro
                 // Flush when: text grew by >3 chars (new words), OR text is
                 // shorter (new caption entry = new sentence, always flush)
                 if (textGrowth > MIN_TEXT_GROWTH || text.length < lastFlushedTextLength) {
-                  if (!speakerLower.includes(botNameLower2) && !speakerLower.includes('vexa')) {
-                    let flushed = 0;
-                    while (audioQueue.length > 0) {
-                      const entry = audioQueue.shift()!;
-                      if (typeof (window as any).__vexaTeamsAudioData === 'function') {
-                        (window as any).__vexaTeamsAudioData(speaker, Array.from(entry.data));
-                      }
-                      flushed++;
-                    }
-                    if (flushed > 0) {
-                      (window as any).logBot?.('[Teams Captions] Flushed ' + flushed + ' chunks to ' + speaker +
-                        ' (text ' + (textGrowth > 0 ? '+' + textGrowth : textGrowth) + ' chars)');
-                    }
-                  }
+                  // Audio routing is now DOM-driven — captions only track text growth
                   lastFlushedTextLength = text.length;
                 }
 

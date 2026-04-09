@@ -1745,8 +1745,19 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
     });
   }
 
-  // No VAD for Teams — caption-driven routing already gates audio.
-  // Small ring buffer chunks are too short for Silero VAD to reliably detect speech.
+  // VAD gate — filters false DOM activations (noise triggering speaking indicator)
+  if (vadModel) {
+    if (!vadSpeakerStates.has(speakerId)) {
+      vadSpeakerStates.set(speakerId, vadModel.createSpeakerState());
+    }
+    const vadState = vadSpeakerStates.get(speakerId)!;
+    const isSpeech = await vadModel.isSpeechStreaming(audioData, vadState);
+    if (pipelineTelemetry) pipelineTelemetry.vadChunksProcessed++;
+    if (!isSpeech) {
+      if (pipelineTelemetry) pipelineTelemetry.vadChunksRejected++;
+      return;
+    }
+  }
   speakerManager.feedAudio(speakerId, audioData);
 }
 

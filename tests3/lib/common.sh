@@ -144,6 +144,17 @@ pod_logs() {
     esac
 }
 
+pod_copy() {
+    # pod_copy <pod_name> <container_path> <local_path>
+    local pod="$1" src="$2" dst="$3"
+    local mode
+    mode=$(cat "$STATE/deploy_mode" 2>/dev/null || detect_mode)
+    case "$mode" in
+        compose|lite) docker cp "$pod:$src" "$dst" ;;
+        helm)         kubectl cp "$pod:$src" "$dst" ;;
+    esac
+}
+
 # ─── State helpers ────────────────────────────────────────────────
 
 state_write() {

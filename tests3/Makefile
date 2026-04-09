@@ -3,6 +3,7 @@
        containers browser-session browser-login browser \
        meeting-tts meeting bot admit transcribe finalize post-meeting meeting-chain \
        webhooks auth-meeting bot-stop-timing transcription-replay tts-reliability \
+       meeting-tts-teams teams-dom-vad collect-teams \
        collect score \
        e2e full \
        vm-compose vm-lite \
@@ -96,6 +97,21 @@ meeting-tts: $(SMOKE_STAMP)       ## full meeting: create → bots → admit →
 
 meeting-tts-teams: $(SMOKE_STAMP) ## Teams meeting: bots → admit → TTS → transcript (TEAMS_MEETING_URL required)
 	@$(T3)/tests/meeting-tts-teams.sh
+
+teams-dom-vad: $(SMOKE_STAMP)    ## Teams DOM+VAD routing validation (TEAMS_MEETING_URL required, 10min)
+	@$(T3)/tests/meeting-tts-teams.sh
+	@echo ""; echo "  Checking DOM+VAD routing state..."; \
+	DOM=$$(cat $(STATE)/dom_events 2>/dev/null || echo 0); \
+	VAD=$$(cat $(STATE)/vad_processed 2>/dev/null || echo 0); \
+	if [ "$$DOM" -gt 0 ] && [ "$$VAD" -gt 0 ]; then \
+	    echo "   ok  teams-dom-vad: dom=$$DOM vad=$$VAD"; \
+	else \
+	    echo "  FAIL teams-dom-vad: dom=$$DOM vad=$$VAD — routing not active"; \
+	    exit 1; \
+	fi
+
+collect-teams: $(SMOKE_STAMP)    ## Teams collect: TTS → capture dataset (TEAMS_MEETING_URL required, 10min)
+	@$(T3)/tests/collect-teams.sh
 
 transcription-replay: $(SMOKE_STAMP)  ## replay GT transcript as TTS, score accuracy (MEETING_URL required, ~7min)
 	@$(T3)/tests/transcription-replay.sh
