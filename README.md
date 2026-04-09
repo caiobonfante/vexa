@@ -45,9 +45,9 @@
 
 **Data sovereignty** — self-host so meeting data never leaves your infrastructure
 
-**Cost** — replace $20/seat SaaS with your own infrastructure
+**Cost** — replace per-seat SaaS with your own infrastructure
 
-**Embed in your product** — multi-tenant meeting bot API with scoped tokens
+**Embed in your product** — multi-tenant meeting bot API
 
 **AI agents** — MCP server with 17 tools
 
