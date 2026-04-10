@@ -236,12 +236,12 @@ else
 
     if [ -n "$AUTH_HEADER" ]; then
         HTTP_CODE=$(curl -s --max-time 15 -X POST \
-            -F file=@/app/test-speech-en.wav -F model=large-v3-turbo -F language=en \
+            -F file=@/app/test-speech-en.wav -F "model=${TRANSCRIPTION_MODEL:-whisper-1}" -F language=en \
             -H "$AUTH_HEADER" \
             -o /tmp/transcription-check.json -w '%{http_code}' "$TRANSCRIPTION_SERVICE_URL" 2>/dev/null)
     else
         HTTP_CODE=$(curl -s --max-time 15 -X POST \
-            -F file=@/app/test-speech-en.wav -F model=large-v3-turbo -F language=en \
+            -F file=@/app/test-speech-en.wav -F "model=${TRANSCRIPTION_MODEL:-whisper-1}" -F language=en \
             -o /tmp/transcription-check.json -w '%{http_code}' "$TRANSCRIPTION_SERVICE_URL" 2>/dev/null)
     fi
     RESULT=$(cat /tmp/transcription-check.json 2>/dev/null)
